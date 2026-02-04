@@ -7,6 +7,9 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@latest --activate && \
     pnpm config set registry https://registry.npmmirror.com
 
+# Set Prisma binary mirror (npmmirror)
+ENV PRISMA_ENGINES_MIRROR="https://registry.npmmirror.com/-/binary/prisma"
+
 # Copy workspace config and ALL package.json files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY client/package.json ./client/
@@ -36,6 +39,9 @@ WORKDIR /app/server
 # Install pnpm and set registry
 RUN corepack enable && corepack prepare pnpm@latest --activate && \
     pnpm config set registry https://registry.npmmirror.com
+
+# Set Prisma binary mirror (npmmirror)
+ENV PRISMA_ENGINES_MIRROR="https://registry.npmmirror.com/-/binary/prisma"
 
 # Copy package files
 COPY server/package.json ./

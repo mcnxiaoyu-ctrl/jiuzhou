@@ -18,6 +18,7 @@ export const pool = new Pool({
   max: 100,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
+  statement_timeout: 30000, // 单条语句超时 30 秒，防止锁等待过久
 });
 
 // 延迟函数

@@ -4,7 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { testConnection } from './config/database.js';
+import { testConnection, pool } from './config/database.js';
 import { testRedisConnection, closeRedis } from './config/redis.js';
 import { initSocket } from './config/socket.js';
 import { initTables } from './models/initTables.js';
@@ -196,6 +196,14 @@ const gracefulShutdown = async (signal: string) => {
     console.log('Redis 连接已关闭');
   } catch (error) {
     console.error('关闭 Redis 连接失败:', error);
+  }
+
+  // 关闭数据库连接池
+  try {
+    await pool.end();
+    console.log('数据库连接池已关闭');
+  } catch (error) {
+    console.error('关闭数据库连接池失败:', error);
   }
 
   console.log('服务已关闭');
