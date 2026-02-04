@@ -15,9 +15,9 @@ export const pool = new Pool({
   database: process.env.DB_NAME || 'jiuzshou_s',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'zlf981216',
-  max: 20,
+  max: 100,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 10000,
 });
 
 // 延迟函数
