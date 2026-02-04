@@ -464,7 +464,7 @@ function convertSkillData(data: SkillData): BattleSkill {
     targetCount: data.target_count || 1,
     damageType: data.damage_type as any,
     element: data.element || 'none',
-    coefficient: data.coefficient || 1.0,
+    coefficient: (data.coefficient ?? 10000) / 10000,
     fixedDamage: data.fixed_damage || 0,
     effects: data.effects || [],
     triggerType: 'active',
