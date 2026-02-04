@@ -15,20 +15,42 @@ import TeamModal from './modules/TeamModal';
 import SkillFloatButton from './modules/SkillFloatButton';
 
 // 懒加载不常用的 Modal，减少首屏加载体积
-const TechniqueModal = lazy(() => import('./modules/TechniqueModal'));
-const TaskModal = lazy(() => import('./modules/TaskModal'));
-const SectModal = lazy(() => import('./modules/SectModal'));
-const MarketModal = lazy(() => import('./modules/MarketModal'));
-const MonthCardModal = lazy(() => import('./modules/MonthCardModal'));
-const BattlePassModal = lazy(() => import('./modules/BattlePassModal'));
-const ArenaModal = lazy(() => import('./modules/ArenaModal'));
-const RankModal = lazy(() => import('./modules/RankModal'));
-const AchievementModal = lazy(() => import('./modules/AchievementModal'));
-const MailModal = lazy(() => import('./modules/MailModal'));
-const SettingModal = lazy(() => import('./modules/SettingModal'));
-const RealmModal = lazy(() => import('./modules/RealmModal'));
-const WarehouseModal = lazy(() => import('./modules/WarehouseModal'));
-const SignInModal = lazy(() => import('./modules/SignInModal'));
+const lazyModules = {
+  TechniqueModal: () => import('./modules/TechniqueModal'),
+  TaskModal: () => import('./modules/TaskModal'),
+  SectModal: () => import('./modules/SectModal'),
+  MarketModal: () => import('./modules/MarketModal'),
+  MonthCardModal: () => import('./modules/MonthCardModal'),
+  BattlePassModal: () => import('./modules/BattlePassModal'),
+  ArenaModal: () => import('./modules/ArenaModal'),
+  RankModal: () => import('./modules/RankModal'),
+  AchievementModal: () => import('./modules/AchievementModal'),
+  MailModal: () => import('./modules/MailModal'),
+  SettingModal: () => import('./modules/SettingModal'),
+  RealmModal: () => import('./modules/RealmModal'),
+  WarehouseModal: () => import('./modules/WarehouseModal'),
+  SignInModal: () => import('./modules/SignInModal'),
+};
+
+const TechniqueModal = lazy(lazyModules.TechniqueModal);
+const TaskModal = lazy(lazyModules.TaskModal);
+const SectModal = lazy(lazyModules.SectModal);
+const MarketModal = lazy(lazyModules.MarketModal);
+const MonthCardModal = lazy(lazyModules.MonthCardModal);
+const BattlePassModal = lazy(lazyModules.BattlePassModal);
+const ArenaModal = lazy(lazyModules.ArenaModal);
+const RankModal = lazy(lazyModules.RankModal);
+const AchievementModal = lazy(lazyModules.AchievementModal);
+const MailModal = lazy(lazyModules.MailModal);
+const SettingModal = lazy(lazyModules.SettingModal);
+const RealmModal = lazy(lazyModules.RealmModal);
+const WarehouseModal = lazy(lazyModules.WarehouseModal);
+const SignInModal = lazy(lazyModules.SignInModal);
+
+// 空闲时预加载所有懒加载模块
+function preloadLazyModules() {
+  Object.values(lazyModules).forEach((loader) => loader());
+}
 
 // 懒加载 Modal 的 loading 状态
 const ModalSkeleton = () => (
@@ -577,6 +599,16 @@ const Game: React.FC<GameProps> = ({ onLogout }) => {
   const version = '1.0.0';
   const { message } = App.useApp();
   const messageRef = useRef(message);
+
+  // 空闲时预加载懒加载模块
+  useEffect(() => {
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(preloadLazyModules);
+    } else {
+      setTimeout(preloadLazyModules, 2000);
+    }
+  }, []);
+
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null);
   const [isTeamLeader, setIsTeamLeader] = useState(false);
