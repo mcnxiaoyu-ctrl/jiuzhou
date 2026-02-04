@@ -1,6 +1,6 @@
 import { App, Badge, Button, Drawer, Modal, Progress, Tag, Tabs, Tooltip } from 'antd';
 import { MailOutlined, SettingOutlined, LogoutOutlined, CalendarOutlined } from '@ant-design/icons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PlayerInfo from './modules/PlayerInfo';
 import GameMap from './modules/GameMap';
 import ChatPanel, { type ChatPanelHandle } from './modules/ChatPanel';
@@ -11,22 +11,24 @@ import BattleArea, { type BattleUnit } from './modules/BattleArea';
 import TeamPanel, { type TeamMember } from './modules/TeamPanel';
 import MapModal from './modules/MapModal';
 import BagModal from './modules/BagModal';
-import TechniqueModal from './modules/TechniqueModal';
-import TaskModal from './modules/TaskModal';
-import SectModal from './modules/SectModal';
-import MarketModal from './modules/MarketModal';
 import TeamModal from './modules/TeamModal';
-import MonthCardModal from './modules/MonthCardModal';
-import BattlePassModal from './modules/BattlePassModal';
-import ArenaModal from './modules/ArenaModal';
-import RankModal from './modules/RankModal';
-import AchievementModal from './modules/AchievementModal';
-import SignInModal from './modules/SignInModal';
-import MailModal from './modules/MailModal';
-import SettingModal from './modules/SettingModal';
-import RealmModal from './modules/RealmModal';
 import SkillFloatButton from './modules/SkillFloatButton';
-import WarehouseModal from './modules/WarehouseModal';
+
+// 懒加载不常用的 Modal，减少首屏加载体积
+const TechniqueModal = lazy(() => import('./modules/TechniqueModal'));
+const TaskModal = lazy(() => import('./modules/TaskModal'));
+const SectModal = lazy(() => import('./modules/SectModal'));
+const MarketModal = lazy(() => import('./modules/MarketModal'));
+const MonthCardModal = lazy(() => import('./modules/MonthCardModal'));
+const BattlePassModal = lazy(() => import('./modules/BattlePassModal'));
+const ArenaModal = lazy(() => import('./modules/ArenaModal'));
+const RankModal = lazy(() => import('./modules/RankModal'));
+const AchievementModal = lazy(() => import('./modules/AchievementModal'));
+const MailModal = lazy(() => import('./modules/MailModal'));
+const SettingModal = lazy(() => import('./modules/SettingModal'));
+const RealmModal = lazy(() => import('./modules/RealmModal'));
+const WarehouseModal = lazy(() => import('./modules/WarehouseModal'));
+const SignInModal = lazy(() => import('./modules/SignInModal'));
 import { gameSocket, type CharacterData } from '../../services/gameSocket';
 import {
   acceptTaskFromNpc,
@@ -2281,54 +2283,106 @@ const Game: React.FC<GameProps> = ({ onLogout }) => {
         }}
       />
       <BagModal open={bagModalOpen} onClose={() => setBagModalOpen(false)} />
-      <WarehouseModal open={warehouseModalOpen} onClose={() => setWarehouseModalOpen(false)} />
-      <TechniqueModal open={techniqueModalOpen} onClose={() => setTechniqueModalOpen(false)} />
-      <TaskModal
-        open={taskModalOpen}
-        onClose={() => setTaskModalOpen(false)}
-        onTrackedChange={() => {
-          void (async () => {
-            await refreshTrackedRoomIds();
-            window.dispatchEvent(new Event('room:objects:changed'));
-          })();
-        }}
-      />
-      <MonthCardModal open={monthCardModalOpen} onClose={() => setMonthCardModalOpen(false)} />
-      <BattlePassModal open={battlePassModalOpen} onClose={() => setBattlePassModalOpen(false)} />
-      <ArenaModal
-        open={arenaModalOpen}
-        onClose={() => setArenaModalOpen(false)}
-        character={character}
-        onStartBattle={(battleId) => {
-          setArenaModalOpen(false);
-          setTopTab('map');
-          setBattleEnemies([]);
-          setBattleAllies(buildAllyGroup(character));
-          setDungeonBattleId(null);
-          setDungeonInstanceId(null);
-          setArenaBattleId(String(battleId));
-          setViewMode('battle');
-        }}
-      />
-      <RankModal open={rankModalOpen} onClose={() => setRankModalOpen(false)} />
-      <SignInModal
-        open={signInModalOpen}
-        onClose={() => {
-          setSignInModalOpen(false);
-          void refreshSignInDot();
-        }}
-        onSigned={() => setShowSignInDot(false)}
-      />
-      <MailModal open={mailModalOpen} onClose={() => setMailModalOpen(false)} />
-      <SettingModal open={settingModalOpen} onClose={() => setSettingModalOpen(false)} />
-      <AchievementModal
-        open={achievementModalOpen}
-        onClose={() => setAchievementModalOpen(false)}
-        character={character}
-        inTeam={inTeam}
-      />
-      <RealmModal open={realmModalOpen} onClose={() => setRealmModalOpen(false)} character={character} />
-      <MarketModal open={marketModalOpen} onClose={() => setMarketModalOpen(false)} playerName={playerName} />
+      {warehouseModalOpen && (
+        <Suspense fallback={null}>
+          <WarehouseModal open={warehouseModalOpen} onClose={() => setWarehouseModalOpen(false)} />
+        </Suspense>
+      )}
+      {techniqueModalOpen && (
+        <Suspense fallback={null}>
+          <TechniqueModal open={techniqueModalOpen} onClose={() => setTechniqueModalOpen(false)} />
+        </Suspense>
+      )}
+      {taskModalOpen && (
+        <Suspense fallback={null}>
+          <TaskModal
+            open={taskModalOpen}
+            onClose={() => setTaskModalOpen(false)}
+            onTrackedChange={() => {
+              void (async () => {
+                await refreshTrackedRoomIds();
+                window.dispatchEvent(new Event('room:objects:changed'));
+              })();
+            }}
+          />
+        </Suspense>
+      )}
+      {monthCardModalOpen && (
+        <Suspense fallback={null}>
+          <MonthCardModal open={monthCardModalOpen} onClose={() => setMonthCardModalOpen(false)} />
+        </Suspense>
+      )}
+      {battlePassModalOpen && (
+        <Suspense fallback={null}>
+          <BattlePassModal open={battlePassModalOpen} onClose={() => setBattlePassModalOpen(false)} />
+        </Suspense>
+      )}
+      {arenaModalOpen && (
+        <Suspense fallback={null}>
+          <ArenaModal
+            open={arenaModalOpen}
+            onClose={() => setArenaModalOpen(false)}
+            character={character}
+            onStartBattle={(battleId) => {
+              setArenaModalOpen(false);
+              setTopTab('map');
+              setBattleEnemies([]);
+              setBattleAllies(buildAllyGroup(character));
+              setDungeonBattleId(null);
+              setDungeonInstanceId(null);
+              setArenaBattleId(String(battleId));
+              setViewMode('battle');
+            }}
+          />
+        </Suspense>
+      )}
+      {rankModalOpen && (
+        <Suspense fallback={null}>
+          <RankModal open={rankModalOpen} onClose={() => setRankModalOpen(false)} />
+        </Suspense>
+      )}
+      {signInModalOpen && (
+        <Suspense fallback={null}>
+          <SignInModal
+            open={signInModalOpen}
+            onClose={() => {
+              setSignInModalOpen(false);
+              void refreshSignInDot();
+            }}
+            onSigned={() => setShowSignInDot(false)}
+          />
+        </Suspense>
+      )}
+      {mailModalOpen && (
+        <Suspense fallback={null}>
+          <MailModal open={mailModalOpen} onClose={() => setMailModalOpen(false)} />
+        </Suspense>
+      )}
+      {settingModalOpen && (
+        <Suspense fallback={null}>
+          <SettingModal open={settingModalOpen} onClose={() => setSettingModalOpen(false)} />
+        </Suspense>
+      )}
+      {achievementModalOpen && (
+        <Suspense fallback={null}>
+          <AchievementModal
+            open={achievementModalOpen}
+            onClose={() => setAchievementModalOpen(false)}
+            character={character}
+            inTeam={inTeam}
+          />
+        </Suspense>
+      )}
+      {realmModalOpen && (
+        <Suspense fallback={null}>
+          <RealmModal open={realmModalOpen} onClose={() => setRealmModalOpen(false)} character={character} />
+        </Suspense>
+      )}
+      {marketModalOpen && (
+        <Suspense fallback={null}>
+          <MarketModal open={marketModalOpen} onClose={() => setMarketModalOpen(false)} playerName={playerName} />
+        </Suspense>
+      )}
       <TeamModal
         open={teamModalOpen}
         onClose={() => {
@@ -2339,12 +2393,16 @@ const Game: React.FC<GameProps> = ({ onLogout }) => {
         }}
         playerName={playerName}
       />
-      <SectModal
-        open={sectModalOpen}
-        onClose={() => setSectModalOpen(false)}
-        spiritStones={spiritStones}
-        playerName={playerName}
-      />
+      {sectModalOpen && (
+        <Suspense fallback={null}>
+          <SectModal
+            open={sectModalOpen}
+            onClose={() => setSectModalOpen(false)}
+            spiritStones={spiritStones}
+            playerName={playerName}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };
