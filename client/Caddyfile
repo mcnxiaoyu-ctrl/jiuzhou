@@ -1,20 +1,8 @@
 {$DOMAIN:localhost} {
-    root * /srv
-    file_server
-
-    # SPA routing - fallback to index.html
-    try_files {path} /index.html
-
     # Gzip compression
     encode gzip
 
-    # Cache static assets
-    @static {
-        path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2
-    }
-    header @static Cache-Control "public, max-age=31536000, immutable"
-
-    # API proxy
+    # API proxy - must be before file_server to take priority
     handle /api/* {
         reverse_proxy {$API_HOST:server:6011}
     }
@@ -22,5 +10,20 @@
     # WebSocket proxy
     handle /socket.io/* {
         reverse_proxy {$API_HOST:server:6011}
+    }
+
+    # Static files and SPA routing for everything else
+    handle {
+        root * /srv
+
+        # Cache static assets
+        @static {
+            path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+
+        # SPA routing - fallback to index.html
+        try_files {path} /index.html
+        file_server
     }
 }
