@@ -45,6 +45,35 @@ const resolveApiBase = (): string => {
 export const API_BASE = resolveApiBase();
 export const SERVER_BASE = API_BASE.replace(/\/api\/?$/, '');
 
+// CDN 静态资源地址（可选）
+// 用于动态加载的图片等资源，如物品图标、头像等
+const resolveCdnBase = (): string => {
+  const fromEnv = normalizeBaseUrl((import.meta.env.VITE_CDN_BASE as string | undefined) ?? '');
+  // 如果未配置 CDN，则回退到 SERVER_BASE
+  return fromEnv || SERVER_BASE;
+};
+
+export const CDN_BASE = resolveCdnBase();
+
+/**
+ * 解析资源 URL
+ * - /uploads/* 用户上传内容 -> SERVER_BASE
+ * - 其他静态资源路径 -> CDN_BASE
+ * - 已经是完整 URL 的直接返回
+ */
+export const resolveAssetUrl = (path: string): string => {
+  const raw = (path ?? '').trim();
+  if (!raw) return '';
+  // 已经是完整 URL
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  // 用户上传内容，必须从服务器获取
+  if (raw.startsWith('/uploads/')) return `${SERVER_BASE}${raw}`;
+  // 其他静态资源路径，从 CDN 获取
+  if (raw.startsWith('/')) return `${CDN_BASE}${raw}`;
+  // 相对路径，尝试补全
+  return `${CDN_BASE}/${raw}`;
+};
+
 const api = axios.create({
   baseURL: API_BASE,
   timeout: 10000,

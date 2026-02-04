@@ -1,11 +1,46 @@
+# Dependencies
 node_modules
 **/node_modules
+
+# Build outputs (will be built in container)
 **/dist
+**/dist-ssr
+
+# Git
 .git
+.gitignore
+
+# Documentation
 *.md
+docs/
+
+# Logs
 *.log
+docker-build.log
+
+# Environment files (sensitive)
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env.cos.example
+
+# IDE and tools
 .vscode
+.idea
 .kiro
+.claude
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test and coverage
+coverage/
+.nyc_output/
+**/*.test.*
+**/*.spec.*
+
+# Misc
+*.bak
+*.tmp
+*.temp

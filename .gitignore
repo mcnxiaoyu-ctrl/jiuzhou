@@ -4,11 +4,15 @@ node_modules/
 # Build outputs
 dist/
 dist-ssr/
+*.tsbuildinfo
 
-# Environment variables
+# Environment variables (keep .example files)
 .env
 .env.local
 .env.*.local
+.env.cos
+!.env.example
+!.env.cos.example
 
 # Uploaded files
 uploads/
@@ -17,19 +21,42 @@ uploads/
 .vscode/
 .idea/
 *.sw?
+*.sublime-*
 
 # OS files
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+lerna-debug.log*
 
 # Tool configs
 .kiro/
+.claude/
 
 # Generated files
 src/generated/
+
+# Docker
+docker-build.log
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# Misc
+*.local
+*.bak
+*.tmp
+*.temp

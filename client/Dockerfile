@@ -3,6 +3,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# CDN 静态资源地址（构建时传入，可选）
+ARG VITE_CDN_BASE=""
+
 # Install pnpm and set registry
 RUN corepack enable && corepack prepare pnpm@latest --activate && \
     pnpm config set registry https://registry.npmmirror.com
@@ -17,7 +20,8 @@ RUN pnpm install --frozen-lockfile --filter client
 # Copy client source
 COPY client ./client
 
-# Build
+# Build with CDN base URL
+ENV VITE_CDN_BASE=${VITE_CDN_BASE}
 RUN pnpm --filter client build
 
 # Production stage
