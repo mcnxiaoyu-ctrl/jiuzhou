@@ -3,9 +3,10 @@
  */
 
 import { query } from '../config/database.js';
-import { 
-  BattleEngine, 
-  createPVEBattle, 
+import { redis } from '../config/redis.js';
+import {
+  BattleEngine,
+  createPVEBattle,
   createPVPBattle,
   calculateRewards,
   type BattleState,
@@ -13,10 +14,10 @@ import {
   type MonsterData,
   type SkillData
 } from '../battle/index.js';
-import { 
-  distributeBattleRewards, 
+import {
+  distributeBattleRewards,
   type BattleParticipant,
-  type DistributeResult 
+  type DistributeResult
 } from './battleDropService.js';
 import { getRoomInMap } from './mapService.js';
 import { getGameServer } from '../game/GameServer.js';
@@ -39,6 +40,103 @@ const CHARACTER_OWNER_CACHE_TTL_MS = 5000;
 const BATTLE_TICK_MS = 650;
 const battleLastEmittedLogLen = new Map<string, number>();
 const MAX_BATTLE_LOG_DELTA = 80;
+
+// Redis 战斗持久化常量
+const REDIS_BATTLE_KEY_PREFIX = 'battle:state:';
+const REDIS_BATTLE_PARTICIPANTS_PREFIX = 'battle:participants:';
+const REDIS_BATTLE_TTL_SECONDS = 30 * 60; // 30分钟
+
+/**
+ * 保存战斗状态到 Redis
+ */
+async function saveBattleToRedis(battleId: string, engine: BattleEngine, participants: number[]): Promise<void> {
+  try {
+    const state = engine.getState();
+    await Promise.all([
+      redis.setex(
+        `${REDIS_BATTLE_KEY_PREFIX}${battleId}`,
+        REDIS_BATTLE_TTL_SECONDS,
+        JSON.stringify(state)
+      ),
+      redis.setex(
+        `${REDIS_BATTLE_PARTICIPANTS_PREFIX}${battleId}`,
+        REDIS_BATTLE_TTL_SECONDS,
+        JSON.stringify(participants)
+      ),
+    ]);
+  } catch (error) {
+    console.error('保存战斗到 Redis 失败:', error);
+  }
+}
+
+/**
+ * 从 Redis 删除战斗状态
+ */
+async function removeBattleFromRedis(battleId: string): Promise<void> {
+  try {
+    await Promise.all([
+      redis.del(`${REDIS_BATTLE_KEY_PREFIX}${battleId}`),
+      redis.del(`${REDIS_BATTLE_PARTICIPANTS_PREFIX}${battleId}`),
+    ]);
+  } catch (error) {
+    console.error('从 Redis 删除战斗失败:', error);
+  }
+}
+
+/**
+ * 从 Redis 恢复所有活跃战斗（服务启动时调用）
+ */
+export async function recoverBattlesFromRedis(): Promise<number> {
+  let recoveredCount = 0;
+  try {
+    const keys = await redis.keys(`${REDIS_BATTLE_KEY_PREFIX}*`);
+    if (keys.length === 0) {
+      console.log('✓ 没有需要恢复的战斗');
+      return 0;
+    }
+
+    for (const key of keys) {
+      const battleId = key.replace(REDIS_BATTLE_KEY_PREFIX, '');
+      try {
+        const [stateJson, participantsJson] = await Promise.all([
+          redis.get(key),
+          redis.get(`${REDIS_BATTLE_PARTICIPANTS_PREFIX}${battleId}`),
+        ]);
+
+        if (!stateJson) {
+          await removeBattleFromRedis(battleId);
+          continue;
+        }
+
+        const state = JSON.parse(stateJson) as BattleState;
+        const participants = participantsJson ? JSON.parse(participantsJson) as number[] : [];
+
+        // 跳过已结束的战斗
+        if (state.phase === 'finished') {
+          await removeBattleFromRedis(battleId);
+          continue;
+        }
+
+        // 恢复战斗引擎
+        const engine = new BattleEngine(state);
+        activeBattles.set(battleId, engine);
+        battleParticipants.set(battleId, participants);
+        startBattleTicker(battleId);
+
+        recoveredCount++;
+        console.log(`  恢复战斗: ${battleId} (${participants.length} 名参与者)`);
+      } catch (error) {
+        console.error(`  恢复战斗 ${battleId} 失败:`, error);
+        await removeBattleFromRedis(battleId);
+      }
+    }
+
+    console.log(`✓ 已恢复 ${recoveredCount} 场战斗`);
+  } catch (error) {
+    console.error('恢复战斗失败:', error);
+  }
+  return recoveredCount;
+}
 
 export interface BattleResult {
   success: boolean;
@@ -309,6 +407,11 @@ function emitBattleUpdate(battleId: string, payload: any): void {
     for (const userId of participants) {
       if (!Number.isFinite(userId)) continue;
       gameServer.emitToUser(userId, 'battle:update', patched);
+    }
+    // 保存战斗状态到 Redis（异步，不阻塞）
+    const engine = activeBattles.get(battleId);
+    if (engine) {
+      void saveBattleToRedis(battleId, engine, participants);
     }
   } catch {
     // 忽略
@@ -1162,6 +1265,8 @@ async function finishBattle(
   battleParticipants.delete(state.battleId);
   stopBattleTicker(state.battleId);
   finishedBattleResults.set(state.battleId, { result: battleResult, at: Date.now() });
+  // 从 Redis 删除战斗状态
+  void removeBattleFromRedis(state.battleId);
 
   return battleResult;
 }
@@ -1262,6 +1367,8 @@ export async function abandonBattle(
   battleParticipants.delete(battleId);
   stopBattleTicker(battleId);
   finishedBattleResults.set(battleId, { result: { success: true, message: '已放弃战斗' }, at: Date.now() });
+  // 从 Redis 删除战斗状态
+  void removeBattleFromRedis(battleId);
   return {
     success: true,
     message: '已放弃战斗',
@@ -1292,6 +1399,8 @@ export function cleanupExpiredBattles(): void {
       activeBattles.delete(battleId);
       battleParticipants.delete(battleId);
       stopBattleTicker(battleId);
+      // 从 Redis 删除过期战斗
+      void removeBattleFromRedis(battleId);
     }
   }
 
@@ -1380,4 +1489,5 @@ export default {
   getBattleState,
   abandonBattle,
   isCharacterInBattle,
+  recoverBattlesFromRedis,
 };

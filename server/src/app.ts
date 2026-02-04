@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { testConnection } from './config/database.js';
+import { testRedisConnection, closeRedis } from './config/redis.js';
 import { initSocket } from './config/socket.js';
 import { initTables } from './models/initTables.js';
 import { initGameServer } from './game/GameServer.js';
@@ -34,6 +35,7 @@ import timeRoutes from './routes/timeRoutes.js';
 import mainQuestRoutes from './routes/mainQuestRoutes.js';
 import arenaRoutes from './routes/arenaRoutes.js';
 import { initGameTimeService } from './services/gameTimeService.js';
+import { recoverBattlesFromRedis } from './services/battleService.js';
 
 dotenv.config();
 
@@ -140,7 +142,7 @@ app.get('/api/health', (_req, res) => {
 const startServer = async () => {
   try {
     console.log('\n🎮 九州修仙录 服务启动中...\n');
-    
+
     // 测试数据库连接
     const dbConnected = await testConnection();
     if (!dbConnected) {
@@ -148,11 +150,23 @@ const startServer = async () => {
       process.exit(1);
     }
 
+    // 测试 Redis 连接
+    const redisConnected = await testRedisConnection();
+    if (!redisConnected) {
+      console.warn('⚠ Redis 连接失败，战斗状态将不会持久化');
+    }
+
     // 初始化数据库表
     await initTables();
 
     // 初始化游戏时间（启动计时）
     await initGameTimeService();
+
+    // 从 Redis 恢复活跃战斗
+    if (redisConnected) {
+      console.log('正在恢复战斗状态...');
+      await recoverBattlesFromRedis();
+    }
 
     // 启动HTTP服务
     httpServer.listen(PORT, HOST, () => {
@@ -163,5 +177,32 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+// 优雅关闭处理
+const gracefulShutdown = async (signal: string) => {
+  console.log(`\n收到 ${signal} 信号，开始优雅关闭...`);
+
+  // 停止接受新连接
+  httpServer.close(() => {
+    console.log('HTTP 服务已关闭');
+  });
+
+  // 等待一小段时间让最后的战斗状态保存到 Redis
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  // 关闭 Redis 连接
+  try {
+    await closeRedis();
+    console.log('Redis 连接已关闭');
+  } catch (error) {
+    console.error('关闭 Redis 连接失败:', error);
+  }
+
+  console.log('服务已关闭');
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 startServer();
