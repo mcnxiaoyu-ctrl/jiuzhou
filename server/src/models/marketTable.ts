@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS market_listing (
   id BIGSERIAL PRIMARY KEY,
   seller_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   seller_character_id BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-  item_instance_id BIGINT NOT NULL REFERENCES item_instance(id) ON DELETE RESTRICT,
+  item_instance_id BIGINT REFERENCES item_instance(id) ON DELETE SET NULL,
   item_def_id VARCHAR(64) NOT NULL REFERENCES item_def(id),
   qty INTEGER NOT NULL,
   unit_price_spirit_stones BIGINT NOT NULL,
@@ -82,6 +82,29 @@ CREATE INDEX IF NOT EXISTS idx_market_trade_record_item_def_id ON market_trade_r
 export const initMarketTable = async (): Promise<void> => {
   await query(marketListingTableSQL);
   await query(marketTradeRecordTableSQL);
+
+  // 迁移：将 item_instance_id 外键从 ON DELETE RESTRICT 改为 ON DELETE SET NULL
+  try {
+    const fkCheck = await query(`
+      SELECT con.conname, col.is_nullable
+      FROM pg_constraint con
+      JOIN pg_class rel ON rel.oid = con.conrelid
+      JOIN information_schema.columns col
+        ON col.table_name = 'market_listing' AND col.column_name = 'item_instance_id'
+      WHERE rel.relname = 'market_listing'
+        AND con.conname = 'market_listing_item_instance_id_fkey'
+        AND con.confdeltype = 'r'
+    `);
+    if (fkCheck.rows.length > 0) {
+      await query(`ALTER TABLE market_listing DROP CONSTRAINT market_listing_item_instance_id_fkey`);
+      await query(`ALTER TABLE market_listing ALTER COLUMN item_instance_id DROP NOT NULL`);
+      await query(`ALTER TABLE market_listing ADD CONSTRAINT market_listing_item_instance_id_fkey FOREIGN KEY (item_instance_id) REFERENCES item_instance(id) ON DELETE SET NULL`);
+      console.log('  ✓ market_listing.item_instance_id 外键已迁移为 ON DELETE SET NULL');
+    }
+  } catch (e) {
+    // 约束不存在或已迁移，忽略
+  }
+
   console.log('✓ 坊市系统表检测完成');
 };
 

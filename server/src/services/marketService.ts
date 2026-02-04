@@ -298,7 +298,7 @@ export const getMyMarketListings = async (params: {
           ii.affixes,
           c.nickname AS seller_name
         FROM market_listing ml
-        JOIN item_instance ii ON ii.id = ml.item_instance_id
+        LEFT JOIN item_instance ii ON ii.id = ml.item_instance_id
         JOIN item_def id ON id.id = ml.item_def_id
         JOIN characters c ON c.id = ml.seller_character_id
         WHERE ml.seller_character_id = $1 AND ml.status = $2

@@ -1682,6 +1682,12 @@ export const sortInventory = async (
       FOR UPDATE
     `, [characterId, location]);
     
+    // 先将所有格子置空，避免重新分配时触发唯一约束冲突
+    await client.query(
+      'UPDATE item_instance SET location_slot = NULL WHERE owner_character_id = $1 AND location = $2',
+      [characterId, location]
+    );
+
     // 重新分配格子
     for (let i = 0; i < result.rows.length; i++) {
       await client.query(
