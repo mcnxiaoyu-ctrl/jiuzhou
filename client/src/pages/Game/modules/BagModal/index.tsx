@@ -10,7 +10,10 @@ import {
   equipInventoryItem,
   getInventoryInfo,
   getInventoryItems,
+  refineInventoryItem,
   removeInventoryItemsBatch,
+  removeInventorySocketGem,
+  socketInventoryGem,
   sortInventory,
   unequipInventoryItem,
   inventoryUseItem,
@@ -38,6 +41,21 @@ type EquipmentAffix = {
   description?: string;
 };
 
+type SocketedGemEffect = {
+  attrKey: string;
+  value: number;
+  applyType: 'flat' | 'percent' | 'special';
+};
+
+type SocketedGemEntry = {
+  slot: number;
+  itemDefId: string;
+  gemType: string;
+  effects: SocketedGemEffect[];
+  name?: string;
+  icon?: string;
+};
+
 type BagItem = {
   id: number;
   itemDefId: string;
@@ -63,6 +81,9 @@ type BagItem = {
         identified: boolean;
         baseAttrs: Record<string, number>;
         affixes: EquipmentAffix[];
+        socketMax: number;
+        gemSlotTypes: unknown;
+        socketedGems: SocketedGemEntry[];
       }
     | null;
 };
@@ -347,9 +368,176 @@ const getStrengthenMultiplier = (strengthenLevel: number): number => {
   return 1 + lv * 0.03;
 };
 
+const getRefineMultiplier = (refineLevel: number): number => {
+  const lv = Math.max(0, Math.min(10, Math.floor(Number(refineLevel) || 0)));
+  return 1 + lv * 0.02;
+};
+
+const parseSocketedGems = (raw: unknown): SocketedGemEntry[] => {
+  let arr: unknown = raw;
+  if (typeof arr === 'string') {
+    try {
+      arr = JSON.parse(arr) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(arr)) return [];
+
+  const out: SocketedGemEntry[] = [];
+  for (const it of arr) {
+    if (!it || typeof it !== 'object') continue;
+    const row = it as Record<string, unknown>;
+    const slot = Number(row.slot);
+    const itemDefId = String(row.itemDefId ?? row.item_def_id ?? '').trim();
+    const gemType = String(row.gemType ?? row.gem_type ?? 'all').trim() || 'all';
+    const effectsRaw = Array.isArray(row.effects) ? row.effects : [];
+    const effects: SocketedGemEffect[] = [];
+    for (const fx of effectsRaw) {
+      if (!fx || typeof fx !== 'object') continue;
+      const f = fx as Record<string, unknown>;
+      const attrKey = String(f.attrKey ?? f.attr_key ?? f.attr ?? '').trim();
+      const value = Number(f.value);
+      const applyTypeRaw = String(f.applyType ?? f.apply_type ?? 'flat').trim().toLowerCase();
+      const applyType: SocketedGemEffect['applyType'] =
+        applyTypeRaw === 'percent' ? 'percent' : applyTypeRaw === 'special' ? 'special' : 'flat';
+      if (!attrKey || !Number.isFinite(value)) continue;
+      effects.push({ attrKey, value, applyType });
+    }
+    if (!Number.isInteger(slot) || slot < 0) continue;
+    if (!itemDefId || effects.length === 0) continue;
+    out.push({
+      slot,
+      itemDefId,
+      gemType,
+      effects,
+      name: typeof row.name === 'string' ? row.name : undefined,
+      icon: typeof row.icon === 'string' ? row.icon : undefined,
+    });
+  }
+  return out.sort((a, b) => a.slot - b.slot);
+};
+
+const resolveSocketMax = (socketMaxRaw: unknown, qualityRaw: unknown): number => {
+  const configured = Number(socketMaxRaw);
+  if (Number.isInteger(configured) && configured > 0) return Math.max(0, Math.min(12, configured));
+  const qualityRank = Math.max(1, Math.min(4, Number(qualityRaw) || 1));
+  if (qualityRank >= 4) return 4;
+  if (qualityRank === 3) return 3;
+  if (qualityRank === 2) return 2;
+  return 1;
+};
+
+const normalizeGemType = (value: unknown): string => {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return 'all';
+  if (['all', 'any', '*', 'universal'].includes(raw)) return 'all';
+  if (['atk', 'attack', 'gongji', 'offense'].includes(raw)) return 'attack';
+  if (['def', 'defense', 'fangyu'].includes(raw)) return 'defense';
+  if (['hp', 'life', 'survival', 'shengming'].includes(raw)) return 'survival';
+  if (['util', 'utility', 'support'].includes(raw)) return 'utility';
+  return raw;
+};
+
+const getAllowedGemTypesBySlot = (gemSlotTypesRaw: unknown, slot: number): string[] | null => {
+  let raw: unknown = gemSlotTypesRaw;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
+  if (Array.isArray(raw)) {
+    const slotBased = raw[slot];
+    if (Array.isArray(slotBased)) {
+      const normalized = slotBased.map((v) => normalizeGemType(v)).filter(Boolean);
+      return normalized.length > 0 ? normalized : null;
+    }
+    if (raw.every((v) => typeof v === 'string')) {
+      const normalized = raw.map((v) => normalizeGemType(v)).filter(Boolean);
+      return normalized.length > 0 ? normalized : null;
+    }
+    return null;
+  }
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const exact = obj[String(slot)];
+    if (Array.isArray(exact)) {
+      const normalized = exact.map((v) => normalizeGemType(v)).filter(Boolean);
+      if (normalized.length > 0) return normalized;
+    }
+    const fallback = obj.default;
+    if (Array.isArray(fallback)) {
+      const normalized = fallback.map((v) => normalizeGemType(v)).filter(Boolean);
+      if (normalized.length > 0) return normalized;
+    }
+  }
+
+  return null;
+};
+
+const isGemTypeAllowedInSlot = (gemSlotTypesRaw: unknown, slot: number, gemTypeRaw: unknown): boolean => {
+  const allowed = getAllowedGemTypesBySlot(gemSlotTypesRaw, slot);
+  if (!allowed || allowed.length === 0) return true;
+  const gemType = normalizeGemType(gemTypeRaw);
+  if (!gemType) return false;
+  return allowed.includes('all') || gemType === 'all' || allowed.includes(gemType);
+};
+
+const getRefineSuccessRatePermyriad = (targetLevel: number): number => {
+  const table: Record<number, number> = {
+    1: 10000,
+    2: 10000,
+    3: 10000,
+    4: 9000,
+    5: 8000,
+    6: 7000,
+    7: 6000,
+    8: 5000,
+    9: 4000,
+    10: 3000,
+  };
+  const lv = Math.max(1, Math.min(10, Math.floor(Number(targetLevel) || 1)));
+  return table[lv] ?? 0;
+};
+
+const buildRefineCostPlan = (targetLevel: number): { materialItemDefId: string; materialQty: number } => {
+  const lv = Math.max(1, Math.min(10, Math.floor(Number(targetLevel) || 1)));
+  return {
+    materialItemDefId: 'enhance-002',
+    materialQty: lv >= 8 ? 2 : 1,
+  };
+};
+
+const getEnhanceMaterialItemDefId = (targetLevel: number): string => {
+  const lv = Math.max(1, Math.min(15, Math.floor(Number(targetLevel) || 1)));
+  return lv <= 10 ? 'enhance-001' : 'enhance-002';
+};
+
+const collectGemCandidates = (items: BagItem[]): BagItem[] => {
+  const gemDefIdSet = new Set(['gem-001', 'gem-002', 'gem-003', 'gem-004']);
+  const out: BagItem[] = [];
+  for (const it of items) {
+    if (it.location !== 'bag') continue;
+    if (it.locked) continue;
+    if (it.category !== 'material') continue;
+    if (gemDefIdSet.has(it.itemDefId)) {
+      out.push(it);
+      continue;
+    }
+    const effects = it.effects;
+    if (!effects.some((line) => line.includes('socket') || line.includes('镶嵌') || line.includes('宝石'))) continue;
+    out.push(it);
+  }
+  return out;
+};
+
 const buildEquipmentLines = (item: BagItem | null): string[] => {
   if (!item?.equip) return [];
-  const { strengthenLevel, refineLevel, identified, baseAttrs, affixes } = item.equip;
+  const { strengthenLevel, refineLevel, identified, baseAttrs, affixes, socketMax, socketedGems } = item.equip;
 
   const lines: string[] = [];
   lines.push(`强化：${strengthenLevel > 0 ? `+${strengthenLevel}` : strengthenLevel}`);
@@ -362,6 +550,20 @@ const buildEquipmentLines = (item: BagItem | null): string[] => {
     const label = attrLabel[k] ?? k;
     const valText = permyriadPercentKeys.has(k) ? formatSignedPermyriadPercent(v) : formatSignedNumber(v);
     lines.push(`基础：${label} ${valText}`);
+  }
+
+  lines.push(`孔位：${socketedGems.length}/${socketMax}`);
+  for (const gem of socketedGems) {
+    const gemName = gem.name || gem.itemDefId;
+    lines.push(`宝石[${gem.slot}]：${gemName}`);
+    for (const effect of gem.effects) {
+      const label = attrLabel[effect.attrKey] ?? effect.attrKey;
+      const valText =
+        effect.applyType === 'percent'
+          ? formatSignedPermyriadPercent(effect.value)
+          : formatSignedNumber(effect.value);
+      lines.push(`  - ${label} ${valText}`);
+    }
   }
 
   if (!identified) {
@@ -422,15 +624,18 @@ const buildBagItem = (it: InventoryItemDto): BagItem | null => {
     effects: buildEffects(def),
     actions: mapActions(def.category),
     equip: isEquip
-      ? {
-          equipSlot: def.equip_slot ?? null,
-          strengthenLevel: Number(it.strengthen_level) || 0,
-          refineLevel: Number(it.refine_level) || 0,
-          identified: !!it.identified,
-          baseAttrs: coerceAttrRecord(def.base_attrs),
-          affixes: coerceAffixes(it.affixes),
-        }
-      : null,
+        ? {
+            equipSlot: def.equip_slot ?? null,
+            strengthenLevel: Number(it.strengthen_level) || 0,
+            refineLevel: Number(it.refine_level) || 0,
+            identified: !!it.identified,
+            baseAttrs: coerceAttrRecord(def.base_attrs),
+            affixes: coerceAffixes(it.affixes),
+            socketMax: resolveSocketMax(def.socket_max, qualityRank[quality]),
+            gemSlotTypes: def.gem_slot_types,
+            socketedGems: parseSocketedGems(it.socketed_gems),
+          }
+        : null,
   };
 };
 
@@ -499,6 +704,12 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
   const [disassembleOpen, setDisassembleOpen] = useState(false);
   const [enhanceOpen, setEnhanceOpen] = useState(false);
   const [enhanceSubmitting, setEnhanceSubmitting] = useState(false);
+  const [growthMode, setGrowthMode] = useState<'enhance' | 'refine' | 'socket'>('enhance');
+  const [refineSubmitting, setRefineSubmitting] = useState(false);
+  const [socketSubmitting, setSocketSubmitting] = useState(false);
+  const [socketSlot, setSocketSlot] = useState<number | undefined>(undefined);
+  const [selectedGemItemId, setSelectedGemItemId] = useState<number | undefined>(undefined);
+  const [removeSlot, setRemoveSlot] = useState<number | undefined>(undefined);
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchMode, setBatchMode] = useState<BatchMode>('disassemble');
   const [batchQualities, setBatchQualities] = useState<BagQuality[]>(qualityLabels);
@@ -754,7 +965,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     if (!activeItem?.equip || activeItem.category !== 'equipment') return null;
     const curLv = Math.max(0, Math.min(15, Math.floor(Number(activeItem.equip.strengthenLevel) || 0)));
     const targetLv = Math.min(15, curLv + 1);
-    const materialItemDefId = targetLv <= 10 ? 'enhance-001' : 'enhance-002';
+    const materialItemDefId = getEnhanceMaterialItemDefId(targetLv);
     const materialName = materialItemDefId === 'enhance-001' ? '淬灵石' : '蕴灵石';
     const owned = materialCounts[materialItemDefId] ?? 0;
     const curFactor = getStrengthenMultiplier(curLv);
@@ -775,6 +986,59 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       previewBaseAttrs,
     };
   }, [activeItem, materialCounts]);
+
+  const refineState = useMemo(() => {
+    if (!activeItem?.equip || activeItem.category !== 'equipment') return null;
+    const curLv = Math.max(0, Math.min(10, Math.floor(Number(activeItem.equip.refineLevel) || 0)));
+    const targetLv = Math.min(10, curLv + 1);
+    const costPlan = buildRefineCostPlan(targetLv);
+    const owned = materialCounts[costPlan.materialItemDefId] ?? 0;
+    const curFactor = getRefineMultiplier(curLv);
+    const nextFactor = getRefineMultiplier(targetLv);
+    const ratio = curFactor > 0 ? nextFactor / curFactor : 1;
+    const previewBaseAttrs: Record<string, number> = {};
+    for (const [k, v] of Object.entries(activeItem.equip.baseAttrs)) {
+      const n = Number(v);
+      if (!Number.isFinite(n)) continue;
+      previewBaseAttrs[k] = Math.round(n * ratio);
+    }
+    return {
+      curLv,
+      targetLv,
+      materialItemDefId: costPlan.materialItemDefId,
+      materialQty: costPlan.materialQty,
+      owned,
+      successRatePermyriad: getRefineSuccessRatePermyriad(targetLv),
+      previewBaseAttrs,
+    };
+  }, [activeItem, materialCounts]);
+
+  const socketState = useMemo(() => {
+    if (!activeItem?.equip || activeItem.category !== 'equipment') return null;
+    const equip = activeItem.equip;
+    const candidates = collectGemCandidates(items);
+    const availableSlots = Array.from({ length: Math.max(0, equip.socketMax) }, (_, idx) => idx);
+    const selectedSlot =
+      socketSlot === undefined || socketSlot === null ? availableSlots.find((s) => !equip.socketedGems.some((g) => g.slot === s)) : socketSlot;
+    const selectedGem = candidates.find((x) => x.id === selectedGemItemId) ?? null;
+    const selectedGemType = selectedGem ? normalizeGemType(selectedGem.subCategory || selectedGem.name) : 'all';
+    const slotValid = selectedSlot !== undefined && selectedSlot >= 0 && selectedSlot < equip.socketMax;
+    const typeValid =
+      selectedGem && selectedSlot !== undefined
+        ? isGemTypeAllowedInSlot(equip.gemSlotTypes, selectedSlot, selectedGemType)
+        : false;
+    return {
+      socketed: equip.socketedGems,
+      socketMax: equip.socketMax,
+      availableSlots,
+      selectedSlot,
+      candidates,
+      selectedGem,
+      selectedGemType,
+      slotValid,
+      typeValid,
+    };
+  }, [activeItem, items, selectedGemItemId, socketSlot]);
 
   const handleEnhance = useCallback(async () => {
     if (!activeItem) return;
@@ -799,6 +1063,78 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       setEnhanceSubmitting(false);
     }
   }, [activeItem, message, refresh]);
+
+  const handleRefine = useCallback(async () => {
+    if (!activeItem) return;
+    if (activeItem.category !== 'equipment') return;
+    if (!activeItem.equip) return;
+
+    setRefineSubmitting(true);
+    try {
+      const res = await refineInventoryItem(activeItem.id);
+      if (res.success) {
+        message.success(res.message || '精炼成功');
+      } else {
+        if ((res.message || '') === '精炼失败') message.warning(res.message || '精炼失败');
+        else message.error(res.message || '精炼失败');
+      }
+      await refresh();
+      window.dispatchEvent(new Event('inventory:changed'));
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      message.error(err.message || '精炼失败');
+    } finally {
+      setRefineSubmitting(false);
+    }
+  }, [activeItem, message, refresh]);
+
+  const handleSocket = useCallback(async () => {
+    if (!activeItem?.equip || activeItem.category !== 'equipment') return;
+    if (!socketState) return;
+    if (!socketState.selectedGem) return;
+    if (socketState.selectedSlot === undefined) return;
+    if (!socketState.slotValid || !socketState.typeValid) return;
+
+    setSocketSubmitting(true);
+    try {
+      const res = await socketInventoryGem({
+        itemId: activeItem.id,
+        gemItemId: socketState.selectedGem.id,
+        slot: socketState.selectedSlot,
+      });
+      if (!res.success) throw new Error(res.message || '镶嵌失败');
+      message.success(res.message || '镶嵌成功');
+      await refresh();
+      window.dispatchEvent(new Event('inventory:changed'));
+      setSelectedGemItemId(undefined);
+      setSocketSlot(undefined);
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      message.error(err.message || '镶嵌失败');
+    } finally {
+      setSocketSubmitting(false);
+    }
+  }, [activeItem, message, refresh, socketState]);
+
+  const handleRemoveSocket = useCallback(async () => {
+    if (!activeItem?.equip || activeItem.category !== 'equipment') return;
+    if (removeSlot === undefined || removeSlot === null) return;
+
+    setSocketSubmitting(true);
+    try {
+      const res = await removeInventorySocketGem({ itemId: activeItem.id, slot: removeSlot });
+      if (!res.success) throw new Error(res.message || '卸下宝石失败');
+      message.success(res.message || '卸下宝石成功');
+      await refresh();
+      window.dispatchEvent(new Event('inventory:changed'));
+      setRemoveSlot(undefined);
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      message.error(err.message || '卸下宝石失败');
+    } finally {
+      setSocketSubmitting(false);
+    }
+  }, [activeItem, message, refresh, removeSlot]);
 
   const bagOnlyItems = useMemo(() => items.filter((i) => i.location === 'bag'), [items]);
 
@@ -1242,17 +1578,28 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       <Modal
         open={enhanceOpen}
         onCancel={() => {
-          if (enhanceSubmitting) return;
+          if (enhanceSubmitting || refineSubmitting || socketSubmitting) return;
           setEnhanceOpen(false);
         }}
         footer={null}
         centered
         destroyOnHidden
-        title="装备强化"
+        title="装备成长"
         className="bag-enhance-modal"
-        maskClosable={!enhanceSubmitting}
+        maskClosable={!(enhanceSubmitting || refineSubmitting || socketSubmitting)}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Tabs
+            size="small"
+            activeKey={growthMode}
+            onChange={(k) => setGrowthMode(k as 'enhance' | 'refine' | 'socket')}
+            items={[
+              { key: 'enhance', label: '强化' },
+              { key: 'refine', label: '精炼' },
+              { key: 'socket', label: '镶嵌' },
+            ]}
+          />
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {activeItem?.name ?? '未选择'}
@@ -1260,7 +1607,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
             {activeItem?.quality ? <Tag color={qualityColor[activeItem.quality]}>{qualityLabelText[activeItem.quality]}</Tag> : null}
           </div>
 
-          {enhanceState ? (
+          {growthMode === 'enhance' && (enhanceState ? (
             <>
               <div>当前强化：+{enhanceState.curLv}</div>
               <div>目标强化：+{enhanceState.targetLv}</div>
@@ -1313,7 +1660,137 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
             </>
           ) : (
             <div className="bag-enhance-hint">请选择可强化的装备</div>
-          )}
+          ))}
+
+          {growthMode === 'refine' && (refineState ? (
+            <>
+              <div>当前精炼：+{refineState.curLv}</div>
+              <div>目标精炼：+{refineState.targetLv}</div>
+              <div>成功率：{(refineState.successRatePermyriad / 100).toFixed(2).replace(/\.00$/, '')}%</div>
+              <div>
+                消耗材料：{refineState.materialItemDefId} ×{refineState.materialQty}（拥有 {refineState.owned}）
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ padding: 10, border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8 }}>
+                  <div style={{ marginBottom: 6, color: 'rgba(255,255,255,0.85)' }}>当前属性</div>
+                  {Object.entries(activeItem?.equip?.baseAttrs ?? {})
+                    .sort(([a], [b]) => (attrOrder[a] ?? 9999) - (attrOrder[b] ?? 9999) || a.localeCompare(b))
+                    .map(([k, v]) => (
+                      <div key={`ref-cur-${k}`}>
+                        {attrLabel[k] ?? k} {permyriadPercentKeys.has(k) ? formatSignedPermyriadPercent(v) : formatSignedNumber(v)}
+                      </div>
+                    ))}
+                </div>
+                <div style={{ padding: 10, border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8 }}>
+                  <div style={{ marginBottom: 6, color: 'rgba(255,255,255,0.85)' }}>精炼后属性</div>
+                  {Object.entries(refineState.previewBaseAttrs)
+                    .sort(([a], [b]) => (attrOrder[a] ?? 9999) - (attrOrder[b] ?? 9999) || a.localeCompare(b))
+                    .map(([k, v]) => (
+                      <div key={`ref-next-${k}`}>
+                        {attrLabel[k] ?? k} {permyriadPercentKeys.has(k) ? formatSignedPermyriadPercent(v) : formatSignedNumber(v)}
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <Button
+                  disabled={
+                    refineSubmitting ||
+                    refineState.curLv >= 10 ||
+                    refineState.owned < refineState.materialQty ||
+                    !!activeItem?.locked
+                  }
+                  type="primary"
+                  onClick={() => void handleRefine()}
+                  loading={refineSubmitting}
+                >
+                  精炼一次
+                </Button>
+              </div>
+
+              {activeItem?.locked ? <div className="bag-enhance-hint">物品已锁定</div> : null}
+              {refineState.curLv >= 10 ? <div className="bag-enhance-hint">精炼已达上限</div> : null}
+              {refineState.owned < refineState.materialQty ? <div className="bag-enhance-warning">材料不足</div> : null}
+            </>
+          ) : (
+            <div className="bag-enhance-hint">请选择可精炼的装备</div>
+          ))}
+
+          {growthMode === 'socket' && (socketState ? (
+            <>
+              <div>孔位：{socketState.socketed.length}/{socketState.socketMax}</div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <Select
+                  value={socketState.selectedSlot}
+                  onChange={(v) => setSocketSlot(typeof v === 'number' ? v : undefined)}
+                  placeholder="选择孔位"
+                  options={socketState.availableSlots.map((slot) => {
+                    const existed = socketState.socketed.find((g) => g.slot === slot);
+                    return {
+                      value: slot,
+                      label: existed ? `孔位${slot}（已镶嵌：${existed.name ?? existed.itemDefId}）` : `孔位${slot}（空）`,
+                    };
+                  })}
+                />
+                <Select
+                  value={selectedGemItemId}
+                  onChange={(v) => setSelectedGemItemId(typeof v === 'number' ? v : undefined)}
+                  placeholder="选择宝石"
+                  options={socketState.candidates.map((g) => ({ value: g.id, label: `${g.name} x${g.qty}` }))}
+                />
+              </div>
+
+              <div style={{ color: 'rgba(255,255,255,0.7)' }}>
+                {socketState.selectedGem
+                  ? `已选宝石：${socketState.selectedGem.name}（类型：${socketState.selectedGemType}）`
+                  : '请选择可镶嵌宝石'}
+              </div>
+              {socketState.selectedGem && socketState.selectedSlot !== undefined && !socketState.typeValid ? (
+                <div className="bag-enhance-warning">宝石类型与孔位不匹配</div>
+              ) : null}
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between' }}>
+                <Select
+                  value={removeSlot}
+                  onChange={(v) => setRemoveSlot(typeof v === 'number' ? v : undefined)}
+                  placeholder="选择卸下孔位"
+                  style={{ minWidth: 220 }}
+                  options={socketState.socketed.map((g) => ({ value: g.slot, label: `孔位${g.slot}：${g.name ?? g.itemDefId}` }))}
+                />
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <Button
+                    disabled={socketSubmitting || removeSlot === undefined || !!activeItem?.locked}
+                    onClick={() => void handleRemoveSocket()}
+                    loading={socketSubmitting}
+                  >
+                    卸下宝石
+                  </Button>
+                  <Button
+                    type="primary"
+                    disabled={
+                      socketSubmitting ||
+                      !socketState.selectedGem ||
+                      socketState.selectedSlot === undefined ||
+                      !socketState.slotValid ||
+                      !socketState.typeValid ||
+                      !!activeItem?.locked
+                    }
+                    onClick={() => void handleSocket()}
+                    loading={socketSubmitting}
+                  >
+                    镶嵌宝石
+                  </Button>
+                </div>
+              </div>
+
+              {activeItem?.locked ? <div className="bag-enhance-hint">物品已锁定</div> : null}
+            </>
+          ) : (
+            <div className="bag-enhance-hint">请选择可镶嵌的装备</div>
+          ))}
         </div>
       </Modal>
 

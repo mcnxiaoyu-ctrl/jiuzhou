@@ -9,6 +9,25 @@
 import { query, pool } from '../config/database.js';
 import type { PoolClient } from 'pg';
 import { randomInt } from 'crypto';
+import {
+  ENHANCE_MAX_LEVEL,
+  REFINE_MAX_LEVEL,
+  buildEnhanceCostPlan,
+  buildEquipmentDisplayBaseAttrs,
+  buildRefineCostPlan,
+  clampInt as clampGrowthInt,
+  getEnhanceFailResultLevel,
+  getEnhanceSuccessRatePermyriad,
+  getRefineFailResultLevel,
+  getRefineSuccessRatePermyriad,
+  inferGemTypeFromEffects,
+  isGemTypeAllowedInSlot,
+  parseSocketEffectsFromItemEffectDefs,
+  parseSocketedGems,
+  resolveSocketMax,
+  type SocketEffect,
+  type SocketedGemEntry,
+} from './equipmentGrowthRules.js';
 
 // 背包位置类型
 export type InventoryLocation = 'bag' | 'warehouse' | 'equipped';
@@ -26,6 +45,7 @@ export interface InventoryItem {
   equipped_slot: string | null;
   strengthen_level: number;
   refine_level: number;
+  socketed_gems: unknown;
   affixes: any;
   identified: boolean;
   locked: boolean;
@@ -104,65 +124,7 @@ const allowedCharacterAttrKeys = new Set<CharacterAttrKey>([
   'lingqi_huifu',
 ]);
 
-const QUALITY_MULTIPLIER_BY_RANK: Record<number, number> = {
-  1: 1,
-  2: 1.2,
-  3: 1.45,
-  4: 1.75,
-};
-
-const getQualityMultiplier = (rank: number): number => {
-  return QUALITY_MULTIPLIER_BY_RANK[rank] ?? 1;
-};
-
-const clampInt = (value: number, min: number, max: number): number => {
-  const v = Number(value);
-  if (!Number.isFinite(v)) return min;
-  return Math.max(min, Math.min(max, Math.floor(v)));
-};
-
-const getStrengthenMultiplier = (strengthenLevel: number): number => {
-  const lv = clampInt(strengthenLevel, 0, 15);
-  return 1 + lv * 0.03;
-};
-
-const ENHANCE_SUCCESS_RATE_PERMYRIAD: Record<number, number> = {
-  1: 2000,
-  2: 1500,
-  3: 1100,
-  4: 800,
-  5: 600,
-  6: 450,
-  7: 320,
-  8: 240,
-  9: 180,
-  10: 130,
-  11: 90,
-  12: 60,
-  13: 40,
-  14: 25,
-  15: 10,
-};
-
-const scaleNumberRecord = (record: Record<string, unknown>, factor: number): Record<string, number> => {
-  if (!Number.isFinite(factor) || factor === 1) {
-    const out: Record<string, number> = {};
-    for (const [k, v] of Object.entries(record)) {
-      const n = Number(v);
-      if (!Number.isFinite(n)) continue;
-      out[k] = n;
-    }
-    return out;
-  }
-
-  const out: Record<string, number> = {};
-  for (const [k, v] of Object.entries(record)) {
-    const n = Number(v);
-    if (!Number.isFinite(n)) continue;
-    out[k] = Math.round(n * factor);
-  }
-  return out;
-};
+const clampInt = clampGrowthInt;
 
 const getSlottedCapacity = (info: InventoryInfo, location: SlottedInventoryLocation): number =>
   location === 'bag' ? info.bag_capacity : info.warehouse_capacity;
@@ -247,6 +209,8 @@ const getEquipmentAttrDeltaByInstanceIdTx = async (
         ii.owner_character_id,
         ii.affixes,
         ii.strengthen_level,
+        ii.refine_level,
+        ii.socketed_gems,
         id.category,
         id.base_attrs,
         id.quality_rank as def_quality_rank,
@@ -265,12 +229,14 @@ const getEquipmentAttrDeltaByInstanceIdTx = async (
 
   const delta = new Map<CharacterAttrKey, number>();
 
-  const baseAttrsRaw = row.base_attrs && typeof row.base_attrs === 'object' ? row.base_attrs : {};
-  const resolvedQualityRank = Number(row.resolved_quality_rank) || 1;
-  const defQualityRank = Number(row.def_quality_rank) || 1;
-  const attrFactor = getQualityMultiplier(resolvedQualityRank) / getQualityMultiplier(defQualityRank);
-  const strengthenFactor = getStrengthenMultiplier(Number(row.strengthen_level) || 0);
-  const baseAttrs = scaleNumberRecord(baseAttrsRaw as Record<string, unknown>, attrFactor * strengthenFactor);
+  const baseAttrs = buildEquipmentDisplayBaseAttrs({
+    baseAttrsRaw: row.base_attrs,
+    defQualityRankRaw: row.def_quality_rank,
+    resolvedQualityRankRaw: row.resolved_quality_rank,
+    strengthenLevelRaw: row.strengthen_level,
+    refineLevelRaw: row.refine_level,
+    socketedGemsRaw: row.socketed_gems,
+  });
 
   for (const [k, v] of Object.entries(baseAttrs)) addToDelta(delta, k, v);
 
@@ -313,9 +279,8 @@ const consumeMaterialByDefIdTx = async (
       WHERE owner_character_id = $1
         AND item_def_id = $2
         AND location IN ('bag', 'warehouse')
-      ORDER BY id ASC
+      ORDER BY qty DESC, id ASC
       FOR UPDATE
-      LIMIT 1
     `,
     [characterId, materialItemDefId]
   );
@@ -324,21 +289,678 @@ const consumeMaterialByDefIdTx = async (
     return { success: false, message: '材料不足' };
   }
 
-  const row = rowResult.rows[0] as { id: number; qty: number; locked: boolean };
-  if (row.locked) {
-    return { success: false, message: '材料已锁定' };
-  }
-  if ((Number(row.qty) || 0) < need) {
+  const rows = rowResult.rows as Array<{ id: number; qty: number; locked: boolean }>;
+  const unlockedRows = rows.filter((row) => !row.locked && (Number(row.qty) || 0) > 0);
+  const unlockedTotal = unlockedRows.reduce((sum, row) => sum + Math.max(0, Number(row.qty) || 0), 0);
+
+  if (unlockedTotal < need) {
+    if (unlockedTotal <= 0 && rows.some((row) => row.locked)) {
+      return { success: false, message: '材料已锁定' };
+    }
     return { success: false, message: '材料不足' };
   }
+
+  let remaining = need;
+  for (const row of unlockedRows) {
+    if (remaining <= 0) break;
+    const rowQty = Math.max(0, Number(row.qty) || 0);
+    if (rowQty <= 0) continue;
+
+    const consume = Math.min(rowQty, remaining);
+    if (consume >= rowQty) {
+      await client.query('DELETE FROM item_instance WHERE id = $1', [row.id]);
+    } else {
+      await client.query('UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2', [consume, row.id]);
+    }
+    remaining -= consume;
+  }
+
+  return { success: true, message: '扣除成功' };
+};
+
+const consumeSpecificItemInstanceTx = async (
+  client: PoolClient,
+  characterId: number,
+  itemInstanceId: number,
+  qty: number
+): Promise<{ success: boolean; message: string; itemDefId?: string }> => {
+  const need = clampInt(qty, 1, 999999);
+  const result = await client.query(
+    `
+      SELECT id, item_def_id, qty, locked, location
+      FROM item_instance
+      WHERE id = $1 AND owner_character_id = $2
+      FOR UPDATE
+      LIMIT 1
+    `,
+    [itemInstanceId, characterId]
+  );
+
+  if (result.rows.length === 0) return { success: false, message: '道具不存在' };
+
+  const row = result.rows[0] as {
+    id: number;
+    item_def_id: string;
+    qty: number;
+    locked: boolean;
+    location: string;
+  };
+  if (row.locked) return { success: false, message: '道具已锁定' };
+  if (!['bag', 'warehouse'].includes(String(row.location))) {
+    return { success: false, message: '道具当前位置不可消耗' };
+  }
+  if ((Number(row.qty) || 0) < need) return { success: false, message: '道具数量不足' };
 
   if ((Number(row.qty) || 0) === need) {
     await client.query('DELETE FROM item_instance WHERE id = $1', [row.id]);
   } else {
     await client.query('UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2', [need, row.id]);
   }
+  return { success: true, message: '扣除成功', itemDefId: String(row.item_def_id) };
+};
 
+const consumeCharacterCurrenciesTx = async (
+  client: PoolClient,
+  characterId: number,
+  costs: { silver?: number; spiritStones?: number }
+): Promise<{ success: boolean; message: string }> => {
+  const silverCost = Math.max(0, Math.floor(Number(costs.silver) || 0));
+  const spiritCost = Math.max(0, Math.floor(Number(costs.spiritStones) || 0));
+  if (silverCost <= 0 && spiritCost <= 0) return { success: true, message: '无需扣除货币' };
+
+  const charResult = await client.query(
+    `SELECT silver, spirit_stones FROM characters WHERE id = $1 FOR UPDATE LIMIT 1`,
+    [characterId]
+  );
+  if (charResult.rows.length === 0) return { success: false, message: '角色不存在' };
+
+  const curSilver = Number(charResult.rows[0].silver ?? 0) || 0;
+  const curSpirit = Number(charResult.rows[0].spirit_stones ?? 0) || 0;
+  if (curSilver < silverCost) return { success: false, message: `银两不足，需要${silverCost}` };
+  if (curSpirit < spiritCost) return { success: false, message: `灵石不足，需要${spiritCost}` };
+
+  await client.query(
+    `
+      UPDATE characters
+      SET silver = silver - $2,
+          spirit_stones = spirit_stones - $3,
+          updated_at = NOW()
+      WHERE id = $1
+    `,
+    [characterId, silverCost, spiritCost]
+  );
   return { success: true, message: '扣除成功' };
+};
+
+const getCharacterSnapshotTx = async (client: PoolClient, characterId: number, userId: number): Promise<unknown | null> => {
+  const characterResult = await client.query('SELECT * FROM characters WHERE id = $1 AND user_id = $2 LIMIT 1', [
+    characterId,
+    userId,
+  ]);
+  return characterResult.rows.length > 0 ? characterResult.rows[0] : null;
+};
+
+const diffEquipmentAttrIfEquippedTx = async (
+  client: PoolClient,
+  characterId: number,
+  itemInstanceId: number,
+  location: unknown
+): Promise<{ success: boolean; message: string; before?: Map<CharacterAttrKey, number> }> => {
+  if (String(location) !== 'equipped') return { success: true, message: '无需差分' };
+  const before = await getEquipmentAttrDeltaByInstanceIdTx(client, characterId, itemInstanceId);
+  if (!before) return { success: false, message: '装备数据异常' };
+  return { success: true, message: 'ok', before };
+};
+
+const applyEquipmentDiffIfEquippedTx = async (
+  client: PoolClient,
+  characterId: number,
+  itemInstanceId: number,
+  location: unknown,
+  before?: Map<CharacterAttrKey, number>
+): Promise<{ success: boolean; message: string }> => {
+  if (String(location) !== 'equipped') return { success: true, message: '无需差分' };
+  if (!before) return { success: false, message: '装备数据异常' };
+  const after = await getEquipmentAttrDeltaByInstanceIdTx(client, characterId, itemInstanceId);
+  if (!after) return { success: false, message: '装备数据异常' };
+  const diff = new Map<CharacterAttrKey, number>();
+  mergeDelta(diff, after);
+  mergeDelta(diff, invertDelta(before));
+  await applyCharacterAttrDeltaTx(client, characterId, diff);
+  return { success: true, message: 'ok' };
+};
+
+const getEnhanceItemStateTx = async (
+  client: PoolClient,
+  characterId: number,
+  itemInstanceId: number
+): Promise<{
+  success: boolean;
+  message: string;
+  item?: {
+    id: number;
+    qty: number;
+    location: InventoryLocation | string;
+    locked: boolean;
+    strengthenLevel: number;
+    itemLevel: number;
+  };
+}> => {
+  const itemResult = await client.query(
+    `
+      SELECT
+        ii.id,
+        ii.qty,
+        ii.location,
+        ii.locked,
+        ii.strengthen_level,
+        id.category,
+        id.level
+      FROM item_instance ii
+      JOIN item_def id ON id.id = ii.item_def_id
+      WHERE ii.id = $1 AND ii.owner_character_id = $2
+      FOR UPDATE
+      LIMIT 1
+    `,
+    [itemInstanceId, characterId]
+  );
+
+  if (itemResult.rows.length === 0) return { success: false, message: '物品不存在' };
+
+  const row = itemResult.rows[0] as {
+    id: number;
+    qty: number;
+    location: InventoryLocation | string;
+    locked: boolean;
+    strengthen_level: number;
+    category: string;
+    level: number | null;
+  };
+
+  if (row.category !== 'equipment') return { success: false, message: '该物品不可强化' };
+  if (row.locked) return { success: false, message: '物品已锁定' };
+  if (String(row.location) === 'auction') return { success: false, message: '交易中的装备不可强化' };
+  if (!['bag', 'warehouse', 'equipped'].includes(String(row.location))) {
+    return { success: false, message: '该物品当前位置不可强化' };
+  }
+  if ((Number(row.qty) || 0) !== 1) return { success: false, message: '装备数量异常' };
+
+  return {
+    success: true,
+    message: 'ok',
+    item: {
+      id: Number(row.id),
+      qty: Number(row.qty) || 1,
+      location: row.location,
+      locked: Boolean(row.locked),
+      strengthenLevel: clampInt(Number(row.strengthen_level) || 0, 0, ENHANCE_MAX_LEVEL),
+      itemLevel: Math.max(0, Math.floor(Number(row.level) || 0)),
+    },
+  };
+};
+
+const getRefineItemStateTx = async (
+  client: PoolClient,
+  characterId: number,
+  itemInstanceId: number
+): Promise<{
+  success: boolean;
+  message: string;
+  item?: {
+    id: number;
+    qty: number;
+    location: InventoryLocation | string;
+    locked: boolean;
+    refineLevel: number;
+    itemLevel: number;
+  };
+}> => {
+  const itemResult = await client.query(
+    `
+      SELECT
+        ii.id,
+        ii.qty,
+        ii.location,
+        ii.locked,
+        ii.refine_level,
+        id.category,
+        id.level
+      FROM item_instance ii
+      JOIN item_def id ON id.id = ii.item_def_id
+      WHERE ii.id = $1 AND ii.owner_character_id = $2
+      FOR UPDATE
+      LIMIT 1
+    `,
+    [itemInstanceId, characterId]
+  );
+
+  if (itemResult.rows.length === 0) return { success: false, message: '物品不存在' };
+
+  const row = itemResult.rows[0] as {
+    id: number;
+    qty: number;
+    location: InventoryLocation | string;
+    locked: boolean;
+    refine_level: number;
+    category: string;
+    level: number | null;
+  };
+
+  if (row.category !== 'equipment') return { success: false, message: '该物品不可精炼' };
+  if (row.locked) return { success: false, message: '物品已锁定' };
+  if (String(row.location) === 'auction') return { success: false, message: '交易中的装备不可精炼' };
+  if (!['bag', 'warehouse', 'equipped'].includes(String(row.location))) {
+    return { success: false, message: '该物品当前位置不可精炼' };
+  }
+  if ((Number(row.qty) || 0) !== 1) return { success: false, message: '装备数量异常' };
+
+  return {
+    success: true,
+    message: 'ok',
+    item: {
+      id: Number(row.id),
+      qty: Number(row.qty) || 1,
+      location: row.location,
+      locked: Boolean(row.locked),
+      refineLevel: clampInt(Number(row.refine_level) || 0, 0, REFINE_MAX_LEVEL),
+      itemLevel: Math.max(0, Math.floor(Number(row.level) || 0)),
+    },
+  };
+};
+
+const getEnhanceToolBonusPermyriad = async (
+  client: PoolClient,
+  characterId: number,
+  toolItemInstanceId?: number
+): Promise<{ success: boolean; message: string; bonusPermyriad: number; consumedToolItemDefId?: string }> => {
+  if (!toolItemInstanceId) {
+    return { success: true, message: '未使用强化符', bonusPermyriad: 0 };
+  }
+
+  const itemResult = await client.query(
+    `
+      SELECT id, item_def_id, qty, locked, location
+      FROM item_instance
+      WHERE id = $1 AND owner_character_id = $2
+      FOR UPDATE
+      LIMIT 1
+    `,
+    [toolItemInstanceId, characterId]
+  );
+  if (itemResult.rows.length === 0) {
+    return { success: false, message: '强化符不存在', bonusPermyriad: 0 };
+  }
+
+  const item = itemResult.rows[0] as {
+    id: number;
+    item_def_id: string;
+    qty: number;
+    locked: boolean;
+    location: string;
+  };
+  if (item.locked) return { success: false, message: '强化符已锁定', bonusPermyriad: 0 };
+  if (!['bag', 'warehouse'].includes(String(item.location))) {
+    return { success: false, message: '强化符当前位置不可消耗', bonusPermyriad: 0 };
+  }
+  if ((Number(item.qty) || 0) < 1) {
+    return { success: false, message: '强化符数量不足', bonusPermyriad: 0 };
+  }
+
+  const toolDefId = String(item.item_def_id || '');
+  if (!toolDefId) return { success: false, message: '强化符数据异常', bonusPermyriad: 0 };
+
+  const defResult = await client.query(
+    'SELECT effect_defs FROM item_def WHERE id = $1 AND enabled = true LIMIT 1',
+    [toolDefId]
+  );
+  if (defResult.rows.length === 0) return { success: false, message: '强化符不存在', bonusPermyriad: 0 };
+
+  const defs: unknown[] = Array.isArray(defResult.rows[0].effect_defs) ? defResult.rows[0].effect_defs : [];
+  let bonus = 0;
+  for (const raw of defs) {
+    if (!raw || typeof raw !== 'object') continue;
+    const effect = raw as {
+      trigger?: unknown;
+      effect_type?: unknown;
+      params?: unknown;
+    };
+    if (String(effect.trigger || '') !== 'enhance') continue;
+    if (String(effect.effect_type || '') !== 'buff') continue;
+    const params = effect.params && typeof effect.params === 'object' ? (effect.params as Record<string, unknown>) : {};
+    const v = Number(params.success_rate_bonus);
+    if (Number.isFinite(v)) bonus += Math.floor(v);
+  }
+
+  if (bonus <= 0) {
+    return { success: false, message: '该道具不是强化符', bonusPermyriad: 0 };
+  }
+
+  if ((Number(item.qty) || 0) === 1) {
+    await client.query('DELETE FROM item_instance WHERE id = $1', [item.id]);
+  } else {
+    await client.query('UPDATE item_instance SET qty = qty - 1, updated_at = NOW() WHERE id = $1', [item.id]);
+  }
+
+  return {
+    success: true,
+    message: 'ok',
+    bonusPermyriad: Math.max(0, bonus),
+    consumedToolItemDefId: toolDefId,
+  };
+};
+
+const consumeEnhanceProtectToolTx = async (
+  client: PoolClient,
+  characterId: number,
+  toolItemInstanceId?: number
+): Promise<{ success: boolean; message: string; protectDowngrade: boolean; consumedToolItemDefId?: string }> => {
+  if (!toolItemInstanceId) {
+    return { success: true, message: '未使用保护符', protectDowngrade: false };
+  }
+
+  const itemResult = await client.query(
+    `
+      SELECT id, item_def_id, qty, locked, location
+      FROM item_instance
+      WHERE id = $1 AND owner_character_id = $2
+      FOR UPDATE
+      LIMIT 1
+    `,
+    [toolItemInstanceId, characterId]
+  );
+  if (itemResult.rows.length === 0) {
+    return { success: false, message: '保护符不存在', protectDowngrade: false };
+  }
+
+  const item = itemResult.rows[0] as {
+    id: number;
+    item_def_id: string;
+    qty: number;
+    locked: boolean;
+    location: string;
+  };
+  if (item.locked) return { success: false, message: '保护符已锁定', protectDowngrade: false };
+  if (!['bag', 'warehouse'].includes(String(item.location))) {
+    return { success: false, message: '保护符当前位置不可消耗', protectDowngrade: false };
+  }
+  if ((Number(item.qty) || 0) < 1) {
+    return { success: false, message: '保护符数量不足', protectDowngrade: false };
+  }
+
+  const toolDefId = String(item.item_def_id || '');
+  if (!toolDefId) return { success: false, message: '保护符数据异常', protectDowngrade: false };
+
+  const defResult = await client.query(
+    'SELECT effect_defs FROM item_def WHERE id = $1 AND enabled = true LIMIT 1',
+    [toolDefId]
+  );
+  if (defResult.rows.length === 0) return { success: false, message: '保护符不存在', protectDowngrade: false };
+
+  const defs: unknown[] = Array.isArray(defResult.rows[0].effect_defs) ? defResult.rows[0].effect_defs : [];
+  let protect = false;
+  for (const raw of defs) {
+    if (!raw || typeof raw !== 'object') continue;
+    const effect = raw as {
+      trigger?: unknown;
+      effect_type?: unknown;
+      params?: unknown;
+    };
+    if (String(effect.trigger || '') !== 'enhance') continue;
+    if (String(effect.effect_type || '') !== 'protect') continue;
+    const params = effect.params && typeof effect.params === 'object' ? (effect.params as Record<string, unknown>) : {};
+    if (Boolean(params.protect_downgrade)) {
+      protect = true;
+      break;
+    }
+  }
+
+  if (!protect) {
+    return { success: false, message: '该道具不是保护符', protectDowngrade: false };
+  }
+
+  if ((Number(item.qty) || 0) === 1) {
+    await client.query('DELETE FROM item_instance WHERE id = $1', [item.id]);
+  } else {
+    await client.query('UPDATE item_instance SET qty = qty - 1, updated_at = NOW() WHERE id = $1', [item.id]);
+  }
+
+  return {
+    success: true,
+    message: 'ok',
+    protectDowngrade: protect,
+    consumedToolItemDefId: toolDefId,
+  };
+};
+
+const loadGemItemForSocketTx = async (
+  client: PoolClient,
+  characterId: number,
+  gemItemInstanceId: number
+): Promise<{
+  success: boolean;
+  message: string;
+  gem?: {
+    itemInstanceId: number;
+    itemDefId: string;
+    name: string;
+    icon: string | null;
+    gemType: string;
+    effects: SocketEffect[];
+  };
+}> => {
+  const itemResult = await client.query(
+    `
+      SELECT id, item_def_id, qty, locked, location
+      FROM item_instance
+      WHERE id = $1 AND owner_character_id = $2
+      FOR UPDATE
+      LIMIT 1
+    `,
+    [gemItemInstanceId, characterId]
+  );
+
+  if (itemResult.rows.length === 0) return { success: false, message: '宝石不存在' };
+
+  const item = itemResult.rows[0] as {
+    id: number;
+    item_def_id: string;
+    qty: number;
+    locked: boolean;
+    location: string;
+  };
+
+  if (item.locked) return { success: false, message: '宝石已锁定' };
+  if (!['bag', 'warehouse'].includes(String(item.location))) {
+    return { success: false, message: '宝石当前位置不可消耗' };
+  }
+  if ((Number(item.qty) || 0) < 1) return { success: false, message: '宝石数量不足' };
+
+  const gemDefId = String(item.item_def_id || '');
+  if (!gemDefId) return { success: false, message: '宝石数据异常' };
+
+  const gemDefResult = await client.query(
+    `
+      SELECT id, name, icon, category, sub_category, effect_defs
+      FROM item_def
+      WHERE id = $1 AND enabled = true
+      LIMIT 1
+    `,
+    [gemDefId]
+  );
+  if (gemDefResult.rows.length === 0) return { success: false, message: '宝石不存在' };
+  const row = gemDefResult.rows[0] as {
+    id: string;
+    name: string;
+    icon: string | null;
+    category: string;
+    sub_category: string | null;
+    effect_defs: unknown;
+  };
+
+  if (row.category !== 'material' || String(row.sub_category || '') !== 'gem') {
+    return { success: false, message: '该物品不是宝石' };
+  }
+  const effects = parseSocketEffectsFromItemEffectDefs(row.effect_defs);
+  if (effects.length === 0) return { success: false, message: '该宝石不可镶嵌' };
+
+  return {
+    success: true,
+    message: 'ok',
+    gem: {
+      itemInstanceId: Number(item.id),
+      itemDefId: row.id,
+      name: row.name,
+      icon: row.icon,
+      gemType: inferGemTypeFromEffects(effects),
+      effects,
+    },
+  };
+};
+
+const normalizeGemSlotTypes = (raw: unknown): unknown => {
+  if (!raw) return null;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return normalizeGemSlotTypes(parsed);
+    } catch {
+      return null;
+    }
+  }
+  if (Array.isArray(raw) || (typeof raw === 'object' && raw !== null)) {
+    return raw;
+  }
+  return null;
+};
+
+const normalizeSocketedGemEntries = (raw: unknown): SocketedGemEntry[] => {
+  return parseSocketedGems(raw);
+};
+
+const toSocketedGemsJson = (entries: SocketedGemEntry[]): string => {
+  const out = entries
+    .map((entry) => ({
+      slot: clampInt(Number(entry.slot) || 0, 0, 999),
+      itemDefId: String(entry.itemDefId || '').trim(),
+      gemType: String(entry.gemType || '').trim() || 'all',
+      effects: entry.effects
+        .map((effect) => ({
+          attrKey: String(effect.attrKey || '').trim(),
+          value: Number(effect.value) || 0,
+          applyType: effect.applyType,
+        }))
+        .filter((effect) => effect.attrKey && Number.isFinite(effect.value) && effect.value !== 0),
+      name: typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim() : undefined,
+      icon: typeof entry.icon === 'string' && entry.icon.trim() ? entry.icon.trim() : undefined,
+    }))
+    .filter((entry) => entry.itemDefId && entry.effects.length > 0)
+    .sort((a, b) => a.slot - b.slot);
+  return JSON.stringify(out);
+};
+
+const findSocketEntryBySlot = (entries: SocketedGemEntry[], slot: number): SocketedGemEntry | null => {
+  const target = clampInt(slot, 0, 999);
+  return entries.find((entry) => clampInt(Number(entry.slot) || 0, 0, 999) === target) ?? null;
+};
+
+const getNextAvailableSocketSlot = (entries: SocketedGemEntry[], socketMax: number): number | null => {
+  const max = clampInt(socketMax, 0, 99);
+  if (max <= 0) return null;
+  const used = new Set(entries.map((entry) => clampInt(Number(entry.slot) || 0, 0, 999)));
+  for (let slot = 0; slot < max; slot += 1) {
+    if (!used.has(slot)) return slot;
+  }
+  return null;
+};
+
+const upsertSocketEntry = (
+  entries: SocketedGemEntry[],
+  nextEntry: SocketedGemEntry
+): SocketedGemEntry[] => {
+  const slot = clampInt(Number(nextEntry.slot) || 0, 0, 999);
+  const filtered = entries.filter((entry) => clampInt(Number(entry.slot) || 0, 0, 999) !== slot);
+  return [...filtered, nextEntry].sort((a, b) => a.slot - b.slot);
+};
+
+const removeSocketEntryBySlot = (entries: SocketedGemEntry[], slot: number): SocketedGemEntry[] => {
+  const target = clampInt(slot, 0, 999);
+  return entries.filter((entry) => clampInt(Number(entry.slot) || 0, 0, 999) !== target);
+};
+
+const readEquipmentSocketStateTx = async (
+  client: PoolClient,
+  characterId: number,
+  itemInstanceId: number
+): Promise<{
+  success: boolean;
+  message: string;
+  item?: {
+    id: number;
+    location: string;
+    qty: number;
+    locked: boolean;
+    socketMax: number;
+    gemSlotTypes: unknown;
+    socketedEntries: SocketedGemEntry[];
+  };
+}> => {
+  const result = await client.query(
+    `
+      SELECT
+        ii.id,
+        ii.qty,
+        ii.location,
+        ii.locked,
+        ii.socketed_gems,
+        id.category,
+        id.socket_max,
+        id.gem_slot_types,
+        COALESCE(ii.quality_rank, id.quality_rank) AS resolved_quality_rank
+      FROM item_instance ii
+      JOIN item_def id ON id.id = ii.item_def_id
+      WHERE ii.id = $1 AND ii.owner_character_id = $2
+      FOR UPDATE
+      LIMIT 1
+    `,
+    [itemInstanceId, characterId]
+  );
+  if (result.rows.length === 0) return { success: false, message: '物品不存在' };
+  const row = result.rows[0] as {
+    id: number;
+    qty: number;
+    location: string;
+    locked: boolean;
+    socketed_gems: unknown;
+    category: string;
+    socket_max: unknown;
+    gem_slot_types: unknown;
+    resolved_quality_rank: unknown;
+  };
+
+  if (row.category !== 'equipment') return { success: false, message: '该物品不可镶嵌' };
+  if (row.locked) return { success: false, message: '物品已锁定' };
+  if ((Number(row.qty) || 0) !== 1) return { success: false, message: '装备数量异常' };
+  if (String(row.location) === 'auction') return { success: false, message: '交易中的装备不可镶嵌' };
+  if (!['bag', 'warehouse', 'equipped'].includes(String(row.location))) {
+    return { success: false, message: '该物品当前位置不可镶嵌' };
+  }
+
+  const socketMax = resolveSocketMax(row.socket_max, row.resolved_quality_rank);
+  if (socketMax <= 0) return { success: false, message: '该装备无可用镶嵌孔' };
+
+  return {
+    success: true,
+    message: 'ok',
+    item: {
+      id: Number(row.id),
+      location: String(row.location),
+      qty: Number(row.qty) || 1,
+      locked: Boolean(row.locked),
+      socketMax,
+      gemSlotTypes: normalizeGemSlotTypes(row.gem_slot_types),
+      socketedEntries: normalizeSocketedGemEntries(row.socketed_gems),
+    },
+  };
 };
 
 const getEquippedSetBonusDeltaTx = async (
@@ -472,6 +1094,7 @@ export const getInventoryItems = async (
         ii.id, ii.item_def_id, ii.qty, ii.location, ii.location_slot,
         ii.quality, ii.quality_rank,
         ii.equipped_slot, ii.strengthen_level, ii.refine_level,
+        ii.socketed_gems,
         ii.affixes, ii.identified, ii.locked, ii.bind_type, ii.created_at
       FROM item_instance ii
       WHERE ii.owner_character_id = $1 AND ii.location = $2
@@ -1155,127 +1778,498 @@ export const unequipItem = async (
 export const enhanceEquipment = async (
   characterId: number,
   userId: number,
-  itemInstanceId: number
-): Promise<{ success: boolean; message: string; data?: { strengthenLevel: number; character?: unknown } }> => {
+  itemInstanceId: number,
+  options: { enhanceToolItemId?: number; protectToolItemId?: number } = {}
+): Promise<{
+  success: boolean;
+  message: string;
+  data?: {
+    strengthenLevel: number;
+    targetLevel?: number;
+    successRatePermyriad?: number;
+    roll?: number;
+    usedMaterial?: { itemDefId: string; qty: number };
+    costs?: { silver: number; spiritStones: number };
+    usedEnhanceToolItemDefId?: string;
+    usedProtectToolItemDefId?: string;
+    protectedDowngrade?: boolean;
+    character?: unknown;
+  };
+}> => {
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    const itemResult = await client.query(
-      `
-        SELECT
-          ii.id,
-          ii.qty,
-          ii.location,
-          ii.locked,
-          ii.strengthen_level,
-          id.category
-        FROM item_instance ii
-        JOIN item_def id ON id.id = ii.item_def_id
-        WHERE ii.id = $1 AND ii.owner_character_id = $2
-        FOR UPDATE
-      `,
-      [itemInstanceId, characterId]
-    );
+    const itemState = await getEnhanceItemStateTx(client, characterId, itemInstanceId);
+    if (!itemState.success || !itemState.item) {
+      await client.query('ROLLBACK');
+      return { success: false, message: itemState.message };
+    }
+    const item = itemState.item;
 
-    if (itemResult.rows.length === 0) {
+    const curLv = clampInt(item.strengthenLevel, 0, ENHANCE_MAX_LEVEL);
+    if (curLv >= ENHANCE_MAX_LEVEL) {
       await client.query('ROLLBACK');
-      return { success: false, message: '物品不存在' };
-    }
-
-    const item = itemResult.rows[0] as {
-      id: number;
-      qty: number;
-      location: InventoryLocation | string;
-      locked: boolean;
-      strengthen_level: number;
-      category: string;
-    };
-
-    if (item.category !== 'equipment') {
-      await client.query('ROLLBACK');
-      return { success: false, message: '该物品不可强化' };
-    }
-    if (item.locked) {
-      await client.query('ROLLBACK');
-      return { success: false, message: '物品已锁定' };
-    }
-    if (String(item.location) === 'auction') {
-      await client.query('ROLLBACK');
-      return { success: false, message: '交易中的装备不可强化' };
-    }
-    if (!['bag', 'warehouse', 'equipped'].includes(String(item.location))) {
-      await client.query('ROLLBACK');
-      return { success: false, message: '该物品当前位置不可强化' };
-    }
-    if ((Number(item.qty) || 0) !== 1) {
-      await client.query('ROLLBACK');
-      return { success: false, message: '装备数量异常' };
-    }
-
-    const curLv = clampInt(Number(item.strengthen_level) || 0, 0, 15);
-    if (curLv >= 15) {
-      await client.query('ROLLBACK');
-      return { success: false, message: '强化已达上限' };
+      return {
+        success: false,
+        message: '强化已达上限',
+        data: { strengthenLevel: curLv, targetLevel: curLv },
+      };
     }
 
     const targetLv = curLv + 1;
-    const materialItemDefId = targetLv <= 10 ? 'enhance-001' : 'enhance-002';
+    const costPlan = buildEnhanceCostPlan(item.itemLevel, targetLv);
 
-    const consumeRes = await consumeMaterialByDefIdTx(client, characterId, materialItemDefId, 1);
-    if (!consumeRes.success) {
+    const beforeDiffRes = await diffEquipmentAttrIfEquippedTx(client, characterId, itemInstanceId, item.location);
+    if (!beforeDiffRes.success) {
       await client.query('ROLLBACK');
-      return { success: false, message: consumeRes.message };
+      return { success: false, message: beforeDiffRes.message };
     }
 
-    const rate = clampInt(ENHANCE_SUCCESS_RATE_PERMYRIAD[targetLv] ?? 0, 0, 10000);
-    const roll = randomInt(1, 10001);
-    const success = roll <= rate;
-
-    if (!success) {
-      await client.query('COMMIT');
-      return { success: false, message: '强化失败', data: { strengthenLevel: curLv } };
-    }
-
-    const beforeDelta =
-      String(item.location) === 'equipped'
-        ? await getEquipmentAttrDeltaByInstanceIdTx(client, characterId, itemInstanceId)
-        : null;
-    if (String(item.location) === 'equipped' && !beforeDelta) {
-      await client.query('ROLLBACK');
-      return { success: false, message: '装备数据异常' };
-    }
-
-    await client.query(
-      'UPDATE item_instance SET strengthen_level = $1, updated_at = NOW() WHERE id = $2 AND owner_character_id = $3',
-      [targetLv, itemInstanceId, characterId]
-    );
-
-    if (String(item.location) === 'equipped') {
-      const afterDelta = await getEquipmentAttrDeltaByInstanceIdTx(client, characterId, itemInstanceId);
-      if (!afterDelta || !beforeDelta) {
-        await client.query('ROLLBACK');
-        return { success: false, message: '装备数据异常' };
-      }
-      const diff = new Map<CharacterAttrKey, number>();
-      mergeDelta(diff, afterDelta);
-      mergeDelta(diff, invertDelta(beforeDelta));
-      await applyCharacterAttrDeltaTx(client, characterId, diff);
-    }
-
-    const characterResult = await client.query('SELECT * FROM characters WHERE id = $1 AND user_id = $2 LIMIT 1', [
+    const materialRes = await consumeMaterialByDefIdTx(
+      client,
       characterId,
-      userId,
-    ]);
-    const character = characterResult.rows.length > 0 ? characterResult.rows[0] : null;
+      costPlan.materialItemDefId,
+      costPlan.materialQty
+    );
+    if (!materialRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: materialRes.message };
+    }
+
+    const currencyRes = await consumeCharacterCurrenciesTx(client, characterId, {
+      silver: costPlan.silverCost,
+      spiritStones: costPlan.spiritStoneCost,
+    });
+    if (!currencyRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: currencyRes.message };
+    }
+
+    const enhanceToolRes = await getEnhanceToolBonusPermyriad(
+      client,
+      characterId,
+      options.enhanceToolItemId
+    );
+    if (!enhanceToolRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: enhanceToolRes.message };
+    }
+
+    const protectToolRes = await consumeEnhanceProtectToolTx(
+      client,
+      characterId,
+      options.protectToolItemId
+    );
+    if (!protectToolRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: protectToolRes.message };
+    }
+
+    const baseRate = getEnhanceSuccessRatePermyriad(targetLv);
+    const finalRate = clampInt(baseRate + enhanceToolRes.bonusPermyriad, 0, 10000);
+    const roll = randomInt(1, 10001);
+    const success = roll <= finalRate;
+
+    const resultLevel = success
+      ? targetLv
+      : getEnhanceFailResultLevel(curLv, targetLv, protectToolRes.protectDowngrade);
+
+    if (resultLevel !== curLv) {
+      await client.query(
+        'UPDATE item_instance SET strengthen_level = $1, updated_at = NOW() WHERE id = $2 AND owner_character_id = $3',
+        [resultLevel, itemInstanceId, characterId]
+      );
+    }
+
+    const applyDiffRes = await applyEquipmentDiffIfEquippedTx(
+      client,
+      characterId,
+      itemInstanceId,
+      item.location,
+      beforeDiffRes.before
+    );
+    if (!applyDiffRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: applyDiffRes.message };
+    }
+
+    const character = await getCharacterSnapshotTx(client, characterId, userId);
 
     await client.query('COMMIT');
-    return { success: true, message: '强化成功', data: { strengthenLevel: targetLv, character } };
+    return {
+      success,
+      message: success ? '强化成功' : '强化失败',
+      data: {
+        strengthenLevel: resultLevel,
+        targetLevel: targetLv,
+        successRatePermyriad: finalRate,
+        roll,
+        usedMaterial: { itemDefId: costPlan.materialItemDefId, qty: costPlan.materialQty },
+        costs: {
+          silver: costPlan.silverCost,
+          spiritStones: costPlan.spiritStoneCost,
+        },
+        usedEnhanceToolItemDefId: enhanceToolRes.consumedToolItemDefId,
+        usedProtectToolItemDefId: protectToolRes.consumedToolItemDefId,
+        protectedDowngrade: !success && protectToolRes.protectDowngrade,
+        character: character ?? null,
+      },
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('强化装备失败:', error);
     return { success: false, message: '强化装备失败' };
+  } finally {
+    client.release();
+  }
+};
+
+export const refineEquipment = async (
+  characterId: number,
+  userId: number,
+  itemInstanceId: number
+): Promise<{
+  success: boolean;
+  message: string;
+  data?: {
+    refineLevel: number;
+    targetLevel?: number;
+    successRatePermyriad?: number;
+    roll?: number;
+    usedMaterial?: { itemDefId: string; qty: number };
+    costs?: { silver: number; spiritStones: number };
+    character?: unknown;
+  };
+}> => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const itemState = await getRefineItemStateTx(client, characterId, itemInstanceId);
+    if (!itemState.success || !itemState.item) {
+      await client.query('ROLLBACK');
+      return { success: false, message: itemState.message };
+    }
+    const item = itemState.item;
+
+    const curLv = clampInt(item.refineLevel, 0, REFINE_MAX_LEVEL);
+    if (curLv >= REFINE_MAX_LEVEL) {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        message: '精炼已达上限',
+        data: { refineLevel: curLv, targetLevel: curLv },
+      };
+    }
+
+    const targetLv = curLv + 1;
+    const costPlan = buildRefineCostPlan(item.itemLevel, targetLv);
+
+    const beforeDiffRes = await diffEquipmentAttrIfEquippedTx(client, characterId, itemInstanceId, item.location);
+    if (!beforeDiffRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: beforeDiffRes.message };
+    }
+
+    const materialRes = await consumeMaterialByDefIdTx(
+      client,
+      characterId,
+      costPlan.materialItemDefId,
+      costPlan.materialQty
+    );
+    if (!materialRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: materialRes.message };
+    }
+
+    const currencyRes = await consumeCharacterCurrenciesTx(client, characterId, {
+      silver: costPlan.silverCost,
+      spiritStones: costPlan.spiritStoneCost,
+    });
+    if (!currencyRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: currencyRes.message };
+    }
+
+    const finalRate = getRefineSuccessRatePermyriad(targetLv);
+    const roll = randomInt(1, 10001);
+    const success = roll <= finalRate;
+    const resultLevel = success ? targetLv : getRefineFailResultLevel(curLv, targetLv);
+
+    if (resultLevel !== curLv) {
+      await client.query(
+        'UPDATE item_instance SET refine_level = $1, updated_at = NOW() WHERE id = $2 AND owner_character_id = $3',
+        [resultLevel, itemInstanceId, characterId]
+      );
+    }
+
+    const applyDiffRes = await applyEquipmentDiffIfEquippedTx(
+      client,
+      characterId,
+      itemInstanceId,
+      item.location,
+      beforeDiffRes.before
+    );
+    if (!applyDiffRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: applyDiffRes.message };
+    }
+
+    const character = await getCharacterSnapshotTx(client, characterId, userId);
+
+    await client.query('COMMIT');
+    return {
+      success,
+      message: success ? '精炼成功' : '精炼失败',
+      data: {
+        refineLevel: resultLevel,
+        targetLevel: targetLv,
+        successRatePermyriad: finalRate,
+        roll,
+        usedMaterial: { itemDefId: costPlan.materialItemDefId, qty: costPlan.materialQty },
+        costs: {
+          silver: costPlan.silverCost,
+          spiritStones: costPlan.spiritStoneCost,
+        },
+        character: character ?? null,
+      },
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('精炼装备失败:', error);
+    return { success: false, message: '精炼装备失败' };
+  } finally {
+    client.release();
+  }
+};
+
+export const socketEquipment = async (
+  characterId: number,
+  userId: number,
+  itemInstanceId: number,
+  gemItemInstanceId: number,
+  options: { slot?: number } = {}
+): Promise<{
+  success: boolean;
+  message: string;
+  data?: {
+    socketedGems: SocketedGemEntry[];
+    socketMax: number;
+    slot: number;
+    gem: { itemDefId: string; name: string; icon: string | null; gemType: string };
+    replacedGem?: SocketedGemEntry;
+    character?: unknown;
+  };
+}> => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const socketState = await readEquipmentSocketStateTx(client, characterId, itemInstanceId);
+    if (!socketState.success || !socketState.item) {
+      await client.query('ROLLBACK');
+      return { success: false, message: socketState.message };
+    }
+    const equip = socketState.item;
+
+    const beforeDiffRes = await diffEquipmentAttrIfEquippedTx(client, characterId, itemInstanceId, equip.location);
+    if (!beforeDiffRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: beforeDiffRes.message };
+    }
+
+    let slot =
+      options.slot === undefined || options.slot === null
+        ? null
+        : clampInt(Number(options.slot) || 0, 0, Math.max(0, equip.socketMax - 1));
+    if (slot === null) {
+      slot = getNextAvailableSocketSlot(equip.socketedEntries, equip.socketMax);
+      if (slot === null) {
+        await client.query('ROLLBACK');
+        return { success: false, message: '镶嵌孔已满，请指定替换孔位' };
+      }
+    }
+
+    if (slot < 0 || slot >= equip.socketMax) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '孔位参数错误' };
+    }
+
+    const gemRes = await loadGemItemForSocketTx(client, characterId, gemItemInstanceId);
+    if (!gemRes.success || !gemRes.gem) {
+      await client.query('ROLLBACK');
+      return { success: false, message: gemRes.message };
+    }
+    const gem = gemRes.gem;
+
+    if (!isGemTypeAllowedInSlot(equip.gemSlotTypes, slot, gem.gemType)) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '该宝石类型与孔位不匹配' };
+    }
+
+    const replacedGem = findSocketEntryBySlot(equip.socketedEntries, slot);
+    if (replacedGem) {
+      const addRes = await addItemToInventoryTx(client, characterId, userId, replacedGem.itemDefId, 1, {
+        location: 'bag',
+        obtainedFrom: 'socket-remove',
+      });
+      if (!addRes.success) {
+        await client.query('ROLLBACK');
+        return { success: false, message: `原宝石返还失败：${addRes.message}` };
+      }
+    }
+
+    const nextEntries = upsertSocketEntry(equip.socketedEntries, {
+      slot,
+      itemDefId: gem.itemDefId,
+      gemType: gem.gemType,
+      effects: gem.effects,
+      name: gem.name,
+      icon: gem.icon ?? undefined,
+    });
+
+    if ((Number(gem.itemInstanceId) || 0) > 0) {
+      const consumeGemRes = await consumeSpecificItemInstanceTx(client, characterId, Number(gem.itemInstanceId), 1);
+      if (!consumeGemRes.success) {
+        await client.query('ROLLBACK');
+        return { success: false, message: consumeGemRes.message };
+      }
+    }
+
+    await client.query(
+      `UPDATE item_instance SET socketed_gems = $1::jsonb, updated_at = NOW() WHERE id = $2 AND owner_character_id = $3`,
+      [toSocketedGemsJson(nextEntries), itemInstanceId, characterId]
+    );
+
+    const applyDiffRes = await applyEquipmentDiffIfEquippedTx(
+      client,
+      characterId,
+      itemInstanceId,
+      equip.location,
+      beforeDiffRes.before
+    );
+    if (!applyDiffRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: applyDiffRes.message };
+    }
+
+    const character = await getCharacterSnapshotTx(client, characterId, userId);
+
+    await client.query('COMMIT');
+    return {
+      success: true,
+      message: replacedGem ? '替换镶嵌成功' : '镶嵌成功',
+      data: {
+        socketedGems: nextEntries,
+        socketMax: equip.socketMax,
+        slot,
+        gem: {
+          itemDefId: gem.itemDefId,
+          name: gem.name,
+          icon: gem.icon,
+          gemType: gem.gemType,
+        },
+        replacedGem: replacedGem ?? undefined,
+        character: character ?? null,
+      },
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('镶嵌宝石失败:', error);
+    return { success: false, message: '镶嵌宝石失败' };
+  } finally {
+    client.release();
+  }
+};
+
+export const removeSocketGem = async (
+  characterId: number,
+  userId: number,
+  itemInstanceId: number,
+  slot: number
+): Promise<{
+  success: boolean;
+  message: string;
+  data?: {
+    socketedGems: SocketedGemEntry[];
+    socketMax: number;
+    removedGem: SocketedGemEntry;
+    character?: unknown;
+  };
+}> => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const socketState = await readEquipmentSocketStateTx(client, characterId, itemInstanceId);
+    if (!socketState.success || !socketState.item) {
+      await client.query('ROLLBACK');
+      return { success: false, message: socketState.message };
+    }
+    const equip = socketState.item;
+
+    const targetSlot = clampInt(Number(slot) || 0, 0, Math.max(0, equip.socketMax - 1));
+    const removed = findSocketEntryBySlot(equip.socketedEntries, targetSlot);
+    if (!removed) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '该孔位没有已镶嵌宝石' };
+    }
+
+    const beforeDiffRes = await diffEquipmentAttrIfEquippedTx(client, characterId, itemInstanceId, equip.location);
+    if (!beforeDiffRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: beforeDiffRes.message };
+    }
+
+    const addRes = await addItemToInventoryTx(client, characterId, userId, removed.itemDefId, 1, {
+      location: 'bag',
+      obtainedFrom: 'socket-remove',
+    });
+    if (!addRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: `宝石返还失败：${addRes.message}` };
+    }
+
+    const nextEntries = removeSocketEntryBySlot(equip.socketedEntries, targetSlot);
+    await client.query(
+      `UPDATE item_instance SET socketed_gems = $1::jsonb, updated_at = NOW() WHERE id = $2 AND owner_character_id = $3`,
+      [toSocketedGemsJson(nextEntries), itemInstanceId, characterId]
+    );
+
+    const applyDiffRes = await applyEquipmentDiffIfEquippedTx(
+      client,
+      characterId,
+      itemInstanceId,
+      equip.location,
+      beforeDiffRes.before
+    );
+    if (!applyDiffRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: applyDiffRes.message };
+    }
+
+    const character = await getCharacterSnapshotTx(client, characterId, userId);
+
+    await client.query('COMMIT');
+    return {
+      success: true,
+      message: '卸下宝石成功',
+      data: {
+        socketedGems: nextEntries,
+        socketMax: equip.socketMax,
+        removedGem: removed,
+        character: character ?? null,
+      },
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('卸下宝石失败:', error);
+    return { success: false, message: '卸下宝石失败' };
   } finally {
     client.release();
   }
@@ -1759,6 +2753,9 @@ export default {
   equipItem,
   unequipItem,
   enhanceEquipment,
+  refineEquipment,
+  socketEquipment,
+  removeSocketGem,
   disassembleEquipment,
   disassembleEquipmentBatch,
   removeItemsBatch,

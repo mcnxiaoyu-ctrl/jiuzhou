@@ -8,38 +8,7 @@ import { query, pool } from '../config/database.js';
 import type { PoolClient } from 'pg';
 import { generateEquipment, createEquipmentInstance, createEquipmentInstanceTx, GenerateOptions, GeneratedEquipment } from './equipmentService.js';
 import { addItemToInventory, addItemToInventoryTx, SlottedInventoryLocation } from './inventoryService.js';
-
-const QUALITY_MULTIPLIER_BY_RANK: Record<number, number> = {
-  1: 1,
-  2: 1.2,
-  3: 1.45,
-  4: 1.75,
-};
-
-const getQualityMultiplier = (rank: number): number => {
-  return QUALITY_MULTIPLIER_BY_RANK[rank] ?? 1;
-};
-
-const clampInt = (value: number, min: number, max: number): number => {
-  const v = Number(value);
-  if (!Number.isFinite(v)) return min;
-  return Math.max(min, Math.min(max, Math.floor(v)));
-};
-
-const getStrengthenMultiplier = (strengthenLevel: number): number => {
-  const lv = clampInt(strengthenLevel, 0, 15);
-  return 1 + lv * 0.03;
-};
-
-const scaleAttrs = (attrs: Record<string, unknown>, factor: number): Record<string, number> => {
-  const out: Record<string, number> = {};
-  for (const [k, v] of Object.entries(attrs)) {
-    const n = Number(v);
-    if (!Number.isFinite(n)) continue;
-    out[k] = Number.isFinite(factor) && factor !== 1 ? Math.round(n * factor) : n;
-  }
-  return out;
-};
+import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
 
 // 物品定义接口
 export interface ItemDef {
@@ -475,11 +444,14 @@ export const getItemInstance = async (instanceId: number): Promise<any | null> =
   if (result.rows.length === 0) return null;
 
   const row = result.rows[0];
-  const resolvedQualityRank = Number(row.resolved_quality_rank) || 1;
-  const defQualityRank = Number(row.def_quality_rank) || 1;
-  const attrFactor = getQualityMultiplier(resolvedQualityRank) / getQualityMultiplier(defQualityRank);
-  const strengthenFactor = getStrengthenMultiplier(Number(row.strengthen_level) || 0);
-  const baseAttrsRaw = row.base_attrs && typeof row.base_attrs === 'object' ? row.base_attrs : {};
+  const displayBaseAttrs = buildEquipmentDisplayBaseAttrs({
+    baseAttrsRaw: row.base_attrs,
+    defQualityRankRaw: row.def_quality_rank,
+    resolvedQualityRankRaw: row.resolved_quality_rank,
+    strengthenLevelRaw: row.strengthen_level,
+    refineLevelRaw: row.refine_level,
+    socketedGemsRaw: row.socketed_gems,
+  });
   return {
     id: row.id,
     itemDefId: row.item_def_id,
@@ -496,10 +468,7 @@ export const getItemInstance = async (instanceId: number): Promise<any | null> =
     // 装备专用
     equipSlot: row.equip_slot,
     equipReqRealm: row.equip_req_realm,
-    baseAttrs:
-      row.category === 'equipment'
-        ? scaleAttrs(baseAttrsRaw as Record<string, unknown>, attrFactor * strengthenFactor)
-        : scaleAttrs(baseAttrsRaw as Record<string, unknown>, 1),
+    baseAttrs: row.category === 'equipment' ? displayBaseAttrs : (row.base_attrs ?? {}),
     affixes: row.affixes || [],
     setId: row.set_id,
     strengthenLevel: row.strengthen_level,

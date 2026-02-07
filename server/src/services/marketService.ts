@@ -1,6 +1,7 @@
 import { pool, query } from '../config/database.js';
 import type { PoolClient } from 'pg';
 import { findEmptySlotsWithClient } from './inventoryService.js';
+import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
 
 export type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
 
@@ -50,33 +51,6 @@ const parsePositiveInt = (v: unknown): number | null => {
   const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
   return n;
-};
-
-const QUALITY_MULTIPLIER_BY_RANK: Record<number, number> = {
-  1: 1,
-  2: 1.2,
-  3: 1.45,
-  4: 1.75,
-};
-
-const getQualityMultiplier = (rank: number): number => {
-  return QUALITY_MULTIPLIER_BY_RANK[rank] ?? 1;
-};
-
-const getStrengthenMultiplier = (strengthenLevel: number): number => {
-  const lv = clampInt(Number(strengthenLevel) || 0, 0, 15);
-  return 1 + lv * 0.03;
-};
-
-const scaleAttrs = (attrs: Record<string, unknown>, factor: number): Record<string, number> => {
-  const out: Record<string, number> = {};
-  const mul = Number.isFinite(factor) ? factor : 1;
-  for (const [k, v] of Object.entries(attrs)) {
-    const n = Number(v);
-    if (!Number.isFinite(n)) continue;
-    out[k] = mul !== 1 ? Math.round(n * mul) : n;
-  }
-  return out;
 };
 
 const parseNonNegativeInt = (v: unknown): number | null => {
@@ -183,10 +157,13 @@ export const getMarketListings = async (params: {
       id.equip_slot,
       id.equip_req_realm,
       id.use_type,
+      id.socket_max,
+      id.gem_slot_types,
       id.quality_rank AS def_quality_rank,
       COALESCE(ii.quality_rank, id.quality_rank) AS resolved_quality_rank,
       ii.strengthen_level,
       ii.refine_level,
+      ii.socketed_gems,
       ii.identified,
       ii.affixes,
       c.nickname AS seller_name
@@ -213,12 +190,17 @@ export const getMarketListings = async (params: {
     const total = Number(countResult.rows[0]?.cnt ?? 0);
     const listings: MarketListingDto[] = listResult.rows.map((r) => {
       const category = r.category === null || r.category === undefined ? null : String(r.category);
-      const baseAttrsRaw = r.base_attrs && typeof r.base_attrs === 'object' ? (r.base_attrs as Record<string, unknown>) : {};
-      const defQualityRank = Number(r.def_quality_rank) || 1;
-      const resolvedQualityRank = Number(r.resolved_quality_rank) || defQualityRank;
-      const attrFactor = getQualityMultiplier(resolvedQualityRank) / getQualityMultiplier(defQualityRank);
-      const strengthenFactor = getStrengthenMultiplier(Number(r.strengthen_level) || 0);
-      const baseAttrs = scaleAttrs(baseAttrsRaw, category === 'equipment' ? attrFactor * strengthenFactor : 1);
+      const baseAttrs =
+        category === 'equipment'
+          ? buildEquipmentDisplayBaseAttrs({
+              baseAttrsRaw: r.base_attrs,
+              defQualityRankRaw: r.def_quality_rank,
+              resolvedQualityRankRaw: r.resolved_quality_rank,
+              strengthenLevelRaw: r.strengthen_level,
+              refineLevelRaw: r.refine_level,
+              socketedGemsRaw: r.socketed_gems,
+            })
+          : (r.base_attrs && typeof r.base_attrs === 'object' ? (r.base_attrs as Record<string, number>) : {});
 
       return {
         id: Number(r.id),
@@ -290,10 +272,13 @@ export const getMyMarketListings = async (params: {
           id.equip_slot,
           id.equip_req_realm,
           id.use_type,
+          id.socket_max,
+          id.gem_slot_types,
           id.quality_rank AS def_quality_rank,
           COALESCE(ii.quality_rank, id.quality_rank) AS resolved_quality_rank,
           ii.strengthen_level,
           ii.refine_level,
+          ii.socketed_gems,
           ii.identified,
           ii.affixes,
           c.nickname AS seller_name
@@ -320,12 +305,17 @@ export const getMyMarketListings = async (params: {
     const total = Number(countResult.rows[0]?.cnt ?? 0);
     const listings: MarketListingDto[] = listResult.rows.map((r) => {
       const category = r.category === null || r.category === undefined ? null : String(r.category);
-      const baseAttrsRaw = r.base_attrs && typeof r.base_attrs === 'object' ? (r.base_attrs as Record<string, unknown>) : {};
-      const defQualityRank = Number(r.def_quality_rank) || 1;
-      const resolvedQualityRank = Number(r.resolved_quality_rank) || defQualityRank;
-      const attrFactor = getQualityMultiplier(resolvedQualityRank) / getQualityMultiplier(defQualityRank);
-      const strengthenFactor = getStrengthenMultiplier(Number(r.strengthen_level) || 0);
-      const baseAttrs = scaleAttrs(baseAttrsRaw, category === 'equipment' ? attrFactor * strengthenFactor : 1);
+      const baseAttrs =
+        category === 'equipment'
+          ? buildEquipmentDisplayBaseAttrs({
+              baseAttrsRaw: r.base_attrs,
+              defQualityRankRaw: r.def_quality_rank,
+              resolvedQualityRankRaw: r.resolved_quality_rank,
+              strengthenLevelRaw: r.strengthen_level,
+              refineLevelRaw: r.refine_level,
+              socketedGemsRaw: r.socketed_gems,
+            })
+          : (r.base_attrs && typeof r.base_attrs === 'object' ? (r.base_attrs as Record<string, number>) : {});
 
       return {
         id: Number(r.id),

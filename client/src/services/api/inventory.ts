@@ -30,6 +30,8 @@ export interface ItemDefLite {
   base_attrs: unknown;
   equip_slot: string | null;
   use_type: string | null;
+  socket_max?: number;
+  gem_slot_types?: unknown;
 }
 
 export interface InventoryItemDto {
@@ -45,6 +47,7 @@ export interface InventoryItemDto {
   identified: boolean;
   locked: boolean;
   bind_type: string;
+  socketed_gems?: unknown;
   created_at: string;
   def?: ItemDefLite;
 }
@@ -130,11 +133,130 @@ export const unequipInventoryItem = (
 export interface InventoryEnhanceResponse {
   success: boolean;
   message: string;
-  data?: { strengthenLevel: number; character: unknown | null };
+  data?: {
+    strengthenLevel: number;
+    targetLevel?: number;
+    successRatePermyriad?: number;
+    roll?: number;
+    usedMaterial?: { itemDefId: string; qty: number };
+    costs?: { silver: number; spiritStones: number };
+    usedEnhanceToolItemDefId?: string;
+    usedProtectToolItemDefId?: string;
+    protectedDowngrade?: boolean;
+    character: unknown | null;
+  };
 }
 
-export const enhanceInventoryItem = (itemId: number): Promise<InventoryEnhanceResponse> => {
-  return api.post('/inventory/enhance', { itemId });
+export interface InventoryEnhanceRequest {
+  itemId?: number;
+  itemInstanceId?: number;
+  instanceId?: number;
+  enhanceToolItemId?: number;
+  protectToolItemId?: number;
+}
+
+export const enhanceInventoryItem = (
+  itemIdOrBody: number | InventoryEnhanceRequest,
+  options: { enhanceToolItemId?: number; protectToolItemId?: number } = {}
+): Promise<InventoryEnhanceResponse> => {
+  if (typeof itemIdOrBody === 'number') {
+    return api.post('/inventory/enhance', { itemId: itemIdOrBody, ...options });
+  }
+  return api.post('/inventory/enhance', itemIdOrBody);
+};
+
+export interface InventoryRefineResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    refineLevel: number;
+    targetLevel?: number;
+    successRatePermyriad?: number;
+    roll?: number;
+    usedMaterial?: { itemDefId: string; qty: number };
+    costs?: { silver: number; spiritStones: number };
+    character: unknown | null;
+  };
+}
+
+export interface InventoryRefineRequest {
+  itemId?: number;
+  itemInstanceId?: number;
+  instanceId?: number;
+}
+
+export const refineInventoryItem = (
+  itemIdOrBody: number | InventoryRefineRequest
+): Promise<InventoryRefineResponse> => {
+  if (typeof itemIdOrBody === 'number') {
+    return api.post('/inventory/refine', { itemId: itemIdOrBody });
+  }
+  return api.post('/inventory/refine', itemIdOrBody);
+};
+
+export interface SocketedGemEffectDto {
+  attr: string;
+  value: number;
+}
+
+export interface SocketedGemEntryDto {
+  slot: number;
+  itemDefId: string;
+  gemType: string;
+  effects: SocketedGemEffectDto[];
+  name?: string;
+  icon?: string;
+}
+
+export interface InventorySocketResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    socketedGems: SocketedGemEntryDto[];
+    socketMax: number;
+    slot: number;
+    gem: { itemDefId: string; name: string; icon: string | null; gemType: string };
+    replacedGem?: SocketedGemEntryDto;
+    character?: unknown;
+  } | null;
+}
+
+export interface InventorySocketRequest {
+  itemId?: number;
+  itemInstanceId?: number;
+  instanceId?: number;
+  gemItemId?: number;
+  gemItemInstanceId?: number;
+  gemInstanceId?: number;
+  slot?: number;
+}
+
+export const socketInventoryGem = (body: InventorySocketRequest): Promise<InventorySocketResponse> => {
+  return api.post('/inventory/socket', body);
+};
+
+export interface InventoryRemoveSocketGemResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    socketedGems: SocketedGemEntryDto[];
+    socketMax: number;
+    removedGem: SocketedGemEntryDto;
+    character?: unknown;
+  } | null;
+}
+
+export interface InventoryRemoveSocketGemRequest {
+  itemId?: number;
+  itemInstanceId?: number;
+  instanceId?: number;
+  slot: number;
+}
+
+export const removeInventorySocketGem = (
+  body: InventoryRemoveSocketGemRequest
+): Promise<InventoryRemoveSocketGemResponse> => {
+  return api.post('/inventory/socket/remove', body);
 };
 
 export interface InventoryDisassembleResponse {

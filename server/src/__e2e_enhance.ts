@@ -2,6 +2,7 @@ import { createItem } from './services/itemService.js';
 import { query } from './config/database.js';
 
 type Json = Record<string, unknown>;
+type E2eLog = Record<string, unknown>;
 
 const base = process.env.E2E_BASE_URL || 'http://localhost:6012';
 
@@ -45,6 +46,100 @@ const findInBag = async (token: string, predicate: (it: any) => boolean): Promis
   return items.find(predicate) ?? null;
 };
 
+const must = (ok: unknown, message: string): void => {
+  if (!ok) throw new Error(message);
+};
+
+const pickNum = (value: unknown, fallback = 0): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const withRetry = async <T>(task: () => Promise<T>, attempts = 3): Promise<T> => {
+  let lastError: unknown;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      return await task();
+    } catch (e) {
+      lastError = e;
+      if (i < attempts) await sleep(80 * i);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('retry failed');
+};
+
+const postInventory = async (
+  path: string,
+  body: Json,
+  token: string,
+): Promise<{ ok: boolean; payload: any }> => {
+  try {
+    const payload = await postJson(`${base}${path}`, body, token);
+    return { ok: true, payload };
+  } catch (e) {
+    return {
+      ok: false,
+      payload: {
+        success: false,
+        message: e instanceof Error ? e.message : 'request failed',
+      },
+    };
+  }
+};
+
+const normalizeSocketedGems = (raw: unknown): Array<{ slot: number; itemDefId: string }> => {
+  const src = Array.isArray(raw) ? raw : [];
+  return src
+    .map((x) => {
+      if (!x || typeof x !== 'object') return null;
+      const row = x as Record<string, unknown>;
+      const slot = Number(row.slot);
+      const itemDefId = String(row.itemDefId || row.item_def_id || '');
+      if (!Number.isInteger(slot) || slot < 0 || !itemDefId) return null;
+      return { slot, itemDefId };
+    })
+    .filter((x): x is { slot: number; itemDefId: string } => !!x)
+    .sort((a, b) => a.slot - b.slot);
+};
+
+const findInventoryItem = async (
+  token: string,
+  predicate: (it: any) => boolean,
+): Promise<any | null> => {
+  const locations: Array<'bag' | 'warehouse' | 'equipped'> = ['bag', 'warehouse', 'equipped'];
+  for (const location of locations) {
+    const list = await getJson(`${base}/api/inventory/items?location=${location}&page=1&pageSize=200`, token);
+    const items = Array.isArray(list?.data?.items) ? list.data.items : [];
+    const found = items.find(predicate);
+    if (found) return found;
+  }
+  return null;
+};
+
+const equipIfNeeded = async (token: string, itemId: number): Promise<void> => {
+  const eqBefore = await findInventoryItem(token, (x) => Number(x?.id) === itemId);
+  if (!eqBefore) throw new Error('equip target not found');
+  if (String(eqBefore.location) === 'equipped') return;
+  const equipRes = await postJson(`${base}/api/inventory/equip`, { itemId }, token);
+  must(Boolean(equipRes?.success), `equip failed: ${String(equipRes?.message ?? '')}`);
+};
+
+const getCharAttrs = async (characterId: number): Promise<{ wugong: number; fagong: number; maxQixue: number }> => {
+  const result = await query(
+    `SELECT wugong, fagong, max_qixue FROM characters WHERE id = $1 LIMIT 1`,
+    [characterId],
+  );
+  if (!result.rows[0]) return { wugong: 0, fagong: 0, maxQixue: 0 };
+  const row = result.rows[0] as Record<string, unknown>;
+  return {
+    wugong: pickNum(row.wugong),
+    fagong: pickNum(row.fagong),
+    maxQixue: pickNum(row.max_qixue),
+  };
+};
+
 const main = async () => {
   const username = `e2e${String(Date.now()).slice(-13)}`;
   const password = 'pass123456';
@@ -63,15 +158,37 @@ const main = async () => {
   if (!eq.success || !eq.itemIds?.[0]) throw new Error(`create equip failed: ${eq.message}`);
   const equipId = Number(eq.itemIds[0]);
 
-  const mats = await createItem(userId, characterId, 'enhance-001', 50, { location: 'bag' });
+  const mats = await createItem(userId, characterId, 'enhance-001', 80, { location: 'bag' });
   if (!mats.success) throw new Error(`create material failed: ${mats.message}`);
+  const refineMats = await createItem(userId, characterId, 'enhance-002', 80, { location: 'bag' });
+  if (!refineMats.success) throw new Error(`create refine material failed: ${refineMats.message}`);
+  const enhTool = await createItem(userId, characterId, 'enhance-003', 1, { location: 'bag' });
+  if (!enhTool.success) throw new Error(`create enhance tool failed: ${enhTool.message}`);
+  const protectTool = await createItem(userId, characterId, 'enhance-005', 20, { location: 'bag' });
+  if (!protectTool.success) throw new Error(`create protect tool failed: ${protectTool.message}`);
+  const gemAtk = await createItem(userId, characterId, 'gem-001', 1, { location: 'bag' });
+  if (!gemAtk.success || !gemAtk.itemIds?.[0]) throw new Error(`create gem-001 failed: ${gemAtk.message}`);
+  const gemDef = await createItem(userId, characterId, 'gem-002', 1, { location: 'bag' });
+  if (!gemDef.success || !gemDef.itemIds?.[0]) throw new Error(`create gem-002 failed: ${gemDef.message}`);
+  const gemHp = await createItem(userId, characterId, 'gem-003', 1, { location: 'bag' });
+  if (!gemHp.success || !gemHp.itemIds?.[0]) throw new Error(`create gem-003 failed: ${gemHp.message}`);
+
+  const enhanceToolItemId = Number(enhTool.itemIds?.[0]);
+  const protectToolItemId = Number(protectTool.itemIds?.[0]);
+  const gemAtkItemId = Number(gemAtk.itemIds?.[0]);
+  const gemDefItemId = Number(gemDef.itemIds?.[0]);
+  const gemHpItemId = Number(gemHp.itemIds?.[0]);
 
   const equipBefore = await findInBag(token, (x) => Number(x?.id) === equipId);
   const matBefore = await findInBag(token, (x) => String(x?.item_def_id) === 'enhance-001');
+  const refineMatBefore = await findInBag(token, (x) => String(x?.item_def_id) === 'enhance-002');
   const before = {
     lv: Number(equipBefore?.strengthen_level ?? 0),
+    refineLv: Number(equipBefore?.refine_level ?? 0),
     wugong: Number(equipBefore?.def?.base_attrs?.wugong ?? 0),
     matQty: Number(matBefore?.qty ?? 0),
+    refineMatQty: Number(refineMatBefore?.qty ?? 0),
+    socketed: normalizeSocketedGems(equipBefore?.socketed_gems),
   };
 
   const logs: Array<{ i: number; success: boolean; msg: string; lv: number }> = [];
@@ -89,13 +206,310 @@ const main = async () => {
     else seenFail = true;
   }
 
+  await query(
+    `UPDATE item_instance
+       SET strengthen_level = 0,
+           location = 'bag',
+           location_slot = NULL,
+           equipped_slot = NULL,
+           locked = false,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
+
+  const toolEnhance = await postJson(
+    `${base}/api/inventory/enhance`,
+    { itemId: equipId, enhanceToolItemId },
+    token,
+  );
+  must(Boolean(toolEnhance?.success), `enhance with tool failed: ${String(toolEnhance?.message ?? '')}`);
+  must(
+    String(toolEnhance?.data?.usedEnhanceToolItemDefId || '') === 'enhance-003',
+    'usedEnhanceToolItemDefId mismatch',
+  );
+
+  await query(
+    `UPDATE item_instance
+       SET strengthen_level = 8,
+           location = 'bag',
+           location_slot = NULL,
+           equipped_slot = NULL,
+           locked = false,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
+
+  const protectLogs: E2eLog[] = [];
+  for (let i = 1; i <= 50; i += 1) {
+    const r = await postJson(
+      `${base}/api/inventory/enhance`,
+      { itemId: equipId, protectToolItemId },
+      token,
+    );
+    protectLogs.push({
+      i,
+      success: Boolean(r?.success),
+      msg: String(r?.message ?? ''),
+      level: pickNum(r?.data?.strengthenLevel),
+      target: pickNum(r?.data?.targetLevel),
+      protectedDowngrade: Boolean(r?.data?.protectedDowngrade),
+      usedProtectToolItemDefId: r?.data?.usedProtectToolItemDefId ?? null,
+    });
+    if (!r?.success) {
+      must(Boolean(r?.data?.protectedDowngrade), 'expected protectedDowngrade on failed protect enhance');
+      must(pickNum(r?.data?.strengthenLevel) >= 8, 'protect should prevent downgrade');
+      break;
+    }
+  }
+
+  const refineLogs: E2eLog[] = [];
+  let refineSeenSuccess = false;
+  let refineSeenFail = false;
+  for (let i = 1; i <= 60 && !(refineSeenSuccess && refineSeenFail); i += 1) {
+    const r = await postJson(`${base}/api/inventory/refine`, { itemId: equipId }, token);
+    const row: E2eLog = {
+      i,
+      success: Boolean(r?.success),
+      msg: String(r?.message ?? ''),
+      refineLevel: pickNum(r?.data?.refineLevel),
+      targetLevel: pickNum(r?.data?.targetLevel),
+      successRatePermyriad: pickNum(r?.data?.successRatePermyriad),
+      roll: pickNum(r?.data?.roll),
+    };
+    refineLogs.push(row);
+    if (r?.success) refineSeenSuccess = true;
+    else refineSeenFail = true;
+  }
+
+  await query(
+    `UPDATE item_instance
+       SET refine_level = 5,
+           location = 'bag',
+           location_slot = NULL,
+           equipped_slot = NULL,
+           locked = false,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
+
+  const refineDowngradeLogs: E2eLog[] = [];
+  for (let i = 1; i <= 60; i += 1) {
+    const r = await postJson(`${base}/api/inventory/refine`, { itemId: equipId }, token);
+    const row: E2eLog = {
+      i,
+      success: Boolean(r?.success),
+      msg: String(r?.message ?? ''),
+      refineLevel: pickNum(r?.data?.refineLevel),
+      targetLevel: pickNum(r?.data?.targetLevel),
+    };
+    refineDowngradeLogs.push(row);
+    if (!r?.success) {
+      const lv = pickNum(r?.data?.refineLevel, -1);
+      must(lv === 4 || lv === 5, `unexpected refine fail level: ${lv}`);
+      break;
+    }
+  }
+
+  const socketRes = await postJson(
+    `${base}/api/inventory/socket`,
+    { itemId: equipId, gemItemId: gemAtkItemId, slot: 0 },
+    token,
+  );
+  must(Boolean(socketRes?.success), `socket gem failed: ${String(socketRes?.message ?? '')}`);
+  must(pickNum(socketRes?.data?.slot, -1) === 0, 'socket slot mismatch');
+  must(String(socketRes?.data?.gem?.itemDefId || '') === 'gem-001', 'socket gem itemDefId mismatch');
+
+  const replaceSocketRes = await postJson(
+    `${base}/api/inventory/socket`,
+    { itemId: equipId, gemItemId: gemDefItemId, slot: 0 },
+    token,
+  );
+  must(Boolean(replaceSocketRes?.success), `replace socket failed: ${String(replaceSocketRes?.message ?? '')}`);
+  must(Boolean(replaceSocketRes?.data?.replacedGem), 'expected replacedGem on replace socket');
+
+  const invalidSocket = await postInventory(
+    '/api/inventory/socket',
+    { itemId: equipId, gemItemId: gemHpItemId, slot: 99 },
+    token,
+  );
+
+  const removeSocketRes = await postJson(
+    `${base}/api/inventory/socket/remove`,
+    { itemId: equipId, slot: 0 },
+    token,
+  );
+  must(Boolean(removeSocketRes?.success), `remove socket failed: ${String(removeSocketRes?.message ?? '')}`);
+  must(String(removeSocketRes?.data?.removedGem?.itemDefId || '') === 'gem-002', 'removed gem mismatch');
+
+  const removeSocketEmpty = await postInventory('/api/inventory/socket/remove', { itemId: equipId, slot: 0 }, token);
+
+  await equipIfNeeded(token, equipId);
+  const charBeforeSocket = await getCharAttrs(characterId);
+  const equipSocketRes = await postJson(
+    `${base}/api/inventory/socket`,
+    { itemId: equipId, gemItemId: gemHpItemId },
+    token,
+  );
+  must(Boolean(equipSocketRes?.success), 'socket on equipped item failed');
+
+  const charAfterSocket = await withRetry(async () => {
+    const row = await getCharAttrs(characterId);
+    if (row.maxQixue < charBeforeSocket.maxQixue + 20) {
+      throw new Error('max_qixue not updated yet');
+    }
+    return row;
+  }, 5);
+
+  const equipRemoveRes = await postJson(
+    `${base}/api/inventory/socket/remove`,
+    { itemId: equipId, slot: 0 },
+    token,
+  );
+  must(Boolean(equipRemoveRes?.success), 'remove socket on equipped item failed');
+
+  const charAfterRemove = await withRetry(async () => {
+    const row = await getCharAttrs(characterId);
+    if (row.maxQixue > charAfterSocket.maxQixue - 20) {
+      throw new Error('max_qixue not rolled back yet');
+    }
+    return row;
+  }, 5);
+
+  await query(
+    `UPDATE item_instance
+       SET location = 'bag',
+           equipped_slot = NULL,
+           location_slot = NULL,
+           locked = false,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
+
   const equipAfter = await findInBag(token, (x) => Number(x?.id) === equipId);
   const matAfter = await findInBag(token, (x) => String(x?.item_def_id) === 'enhance-001');
+  const refineMatAfter = await findInBag(token, (x) => String(x?.item_def_id) === 'enhance-002');
+  const enhanceToolAfter = await findInBag(token, (x) => Number(x?.id) === enhanceToolItemId);
+  const protectToolAfter = await findInBag(token, (x) => Number(x?.id) === protectToolItemId);
+  const gemDefAfter = await findInBag(token, (x) => String(x?.item_def_id) === 'gem-002');
+  const gemHpAfter = await findInBag(token, (x) => String(x?.item_def_id) === 'gem-003');
   const after = {
     lv: Number(equipAfter?.strengthen_level ?? 0),
+    refineLv: Number(equipAfter?.refine_level ?? 0),
     wugong: Number(equipAfter?.def?.base_attrs?.wugong ?? 0),
     matQty: Number(matAfter?.qty ?? 0),
+    refineMatQty: Number(refineMatAfter?.qty ?? 0),
+    socketed: normalizeSocketedGems(equipAfter?.socketed_gems),
+    enhanceToolLeft: Number(enhanceToolAfter?.qty ?? 0),
+    protectToolLeft: Number(protectToolAfter?.qty ?? 0),
+    gem002Qty: Number(gemDefAfter?.qty ?? 0),
+    gem003Qty: Number(gemHpAfter?.qty ?? 0),
   };
+
+  await query(
+    `UPDATE item_instance
+       SET strengthen_level = 0,
+           location = 'bag',
+           location_slot = NULL,
+           equipped_slot = NULL,
+           locked = false,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
+
+  await query(
+    `DELETE FROM item_instance
+     WHERE owner_character_id = $1 AND item_def_id = 'enhance-001' AND location IN ('bag','warehouse')`,
+    [characterId],
+  );
+  await query(
+    `DELETE FROM item_instance
+     WHERE owner_character_id = $1 AND item_def_id = 'enhance-002' AND location IN ('bag','warehouse')`,
+    [characterId],
+  );
+  const enhanceNoMatRetry = await postInventory('/api/inventory/enhance', { itemId: equipId }, token);
+
+  await query(
+    `UPDATE item_instance
+       SET refine_level = 0,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
+
+  await query(
+    `DELETE FROM item_instance
+     WHERE owner_character_id = $1 AND item_def_id = 'enhance-002' AND location IN ('bag','warehouse')`,
+    [characterId],
+  );
+  const refineNoMat = await postInventory('/api/inventory/refine', { itemId: equipId }, token);
+
+  await query(
+    `UPDATE characters
+       SET silver = 0,
+           spirit_stones = 0,
+           updated_at = NOW()
+     WHERE id = $1`,
+    [characterId],
+  );
+  await createItem(userId, characterId, 'enhance-001', 1, { location: 'bag' });
+  const enhanceNoMoney = await postInventory('/api/inventory/enhance', { itemId: equipId }, token);
+
+  await query(
+    `UPDATE item_instance
+       SET location = 'bag',
+           location_slot = NULL,
+           equipped_slot = NULL,
+           locked = true,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
+  const socketLocked = await postInventory('/api/inventory/socket', { itemId: equipId, gemItemId: gemAtkItemId }, token);
+
+  await query(
+    `UPDATE item_instance
+       SET location = 'auction',
+           location_slot = NULL,
+           equipped_slot = NULL,
+           locked = false,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
+  const socketTrade = await postInventory('/api/inventory/socket', { itemId: equipId, gemItemId: gemAtkItemId }, token);
+
+  await query(
+    `UPDATE item_instance
+       SET location = 'bag',
+           location_slot = NULL,
+           equipped_slot = NULL,
+           locked = false,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
+
+  await query(
+    `UPDATE item_instance
+       SET refine_level = 10,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
+  const refineCap = await postInventory('/api/inventory/refine', { itemId: equipId }, token);
+
+  await query(
+    `UPDATE item_instance
+       SET socketed_gems = '[]'::jsonb,
+           updated_at = NOW()
+     WHERE id = $1 AND owner_character_id = $2`,
+    [equipId, characterId],
+  );
 
   await query(
     "UPDATE item_instance SET location = 'auction', location_slot = NULL, equipped_slot = NULL, updated_at = NOW() WHERE id = $1 AND owner_character_id = $2",
@@ -115,19 +529,105 @@ const main = async () => {
   );
   const cap = await postJson(`${base}/api/inventory/enhance`, { itemId: equipId }, token);
 
+  const summary = {
+    username,
+    userId,
+    characterId,
+    equipId,
+    before,
+    logs,
+    toolEnhance: {
+      success: Boolean(toolEnhance?.success),
+      msg: String(toolEnhance?.message ?? ''),
+      usedEnhanceToolItemDefId: toolEnhance?.data?.usedEnhanceToolItemDefId ?? null,
+    },
+    protectLogs,
+    refineLogs,
+    refineDowngradeLogs,
+    socket: {
+      first: { success: Boolean(socketRes?.success), msg: String(socketRes?.message ?? '') },
+      replace: {
+        success: Boolean(replaceSocketRes?.success),
+        msg: String(replaceSocketRes?.message ?? ''),
+        replacedGem: replaceSocketRes?.data?.replacedGem ?? null,
+      },
+      invalidSlot: {
+        ok: invalidSocket.ok,
+        success: Boolean(invalidSocket.payload?.success),
+        msg: String(invalidSocket.payload?.message ?? ''),
+      },
+      remove: { success: Boolean(removeSocketRes?.success), msg: String(removeSocketRes?.message ?? '') },
+      removeEmpty: {
+        ok: removeSocketEmpty.ok,
+        success: Boolean(removeSocketEmpty.payload?.success),
+        msg: String(removeSocketEmpty.payload?.message ?? ''),
+      },
+      onEquipped: {
+        socketSuccess: Boolean(equipSocketRes?.success),
+        removeSuccess: Boolean(equipRemoveRes?.success),
+      },
+    },
+    equippedAttrRefresh: {
+      before: charBeforeSocket,
+      afterSocket: charAfterSocket,
+      afterRemove: charAfterRemove,
+      maxQixueRaised: charAfterSocket.maxQixue - charBeforeSocket.maxQixue,
+      maxQixueRestored: charAfterSocket.maxQixue - charAfterRemove.maxQixue,
+    },
+    negativeCases: {
+      enhanceNoMaterial: {
+        ok: enhanceNoMatRetry.ok,
+        success: Boolean(enhanceNoMatRetry.payload?.success),
+        msg: String(enhanceNoMatRetry.payload?.message ?? ''),
+      },
+      refineNoMaterial: {
+        ok: refineNoMat.ok,
+        success: Boolean(refineNoMat.payload?.success),
+        msg: String(refineNoMat.payload?.message ?? ''),
+      },
+      enhanceNoMoney: {
+        ok: enhanceNoMoney.ok,
+        success: Boolean(enhanceNoMoney.payload?.success),
+        msg: String(enhanceNoMoney.payload?.message ?? ''),
+      },
+      socketLocked: {
+        ok: socketLocked.ok,
+        success: Boolean(socketLocked.payload?.success),
+        msg: String(socketLocked.payload?.message ?? ''),
+      },
+      socketTrade: {
+        ok: socketTrade.ok,
+        success: Boolean(socketTrade.payload?.success),
+        msg: String(socketTrade.payload?.message ?? ''),
+      },
+      refineCap: {
+        ok: refineCap.ok,
+        success: Boolean(refineCap.payload?.success),
+        msg: String(refineCap.payload?.message ?? ''),
+      },
+    },
+    after,
+    trade: { success: trade?.success, msg: trade?.message },
+    locked: { success: locked?.success, msg: locked?.message },
+    cap: { success: cap?.success, msg: cap?.message },
+  };
+
+  // 强制关键断言，便于脚本作为 e2e gate 使用
+  must(Boolean(summary.logs.some((x) => x.success)), 'enhance should have at least one success in random attempts');
+  must(Boolean(summary.logs.some((x) => !x.success)), 'enhance should have at least one fail in random attempts');
+  must(Boolean(summary.refineLogs.some((x) => x.success)), 'refine should have at least one success in random attempts');
+  must(Boolean(summary.refineLogs.some((x) => !x.success)), 'refine should have at least one fail in random attempts');
+  must(summary.equippedAttrRefresh.maxQixueRaised >= 20, 'equipped socket should raise max_qixue by gem effect');
+  must(summary.equippedAttrRefresh.maxQixueRestored >= 20, 'remove socket should rollback max_qixue by gem effect');
+  must(!summary.negativeCases.enhanceNoMaterial.success, 'enhanceNoMaterial should fail');
+  must(!summary.negativeCases.refineNoMaterial.success, 'refineNoMaterial should fail');
+  must(!summary.negativeCases.enhanceNoMoney.success, 'enhanceNoMoney should fail');
+  must(!summary.negativeCases.socketLocked.success, 'socketLocked should fail');
+  must(!summary.negativeCases.socketTrade.success, 'socketTrade should fail');
+  must(!summary.negativeCases.refineCap.success, 'refineCap should fail');
+
   console.log(
-    JSON.stringify({
-      username,
-      userId,
-      characterId,
-      equipId,
-      before,
-      logs,
-      after,
-      trade: { success: trade?.success, msg: trade?.message },
-      locked: { success: locked?.success, msg: locked?.message },
-      cap: { success: cap?.success, msg: cap?.message },
-    }),
+    JSON.stringify(summary),
   );
 };
 

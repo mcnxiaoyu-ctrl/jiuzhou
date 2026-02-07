@@ -7,6 +7,9 @@ import itemService from '../services/itemService.js';
 import { query } from '../config/database.js';
 import { verifyToken } from '../services/authService.js';
 import { getGameServer } from '../game/GameServer.js';
+import {
+  buildEquipmentDisplayBaseAttrs,
+} from '../services/equipmentGrowthRules.js';
 
 const router = Router();
 
@@ -40,31 +43,30 @@ const isAllowedLocation = (value: unknown): value is InventoryLocation =>
 const isAllowedSlottedLocation = (value: unknown): value is (typeof allowedSlottedLocations)[number] =>
   typeof value === 'string' && (allowedSlottedLocations as readonly string[]).includes(value);
 
-const QUALITY_RANK: Record<string, number> = { 黄: 1, 玄: 2, 地: 3, 天: 4 };
-const QUALITY_MULTIPLIER_BY_RANK: Record<number, number> = { 1: 1, 2: 1.2, 3: 1.45, 4: 1.75 };
-
-const getQualityMultiplier = (rank: number): number => QUALITY_MULTIPLIER_BY_RANK[rank] ?? 1;
-
 const clampInt = (value: number, min: number, max: number): number => {
   const v = Number(value);
   if (!Number.isFinite(v)) return min;
   return Math.max(min, Math.min(max, Math.floor(v)));
 };
 
-const getStrengthenMultiplier = (strengthenLevel: number): number => {
-  const lv = clampInt(strengthenLevel, 0, 15);
-  return 1 + lv * 0.03;
+const parsePositiveInt = (value: unknown): number | null => {
+  if (value === undefined || value === null) return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
 };
 
-const scaleAttrs = (attrs: unknown, factor: number): Record<string, number> => {
-  const src = attrs && typeof attrs === 'object' ? (attrs as Record<string, unknown>) : {};
-  const out: Record<string, number> = {};
-  for (const [k, v] of Object.entries(src)) {
-    const n = Number(v);
-    if (!Number.isFinite(n)) continue;
-    out[k] = Number.isFinite(factor) && factor !== 1 ? Math.round(n * factor) : n;
-  }
-  return out;
+const parseOptionalPositiveInt = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = parsePositiveInt(value);
+  return parsed ?? NaN;
+};
+
+const parseOptionalNonNegativeInt = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) return NaN;
+  return parsed;
 };
 
 // 获取角色ID的辅助函数
@@ -128,7 +130,7 @@ router.get('/items', async (req: Request, res: Response) => {
       const defResult = await query(
         `SELECT 
            id, name, icon, quality, quality_rank, category, sub_category, stack_max,
-           description, long_desc, tags, effect_defs, base_attrs, equip_slot, use_type
+           description, long_desc, tags, effect_defs, base_attrs, equip_slot, use_type, socket_max, gem_slot_types
          FROM item_def WHERE id = ANY($1)`,
         [itemDefIds]
       );
@@ -140,21 +142,17 @@ router.get('/items', async (req: Request, res: Response) => {
 
         if (def.category !== 'equipment') return { ...item, def };
 
-        const resolvedQuality = typeof item.quality === 'string' && item.quality ? item.quality : def.quality;
-        const resolvedRank =
-          Number(item.quality_rank) ||
-          QUALITY_RANK[resolvedQuality] ||
-          Number(def.quality_rank) ||
-          1;
-        const defRank = Number(def.quality_rank) || QUALITY_RANK[def.quality] || 1;
-        const attrFactor = getQualityMultiplier(resolvedRank) / getQualityMultiplier(defRank);
-        const strengthenFactor = getStrengthenMultiplier(Number(item.strengthen_level) || 0);
-
+        const displayBaseAttrs = buildEquipmentDisplayBaseAttrs({
+          baseAttrsRaw: def.base_attrs,
+          defQualityRankRaw: def.quality_rank,
+          resolvedQualityRankRaw: item.quality_rank,
+          strengthenLevelRaw: item.strengthen_level,
+          refineLevelRaw: item.refine_level,
+          socketedGemsRaw: item.socketed_gems,
+        });
         const mergedDef = {
           ...def,
-          quality: resolvedQuality,
-          quality_rank: resolvedRank,
-          base_attrs: scaleAttrs(def.base_attrs, attrFactor * strengthenFactor),
+          base_attrs: displayBaseAttrs,
         };
 
         return { ...item, def: mergedDef };
@@ -379,7 +377,7 @@ router.post('/unequip', async (req: Request, res: Response) => {
 // ============================================
 // 强化装备
 // POST /api/inventory/enhance
-// Body: { itemId: number }
+// Body: { itemId: number, enhanceToolItemId?: number, protectToolItemId?: number }
 // ============================================
 router.post('/enhance', async (req: Request, res: Response) => {
   try {
@@ -390,17 +388,44 @@ router.post('/enhance', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: '角色不存在' });
     }
 
-    const { itemId } = req.body;
-    if (itemId === undefined || itemId === null) {
+    const {
+      itemId,
+      itemInstanceId,
+      instanceId,
+      enhanceToolItemId,
+      protectToolItemId,
+    } = req.body as {
+      itemId?: unknown;
+      itemInstanceId?: unknown;
+      instanceId?: unknown;
+      enhanceToolItemId?: unknown;
+      protectToolItemId?: unknown;
+    };
+
+    const rawItemInstanceId = itemInstanceId ?? instanceId ?? itemId;
+    if (rawItemInstanceId === undefined || rawItemInstanceId === null) {
       return res.status(400).json({ success: false, message: '参数不完整' });
     }
 
-    const parsedItemId = Number(itemId);
+    const parsedItemId = Number(rawItemInstanceId);
     if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
       return res.status(400).json({ success: false, message: 'itemId参数错误' });
     }
 
-    const result = await inventoryService.enhanceEquipment(characterId, userId, parsedItemId);
+    const parsedEnhanceToolItemId = parseOptionalPositiveInt(enhanceToolItemId);
+    if (Number.isNaN(parsedEnhanceToolItemId)) {
+      return res.status(400).json({ success: false, message: 'enhanceToolItemId参数错误' });
+    }
+
+    const parsedProtectToolItemId = parseOptionalPositiveInt(protectToolItemId);
+    if (Number.isNaN(parsedProtectToolItemId)) {
+      return res.status(400).json({ success: false, message: 'protectToolItemId参数错误' });
+    }
+
+    const result = await inventoryService.enhanceEquipment(characterId, userId, parsedItemId, {
+      enhanceToolItemId: parsedEnhanceToolItemId,
+      protectToolItemId: parsedProtectToolItemId,
+    });
 
     if (result.success) {
       try {
@@ -413,13 +438,202 @@ router.post('/enhance', async (req: Request, res: Response) => {
     return res.json({
       success: result.success,
       message: result.message,
-      data: {
-        strengthenLevel: result.data?.strengthenLevel ?? 0,
-        character: result.data?.character ?? null,
+      data: result.data ?? {
+        strengthenLevel: 0,
+        character: null,
       },
     });
   } catch (error) {
     console.error('强化装备失败:', error);
+    return res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// ============================================
+// 精炼装备
+// POST /api/inventory/refine
+// Body: { itemId: number }
+// ============================================
+router.post('/refine', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthedRequest).userId;
+    const characterId = await getCharacterId(userId);
+
+    if (!characterId) {
+      return res.status(404).json({ success: false, message: '角色不存在' });
+    }
+
+    const { itemId, itemInstanceId, instanceId } = req.body as {
+      itemId?: unknown;
+      itemInstanceId?: unknown;
+      instanceId?: unknown;
+    };
+
+    const rawItemInstanceId = itemInstanceId ?? instanceId ?? itemId;
+    if (rawItemInstanceId === undefined || rawItemInstanceId === null) {
+      return res.status(400).json({ success: false, message: '参数不完整' });
+    }
+
+    const parsedItemId = Number(rawItemInstanceId);
+    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
+      return res.status(400).json({ success: false, message: 'itemId参数错误' });
+    }
+
+    const result = await inventoryService.refineEquipment(characterId, userId, parsedItemId);
+
+    if (result.success) {
+      try {
+        const gameServer = getGameServer();
+        await gameServer.pushCharacterUpdate(userId);
+      } catch {
+      }
+    }
+
+    return res.json({
+      success: result.success,
+      message: result.message,
+      data: result.data ?? {
+        refineLevel: 0,
+        character: null,
+      },
+    });
+  } catch (error) {
+    console.error('精炼装备失败:', error);
+    return res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// ============================================
+// 镶嵌宝石
+// POST /api/inventory/socket
+// Body: { itemId: number, gemItemId: number, slot?: number }
+// ============================================
+router.post('/socket', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthedRequest).userId;
+    const characterId = await getCharacterId(userId);
+
+    if (!characterId) {
+      return res.status(404).json({ success: false, message: '角色不存在' });
+    }
+
+    const {
+      itemId,
+      itemInstanceId,
+      instanceId,
+      gemItemId,
+      gemItemInstanceId,
+      gemInstanceId,
+      slot,
+    } = req.body as {
+      itemId?: unknown;
+      itemInstanceId?: unknown;
+      instanceId?: unknown;
+      gemItemId?: unknown;
+      gemItemInstanceId?: unknown;
+      gemInstanceId?: unknown;
+      slot?: unknown;
+    };
+
+    const rawItemInstanceId = itemInstanceId ?? instanceId ?? itemId;
+    if (rawItemInstanceId === undefined || rawItemInstanceId === null) {
+      return res.status(400).json({ success: false, message: '参数不完整' });
+    }
+    const parsedItemId = Number(rawItemInstanceId);
+    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
+      return res.status(400).json({ success: false, message: 'itemId参数错误' });
+    }
+
+    const rawGemItemInstanceId = gemItemInstanceId ?? gemInstanceId ?? gemItemId;
+    if (rawGemItemInstanceId === undefined || rawGemItemInstanceId === null) {
+      return res.status(400).json({ success: false, message: '参数不完整' });
+    }
+    const parsedGemItemId = Number(rawGemItemInstanceId);
+    if (!Number.isInteger(parsedGemItemId) || parsedGemItemId <= 0) {
+      return res.status(400).json({ success: false, message: 'gemItemId参数错误' });
+    }
+
+    const parsedSlot = parseOptionalNonNegativeInt(slot);
+    if (Number.isNaN(parsedSlot)) {
+      return res.status(400).json({ success: false, message: 'slot参数错误' });
+    }
+
+    const result = await inventoryService.socketEquipment(characterId, userId, parsedItemId, parsedGemItemId, {
+      slot: parsedSlot,
+    });
+
+    if (result.success) {
+      try {
+        const gameServer = getGameServer();
+        await gameServer.pushCharacterUpdate(userId);
+      } catch {
+      }
+    }
+
+    return res.json({
+      success: result.success,
+      message: result.message,
+      data: result.data ?? null,
+    });
+  } catch (error) {
+    console.error('镶嵌宝石失败:', error);
+    return res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// ============================================
+// 卸下宝石
+// POST /api/inventory/socket/remove
+// Body: { itemId: number, slot: number }
+// ============================================
+router.post('/socket/remove', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthedRequest).userId;
+    const characterId = await getCharacterId(userId);
+
+    if (!characterId) {
+      return res.status(404).json({ success: false, message: '角色不存在' });
+    }
+
+    const { itemId, itemInstanceId, instanceId, slot } = req.body as {
+      itemId?: unknown;
+      itemInstanceId?: unknown;
+      instanceId?: unknown;
+      slot?: unknown;
+    };
+
+    const rawItemInstanceId = itemInstanceId ?? instanceId ?? itemId;
+    if (rawItemInstanceId === undefined || rawItemInstanceId === null || slot === undefined || slot === null) {
+      return res.status(400).json({ success: false, message: '参数不完整' });
+    }
+
+    const parsedItemId = Number(rawItemInstanceId);
+    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
+      return res.status(400).json({ success: false, message: 'itemId参数错误' });
+    }
+
+    const parsedSlot = parseOptionalNonNegativeInt(slot);
+    if (parsedSlot === undefined || Number.isNaN(parsedSlot)) {
+      return res.status(400).json({ success: false, message: 'slot参数错误' });
+    }
+
+    const result = await inventoryService.removeSocketGem(characterId, userId, parsedItemId, parsedSlot);
+
+    if (result.success) {
+      try {
+        const gameServer = getGameServer();
+        await gameServer.pushCharacterUpdate(userId);
+      } catch {
+      }
+    }
+
+    return res.json({
+      success: result.success,
+      message: result.message,
+      data: result.data ?? null,
+    });
+  } catch (error) {
+    console.error('卸下宝石失败:', error);
     return res.status(500).json({ success: false, message: '服务器错误' });
   }
 });
