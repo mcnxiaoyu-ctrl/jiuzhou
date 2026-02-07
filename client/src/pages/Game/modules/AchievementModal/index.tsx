@@ -527,7 +527,13 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
                       <div className="achievement-title-main">
                         <div className="achievement-title-top">
                           <div className="achievement-title-name">{title.name}</div>
-                          <Tag>{getRarityLabel(title.rarity)}</Tag>
+                          <Tag color={
+                            title.rarity === 'legendary' ? 'orange' :
+                            title.rarity === 'epic' ? 'purple' :
+                            title.rarity === 'rare' ? 'blue' :
+                            title.rarity === 'uncommon' ? 'cyan' :
+                            'default'
+                          }>{getRarityLabel(title.rarity)}</Tag>
                         </div>
                         <div className="achievement-item-desc">{title.description}</div>
                         <div className="achievement-item-desc">{effectsText || '无属性加成'}</div>
