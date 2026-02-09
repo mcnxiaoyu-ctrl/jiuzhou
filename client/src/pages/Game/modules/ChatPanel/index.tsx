@@ -1,8 +1,9 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Button, Drawer, Input, Modal, Popover, Select, Table, Tabs, Tooltip, type InputRef } from 'antd';
+import { Button, Drawer, Input, Popover, Select, Table, Tabs, Tooltip, type InputRef } from 'antd';
 import { BarChartOutlined, CloseOutlined, LineChartOutlined, SendOutlined } from '@ant-design/icons';
 import { gameSocket, type CharacterData, type OnlinePlayerDto } from '../../../../services/gameSocket';
 import type { InfoTarget } from '../InfoModal';
+import StatsShell from './StatsShell';
 import './index.scss';
 
 type ChatChannel = 'all' | 'world' | 'team' | 'sect' | 'private' | 'battle' | 'system';
@@ -839,8 +840,8 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
     };
   }, [outputStats.actors.length, outputStats.byActorRows, outputStats.skills.length]);
 
-  const tableScrollY = 380;
-  const tableScrollYWithFilters = 330;
+  const tableScroll = isMobile ? { x: 'max-content' as const } : { y: 380 };
+  const tableScrollWithFilters = isMobile ? { x: 'max-content' as const } : { y: 330 };
 
   const resetBattleStats = useCallback(() => {
     const now = Date.now();
@@ -977,7 +978,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
                 </Button>
               </Popover>
             )}
-            <Tooltip title="掉落统计">
+            <Tooltip title={isMobile ? '' : '掉落统计'}>
               <Button
                 type="text"
                 size="small"
@@ -985,7 +986,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
                 onClick={() => setDropStatsOpen(true)}
               />
             </Tooltip>
-            <Tooltip title="输出统计">
+            <Tooltip title={isMobile ? '' : '输出统计'}>
               <Button
                 type="text"
                 size="small"
@@ -997,20 +998,13 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
         }
       />
 
-      <Modal
-        title="掉落统计"
-        open={dropStatsOpen}
-        onCancel={() => setDropStatsOpen(false)}
-        footer={null}
-        width={720}
-        className="chat-stats-modal"
-      >
+      <StatsShell title="掉落统计" open={dropStatsOpen} onClose={() => setDropStatsOpen(false)} isMobile={isMobile}>
         <div className="chat-stats-shell">
           <div className="chat-stats-top">
             <div className="chat-stats-summary">
               掉落记录 {dropStats.totalRecords} · 物品 {dropStats.uniqueItemCount} · 获得者 {dropStats.uniqueReceiverCount} · 总数量 {dropStats.totalQty}
             </div>
-            <Tooltip title="从现在开始重新统计（不清空聊天记录）">
+            <Tooltip title={isMobile ? '' : '从现在开始重新统计（不清空聊天记录）'}>
               <Button size="small" onClick={resetBattleStats}>
                 清空重新统计
               </Button>
@@ -1030,7 +1024,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
                     size="small"
                     pagination={false}
                     sticky
-                    scroll={{ y: tableScrollY }}
+                    scroll={tableScroll}
                     dataSource={dropStats.byItemRows.map((r) => ({ ...r, key: r.itemName }))}
                     columns={[
                       { title: '物品', dataIndex: 'itemName', key: 'itemName' },
@@ -1058,7 +1052,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
                     size="small"
                     pagination={false}
                     sticky
-                    scroll={{ y: tableScrollY }}
+                    scroll={tableScroll}
                     dataSource={dropStats.byReceiverRows.map((r) => ({ ...r, key: r.receiverName }))}
                     columns={[
                       { title: '获得者', dataIndex: 'receiverName', key: 'receiverName' },
@@ -1095,7 +1089,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
                       size="small"
                       pagination={false}
                       sticky
-                      scroll={{ y: tableScrollYWithFilters }}
+                      scroll={tableScrollWithFilters}
                       dataSource={dropDetailsFiltered.map((r, idx) => ({ ...r, key: `${r.timestamp}-${idx}` }))}
                       columns={[
                         { title: '物品', dataIndex: 'itemName', key: 'itemName' },
@@ -1128,22 +1122,15 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
             ]}
           />
         </div>
-      </Modal>
+      </StatsShell>
 
-      <Modal
-        title="输出统计"
-        open={outputStatsOpen}
-        onCancel={() => setOutputStatsOpen(false)}
-        footer={null}
-        width={720}
-        className="chat-stats-modal"
-      >
+      <StatsShell title="输出统计" open={outputStatsOpen} onClose={() => setOutputStatsOpen(false)} isMobile={isMobile}>
         <div className="chat-stats-shell">
           <div className="chat-stats-top">
             <div className="chat-stats-summary">
               角色 {outputSummary.actorCount} · 技能 {outputSummary.skillCount} · 施放 {outputSummary.castCount} · 总伤害 {outputSummary.totalDamage} · 总治疗 {outputSummary.totalHeal} · 暴击 {outputSummary.totalCrit} · 未命中 {outputSummary.totalMiss}
             </div>
-            <Tooltip title="从现在开始重新统计（不清空聊天记录）">
+            <Tooltip title={isMobile ? '' : '从现在开始重新统计（不清空聊天记录）'}>
               <Button size="small" onClick={resetBattleStats}>
                 清空重新统计
               </Button>
@@ -1163,7 +1150,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
                     size="small"
                     pagination={false}
                     sticky
-                    scroll={{ y: tableScrollY }}
+                    scroll={tableScroll}
                     dataSource={outputStats.byActorRows.map((r) => ({ ...r, key: r.actorName }))}
                     columns={[
                       { title: '角色', dataIndex: 'actorName', key: 'actorName' },
@@ -1185,7 +1172,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
                     size="small"
                     pagination={false}
                     sticky
-                    scroll={{ y: tableScrollY }}
+                    scroll={tableScroll}
                     dataSource={outputStats.bySkillRows.map((r) => ({ ...r, key: r.skillName }))}
                     columns={[
                       { title: '技能', dataIndex: 'skillName', key: 'skillName' },
@@ -1225,7 +1212,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
                       size="small"
                       pagination={false}
                       sticky
-                      scroll={{ y: tableScrollYWithFilters }}
+                      scroll={tableScrollWithFilters}
                       dataSource={outputDetailsFiltered.map((r, idx) => ({ ...r, key: `${r.round}-${r.actorName}-${r.skillName}-${idx}` }))}
                       columns={[
                         { title: '回合', dataIndex: 'round', key: 'round', width: 70, align: 'right' },
@@ -1255,7 +1242,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer,
             ]}
           />
         </div>
-      </Modal>
+      </StatsShell>
 
       <div className="chat-messages">
         {activeChannel === 'private' ? (

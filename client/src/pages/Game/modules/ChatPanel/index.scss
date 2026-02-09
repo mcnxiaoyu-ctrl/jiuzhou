@@ -215,6 +215,67 @@
   .chat-pie-grid {
     grid-template-columns: 1fr;
   }
+
+  .chat-pie-card {
+    min-height: auto;
+  }
+
+  .chat-pie-body {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .chat-pie-legend {
+    max-height: none;
+  }
+
+  .chat-stats-top {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .chat-stats-summary {
+    font-size: 12px;
+    line-height: 1.8;
+  }
+
+  .chat-stats-filters {
+    flex-direction: column;
+    gap: 8px;
+
+    > .ant-select {
+      width: 100% !important;
+    }
+  }
+}
+
+.chat-stats-drawer {
+  .ant-drawer-body {
+    padding: 12px;
+    overflow-x: hidden;
+  }
+
+  .chat-stats-shell {
+    height: auto;
+    display: block;
+  }
+
+  .chat-stats-tabs {
+    display: block;
+  }
+
+  .chat-stats-tabs .ant-tabs-content-holder {
+    overflow: visible;
+  }
+
+  .chat-stats-tabs .ant-tabs-content,
+  .chat-stats-tabs .ant-tabs-tabpane {
+    height: auto;
+  }
+
+  .ant-table-wrapper {
+    max-width: 100%;
+  }
 }
 
 .chat-messages {
