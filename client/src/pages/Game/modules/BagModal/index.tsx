@@ -366,6 +366,10 @@ const formatSignedPermyriadPercent = (value: number): string => {
   return `${sign}${trimmed}%`;
 };
 
+const formatPermyriadPercent = (value: number): string => {
+  return (value / 100).toFixed(2).replace(/\.00$/, '');
+};
+
 const getStrengthenMultiplier = (strengthenLevel: number): number => {
   const lv = Math.max(0, Math.min(15, Math.floor(Number(strengthenLevel) || 0)));
   return 1 + lv * 0.03;
@@ -528,6 +532,28 @@ const isGemTypeAllowedInSlot = (gemSlotTypesRaw: unknown, slot: number, gemTypeR
   const gemType = normalizeGemType(gemTypeRaw);
   if (!gemType) return false;
   return allowed.includes('all') || gemType === 'all' || allowed.includes(gemType);
+};
+
+const getEnhanceSuccessRatePermyriad = (targetLevel: number): number => {
+  const table: Record<number, number> = {
+    1: 10000,
+    2: 10000,
+    3: 10000,
+    4: 10000,
+    5: 10000,
+    6: 8000,
+    7: 7000,
+    8: 6000,
+    9: 5000,
+    10: 4000,
+    11: 3500,
+    12: 3000,
+    13: 2500,
+    14: 2000,
+    15: 1500,
+  };
+  const lv = Math.max(1, Math.min(15, Math.floor(Number(targetLevel) || 1)));
+  return table[lv] ?? 0;
 };
 
 const getRefineSuccessRatePermyriad = (targetLevel: number): number => {
@@ -1030,6 +1056,8 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       materialItemDefId,
       materialName,
       owned,
+      successRatePermyriad: getEnhanceSuccessRatePermyriad(targetLv),
+      downgradeOnFail: targetLv >= 8,
       previewBaseAttrs,
     };
   }, [activeItem, materialCounts]);
@@ -1662,8 +1690,18 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
             <>
               <div>当前强化：+{enhanceState.curLv}</div>
               <div>目标强化：+{enhanceState.targetLv}</div>
+              <div>成功率：{formatPermyriadPercent(enhanceState.successRatePermyriad)}%</div>
               <div>
                 消耗材料：{enhanceState.materialName} ×1（拥有 {enhanceState.owned}）
+              </div>
+              <div className="bag-growth-rule-card">
+                <div className="bag-growth-rule-title">强化规则</div>
+                <div className="bag-growth-rule-item">等级上限：+15</div>
+                <div className="bag-growth-rule-item">材料：+1~+10 用淬灵石，+11~+15 用蕴灵石</div>
+                <div className="bag-growth-rule-item">
+                  失败规则：+1~+7 不掉级，+8~+15 失败掉1级
+                  {enhanceState.downgradeOnFail ? '（当前目标会掉级）' : '（当前目标不掉级）'}
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -1717,7 +1755,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
             <>
               <div>当前精炼：+{refineState.curLv}</div>
               <div>目标精炼：+{refineState.targetLv}</div>
-              <div>成功率：{(refineState.successRatePermyriad / 100).toFixed(2).replace(/\.00$/, '')}%</div>
+              <div>成功率：{formatPermyriadPercent(refineState.successRatePermyriad)}%</div>
               <div>
                 消耗材料：{refineState.materialName} ×{refineState.materialQty}（拥有 {refineState.owned}）
               </div>

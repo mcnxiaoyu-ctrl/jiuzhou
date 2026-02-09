@@ -37,6 +37,25 @@
     font-weight: 800;
     text-align: center;
   }
+
+  .bag-growth-rule-card {
+    padding: 10px 12px;
+    border: 1px solid var(--border-color-soft);
+    border-radius: 10px;
+    background: var(--panel-bg-soft);
+  }
+
+  .bag-growth-rule-title {
+    margin-bottom: 6px;
+    font-weight: 700;
+    color: var(--text-color);
+  }
+
+  .bag-growth-rule-item {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+  }
 }
 
 .bag-modal-shell {
