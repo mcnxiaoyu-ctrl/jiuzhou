@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Button, Input, Modal, Popover, Select, Table, Tabs, Tooltip, type InputRef } from 'antd';
+import { Button, Drawer, Input, Modal, Popover, Select, Table, Tabs, Tooltip, type InputRef } from 'antd';
 import { BarChartOutlined, CloseOutlined, LineChartOutlined, SendOutlined } from '@ant-design/icons';
 import { gameSocket, type CharacterData, type OnlinePlayerDto } from '../../../../services/gameSocket';
 import type { InfoTarget } from '../InfoModal';
@@ -200,6 +200,7 @@ const trimMessagesByChannel = (list: Message[]): Message[] => {
 
 interface ChatPanelProps {
   onSelectPlayer?: (target: InfoTarget) => void;
+  isMobile?: boolean;
 }
 
 export interface ChatPanelHandle {
@@ -220,7 +221,7 @@ const buildInitialPrivateTargets = (list: Message[]): PrivateTarget[] => {
   return Array.from(map.values());
 };
 
-const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer }, ref) => {
+const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer, isMobile }, ref) => {
   const [activeChannel, setActiveChannel] = useState<ChatChannel>('all');
   const [inputValue, setInputValue] = useState('');
   const [messages, setMessages] = useState<Message[]>(() => trimMessagesByChannel(initialMessages));
@@ -238,6 +239,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer 
   const [outputKeyword, setOutputKeyword] = useState('');
   const [outputActor, setOutputActor] = useState<string | undefined>(undefined);
   const [battleStatsFromTs, setBattleStatsFromTs] = useState(0);
+  const [onlineDrawerOpen, setOnlineDrawerOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<InputRef>(null);
   const myCharacterIdRef = useRef<number | null>(character?.id ?? null);
@@ -875,7 +877,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer 
           pagination={false}
           dataSource={onlinePlayers}
           rowKey={(row) => String(row.id)}
-          scroll={{ y: 260 }}
+          scroll={isMobile ? undefined : { y: 260 }}
           columns={[
             {
               title: '姓名',
@@ -889,23 +891,24 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer 
                 </div>
               ),
             },
-            { title: '境界', dataIndex: 'realm', key: 'realm', width: 140, ellipsis: true },
+            { title: '境界', dataIndex: 'realm', key: 'realm', width: isMobile ? 100 : 140, ellipsis: true },
             {
               title: '',
               key: 'action',
-              width: 72,
+              width: 56,
               render: (_: unknown, record: OnlinePlayerDto) => (
                 <Button
                   size="small"
                   type="link"
-                  onClick={() =>
+                  onClick={() => {
                     openPrivateChat({
                       type: 'player',
                       id: String(record.id),
                       name: record.nickname,
                       title: record.title,
-                    })
-                  }
+                    });
+                    if (isMobile) setOnlineDrawerOpen(false);
+                  }}
                 >
                   私聊
                 </Button>
@@ -916,7 +919,7 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer 
         />
       </div>
     );
-  }, [onlinePlayers, openPrivateChat]);
+  }, [onlinePlayers, openPrivateChat, isMobile]);
 
   return (
     <div className={`chat-panel ${activeChannel === 'private' ? 'is-private' : ''}`}>
@@ -934,19 +937,46 @@ const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer 
         className="chat-tabs"
         tabBarExtraContent={
           <div className="chat-tabs-actions">
-            <Popover
-              trigger="click"
-              placement="bottomRight"
-              content={onlinePopoverContent}
-              overlayClassName="chat-online-popover-overlay"
-              onOpenChange={(open) => {
-                if (open) gameSocket.requestOnlinePlayers();
-              }}
-            >
-              <Button type="text" size="small" className="chat-online-button">
-                在线 {onlineTotal}
-              </Button>
-            </Popover>
+            {isMobile ? (
+              <>
+                <Button
+                  type="text"
+                  size="small"
+                  className="chat-online-button"
+                  onClick={() => {
+                    gameSocket.requestOnlinePlayers();
+                    setOnlineDrawerOpen(true);
+                  }}
+                >
+                  在线 {onlineTotal}
+                </Button>
+                <Drawer
+                  title={`在线玩家 (${onlineTotal})`}
+                  placement="bottom"
+                  open={onlineDrawerOpen}
+                  onClose={() => setOnlineDrawerOpen(false)}
+                  height="60vh"
+                  className="chat-online-drawer"
+                  styles={{ body: { padding: '0 12px 12px' } }}
+                >
+                  {onlinePopoverContent}
+                </Drawer>
+              </>
+            ) : (
+              <Popover
+                trigger="click"
+                placement="bottomRight"
+                content={onlinePopoverContent}
+                overlayClassName="chat-online-popover-overlay"
+                onOpenChange={(open) => {
+                  if (open) gameSocket.requestOnlinePlayers();
+                }}
+              >
+                <Button type="text" size="small" className="chat-online-button">
+                  在线 {onlineTotal}
+                </Button>
+              </Popover>
+            )}
             <Tooltip title="掉落统计">
               <Button
                 type="text"

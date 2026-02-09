@@ -1726,7 +1726,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
           </div>
           <div className="game-chat-area">
             <div className="game-chat-left">
-              <ChatPanel ref={chatPanelRef} onSelectPlayer={setInfoTarget} />
+              <ChatPanel ref={chatPanelRef} onSelectPlayer={setInfoTarget} isMobile={isMobile} />
             </div>
             <div className="game-chat-right">
               <TeamPanel

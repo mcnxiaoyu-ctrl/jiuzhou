@@ -386,3 +386,18 @@
     padding: 8px 10px;
   }
 }
+
+.chat-online-drawer {
+  .chat-online-popover {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .ant-table-wrapper {
+    width: 100%;
+  }
+
+  .ant-table {
+    font-size: 13px;
+  }
+}
