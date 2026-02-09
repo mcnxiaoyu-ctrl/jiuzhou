@@ -369,6 +369,10 @@ const MapModal: React.FC<MapModalProps> = ({ open, onClose, initialCategory, onE
     return { ...activeMap, ...d };
   }, [activeMap, detailById]);
 
+  useEffect(() => {
+    if (open) setShowMobileDetail(false);
+  }, [open]);
+
   const activeRealmText = useMemo(() => normalizeRealmText(mergedActiveMap?.realm), [mergedActiveMap?.realm]);
 
   const monsterRows = useMemo(() => {

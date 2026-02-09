@@ -124,6 +124,11 @@ function App() {
         token: {
           colorPrimary: 'var(--primary-color)',
         },
+        components: {
+          Modal: {
+            contentBg: 'var(--panel-bg)',
+          },
+        },
       }}
     >
       <AntdApp>
