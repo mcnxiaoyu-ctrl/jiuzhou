@@ -105,7 +105,8 @@ function App() {
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            height: '100vh',
+            minHeight: '100dvh',
+            height: '100%',
             background: 'var(--app-bg)',
             color: 'var(--text-color)',
           }}
@@ -136,7 +137,15 @@ function App() {
         {isLoggedIn ? (
           <Suspense
             fallback={
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: '100dvh',
+                  height: '100%',
+                }}
+              >
                 <Spin size="large" tip="加载游戏中...">
                   <div style={{ width: 140, height: 80 }} />
                 </Spin>
