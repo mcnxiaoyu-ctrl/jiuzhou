@@ -197,10 +197,9 @@ const scaleAttrLabel: Record<string, string> = {
   sudu: '速度',
 };
 
-// 技能Tooltip内容渲染
-const renderSkillTooltip = (skill: TechniqueSkill): React.ReactNode => {
+const getSkillDetailItems = (skill: TechniqueSkill): Array<{ label: string; value: string }> => {
   const items: Array<{ label: string; value: string }> = [];
-  
+
   if (skill.description) {
     items.push({ label: '描述', value: skill.description });
   }
@@ -235,6 +234,22 @@ const renderSkillTooltip = (skill: TechniqueSkill): React.ReactNode => {
   if (skill.scale_attr) {
     items.push({ label: '缩放属性', value: scaleAttrLabel[skill.scale_attr] || skill.scale_attr });
   }
+
+  return items;
+};
+
+const getSkillInlineSummary = (skill: TechniqueSkill): string => {
+  const detailItems = getSkillDetailItems(skill).filter((item) => item.label !== '描述');
+  if (detailItems.length === 0) return '暂无详细信息';
+  return detailItems
+    .slice(0, 3)
+    .map((item) => `${item.label}:${item.value}`)
+    .join(' · ');
+};
+
+// 技能Tooltip内容渲染
+const renderSkillTooltip = (skill: TechniqueSkill): React.ReactNode => {
+  const items = getSkillDetailItems(skill);
 
   return (
     <div className="skill-tooltip">
@@ -426,6 +441,8 @@ const slotLabels: Record<SlotKey, string> = {
   sub3: '副功法Ⅲ',
 };
 
+const MOBILE_BREAKPOINT = 768;
+
 interface TechniqueModalProps {
   open: boolean;
   onClose: () => void;
@@ -444,6 +461,9 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [cultivateSubmitting, setCultivateSubmitting] = useState(false);
   const [availableSkills, setAvailableSkills] = useState<TechniqueSkill[]>([]);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
   const techniqueDetailCacheRef = useRef<
     Map<string, { technique: TechniqueDefDto; layers: TechniqueLayerDto[]; skills: SkillDefDto[] }>
   >(new Map());
@@ -461,6 +481,13 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
     Array.from({ length: 10 }).map(() => null),
   );
   const [activeSkillSlot, setActiveSkillSlot] = useState<number>(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     gameSocket.connect();
@@ -694,108 +721,145 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
   }, [equipped]);
 
   const leftItems: Array<{ key: TechniquePanel; label: string }> = [
-    { key: 'slots', label: '功法栏' },
-    { key: 'learned', label: '已学功法' },
-    { key: 'bonus', label: '功法加成' },
-    { key: 'skills', label: '技能配置' },
+    { key: 'slots', label: isMobile ? '功法栏' : '功法栏' },
+    { key: 'learned', label: isMobile ? '已学功法' : '已学功法' },
+    { key: 'bonus', label: isMobile ? '功法加成' : '功法加成' },
+    { key: 'skills', label: isMobile ? '技能' : '技能配置' },
   ];
 
-  const renderSlotsPanel = () => (
-    <div className="tech-pane">
-      <div className="tech-pane-top">
-        <div className="tech-slots">
-          {(Object.keys(slotLabels) as SlotKey[]).map((k) => {
-            const t = equippedTech[k];
-            return (
-              <Tooltip
-                key={k}
-                title={t ? renderTechniqueTooltip(t) : null}
-                placement="right"
-                classNames={{ root: 'technique-tooltip-overlay' }}
-              >
-                <div
-                  className={`tech-slot ${k === activeSlot ? 'is-active' : ''}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setActiveSlot(k)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') setActiveSlot(k);
-                  }}
-                >
-                  <div className="tech-slot-label">{slotLabels[k]}</div>
-                  <div className="tech-slot-card">
-                    <div className="tech-slot-meta">
-                      <div className="tech-slot-name">
-                        {t ? `${t.name}（${layerText(t.layer)}/${layerText(t.layers.length)}）` : '未装备'}
-                      </div>
-                      <div className="tech-slot-tags">
-                        {t ? <Tag color={qualityColor[t.quality]}>{qualityText[t.quality]}</Tag> : <Tag>未装配</Tag>}
-                        {(t?.tags ?? []).slice(0, 2).map((x) => (
-                          <Tag key={x} color="default">
-                            {x}
-                          </Tag>
-                        ))}
-                      </div>
-                    </div>
-                    <Button
-                      size="small"
-                      className={`tech-slot-remove ${t ? '' : 'is-placeholder'}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeFromSlot(k);
-                      }}
-                    >
-                      卸下
-                    </Button>
-                  </div>
-                  <div className="tech-slot-hint">{t ? '点击下方功法可替换' : '点击下方功法运功装备到此栏位'}</div>
-                </div>
-              </Tooltip>
-            );
-          })}
+  const renderSlotCard = (k: SlotKey) => {
+    const t = equippedTech[k];
+    return (
+      <Tooltip
+        key={k}
+        title={t ? renderTechniqueTooltip(t) : null}
+        placement={isMobile ? 'top' : 'right'}
+        classNames={{ root: 'technique-tooltip-overlay' }}
+      >
+        <div
+          className={`tech-slot ${k === activeSlot ? 'is-active' : ''}`}
+          role="button"
+          tabIndex={0}
+          onClick={() => setActiveSlot(k)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') setActiveSlot(k);
+          }}
+        >
+          <div className="tech-slot-label">{slotLabels[k]}</div>
+          <div className="tech-slot-card">
+            <div className="tech-slot-meta">
+              <div className="tech-slot-name">
+                {t ? `${t.name}（${layerText(t.layer)}/${layerText(t.layers.length)}）` : '未装备'}
+              </div>
+              <div className="tech-slot-tags">
+                {t ? <Tag color={qualityColor[t.quality]}>{qualityText[t.quality]}</Tag> : <Tag>未装配</Tag>}
+                {(t?.tags ?? []).slice(0, 2).map((x) => (
+                  <Tag key={x} color="default">
+                    {x}
+                  </Tag>
+                ))}
+              </div>
+            </div>
+            <Button
+              size="small"
+              className={`tech-slot-remove ${t ? '' : 'is-placeholder'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                removeFromSlot(k);
+              }}
+            >
+              卸下
+            </Button>
+          </div>
+          <div className="tech-slot-hint">{t ? '点击下方功法可替换' : '点击下方功法运功装备到此栏位'}</div>
         </div>
-      </div>
+      </Tooltip>
+    );
+  };
 
-      <div className="tech-pane-bottom">
-        <div className="tech-subtitle">已学功法（当前栏位：{slotLabels[activeSlot]}）</div>
-        <div className="tech-learned-list">
-          {learned.map((t) => {
-            const equippedSlot = equippedSlotByTechId.get(t.id) ?? null;
-            return (
-              <Tooltip key={t.id} title={renderTechniqueTooltip(t)} placement="right" classNames={{ root: 'technique-tooltip-overlay' }}>
-                <div className="tech-row">
-                  <div className="tech-row-main">
-                    <div className="tech-row-name">{t.name}</div>
-                    <div className="tech-row-tags">
-                      <Tag color={qualityColor[t.quality]}>{qualityText[t.quality]}</Tag>
-                      <Tag color="default">
-                        {layerText(t.layer)}/{layerText(t.layers.length)}
-                      </Tag>
-                      {equippedSlot ? <Tag color="blue">{slotLabels[equippedSlot]}</Tag> : null}
-                      {t.tags.slice(0, 2).map((x) => (
-                        <Tag key={x} color="default">
-                          {x}
-                        </Tag>
-                      ))}
-                    </div>
-                  </div>
-                  {equippedSlot ? (
-                    <Button size="small" danger onClick={() => removeFromSlot(equippedSlot)}>
-                      取消运功
-                    </Button>
-                  ) : (
-                    <Button size="small" type="primary" onClick={() => equipToActiveSlot(t.id)}>
-                      运功
-                    </Button>
-                  )}
+  const renderSlotLearnedList = () => (
+    <div className="tech-learned-list">
+      {learned.map((t) => {
+        const equippedSlot = equippedSlotByTechId.get(t.id) ?? null;
+        return (
+          <Tooltip key={t.id} title={renderTechniqueTooltip(t)} placement={isMobile ? "top" : "right"} classNames={{ root: 'technique-tooltip-overlay' }}>
+            <div className="tech-row">
+              <div className="tech-row-main">
+                <div className="tech-row-name">{t.name}</div>
+                <div className="tech-row-tags">
+                  <Tag color={qualityColor[t.quality]}>{qualityText[t.quality]}</Tag>
+                  <Tag color="default">
+                    {layerText(t.layer)}/{layerText(t.layers.length)}
+                  </Tag>
+                  {equippedSlot ? <Tag color="blue">{slotLabels[equippedSlot]}</Tag> : null}
+                  {t.tags.slice(0, 2).map((x) => (
+                    <Tag key={x} color="default">
+                      {x}
+                    </Tag>
+                  ))}
                 </div>
-              </Tooltip>
-            );
-          })}
-        </div>
-      </div>
+              </div>
+              {equippedSlot ? (
+                <Button size="small" danger onClick={() => removeFromSlot(equippedSlot)}>
+                  取消运功
+                </Button>
+              ) : (
+                <Button size="small" type="primary" onClick={() => equipToActiveSlot(t.id)}>
+                  运功
+                </Button>
+              )}
+            </div>
+          </Tooltip>
+        );
+      })}
     </div>
   );
+
+  const renderSlotsPanel = () => {
+    const slotKeys = Object.keys(slotLabels) as SlotKey[];
+
+    if (isMobile) {
+      return (
+        <div className="tech-pane">
+          <div className="tech-pane-scroll tech-pane-mobile-scroll">
+            <div className="tech-mobile-slot-tabs">
+              {slotKeys.map((k) => (
+                <Button
+                  key={k}
+                  size="small"
+                  type={k === activeSlot ? 'primary' : 'default'}
+                  className="tech-mobile-slot-tab"
+                  onClick={() => setActiveSlot(k)}
+                >
+                  {slotLabels[k]}
+                </Button>
+              ))}
+            </div>
+
+            <div className="tech-slots tech-slots-focus">
+              {renderSlotCard(activeSlot)}
+            </div>
+
+            <div className="tech-subtitle">已学功法（当前栏位：{slotLabels[activeSlot]}）</div>
+            {renderSlotLearnedList()}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="tech-pane">
+        <div className="tech-pane-top">
+          <div className="tech-slots">{slotKeys.map((k) => renderSlotCard(k))}</div>
+        </div>
+
+        <div className="tech-pane-bottom">
+          <div className="tech-subtitle">已学功法（当前栏位：{slotLabels[activeSlot]}）</div>
+          {renderSlotLearnedList()}
+        </div>
+      </div>
+    );
+  };
 
   const renderLearnedPanel = () => (
     <div className="tech-pane">
@@ -803,7 +867,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
         <div className="tech-subtitle">已学功法</div>
         <div className="tech-learned-list">
           {learned.map((t) => (
-            <Tooltip key={t.id} title={renderTechniqueTooltip(t)} placement="right" classNames={{ root: 'technique-tooltip-overlay' }}>
+            <Tooltip key={t.id} title={renderTechniqueTooltip(t)} placement={isMobile ? "top" : "right"} classNames={{ root: 'technique-tooltip-overlay' }}>
               <div className="tech-row">
                 <div className="tech-row-main">
                   <div className="tech-row-name">{t.name}</div>
@@ -911,63 +975,127 @@ mu                    <span className="tech-table-name-text">{row.name}</span>
     );
   };
 
-  const renderSkillsPanel = () => (
-    <div className="tech-pane">
-      <div className="tech-pane-top">
-        <div className="tech-subtitle">技能栏</div>
-        <div className="skill-slots">
-          {skillSlots.map((s, idx) => (
-            <div
-              key={`slot-${idx}`}
-              className={`skill-slot ${idx === activeSkillSlot ? 'is-active' : ''}`}
-              role="button"
-              tabIndex={0}
-              onClick={() => setActiveSkillSlot(idx)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') setActiveSkillSlot(idx);
-              }}
-            >
-              <div className="skill-slot-index">{idx + 1}</div>
-              {s ? <img className="skill-slot-icon" src={s.icon} alt={s.name} /> : <div className="skill-slot-empty" />}
+  const renderSkillsPanel = () => {
+    const activeSlotSkill = skillSlots[activeSkillSlot] ?? null;
+
+    if (isMobile) {
+      return (
+        <div className="tech-pane">
+          <div className="tech-pane-scroll tech-pane-mobile-scroll">
+            <div className="tech-subtitle">技能栏（当前：{activeSkillSlot + 1}号位）</div>
+            <div className="skill-slots-mobile-tabs">
+              {skillSlots.map((slot, idx) => (
+                <Button
+                  key={`slot-tab-${idx}`}
+                  size="small"
+                  type={idx === activeSkillSlot ? 'primary' : 'default'}
+                  className="skill-slot-mobile-tab"
+                  onClick={() => setActiveSkillSlot(idx)}
+                >
+                  {idx + 1}
+                  {slot ? '●' : ''}
+                </Button>
+              ))}
+            </div>
+
+            <div className="skill-slot-mobile-active">
+              <div className="skill-slot-mobile-active-main">
+                <div className="skill-slot-mobile-active-title">{activeSlotSkill ? activeSlotSkill.name : '当前栏位未装配'}</div>
+                <div className="skill-slot-mobile-active-sub">点击下方技能可装备到当前栏位</div>
+              </div>
               <Button
                 size="small"
-                className={`skill-slot-clear ${s ? '' : 'is-placeholder'}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clearSkillSlot(idx);
-                }}
+                className={`skill-slot-mobile-clear ${activeSlotSkill ? '' : 'is-placeholder'}`}
+                onClick={() => clearSkillSlot(activeSkillSlot)}
               >
                 清空
               </Button>
             </div>
-          ))}
-        </div>
-      </div>
 
-      <div className="tech-pane-bottom">
-        <div className="tech-subtitle">技能库（点击按顺序装备）</div>
-        <div className="skill-list">
-          {availableSkills.map((s) => (
-            <Tooltip key={s.id} title={renderSkillTooltip(s)} placement="top" classNames={{ root: 'skill-tooltip-overlay' }}>
+            <div className="tech-subtitle">技能库（点击装备）</div>
+            <div className="skill-list-mobile">
+              {availableSkills.map((s) => (
+                <div key={s.id} className="skill-item-mobile">
+                  <img className="skill-item-mobile-icon" src={s.icon} alt={s.name} />
+                  <div className="skill-item-mobile-main">
+                    <div className="skill-item-mobile-name">{s.name}</div>
+                    <div className="skill-item-mobile-summary">{getSkillInlineSummary(s)}</div>
+                  </div>
+                  <Button
+                    size="small"
+                    type="primary"
+                    className="skill-item-mobile-action"
+                    onClick={() => equipSkillToSlot(s.id)}
+                  >
+                    装备
+                  </Button>
+                </div>
+              ))}
+              {availableSkills.length === 0 ? <div className="tech-empty">暂无技能</div> : null}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="tech-pane">
+        <div className="tech-pane-top">
+          <div className="tech-subtitle">技能栏</div>
+          <div className="skill-slots">
+            {skillSlots.map((s, idx) => (
               <div
-                className="skill-item"
+                key={`slot-${idx}`}
+                className={`skill-slot ${idx === activeSkillSlot ? 'is-active' : ''}`}
                 role="button"
                 tabIndex={0}
-                onClick={() => equipSkillToSlot(s.id)}
+                onClick={() => setActiveSkillSlot(idx)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') equipSkillToSlot(s.id);
+                  if (e.key === 'Enter' || e.key === ' ') setActiveSkillSlot(idx);
                 }}
               >
+                <div className="skill-slot-index">{idx + 1}</div>
+                {s ? <img className="skill-slot-icon" src={s.icon} alt={s.name} /> : <div className="skill-slot-empty" />}
+                <Button
+                  size="small"
+                  className={`skill-slot-clear ${s ? '' : 'is-placeholder'}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearSkillSlot(idx);
+                  }}
+                >
+                  清空
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="tech-pane-bottom">
+          <div className="tech-subtitle">技能库（点击按顺序装备）</div>
+          <div className="skill-list">
+            {availableSkills.map((s) => (
+              <div key={s.id} className="skill-item">
                 <img className="skill-item-icon" src={s.icon} alt={s.name} />
                 <div className="skill-item-name">{s.name}</div>
+                <div className="skill-item-summary">{getSkillInlineSummary(s)}</div>
+                <Button
+                  size="small"
+                  type="primary"
+                  className="skill-item-action"
+                  onClick={() => equipSkillToSlot(s.id)}
+                >
+                  装备
+                </Button>
               </div>
-            </Tooltip>
-          ))}
-          {availableSkills.length === 0 ? <div className="tech-empty">暂无技能</div> : null}
+            ))}
+            {availableSkills.length === 0 ? <div className="tech-empty">暂无技能</div> : null}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
+
 
   const panelContent = () => {
     if (loading) {
@@ -990,7 +1118,7 @@ mu                    <span className="tech-table-name-text">{row.name}</span>
       footer={null}
       title={null}
       centered
-      width={1080}
+      width="min(1080px, calc(100vw - 16px))"
       className="tech-modal"
       destroyOnHidden
       maskClosable
@@ -1034,7 +1162,7 @@ mu                    <span className="tech-table-name-text">{row.name}</span>
         footer={null}
         title="功法详情"
         centered
-        width={720}
+        width="min(720px, calc(100vw - 16px))"
         className="tech-submodal"
         destroyOnHidden
       >
@@ -1143,7 +1271,7 @@ mu                    <span className="tech-table-name-text">{row.name}</span>
         onCancel={() => setCultivateOpen(false)}
         title="功法修炼"
         centered
-        width={640}
+        width="min(640px, calc(100vw - 16px))"
         className="tech-submodal"
         destroyOnHidden
         okText="确认修炼"
