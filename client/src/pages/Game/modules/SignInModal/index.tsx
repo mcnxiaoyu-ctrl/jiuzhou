@@ -1,5 +1,5 @@
 import React from 'react';
-import { App, Button, Calendar, Col, Modal, Radio, Row, Select, Space, Tag, Typography } from 'antd';
+import { App, Button, Calendar, Modal, Radio, Select, Tag, Typography } from 'antd';
 import type { CalendarProps } from 'antd';
 import { createStyles } from 'antd-style';
 import { clsx } from 'clsx';
@@ -36,10 +36,17 @@ const useStyle = createStyles(({ token, css, cx }) => {
   `;
   return {
     wrapper: css`
-      width: 450px;
+      width: 100%;
+      max-width: 450px;
       border: 1px solid ${token.colorBorderSecondary};
       border-radius: ${token.borderRadiusOuter};
       padding: 5px;
+
+      @media (max-width: 520px) {
+        max-width: 100%;
+        border: none;
+        padding: 0;
+      }
     `,
     dateCell: css`
       position: relative;
@@ -280,9 +287,10 @@ const SignInModal: React.FC<SignInModalProps> = ({ open, onClose, onSigned }) =>
       open={open}
       onCancel={onClose}
       footer={null}
-      title={null}
+      title="签到"
       centered
-      width={520}
+      width="95vw"
+      style={{ maxWidth: 520 }}
       className="signin-modal"
       destroyOnHidden
       maskClosable
@@ -324,57 +332,54 @@ const SignInModal: React.FC<SignInModalProps> = ({ open, onClose, onSigned }) =>
                 });
               }
               return (
-                <Row justify="end" gutter={8} style={{ padding: 8 }}>
-                  <Col>
-                    <Select
-                      size="small"
-                      popupMatchSelectWidth={false}
-                      className="my-year-select"
-                      value={year}
-                      options={options}
-                      onChange={(newYear) => {
-                        const now = value.clone().year(newYear);
-                        onChange(now);
-                      }}
-                    />
-                  </Col>
-                  <Col>
-                    <Select
-                      size="small"
-                      popupMatchSelectWidth={false}
-                      value={month}
-                      options={monthOptions}
-                      onChange={(newMonth) => {
-                        const now = value.clone().month(newMonth);
-                        onChange(now);
-                      }}
-                    />
-                  </Col>
-                  <Col>
-                    <Radio.Group size="small" onChange={(e) => onTypeChange(e.target.value)} value={type}>
-                      <Radio.Button value="month">月</Radio.Button>
-                      <Radio.Button value="year">年</Radio.Button>
-                    </Radio.Group>
-                  </Col>
-                </Row>
+                <div className="signin-header">
+                  <Select
+                    size="small"
+                    popupMatchSelectWidth={false}
+                    className="signin-year-select"
+                    value={year}
+                    options={options}
+                    onChange={(newYear) => {
+                      const now = value.clone().year(newYear);
+                      onChange(now);
+                    }}
+                  />
+                  <Select
+                    size="small"
+                    popupMatchSelectWidth={false}
+                    className="signin-month-select"
+                    value={month}
+                    options={monthOptions}
+                    onChange={(newMonth) => {
+                      const now = value.clone().month(newMonth);
+                      onChange(now);
+                    }}
+                  />
+                  <Radio.Group size="small" onChange={(e) => onTypeChange(e.target.value)} value={type}>
+                    <Radio.Button value="month">月</Radio.Button>
+                    <Radio.Button value="year">年</Radio.Button>
+                  </Radio.Group>
+                </div>
               );
             }}
           />
         </div>
 
         <div className="signin-footer">
-          <Space orientation="vertical" size={6} style={{ width: '100%' }}>
-            <Space size={8} wrap>
-              <Typography.Text type="secondary">已选：</Typography.Text>
-              <Typography.Text>{selectedKey}</Typography.Text>
+          <div className="signin-footer-info">
+            <div className="signin-footer-date">
+              <Typography.Text type="secondary" className="signin-footer-label">已选：</Typography.Text>
+              <Typography.Text className="signin-footer-value">{selectedKey}</Typography.Text>
+            </div>
+            <div className="signin-footer-tags">
               <Tag color={signedToday ? 'success' : 'default'}>{signedToday ? '今日已签到' : '今日未签到'}</Tag>
               <Tag color="processing">本月已签 {monthSignedCount} 天</Tag>
-              <Tag color="purple">连续 {streakDays} 天</Tag>
-            </Space>
-            <Button type="primary" block loading={loading} disabled={!isTodaySelected || signedToday} onClick={handleSignIn}>
-              {signedToday ? '今日已签到' : '签到'}
-            </Button>
-          </Space>
+              <Tag color="purple" className="signin-streak-tag">连续 {streakDays} 天</Tag>
+            </div>
+          </div>
+          <Button type="primary" block loading={loading} disabled={!isTodaySelected || signedToday} onClick={handleSignIn}>
+            {signedToday ? '今日已签到' : '签到'}
+          </Button>
         </div>
       </div>
     </Modal>

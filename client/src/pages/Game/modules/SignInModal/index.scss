@@ -1,9 +1,17 @@
+.signin-modal .ant-modal-content {
+  position: relative;
+}
+
+.signin-modal .ant-modal-close {
+  z-index: 10;
+}
+
 .signin-modal .ant-modal-body {
   display: flex;
   justify-content: center;
   align-items: stretch;
   padding: 12px;
-  max-height: 75vh;
+  max-height: 80vh;
   overflow: auto;
 }
 
@@ -13,7 +21,135 @@
   gap: 10px;
 }
 
+/* ── 日历头部 ── */
+.signin-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+.signin-year-select {
+  min-width: 0;
+}
+
+.signin-month-select {
+  min-width: 0;
+}
+
+/* ── 底部区域 ── */
 .signin-modal .signin-footer {
   margin-top: auto;
-  padding: 0 6px 2px;
+  padding: 4px 6px 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.signin-footer-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.signin-footer-date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.signin-footer-tags {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  align-self: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.signin-footer-tags .ant-tag,
+.signin-streak-tag {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.signin-streak-tag {
+  align-self: flex-start;
+}
+
+/* ── 移动端适配 ── */
+@media screen and (max-width: 520px) {
+  .signin-modal {
+    .ant-modal-content {
+      padding: 8px 4px;
+      border-radius: 14px;
+    }
+
+    .ant-modal-body {
+      padding: 4px;
+    }
+
+    .ant-modal-close {
+      top: 6px;
+      right: 6px;
+    }
+  }
+
+  /* 头部紧凑排列 */
+  .signin-header {
+    padding: 6px 4px;
+    gap: 6px;
+    justify-content: center;
+  }
+
+  .signin-year-select .ant-select-selector,
+  .signin-month-select .ant-select-selector {
+    font-size: 12px !important;
+    padding: 0 6px !important;
+  }
+
+  /* 日历网格触摸优化 */
+  .signin-modal .ant-picker-calendar {
+    .ant-picker-cell {
+      padding: 2px 0;
+    }
+
+    .ant-picker-content th {
+      font-size: 12px;
+      padding: 4px 0;
+    }
+  }
+
+  /* 底部紧凑 */
+  .signin-footer-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .signin-footer-label {
+    font-size: 12px !important;
+  }
+
+  .signin-footer-value {
+    font-size: 13px !important;
+  }
+
+  .signin-footer-tags .ant-tag,
+  .signin-streak-tag {
+    font-size: 11px;
+  }
 }

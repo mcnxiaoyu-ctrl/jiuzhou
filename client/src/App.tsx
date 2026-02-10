@@ -127,7 +127,7 @@ function App() {
         components: {
           Modal: {
             contentBg: 'var(--panel-bg)',
-            contentPadding: 4,
+            contentPadding: 8,
           } as any,
         },
       }}
