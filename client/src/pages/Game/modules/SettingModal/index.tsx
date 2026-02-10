@@ -1,5 +1,5 @@
 import { App, Button, Input, Menu, Modal, Space, Switch, Typography } from 'antd';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './index.scss';
 
 type SettingKey = 'base' | 'battle' | 'cdk';
@@ -12,6 +12,7 @@ interface SettingModalProps {
 const CDK_STORAGE_KEY = 'cdk_redeemed_v1';
 const THEME_STORAGE_KEY = 'ui_theme_v1';
 const THEME_EVENT_NAME = 'app:theme';
+const MOBILE_BREAKPOINT = 768;
 
 const loadThemeMode = () => {
   const raw = localStorage.getItem(THEME_STORAGE_KEY);
@@ -41,6 +42,16 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   const [autoBattle, setAutoBattle] = useState(false);
   const [fastBattle, setFastBattle] = useState(false);
   const [cdk, setCdk] = useState('');
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const menuItems = useMemo(
     () => [
@@ -76,14 +87,23 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   };
 
   return (
-    <Modal open={open} onCancel={onClose} footer={null} title={null} centered width={860} className="setting-modal" destroyOnHidden>
-      <div className="setting-modal-body">
+    <Modal
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      title={null}
+      centered
+      width="min(860px, calc(100vw - 16px))"
+      className="setting-modal"
+      destroyOnHidden
+    >
+      <div className={`setting-modal-body ${isMobile ? 'is-mobile' : ''}`}>
         <aside className="setting-left">
-          <Typography.Title level={5} style={{ margin: 0, padding: '12px 12px 6px' }}>
+          <Typography.Title level={5} className="setting-left-title">
             设置
           </Typography.Title>
           <Menu
-            mode="inline"
+            mode={isMobile ? 'horizontal' : 'inline'}
             items={menuItems}
             selectedKeys={[activeKey]}
             onClick={(e) => setActiveKey(e.key as SettingKey)}
@@ -124,12 +144,21 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
               <Typography.Title level={5} style={{ margin: 0 }}>
                 CDK兑换
               </Typography.Title>
-              <Space.Compact style={{ width: '100%' }}>
-                <Input value={cdk} onChange={(e) => setCdk(e.target.value)} placeholder="请输入CDK" />
-                <Button type="primary" onClick={redeemCdk}>
-                  兑换
-                </Button>
-              </Space.Compact>
+              {isMobile ? (
+                <Space direction="vertical" size={8} className="setting-cdk-mobile">
+                  <Input value={cdk} onChange={(e) => setCdk(e.target.value)} placeholder="请输入CDK" />
+                  <Button type="primary" onClick={redeemCdk} block>
+                    兑换
+                  </Button>
+                </Space>
+              ) : (
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input value={cdk} onChange={(e) => setCdk(e.target.value)} placeholder="请输入CDK" />
+                  <Button type="primary" onClick={redeemCdk}>
+                    兑换
+                  </Button>
+                </Space.Compact>
+              )}
             </Space>
           ) : null}
         </section>

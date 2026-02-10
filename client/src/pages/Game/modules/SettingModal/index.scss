@@ -1,8 +1,10 @@
 .setting-modal {
   .ant-modal-content {
     padding: 0;
+    border-radius: 14px;
     background: var(--panel-bg);
     color: var(--text-color);
+    overflow: hidden;
   }
 
   .ant-modal-close {
@@ -66,6 +68,11 @@
   height: 520px;
 }
 
+.setting-left-title {
+  margin: 0 !important;
+  padding: 12px 12px 6px;
+}
+
 .setting-left {
   width: 180px;
   border-right: 1px solid var(--border-color);
@@ -87,4 +94,70 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--panel-bg-soft);
+}
+
+.setting-cdk-mobile {
+  width: 100%;
+}
+
+@media screen and (max-width: 768px) {
+  .setting-modal {
+    .ant-modal-close {
+      top: 8px;
+      right: 8px;
+    }
+  }
+
+  .setting-modal-body.is-mobile {
+    flex-direction: column;
+    height: 80vh;
+  }
+
+  .setting-left {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+  }
+
+  .setting-left-title {
+    padding: 10px 12px 6px;
+    font-size: 20px;
+  }
+
+  .setting-left .ant-menu-horizontal {
+    display: flex;
+    gap: 8px;
+    padding: 0 10px;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+    border-bottom: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  .setting-left .ant-menu-horizontal .ant-menu-item {
+    margin: 0;
+    height: 34px;
+    line-height: 34px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border-bottom: none;
+    flex: 0 0 auto;
+  }
+
+  .setting-left .ant-menu-horizontal .ant-menu-item::after {
+    display: none;
+  }
+
+  .setting-right {
+    padding: 12px;
+  }
+
+  .setting-row {
+    padding: 10px;
+  }
 }
