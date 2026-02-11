@@ -263,15 +263,15 @@ type SkillFloatButtonProps = {
   onCastSkill?: (skillId: string, targetType?: string) => Promise<boolean>;
 };
 
-const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({ 
-  turn, 
+const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
+  turn,
   turnSide,
   isMyTurn = false,
   isBattleRunning = false,
   actionKey,
   autoMode = false,
   onAutoModeChange,
-  onCastSkill 
+  onCastSkill
 }) => {
   const { message } = App.useApp();
   const [open, setOpen] = useState(false);
@@ -474,20 +474,20 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
         if (notify) message.warning('技能释放中，请稍候');
         return false;
       }
-      
+
       // 检查是否轮到玩家行动（战斗中）
       if (turn != null && isBattleRunning && !isMyTurn) {
         if (notify) message.warning('还没轮到你的回合');
         return false;
       }
-      
+
       const target = skillsRef.current.find((s) => s.id === skillId);
       if (!target) return false;
       if (target.cooldownLeft > 0) {
         if (notify) message.info(`${target.name} 冷却中：${target.cooldownLeft}回合`);
         return false;
       }
-      
+
       if (turn != null && onCastSkill) {
         setIsCasting(true);
         try {
@@ -690,8 +690,8 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
                 五行：{formatElement(s.element)}
               </div>
               {effectLines.length > 0 ? effectLines.map((line, idx) => (
-                <div key={`${s.id}-effect-${idx}`}>效果{idx + 1}：{line}</div>
-              )) : <div>效果：无</div>}
+                <div key={`${s.id}-effect-${idx}`}>{line}</div>
+              )) : <div>无效果</div>}
               {s.description ? <div style={{ marginTop: 6, opacity: 0.9, whiteSpace: 'pre-wrap' }}>{s.description}</div> : null}
             </div>
           );
