@@ -577,3 +577,75 @@
   color: var(--text-secondary);
   font-size: 14px;
 }
+
+@media screen and (max-width: 768px) {
+  .mq-progress-view {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .mq-chapter-card,
+  .mq-section-card {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .mq-chapter-header {
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .mq-chapter-icon {
+    font-size: 24px;
+  }
+
+  .mq-chapter-name {
+    font-size: 16px;
+    line-height: 1.35;
+  }
+
+  .mq-section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .mq-section-title {
+    flex-wrap: wrap;
+  }
+
+  .mq-section-name {
+    font-size: 15px;
+  }
+
+  .mq-objective {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .mq-objective-progress {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .mq-track-row {
+    width: 100%;
+  }
+
+  .mq-view-header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .mq-chapters-list,
+  .mq-sections-list {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .mq-chapter-item,
+  .mq-section-item {
+    padding: 10px 12px;
+  }
+}

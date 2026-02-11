@@ -1,4 +1,4 @@
-import { App, Button, Input, Modal, Tag } from 'antd';
+import { App, Button, Input, Modal, Segmented, Tag } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
@@ -99,6 +99,14 @@ const categoryLabels: Record<TaskCategory, string> = {
   bounty: '悬赏任务',
 };
 
+const categoryShortLabels: Record<TaskCategory, string> = {
+  main: '主线',
+  side: '支线',
+  daily: '日常',
+  event: '活动',
+  bounty: '悬赏',
+};
+
 const statusText: Record<TaskStatus, string> = {
   ongoing: '进行中',
   turnin: '可提交',
@@ -121,6 +129,16 @@ interface TaskModalProps {
 
 const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange }) => {
   const { message } = App.useApp();
+  const taskCategoryKeys = useMemo(() => Object.keys(categoryLabels) as TaskCategory[], []);
+  const taskCategoryOptions = useMemo(
+    () => taskCategoryKeys.map((k) => ({ label: categoryShortLabels[k], value: k })),
+    [taskCategoryKeys],
+  );
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 768;
+  });
+  const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list');
   const [category, setCategory] = useState<TaskCategory>('main');
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string>('');
@@ -297,10 +315,21 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
   }, [message]);
 
   useEffect(() => {
+    const updateMobileFlag = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    updateMobileFlag();
+    window.addEventListener('resize', updateMobileFlag);
+    return () => window.removeEventListener('resize', updateMobileFlag);
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
     setCategory('main');
     setQuery('');
     setActiveId('');
+    setMobilePane('list');
     void refresh();
   }, [open, refresh]);
 
@@ -354,6 +383,12 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
   }, [activeId, filtered]);
 
   const activeTask = useMemo(() => filtered.find((t) => t.id === safeActiveId) ?? null, [filtered, safeActiveId]);
+  const isMobileTaskPane = isMobile && category !== 'main';
+  const handleCategoryChange = useCallback((nextCategory: TaskCategory) => {
+    setCategory(nextCategory);
+    setActiveId('');
+    setMobilePane('list');
+  }, []);
 
   const toggleTrack = useCallback(async () => {
     if (!activeTask?.id) return;
@@ -420,21 +455,33 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
             <img className="task-left-icon" src={coin01} alt="任务" />
             <div className="task-left-name">任务</div>
           </div>
-          <div className="task-left-list">
-            {(Object.keys(categoryLabels) as TaskCategory[]).map((k) => (
-              <Button
-                key={k}
-                type={category === k ? 'primary' : 'default'}
-                className="task-left-item"
-                onClick={() => {
-                  setCategory(k);
-                  setActiveId('');
+          {isMobile ? (
+            <div className="task-left-segmented-wrap">
+              <Segmented
+                className="task-left-segmented"
+                value={category}
+                options={taskCategoryOptions}
+                onChange={(value) => {
+                  if (typeof value !== 'string') return;
+                  if (!taskCategoryKeys.includes(value as TaskCategory)) return;
+                  handleCategoryChange(value as TaskCategory);
                 }}
-              >
-                {categoryLabels[k]}
-              </Button>
-            ))}
-          </div>
+              />
+            </div>
+          ) : (
+            <div className="task-left-list">
+              {taskCategoryKeys.map((k) => (
+                <Button
+                  key={k}
+                  type={category === k ? 'primary' : 'default'}
+                  className="task-left-item"
+                  onClick={() => handleCategoryChange(k)}
+                >
+                  {categoryLabels[k]}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="task-modal-right">
@@ -454,9 +501,26 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
                   prefix={<SearchOutlined />}
                 />
               </div>
+              {isMobileTaskPane ? (
+                <div className="task-mobile-pane-switch">
+                  <Segmented
+                    className="task-mobile-pane-segmented"
+                    value={mobilePane}
+                    options={[
+                      { label: '任务列表', value: 'list' },
+                      { label: '任务详情', value: 'detail', disabled: !activeTask },
+                    ]}
+                    onChange={(value) => {
+                      if (value === 'list' || value === 'detail') {
+                        setMobilePane(value);
+                      }
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
 
-            <div className="task-pane-body">
+            <div className={`task-pane-body ${isMobileTaskPane ? `is-mobile-${mobilePane}` : ''}`}>
               <div className="task-list">
                 {filtered.map((t) => (
                   <div
@@ -464,9 +528,15 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
                     className={`task-item ${t.id === safeActiveId ? 'is-active' : ''}`}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setActiveId(t.id)}
+                    onClick={() => {
+                      setActiveId(t.id);
+                      if (isMobileTaskPane) setMobilePane('detail');
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') setActiveId(t.id);
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        setActiveId(t.id);
+                        if (isMobileTaskPane) setMobilePane('detail');
+                      }
                     }}
                   >
                     <div className="task-item-top">
@@ -489,6 +559,11 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
               <div className="task-detail">
                 {activeTask ? (
                   <>
+                    {isMobileTaskPane ? (
+                      <Button className="task-mobile-back-btn" onClick={() => setMobilePane('list')}>
+                        返回任务列表
+                      </Button>
+                    ) : null}
                     <div className="task-detail-header">
                       <div className="task-detail-title">{activeTask.title}</div>
                       <div className="task-detail-tags">
