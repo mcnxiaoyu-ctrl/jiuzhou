@@ -11,6 +11,11 @@ import { query, pool } from '../config/database.js';
 import { createItem, CreateItemOptions } from './itemService.js';
 import { sendSystemMail, type MailAttachItem } from './mailService.js';
 import { recordCollectItemEvent } from './taskService.js';
+import {
+  clampQualityRank,
+  resolveDisassembleRewardItemDefIdByQualityRank,
+  resolveQualityRank,
+} from './equipmentDisassembleRules.js';
 import type { MonsterData } from '../battle/BattleFactory.js';
 
 // ============================================
@@ -83,6 +88,11 @@ export interface BattleParticipant {
   characterId: number;
   nickname: string;
   fuyuan?: number;
+}
+
+interface AutoDisassembleSetting {
+  enabled: boolean;
+  maxQualityRank: number;
 }
 
 // ============================================
@@ -336,35 +346,203 @@ export const distributeBattleRewards = async (
     
     // 4. 分发物品（组队随机分配，单人全部获得）
     const allItems: DistributeResult['rewards']['items'] = [];
-    
+    const itemMetaCache = new Map<string, { name: string; category: string }>();
+    const autoDisassembleSettings = new Map<number, AutoDisassembleSetting>();
+
+    const participantCharacterIds = [...new Set(participants.map((p) => Number(p.characterId)).filter((id) => Number.isInteger(id) && id > 0))];
+    if (participantCharacterIds.length > 0) {
+      const settingResult = await client.query(
+        `
+          SELECT id, auto_disassemble_enabled, auto_disassemble_max_quality_rank
+          FROM characters
+          WHERE id = ANY($1)
+        `,
+        [participantCharacterIds]
+      );
+      for (const row of settingResult.rows as Array<{
+        id: number;
+        auto_disassemble_enabled: boolean | null;
+        auto_disassemble_max_quality_rank: number | null;
+      }>) {
+        autoDisassembleSettings.set(Number(row.id), {
+          enabled: Boolean(row.auto_disassemble_enabled),
+          maxQualityRank: clampQualityRank(row.auto_disassemble_max_quality_rank, 1),
+        });
+      }
+    }
+
+    const appendCollectCount = (characterId: number, itemDefId: string, qty: number) => {
+      const key = `${characterId}|${itemDefId}`;
+      const existing = collectCounts.get(key);
+      if (existing) {
+        existing.qty += qty;
+      } else {
+        collectCounts.set(key, { characterId, itemDefId, qty });
+      }
+    };
+
+    const appendRewardRecord = (
+      characterId: number,
+      itemDefId: string,
+      itemName: string,
+      quantity: number,
+      instanceIds: number[]
+    ) => {
+      allItems.push({ itemDefId, itemName, quantity, instanceIds, receiverId: characterId });
+      const playerReward = perPlayerRewards.find((p) => p.characterId === characterId);
+      if (playerReward) {
+        playerReward.items.push({ itemDefId, itemName, quantity, instanceIds });
+      }
+    };
+
+    const queuePendingMailItem = (receiver: BattleParticipant, attachItem: MailAttachItem) => {
+      const existing = pendingMailByReceiver.get(receiver.characterId) || {
+        userId: receiver.userId,
+        items: [],
+      };
+      const keyA = JSON.stringify(attachItem.options?.equipOptions || null);
+      const found = existing.items.find((x) => {
+        const keyB = JSON.stringify(x.options?.equipOptions || null);
+        return (
+          x.item_def_id === attachItem.item_def_id &&
+          (x.options?.bindType || 'none') === (attachItem.options?.bindType || 'none') &&
+          keyB === keyA
+        );
+      });
+      if (found) {
+        found.qty += attachItem.qty;
+      } else {
+        existing.items.push(attachItem);
+      }
+      pendingMailByReceiver.set(receiver.characterId, existing);
+    };
+
+    const getItemMeta = async (itemDefId: string): Promise<{ name: string; category: string }> => {
+      const cached = itemMetaCache.get(itemDefId);
+      if (cached) return cached;
+      const result = await client.query('SELECT name, category FROM item_def WHERE id = $1', [itemDefId]);
+      const meta = {
+        name: result.rows[0]?.name || itemDefId,
+        category: result.rows[0]?.category || 'misc',
+      };
+      itemMetaCache.set(itemDefId, meta);
+      return meta;
+    };
+
     for (const entry of mergedDropsByReceiver.values()) {
       const drop = entry.drop;
       const receiver = entry.receiver;
-      
-      // 获取物品名称
-      const itemNameResult = await client.query(
-        'SELECT name, category FROM item_def WHERE id = $1',
-        [drop.itemDefId]
-      );
-      const itemName = itemNameResult.rows[0]?.name || drop.itemDefId;
-      const itemCategory = itemNameResult.rows[0]?.category || 'misc';
-      
-      // 创建物品选项
+      const { name: itemName, category: itemCategory } = await getItemMeta(drop.itemDefId);
+
       const createOptions: CreateItemOptions = {
         location: 'bag',
         bindType: drop.bindType,
         obtainedFrom: 'battle_drop',
         dbClient: client,
       };
-      
+
       if (itemCategory === 'equipment') {
         createOptions.equipOptions = {
           fuyuan: entry.receiverFuyuan,
-          ...(drop.qualityWeights ? { qualityWeights: drop.qualityWeights as any } : {})
+          ...(drop.qualityWeights ? { qualityWeights: drop.qualityWeights as any } : {}),
         };
       }
-      
-      // 创建物品实例
+
+      const receiverAutoDisassemble = autoDisassembleSettings.get(receiver.characterId) || {
+        enabled: false,
+        maxQualityRank: 1,
+      };
+      const shouldTryAutoDisassemble = itemCategory === 'equipment' && receiverAutoDisassemble.enabled;
+
+      if (shouldTryAutoDisassemble) {
+        for (let i = 0; i < drop.quantity; i++) {
+          const createResult = await createItem(
+            receiver.userId,
+            receiver.characterId,
+            drop.itemDefId,
+            1,
+            createOptions
+          );
+
+          if (!createResult.success) {
+            if (createResult.message === '背包已满') {
+              queuePendingMailItem(receiver, {
+                item_def_id: drop.itemDefId,
+                qty: 1,
+                options: {
+                  bindType: createOptions.bindType,
+                  equipOptions: createOptions.equipOptions,
+                },
+              });
+              appendRewardRecord(receiver.characterId, drop.itemDefId, itemName, 1, []);
+            } else {
+              console.warn(`物品创建失败: ${drop.itemDefId}, ${createResult.message}`);
+            }
+            continue;
+          }
+
+          const generatedQualityRank = (() => {
+            const raw = Number(createResult.equipment?.qualityRank);
+            if (Number.isInteger(raw) && raw > 0) return raw;
+            return resolveQualityRank(createResult.equipment?.quality);
+          })();
+          const disassembleRewardItemDefId = resolveDisassembleRewardItemDefIdByQualityRank(generatedQualityRank);
+          const shouldDisassembleCurrent =
+            Boolean(disassembleRewardItemDefId) &&
+            generatedQualityRank > 0 &&
+            generatedQualityRank <= receiverAutoDisassemble.maxQualityRank;
+
+          if (shouldDisassembleCurrent && disassembleRewardItemDefId) {
+            const rewardCreateResult = await createItem(
+              receiver.userId,
+              receiver.characterId,
+              disassembleRewardItemDefId,
+              1,
+              {
+                location: 'bag',
+                obtainedFrom: 'auto_disassemble',
+                dbClient: client,
+              }
+            );
+
+            if (rewardCreateResult.success || rewardCreateResult.message === '背包已满') {
+              const sourceItemIds = (createResult.itemIds || []).filter((id) => Number.isInteger(id) && id > 0);
+              if (sourceItemIds.length > 0) {
+                await client.query(
+                  'DELETE FROM item_instance WHERE owner_character_id = $1 AND id = ANY($2)',
+                  [receiver.characterId, sourceItemIds]
+                );
+              }
+
+              const rewardMeta = await getItemMeta(disassembleRewardItemDefId);
+              if (rewardCreateResult.success) {
+                appendCollectCount(receiver.characterId, disassembleRewardItemDefId, 1);
+                appendRewardRecord(
+                  receiver.characterId,
+                  disassembleRewardItemDefId,
+                  rewardMeta.name,
+                  1,
+                  rewardCreateResult.itemIds || []
+                );
+              } else {
+                queuePendingMailItem(receiver, {
+                  item_def_id: disassembleRewardItemDefId,
+                  qty: 1,
+                });
+                appendRewardRecord(receiver.characterId, disassembleRewardItemDefId, rewardMeta.name, 1, []);
+              }
+              continue;
+            }
+
+            console.warn(`自动分解入包失败，保留原装备: ${disassembleRewardItemDefId}, ${rewardCreateResult.message}`);
+          }
+
+          appendCollectCount(receiver.characterId, drop.itemDefId, 1);
+          appendRewardRecord(receiver.characterId, drop.itemDefId, itemName, 1, createResult.itemIds || []);
+        }
+        continue;
+      }
+
       const createResult = await createItem(
         receiver.userId,
         receiver.characterId,
@@ -372,86 +550,22 @@ export const distributeBattleRewards = async (
         drop.quantity,
         createOptions
       );
-      
+
       if (createResult.success) {
-        const collectKey = `${receiver.characterId}|${drop.itemDefId}`;
-        const existingCollect = collectCounts.get(collectKey);
-        if (existingCollect) {
-          existingCollect.qty += drop.quantity;
-        } else {
-          collectCounts.set(collectKey, { characterId: receiver.characterId, itemDefId: drop.itemDefId, qty: drop.quantity });
-        }
-
-        const itemRecord = {
-          itemDefId: drop.itemDefId,
-          itemName,
-          quantity: drop.quantity,
-          instanceIds: createResult.itemIds || [],
-          receiverId: receiver.characterId,
-        };
-        
-        allItems.push(itemRecord);
-        
-        // 记录到对应玩家的奖励中
-        const playerReward = perPlayerRewards.find(p => p.characterId === receiver.characterId);
-        if (playerReward) {
-          playerReward.items.push({
-            itemDefId: drop.itemDefId,
-            itemName,
-            quantity: drop.quantity,
-            instanceIds: createResult.itemIds || [],
-          });
-        }
+        appendCollectCount(receiver.characterId, drop.itemDefId, drop.quantity);
+        appendRewardRecord(receiver.characterId, drop.itemDefId, itemName, drop.quantity, createResult.itemIds || []);
+      } else if (createResult.message === '背包已满') {
+        queuePendingMailItem(receiver, {
+          item_def_id: drop.itemDefId,
+          qty: drop.quantity,
+          options: {
+            bindType: createOptions.bindType,
+            equipOptions: createOptions.equipOptions,
+          },
+        });
+        appendRewardRecord(receiver.characterId, drop.itemDefId, itemName, drop.quantity, []);
       } else {
-        const isBagFull = createResult.message === '背包已满';
-        if (isBagFull) {
-          const attachItem: MailAttachItem = {
-            item_def_id: drop.itemDefId,
-            qty: drop.quantity,
-            options: {
-              bindType: createOptions.bindType,
-              equipOptions: createOptions.equipOptions,
-            },
-          };
-
-          const existing = pendingMailByReceiver.get(receiver.characterId) || {
-            userId: receiver.userId,
-            items: [],
-          };
-          const keyA = JSON.stringify(attachItem.options?.equipOptions || null);
-          const found = existing.items.find((x) => {
-            const keyB = JSON.stringify(x.options?.equipOptions || null);
-            return x.item_def_id === attachItem.item_def_id && (x.options?.bindType || 'none') === (attachItem.options?.bindType || 'none') && keyB === keyA;
-          });
-          if (found) {
-            found.qty += attachItem.qty;
-          } else {
-            existing.items.push(attachItem);
-          }
-          pendingMailByReceiver.set(receiver.characterId, existing);
-
-          const itemRecord = {
-            itemDefId: drop.itemDefId,
-            itemName,
-            quantity: drop.quantity,
-            instanceIds: [],
-            receiverId: receiver.characterId,
-          };
-
-          allItems.push(itemRecord);
-
-          const playerReward = perPlayerRewards.find((p) => p.characterId === receiver.characterId);
-          if (playerReward) {
-            playerReward.items.push({
-              itemDefId: drop.itemDefId,
-              itemName,
-              quantity: drop.quantity,
-              instanceIds: [],
-            });
-          }
-        } else {
-          console.warn(`物品创建失败: ${drop.itemDefId}, ${createResult.message}`);
-        }
+        console.warn(`物品创建失败: ${drop.itemDefId}, ${createResult.message}`);
       }
     }
     

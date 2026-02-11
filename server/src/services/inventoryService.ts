@@ -28,6 +28,9 @@ import {
   type SocketEffect,
   type SocketedGemEntry,
 } from './equipmentGrowthRules.js';
+import {
+  resolveDisassembleRewardItemDefIdByQuality,
+} from './equipmentDisassembleRules.js';
 
 // 背包位置类型
 export type InventoryLocation = 'bag' | 'warehouse' | 'equipped';
@@ -2377,13 +2380,7 @@ export const disassembleEquipment = async (
       return { success: false, message: '装备数量异常' };
     }
 
-    const quality = item.quality;
-    const rewardItemDefId =
-      quality === '黄' || quality === '玄'
-        ? 'enhance-001'
-        : quality === '地' || quality === '天'
-          ? 'enhance-002'
-          : null;
+    const rewardItemDefId = resolveDisassembleRewardItemDefIdByQuality(item.quality);
 
     if (!rewardItemDefId) {
       await client.query('ROLLBACK');
@@ -2503,10 +2500,10 @@ export const disassembleEquipmentBatch = async (
         return { success: false, message: '包含数量异常的装备' };
       }
 
-      const q = row.quality;
-      if (q === '黄' || q === '玄') {
+      const rewardItemDefId = resolveDisassembleRewardItemDefIdByQuality(row.quality);
+      if (rewardItemDefId === 'enhance-001') {
         cuiLingCount += 1;
-      } else if (q === '地' || q === '天') {
+      } else if (rewardItemDefId === 'enhance-002') {
         yunLingCount += 1;
       } else {
         await client.query('ROLLBACK');

@@ -1,5 +1,6 @@
-import { App, Button, Input, Menu, Modal, Space, Switch, Typography } from 'antd';
+import { App, Button, Input, Menu, Modal, Select, Space, Switch, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
+import { getCharacterInfo, updateCharacterAutoDisassemble } from '../../../../services/api';
 import './index.scss';
 
 type SettingKey = 'base' | 'battle' | 'cdk';
@@ -35,12 +36,22 @@ const saveRedeemedCdks = (set: Set<string>) => {
   localStorage.setItem(CDK_STORAGE_KEY, JSON.stringify(Array.from(set)));
 };
 
+const clampQualityRank = (value: unknown): number => {
+  const n = Number(value);
+  if (!Number.isInteger(n)) return 1;
+  return Math.max(1, Math.min(4, n));
+};
+
 const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   const { message } = App.useApp();
   const [activeKey, setActiveKey] = useState<SettingKey>('base');
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => loadThemeMode());
   const [autoBattle, setAutoBattle] = useState(false);
   const [fastBattle, setFastBattle] = useState(false);
+  const [autoDisassembleEnabled, setAutoDisassembleEnabled] = useState(false);
+  const [autoDisassembleMaxQualityRank, setAutoDisassembleMaxQualityRank] = useState(1);
+  const [autoDisassembleSaving, setAutoDisassembleSaving] = useState(false);
+  const [autoDisassembleLoading, setAutoDisassembleLoading] = useState(false);
   const [cdk, setCdk] = useState('');
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= MOBILE_BREAKPOINT : false
@@ -84,6 +95,62 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
     setThemeMode(nextMode);
     localStorage.setItem(THEME_STORAGE_KEY, nextMode);
     window.dispatchEvent(new CustomEvent(THEME_EVENT_NAME, { detail: { mode: nextMode } }));
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setAutoDisassembleLoading(true);
+    void (async () => {
+      try {
+        const res = await getCharacterInfo();
+        if (!res.success || !res.data?.character || cancelled) return;
+        const character = res.data.character;
+        setAutoDisassembleEnabled(Boolean(character.auto_disassemble_enabled));
+        setAutoDisassembleMaxQualityRank(clampQualityRank(character.auto_disassemble_max_quality_rank));
+      } catch {
+      } finally {
+        if (!cancelled) {
+          setAutoDisassembleLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const saveAutoDisassemble = async (
+    nextEnabled: boolean,
+    nextMaxQualityRank: number,
+    rollback: () => void,
+  ) => {
+    setAutoDisassembleSaving(true);
+    try {
+      const res = await updateCharacterAutoDisassemble(nextEnabled, nextMaxQualityRank);
+      if (!res.success) throw new Error(res.message || '设置保存失败');
+    } catch (error) {
+      rollback();
+      const e = error as { message?: string };
+      message.error(e.message || '设置保存失败');
+    } finally {
+      setAutoDisassembleSaving(false);
+    }
+  };
+
+  const handleAutoDisassembleEnabledChange = (next: boolean) => {
+    if (autoDisassembleLoading || autoDisassembleSaving) return;
+    const prevEnabled = autoDisassembleEnabled;
+    setAutoDisassembleEnabled(next);
+    void saveAutoDisassemble(next, autoDisassembleMaxQualityRank, () => setAutoDisassembleEnabled(prevEnabled));
+  };
+
+  const handleAutoDisassembleQualityChange = (next: number) => {
+    if (autoDisassembleLoading || autoDisassembleSaving) return;
+    const clamped = clampQualityRank(next);
+    const prevRank = autoDisassembleMaxQualityRank;
+    setAutoDisassembleMaxQualityRank(clamped);
+    void saveAutoDisassemble(autoDisassembleEnabled, clamped, () => setAutoDisassembleMaxQualityRank(prevRank));
   };
 
   return (
@@ -135,6 +202,29 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
               <div className="setting-row">
                 <Typography.Text>快速战斗</Typography.Text>
                 <Switch checked={fastBattle} onChange={setFastBattle} />
+              </div>
+              <div className="setting-row">
+                <Typography.Text>自动分解装备</Typography.Text>
+                <Switch
+                  checked={autoDisassembleEnabled}
+                  loading={autoDisassembleLoading || autoDisassembleSaving}
+                  onChange={handleAutoDisassembleEnabledChange}
+                />
+              </div>
+              <div className="setting-row">
+                <Typography.Text>自动分解最高品质</Typography.Text>
+                <Select
+                  style={{ minWidth: 180 }}
+                  value={autoDisassembleMaxQualityRank}
+                  disabled={autoDisassembleLoading || autoDisassembleSaving}
+                  options={[
+                    { label: '黄品', value: 1 },
+                    { label: '玄品', value: 2 },
+                    { label: '地品', value: 3 },
+                    { label: '天品', value: 4 },
+                  ]}
+                  onChange={handleAutoDisassembleQualityChange}
+                />
               </div>
             </Space>
           ) : null}

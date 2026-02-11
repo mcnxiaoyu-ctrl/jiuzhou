@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS characters (
 
   -- 战斗设置
   auto_cast_skills BOOLEAN DEFAULT true,               -- 自动释放技能开关
+  auto_disassemble_enabled BOOLEAN DEFAULT false,      -- 自动分解装备开关
+  auto_disassemble_max_quality_rank INTEGER DEFAULT 1, -- 自动分解最高品质（1黄/2玄/3地/4天）
   
   -- 时间戳
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,     -- 创建时间
@@ -150,6 +152,26 @@ BEGIN
     WHERE table_name = 'characters' AND column_name = 'auto_cast_skills'
   ) THEN
     EXECUTE $$COMMENT ON COLUMN characters.auto_cast_skills IS '自动释放技能开关'$$;
+  END IF;
+END
+$do$;
+DO $do$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'characters' AND column_name = 'auto_disassemble_enabled'
+  ) THEN
+    EXECUTE $$COMMENT ON COLUMN characters.auto_disassemble_enabled IS '自动分解装备开关'$$;
+  END IF;
+END
+$do$;
+DO $do$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'characters' AND column_name = 'auto_disassemble_max_quality_rank'
+  ) THEN
+    EXECUTE $$COMMENT ON COLUMN characters.auto_disassemble_max_quality_rank IS '自动分解最高品质（1黄/2玄/3地/4天）'$$;
   END IF;
 END
 $do$;
@@ -231,6 +253,8 @@ const columnsToCheck = [
   { name: 'current_map_id', type: "VARCHAR(64) DEFAULT 'map-qingyun-village'", comment: '当前所在地图ID' },
   { name: 'current_room_id', type: "VARCHAR(64) DEFAULT 'room-village-center'", comment: '当前所在房间ID' },
   { name: 'auto_cast_skills', type: 'BOOLEAN DEFAULT true', comment: '自动释放技能开关' },
+  { name: 'auto_disassemble_enabled', type: 'BOOLEAN DEFAULT false', comment: '自动分解装备开关' },
+  { name: 'auto_disassemble_max_quality_rank', type: 'INTEGER DEFAULT 1', comment: '自动分解最高品质（1黄/2玄/3地/4天）' },
 ];
 
 // 检查并添加缺失字段

@@ -1,5 +1,12 @@
 import { Router, Request, Response } from 'express';
-import { checkCharacter, createCharacter, getCharacter, updateCharacterAutoCastSkills, updateCharacterPosition } from '../services/characterService.js';
+import {
+  checkCharacter,
+  createCharacter,
+  getCharacter,
+  updateCharacterAutoCastSkills,
+  updateCharacterAutoDisassembleSettings,
+  updateCharacterPosition,
+} from '../services/characterService.js';
 import { verifyToken } from '../services/authService.js';
 import { getGameServer } from '../game/GameServer.js';
 
@@ -123,6 +130,39 @@ router.post('/updateAutoCastSkills', authMiddleware, async (req: Request, res: R
   } catch (error) {
     console.error('更新自动释放技能开关接口错误:', error);
     res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+router.post('/updateAutoDisassemble', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as Request & { userId: number }).userId;
+    const body = req.body as { enabled?: unknown; maxQualityRank?: unknown };
+
+    const enabled = Boolean(body?.enabled);
+    const parsedRank =
+      body?.maxQualityRank === undefined || body?.maxQualityRank === null
+        ? undefined
+        : Number(body.maxQualityRank);
+
+    if (parsedRank !== undefined && (!Number.isInteger(parsedRank) || parsedRank < 1 || parsedRank > 4)) {
+      return res.status(400).json({ success: false, message: 'maxQualityRank参数错误' });
+    }
+
+    const result = await updateCharacterAutoDisassembleSettings(userId, enabled, parsedRank);
+
+    if (result.success) {
+      try {
+        const gameServer = getGameServer();
+        await gameServer.pushCharacterUpdate(userId);
+      } catch {
+        // 忽略
+      }
+    }
+
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    console.error('更新自动分解设置接口错误:', error);
+    return res.status(500).json({ success: false, message: '服务器错误' });
   }
 });
 

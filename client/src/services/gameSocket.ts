@@ -58,6 +58,8 @@ export interface CharacterData {
   gender: string;
   avatar: string | null;
   autoCastSkills: boolean;
+  autoDisassembleEnabled: boolean;
+  autoDisassembleMaxQualityRank: number;
   spiritStones: number;
   silver: number;
   stamina: number;

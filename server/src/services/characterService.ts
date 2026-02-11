@@ -11,6 +11,8 @@ export interface Character {
   gender: string;
   avatar: string | null;
   auto_cast_skills: boolean;
+  auto_disassemble_enabled: boolean;
+  auto_disassemble_max_quality_rank: number;
   spirit_stones: number;
   silver: number;
   stamina: number;
@@ -268,4 +270,44 @@ export const updateCharacterAutoCastSkills = async (
   }
 };
 
-export default { checkCharacter, createCharacter, getCharacter, updateCharacterPosition, updateCharacterAutoCastSkills };
+const clampQualityRank = (value: unknown): number => {
+  const n = Number(value);
+  if (!Number.isInteger(n)) return 1;
+  return Math.max(1, Math.min(4, n));
+};
+
+export const updateCharacterAutoDisassembleSettings = async (
+  userId: number,
+  enabled: boolean,
+  maxQualityRank?: number
+): Promise<{ success: boolean; message: string }> => {
+  try {
+    const parsedRank = maxQualityRank == null ? null : clampQualityRank(maxQualityRank);
+    const sql = `
+      UPDATE characters
+      SET auto_disassemble_enabled = $1,
+          auto_disassemble_max_quality_rank = GREATEST(1, LEAST(4, COALESCE($2, auto_disassemble_max_quality_rank, 1))),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = $3
+    `;
+    const result = await query(sql, [Boolean(enabled), parsedRank, userId]);
+
+    if (result.rowCount === 0) {
+      return { success: false, message: '角色不存在' };
+    }
+
+    return { success: true, message: '设置已保存' };
+  } catch (error) {
+    console.error('更新自动分解设置失败:', error);
+    return { success: false, message: '更新设置失败' };
+  }
+};
+
+export default {
+  checkCharacter,
+  createCharacter,
+  getCharacter,
+  updateCharacterPosition,
+  updateCharacterAutoCastSkills,
+  updateCharacterAutoDisassembleSettings,
+};

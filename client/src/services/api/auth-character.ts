@@ -23,6 +23,9 @@ export interface CharacterResponse {
       title: string;
       realm: string;
       sub_realm: string | null;
+      auto_cast_skills?: boolean;
+      auto_disassemble_enabled?: boolean;
+      auto_disassemble_max_quality_rank?: number;
       spirit_stones: number;
       silver: number;
       qixue: number;
@@ -94,4 +97,11 @@ export const updateCharacterPositionKeepalive = (currentMapId: string, currentRo
 
 export const updateCharacterAutoCastSkills = (enabled: boolean): Promise<{ success: boolean; message: string }> => {
   return api.post('/character/updateAutoCastSkills', { enabled });
+};
+
+export const updateCharacterAutoDisassemble = (
+  enabled: boolean,
+  maxQualityRank: number
+): Promise<{ success: boolean; message: string }> => {
+  return api.post('/character/updateAutoDisassemble', { enabled, maxQualityRank });
 };
