@@ -94,8 +94,13 @@ const SortPanel: React.FC<SortPanelProps> = ({ value, onChange, onClose }) => (
 interface SheetProps {
   item: BagItem;
   loading: boolean;
+  useQty: number;
+  useQtyMax: number;
   onClose: () => void;
   onUse: () => void;
+  onUseQtyChange: (nextValue: number) => void;
+  onUseQtyStep: (delta: number) => void;
+  onUseQtyMax: () => void;
   onEquipToggle: () => void;
   onDisassemble: () => void;
   onEnhance: () => void;
@@ -104,8 +109,13 @@ interface SheetProps {
 const ItemSheet: React.FC<SheetProps> = ({
   item,
   loading,
+  useQty,
+  useQtyMax,
   onClose,
   onUse,
+  onUseQtyChange,
+  onUseQtyStep,
+  onUseQtyMax,
   onEquipToggle,
   onDisassemble,
   onEnhance,
@@ -116,6 +126,11 @@ const ItemSheet: React.FC<SheetProps> = ({
   const hasSetInfo = Boolean(item.setInfo && item.setInfo.bonuses.length > 0);
   const hasEffects = (item.effects?.length ?? 0) > 0;
   const isEquipped = item.location === 'equipped';
+  const canBatchUse =
+    item.actions.includes('use') &&
+    item.category === 'consumable' &&
+    item.location === 'bag' &&
+    Math.floor(item.qty) > 1;
 
   const actionDisabled = (a: BagAction) => {
     if (!item.actions.includes(a)) return true;
@@ -222,6 +237,49 @@ const ItemSheet: React.FC<SheetProps> = ({
           )}
         </div>
 
+        {canBatchUse && (
+          <div className="mbag-sheet-use-qty">
+            <span className="mbag-sheet-use-qty-label">使用数量</span>
+            <div className="mbag-sheet-use-qty-controls">
+              <button
+                className="mbag-sheet-use-qty-btn"
+                disabled={loading || actionDisabled('use') || useQty <= 1}
+                onClick={() => onUseQtyStep(-1)}
+              >
+                -
+              </button>
+              <input
+                className="mbag-sheet-use-qty-input"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={useQtyMax}
+                disabled={loading || actionDisabled('use')}
+                value={useQty}
+                onChange={(event) => {
+                  const parsed = Number(event.target.value);
+                  if (!Number.isFinite(parsed)) return;
+                  onUseQtyChange(parsed);
+                }}
+              />
+              <button
+                className="mbag-sheet-use-qty-btn"
+                disabled={loading || actionDisabled('use') || useQty >= useQtyMax}
+                onClick={() => onUseQtyStep(1)}
+              >
+                +
+              </button>
+              <button
+                className="mbag-sheet-use-qty-btn is-max"
+                disabled={loading || actionDisabled('use') || useQty >= useQtyMax}
+                onClick={onUseQtyMax}
+              >
+                最大
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 操作 */}
         <div className="mbag-sheet-actions">
           {item.actions.includes('use') && (
@@ -230,7 +288,7 @@ const ItemSheet: React.FC<SheetProps> = ({
               disabled={loading || actionDisabled('use')}
               onClick={onUse}
             >
-              使用
+              使用{canBatchUse && useQty > 1 ? `×${useQty}` : ''}
             </button>
           )}
           {item.actions.includes('equip') && (
@@ -550,6 +608,7 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
   const [items, setItems] = useState<BagItem[]>([]);
   const [playerSilver, setPlayerSilver] = useState(0);
   const [playerSpiritStones, setPlayerSpiritStones] = useState(0);
+  const [useQty, setUseQty] = useState(1);
 
   useEffect(() => {
     return gameSocket.onCharacterUpdate((char) => {
@@ -608,6 +667,36 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
     () => (activeId !== null ? filtered.find((i) => i.id === activeId) ?? null : null),
     [activeId, filtered],
   );
+  const useQtyMax = useMemo(() => {
+    if (!activeItem || activeItem.category !== 'consumable') return 1;
+    return Math.max(1, Math.floor(activeItem.qty));
+  }, [activeItem]);
+  const clampUseQty = useCallback(
+    (value: number) => Math.max(1, Math.min(useQtyMax, Math.floor(value))),
+    [useQtyMax],
+  );
+  useEffect(() => {
+    setUseQty(1);
+  }, [activeItem?.id]);
+  useEffect(() => {
+    setUseQty((prev) => Math.max(1, Math.min(prev, useQtyMax)));
+  }, [useQtyMax]);
+  const handleUseQtyChange = useCallback(
+    (nextValue: number) => {
+      if (!Number.isFinite(nextValue)) return;
+      setUseQty(clampUseQty(nextValue));
+    },
+    [clampUseQty],
+  );
+  const handleUseQtyStep = useCallback(
+    (delta: number) => {
+      setUseQty((prev) => clampUseQty(prev + delta));
+    },
+    [clampUseQty],
+  );
+  const handleUseQtyMax = useCallback(() => {
+    setUseQty(useQtyMax);
+  }, [useQtyMax]);
 
   const usedSlots = info?.bag_used ?? items.filter((i) => i.location === 'bag').length;
   const totalSlots = info?.bag_capacity ?? 100;
@@ -637,19 +726,21 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
 
   const handleUseItem = useCallback(async () => {
     if (!activeItem) return;
+    const useCount = activeItem.category === 'consumable' ? clampUseQty(useQty) : 1;
     setLoading(true);
     try {
       const beforeChar = gameSocket.getCharacter();
-      const res = await inventoryUseItem({ itemInstanceId: activeItem.id, qty: 1 });
+      const res = await inventoryUseItem({ itemInstanceId: activeItem.id, qty: useCount });
       if (!res.success) throw new Error(res.message || '使用失败');
 
       const lootResults = res.data?.lootResults;
-      const remaining = Math.max(0, activeItem.qty - 1);
+      const remaining = Math.max(0, Math.floor(activeItem.qty) - useCount);
 
       let content: string;
       if (lootResults && lootResults.length > 0) {
         const parts = lootResults.map((r) => `${r.name || r.type}×${r.amount}`);
-        content = `打开【${activeItem.name}】，获得${parts.join('、')}。`;
+        const qtyPart = useCount > 1 ? `×${useCount}` : '';
+        content = `打开【${activeItem.name}】${qtyPart}，获得${parts.join('、')}。`;
       } else {
         const afterChar = res.data?.character;
         const beforeQixue = beforeChar?.qixue ?? null;
@@ -658,7 +749,7 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
         const afterQixue = pickNumber(afterChar, ['qixue']);
         const afterLingqi = pickNumber(afterChar, ['lingqi']);
         const afterExp = pickNumber(afterChar, ['exp']);
-        const effectDelta = calcUseEffectDelta(res.effects, 1);
+        const effectDelta = calcUseEffectDelta(res.effects, useCount);
         const qixueByStat =
           beforeQixue !== null && afterQixue !== null ? Math.max(0, Math.floor(afterQixue - beforeQixue)) : null;
         const lingqiByStat =
@@ -671,10 +762,11 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
         if (restoredQixue > 0) effectParts.push(`恢复了${restoredQixue}点气血`);
         if (restoredLingqi > 0) effectParts.push(`恢复了${restoredLingqi}点灵气`);
         if (gainedExp > 0) effectParts.push(`获得了${gainedExp}点经验`);
+        const qtyPart = useCount > 1 ? `×${useCount}` : '';
         content = activeItem.category === 'consumable'
           ? effectParts.length > 0
-            ? `使用【${activeItem.name}】成功，${effectParts.join('，')}，背包剩余${remaining}。`
-            : `使用【${activeItem.name}】成功，背包剩余${remaining}。`
+            ? `使用【${activeItem.name}】${qtyPart}成功，${effectParts.join('，')}，背包剩余${remaining}。`
+            : `使用【${activeItem.name}】${qtyPart}成功，背包剩余${remaining}。`
           : `使用【${activeItem.name}】成功，背包剩余${remaining}。`;
       }
       window.dispatchEvent(new CustomEvent('chat:append', { detail: { channel: 'system', content } }));
@@ -687,7 +779,7 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
       }));
       setLoading(false);
     }
-  }, [activeItem, refresh]);
+  }, [activeItem, clampUseQty, refresh, useQty]);
 
   const handleBatchDisassemble = useCallback(async () => {
     const candidates = items.filter(
@@ -824,8 +916,13 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
         <ItemSheet
           item={activeItem}
           loading={loading}
+          useQty={useQty}
+          useQtyMax={useQtyMax}
           onClose={() => setSheetOpen(false)}
           onUse={() => void handleUseItem()}
+          onUseQtyChange={handleUseQtyChange}
+          onUseQtyStep={handleUseQtyStep}
+          onUseQtyMax={handleUseQtyMax}
           onEquipToggle={() => void handleEquipToggle()}
           onDisassemble={() => { setSheetOpen(false); setDisassembleOpen(true); }}
           onEnhance={() => { setSheetOpen(false); setGrowthOpen(true); }}

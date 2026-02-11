@@ -650,6 +650,41 @@
   gap: 10px;
 }
 
+.bag-use-qty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bag-use-qty-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.bag-use-qty-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bag-use-qty-input {
+  width: 74px;
+}
+
+.bag-use-qty-input.ant-input-number {
+  background: var(--panel-bg-soft);
+  border-color: var(--border-color-soft);
+}
+
+.bag-use-qty-input.ant-input-number .ant-input-number-input {
+  color: var(--text-color);
+  text-align: center;
+}
+
 .bag-actions-row {
   overflow-x: auto;
   overflow-y: hidden;

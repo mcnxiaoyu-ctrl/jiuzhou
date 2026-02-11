@@ -1,4 +1,4 @@
-import { App, Button, Input, Modal, Select, Tabs, Tag } from 'antd';
+import { App, Button, Input, InputNumber, Modal, Select, Tabs, Tag } from 'antd';
 import { FilterOutlined, SearchOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import MobileBagModal from './MobileBagModal';
@@ -90,6 +90,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
   const [items, setItems] = useState<BagItem[]>([]);
   const [playerSilver, setPlayerSilver] = useState(0);
   const [playerSpiritStones, setPlayerSpiritStones] = useState(0);
+  const [useQty, setUseQty] = useState(1);
 
   useEffect(() => {
     return gameSocket.onCharacterUpdate((char) => {
@@ -207,6 +208,40 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     () => (safeActiveId === null ? null : filtered.find((i) => i.id === safeActiveId) ?? null),
     [filtered, safeActiveId]
   );
+  const useQtyMax = useMemo(() => {
+    if (!activeItem || activeItem.category !== 'consumable') return 1;
+    return Math.max(1, Math.floor(activeItem.qty));
+  }, [activeItem]);
+  const canBatchUseConsumable = useMemo(() => {
+    if (!activeItem) return false;
+    if (!activeItem.actions.includes('use')) return false;
+    if (activeItem.category !== 'consumable') return false;
+    if (activeItem.location !== 'bag') return false;
+    return Math.floor(activeItem.qty) > 1;
+  }, [activeItem]);
+  const clampUseQty = useCallback(
+    (value: number) => Math.max(1, Math.min(useQtyMax, Math.floor(value))),
+    [useQtyMax]
+  );
+  useEffect(() => {
+    setUseQty(1);
+  }, [activeItem?.id]);
+  useEffect(() => {
+    setUseQty((prev) => Math.max(1, Math.min(prev, useQtyMax)));
+  }, [useQtyMax]);
+  const updateUseQty = useCallback(
+    (nextValue: number) => {
+      if (!Number.isFinite(nextValue)) return;
+      setUseQty(clampUseQty(nextValue));
+    },
+    [clampUseQty]
+  );
+  const stepUseQty = useCallback(
+    (delta: number) => {
+      setUseQty((prev) => clampUseQty(prev + delta));
+    },
+    [clampUseQty]
+  );
 
   const equipLines = useMemo(() => buildEquipmentLines(activeItem), [activeItem]);
   const hasDesc = useMemo(() => Boolean(activeItem?.desc?.trim()), [activeItem?.desc]);
@@ -303,20 +338,22 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
 
   const handleUseItem = useCallback(async () => {
     if (!activeItem) return;
+    const useCount = activeItem.category === 'consumable' ? clampUseQty(useQty) : 1;
 
     setLoading(true);
     try {
       const beforeChar = gameSocket.getCharacter();
-      const res = await inventoryUseItem({ itemInstanceId: activeItem.id, qty: 1 });
+      const res = await inventoryUseItem({ itemInstanceId: activeItem.id, qty: useCount });
       if (!res.success) throw new Error(res.message || '使用失败');
 
       const lootResults = res.data?.lootResults;
-      const remaining = Math.max(0, Math.floor(activeItem.qty) - 1);
+      const remaining = Math.max(0, Math.floor(activeItem.qty) - useCount);
 
       let content: string;
       if (lootResults && lootResults.length > 0) {
         const rewardParts = lootResults.map((r) => `${r.name || r.type}×${r.amount}`);
-        content = `打开【${activeItem.name}】，获得${rewardParts.join('、')}。`;
+        const qtyPart = useCount > 1 ? `×${useCount}` : '';
+        content = `打开【${activeItem.name}】${qtyPart}，获得${rewardParts.join('、')}。`;
       } else {
         const afterChar = res.data?.character;
         const beforeQixue = beforeChar?.qixue ?? null;
@@ -325,7 +362,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
         const afterQixue = pickNumber(afterChar, ['qixue']);
         const afterLingqi = pickNumber(afterChar, ['lingqi']);
         const afterExp = pickNumber(afterChar, ['exp']);
-        const effectDelta = calcUseEffectDelta(res.effects, 1);
+        const effectDelta = calcUseEffectDelta(res.effects, useCount);
 
         const qixueByStat =
           beforeQixue !== null && afterQixue !== null ? Math.max(0, Math.floor(afterQixue - beforeQixue)) : null;
@@ -342,11 +379,12 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
         if (restoredLingqi > 0) effectParts.push(`恢复了${restoredLingqi}点灵气`);
         if (gainedExp > 0) effectParts.push(`获得了${gainedExp}点经验`);
 
+        const qtyPart = useCount > 1 ? `×${useCount}` : '';
         content =
           activeItem.category === 'consumable'
             ? effectParts.length > 0
-              ? `使用【${activeItem.name}】成功，${effectParts.join('，')}，背包剩余${remaining}。`
-              : `使用【${activeItem.name}】成功，背包剩余${remaining}。`
+              ? `使用【${activeItem.name}】${qtyPart}成功，${effectParts.join('，')}，背包剩余${remaining}。`
+              : `使用【${activeItem.name}】${qtyPart}成功，背包剩余${remaining}。`
             : `使用【${activeItem.name}】成功，背包剩余${remaining}。`;
       }
       window.dispatchEvent(new CustomEvent('chat:append', { detail: { channel: 'system', content } }));
@@ -362,7 +400,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       );
       setLoading(false);
     }
-  }, [activeItem, refresh]);
+  }, [activeItem, clampUseQty, refresh, useQty]);
 
   const enhanceState = useMemo(() => {
     if (!activeItem?.equip || activeItem.category !== 'equipment') return null;
@@ -617,6 +655,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     const qty = batchCandidates.reduce((sum, it) => sum + Math.max(0, it.qty || 0), 0);
     return `共${qty}件`;
   }, [batchCandidates, batchMode]);
+  const useActionDisabled = loading || actionDisabled('use');
 
   return (
     <Modal
@@ -859,62 +898,102 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                 hasAction('disassemble') ||
                 hasAction('enhance') ||
                 hasAction('show') ? (
-                  <div className="bag-actions-row">
-                    <div className="bag-actions-row-inner">
-                      {hasAction('use') ? (
-                        <Button
-                          size="small"
-                          type="primary"
-                          disabled={loading || actionDisabled('use')}
-                          onClick={() => void handleUseItem()}
-                        >
-                          使用
-                        </Button>
-                      ) : null}
-                      {hasAction('compose') ? (
-                        <Button
-                          size="small"
-                          disabled={loading || actionDisabled('compose')}
-                          onClick={() => setCraftOpen(true)}
-                        >
-                          合成
-                        </Button>
-                      ) : null}
-                      {hasAction('equip') ? (
-                        <Button
-                          size="small"
-                          disabled={loading || actionDisabled('equip')}
-                          onClick={() => void handleEquipToggle()}
-                        >
-                          {equipButtonText}
-                        </Button>
-                      ) : null}
-                      {hasAction('disassemble') ? (
-                        <Button
-                          size="small"
-                          danger
-                          disabled={loading || actionDisabled('disassemble')}
-                          onClick={() => setDisassembleOpen(true)}
-                        >
-                          分解
-                        </Button>
-                      ) : null}
-                      {hasAction('enhance') ? (
-                        <Button
-                          size="small"
-                          disabled={loading || actionDisabled('enhance')}
-                          onClick={() => setEnhanceOpen(true)}
-                        >
-                          强化
-                        </Button>
-                      ) : null}
-                      {hasAction('show') ? (
-                        <Button size="small" disabled={actionDisabled('show')}>
-                          展示
-                        </Button>
-                      ) : null}
+                  <>
+                    {canBatchUseConsumable ? (
+                      <div className="bag-use-qty">
+                        <span className="bag-use-qty-label">使用数量</span>
+                        <div className="bag-use-qty-controls">
+                          <Button
+                            size="small"
+                            disabled={useActionDisabled || useQty <= 1}
+                            onClick={() => stepUseQty(-1)}
+                          >
+                            -
+                          </Button>
+                          <InputNumber
+                            size="small"
+                            min={1}
+                            max={useQtyMax}
+                            controls={false}
+                            value={useQty}
+                            className="bag-use-qty-input"
+                            disabled={useActionDisabled}
+                            onChange={(value) => updateUseQty(typeof value === 'number' ? value : Number.NaN)}
+                          />
+                          <Button
+                            size="small"
+                            disabled={useActionDisabled || useQty >= useQtyMax}
+                            onClick={() => stepUseQty(1)}
+                          >
+                            +
+                          </Button>
+                          <Button
+                            size="small"
+                            disabled={useActionDisabled || useQty >= useQtyMax}
+                            onClick={() => setUseQty(useQtyMax)}
+                          >
+                            最大
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="bag-actions-row">
+                      <div className="bag-actions-row-inner">
+                        {hasAction('use') ? (
+                          <Button
+                            size="small"
+                            type="primary"
+                            disabled={useActionDisabled}
+                            onClick={() => void handleUseItem()}
+                          >
+                            使用{canBatchUseConsumable && useQty > 1 ? `×${useQty}` : ''}
+                          </Button>
+                        ) : null}
+                        {hasAction('compose') ? (
+                          <Button
+                            size="small"
+                            disabled={loading || actionDisabled('compose')}
+                            onClick={() => setCraftOpen(true)}
+                          >
+                            合成
+                          </Button>
+                        ) : null}
+                        {hasAction('equip') ? (
+                          <Button
+                            size="small"
+                            disabled={loading || actionDisabled('equip')}
+                            onClick={() => void handleEquipToggle()}
+                          >
+                            {equipButtonText}
+                          </Button>
+                        ) : null}
+                        {hasAction('disassemble') ? (
+                          <Button
+                            size="small"
+                            danger
+                            disabled={loading || actionDisabled('disassemble')}
+                            onClick={() => setDisassembleOpen(true)}
+                          >
+                            分解
+                          </Button>
+                        ) : null}
+                        {hasAction('enhance') ? (
+                          <Button
+                            size="small"
+                            disabled={loading || actionDisabled('enhance')}
+                            onClick={() => setEnhanceOpen(true)}
+                          >
+                            强化
+                          </Button>
+                        ) : null}
+                        {hasAction('show') ? (
+                          <Button size="small" disabled={actionDisabled('show')}>
+                            展示
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
+                  </>
                 ) : null}
               </div>
             </>

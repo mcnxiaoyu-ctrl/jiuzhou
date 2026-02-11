@@ -492,6 +492,66 @@
   font-weight: 600;
 }
 
+.mbag-sheet-use-qty {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 16px 2px;
+}
+
+.mbag-sheet-use-qty-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.mbag-sheet-use-qty-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mbag-sheet-use-qty-btn {
+  height: 30px;
+  min-width: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color-soft);
+  background: var(--panel-bg-soft);
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &.is-max {
+    min-width: 46px;
+    padding: 0 8px;
+  }
+
+  &:active {
+    background: var(--active-bg);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+}
+
+.mbag-sheet-use-qty-input {
+  width: 62px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color-soft);
+  background: var(--panel-bg-soft);
+  color: var(--text-color);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  outline: none;
+}
+
 /* 详情滚动区 */
 .mbag-sheet-body {
   flex: 1;
