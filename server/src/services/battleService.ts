@@ -25,6 +25,7 @@ import { getGameServer } from '../game/GameServer.js';
 import { recordKillMonsterEvent } from './taskService.js';
 import { calculateTechniquePassives, getBattleSkills } from './characterTechniqueService.js';
 import { getArenaStatus } from './arenaService.js';
+import type { PoolClient } from 'pg';
 
 // 活跃战斗缓存
 const activeBattles = new Map<string, BattleEngine>();
@@ -221,10 +222,13 @@ function withBattleStartResources<T extends { qixue?: number; max_qixue?: number
   };
 }
 
-async function restoreBattleStartResourcesInDb(userIds: number[]): Promise<void> {
+type QueryExecutor = Pick<PoolClient, 'query'>;
+
+async function restoreBattleStartResourcesInDb(userIds: number[], queryExecutor?: QueryExecutor): Promise<void> {
   const uniqUserIds = [...new Set(userIds)].filter((id) => Number.isFinite(id) && id > 0);
   if (uniqUserIds.length === 0) return;
-  await query(
+  const executeQuery = queryExecutor ? queryExecutor.query.bind(queryExecutor) : query;
+  await executeQuery(
     `
       UPDATE characters
       SET
@@ -1004,7 +1008,15 @@ export async function playerAction(
   }
 }
 
-export async function startDungeonPVEBattle(userId: number, monsterDefIds: string[]): Promise<BattleResult> {
+type StartDungeonPVEBattleOptions = {
+  resourceSyncClient?: QueryExecutor;
+};
+
+export async function startDungeonPVEBattle(
+  userId: number,
+  monsterDefIds: string[],
+  options?: StartDungeonPVEBattleOptions
+): Promise<BattleResult> {
   try {
     const charResult = await query('SELECT * FROM characters WHERE user_id = $1', [userId]);
     if (charResult.rows.length === 0) {
@@ -1051,7 +1063,7 @@ export async function startDungeonPVEBattle(userId: number, monsterDefIds: strin
     }
 
     try {
-      await restoreBattleStartResourcesInDb(participantUserIds);
+      await restoreBattleStartResourcesInDb(participantUserIds, options?.resourceSyncClient);
       const gameServer = getGameServer();
       for (const uid of participantUserIds) {
         if (!Number.isFinite(uid) || uid <= 0) continue;

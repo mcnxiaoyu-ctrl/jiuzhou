@@ -1456,7 +1456,7 @@ export const startDungeonInstance = async (
       instanceId,
     ]);
 
-    const battleRes = await startDungeonPVEBattle(userId, monsterDefIds);
+    const battleRes = await startDungeonPVEBattle(userId, monsterDefIds, { resourceSyncClient: client });
     if (!battleRes.success || !battleRes.data?.battleId) {
       await client.query('ROLLBACK');
       return { success: false, message: battleRes.message || '开启战斗失败' };
