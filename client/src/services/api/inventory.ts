@@ -34,6 +34,8 @@ export interface ItemDefLite {
   use_type: string | null;
   use_req_realm?: string | null;
   use_req_level?: number | null;
+  use_limit_daily?: number | null;
+  use_limit_total?: number | null;
   socket_max?: number;
   gem_slot_types?: unknown;
   level?: number | null;

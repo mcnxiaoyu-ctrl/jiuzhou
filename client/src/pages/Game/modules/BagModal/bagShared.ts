@@ -995,9 +995,9 @@ const buildSetInfo = (def: ItemDefLite): SetInfo | null => {
 const buildEffects = (def?: ItemDefLite): string[] => {
   const effects: string[] = [];
   const raw = def?.effect_defs;
-  if (!Array.isArray(raw)) return effects;
+  const effectDefs = Array.isArray(raw) ? raw : [];
 
-  for (const e of raw) {
+  for (const e of effectDefs) {
     if (!e || typeof e !== "object") continue;
     const effectType = (e as { effect_type?: unknown }).effect_type;
     const value = (e as { value?: unknown }).value;
@@ -1044,21 +1044,40 @@ const buildEffects = (def?: ItemDefLite): string[] => {
   const isTechniqueBook =
     isTechniqueBookSubCategory(def?.sub_category) ||
     hasLearnTechniqueEffect(def?.effect_defs);
-  if (isTechniqueBook) {
-    const reqRealm = typeof def?.use_req_realm === "string" ? def.use_req_realm.trim() : "";
-    const reqLevelRaw =
-      typeof def?.use_req_level === "number"
-        ? def.use_req_level
-        : Number(def?.use_req_level);
-    const reqLevel = Number.isFinite(reqLevelRaw)
-      ? Math.max(0, Math.floor(reqLevelRaw))
-      : 0;
-    const reqParts: string[] = [];
-    if (reqRealm) reqParts.push(`境界≥${reqRealm}`);
-    if (reqLevel > 0) reqParts.push(`等级≥${reqLevel}`);
-    if (reqParts.length > 0) {
-      effects.push(`学习要求：${reqParts.join("，")}`);
-    }
+  const reqRealm = typeof def?.use_req_realm === "string" ? def.use_req_realm.trim() : "";
+  const reqLevelRaw =
+    typeof def?.use_req_level === "number"
+      ? def.use_req_level
+      : Number(def?.use_req_level);
+  const reqLevel = Number.isFinite(reqLevelRaw)
+    ? Math.max(0, Math.floor(reqLevelRaw))
+    : 0;
+  const reqParts: string[] = [];
+  if (reqRealm) reqParts.push(`境界≥${reqRealm}`);
+  if (reqLevel > 0) reqParts.push(`等级≥${reqLevel}`);
+  if (reqParts.length > 0) {
+    effects.push(`${isTechniqueBook ? "学习要求" : "使用要求"}：${reqParts.join("，")}`);
+  }
+
+  const dailyLimitRaw =
+    typeof def?.use_limit_daily === "number"
+      ? def.use_limit_daily
+      : Number(def?.use_limit_daily);
+  const totalLimitRaw =
+    typeof def?.use_limit_total === "number"
+      ? def.use_limit_total
+      : Number(def?.use_limit_total);
+  const dailyLimit = Number.isFinite(dailyLimitRaw)
+    ? Math.max(0, Math.floor(dailyLimitRaw))
+    : 0;
+  const totalLimit = Number.isFinite(totalLimitRaw)
+    ? Math.max(0, Math.floor(totalLimitRaw))
+    : 0;
+  const useLimitParts: string[] = [];
+  if (dailyLimit > 0) useLimitParts.push(`每日最多${dailyLimit}次`);
+  if (totalLimit > 0) useLimitParts.push(`总计最多${totalLimit}次`);
+  if (useLimitParts.length > 0) {
+    effects.push(`使用限制：${useLimitParts.join("，")}`);
   }
 
   return effects;

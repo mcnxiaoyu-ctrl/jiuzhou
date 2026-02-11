@@ -132,7 +132,7 @@ router.get('/items', async (req: Request, res: Response) => {
         `SELECT 
            d.id, d.name, d.icon, d.quality, d.quality_rank, d.category, d.sub_category, d.stack_max,
            d.description, d.long_desc, d.tags, d.effect_defs, d.base_attrs, d.equip_slot, d.use_type,
-           d.use_req_realm, d.use_req_level,
+           d.use_req_realm, d.use_req_level, d.use_limit_daily, d.use_limit_total,
            d.socket_max, d.gem_slot_types, d.level,
            d.set_id, s.name AS set_name
          FROM item_def d
