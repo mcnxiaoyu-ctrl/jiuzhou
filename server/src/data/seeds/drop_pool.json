@@ -27,6 +27,13 @@
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.12,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
         }
       ]
     },
@@ -55,6 +62,13 @@
           "qty_min": 1,
           "qty_max": 2,
           "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.18,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
         }
       ]
     },
@@ -80,6 +94,13 @@
         {
           "item_def_id": "cons-001",
           "chance": 0.08,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.22,
           "qty_min": 1,
           "qty_max": 2,
           "show_in_ui": true
@@ -125,6 +146,13 @@
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.28,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
         }
       ]
     },
@@ -152,6 +180,13 @@
           "chance": 0.015,
           "qty_min": 1,
           "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.25,
+          "qty_min": 1,
+          "qty_max": 2,
           "show_in_ui": true
         }
       ]
@@ -194,6 +229,13 @@
           "chance": 0.01,
           "qty_min": 1,
           "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.32,
+          "qty_min": 1,
+          "qty_max": 2,
           "show_in_ui": true
         }
       ]
@@ -262,6 +304,20 @@
         {
           "item_def_id": "book-qingfeng-jian",
           "chance": 0.012,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.85,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lingmo",
+          "chance": 0.15,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
@@ -440,6 +496,20 @@
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 1,
+          "qty_min": 6,
+          "qty_max": 10,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lingmo",
+          "chance": 0.45,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
         }
       ]
     },
@@ -502,6 +572,13 @@
           "chance": 0.01,
           "qty_min": 1,
           "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.35,
+          "qty_min": 1,
+          "qty_max": 3,
           "show_in_ui": true
         }
       ]
@@ -566,6 +643,13 @@
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.4,
+          "qty_min": 1,
+          "qty_max": 3,
+          "show_in_ui": true
         }
       ]
     },
@@ -622,6 +706,13 @@
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.45,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
         }
       ]
     },
@@ -675,6 +766,20 @@
         {
           "item_def_id": "set-zixiao-gloves",
           "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.5,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lingmo",
+          "chance": 0.2,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
@@ -768,6 +873,20 @@
           "chance": 0.008,
           "qty_min": 1,
           "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.9,
+          "qty_min": 4,
+          "qty_max": 7,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lingmo",
+          "chance": 0.65,
+          "qty_min": 2,
+          "qty_max": 4,
           "show_in_ui": true
         }
       ]
@@ -873,6 +992,20 @@
           "chance": 0.045,
           "qty_min": 1,
           "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 1,
+          "qty_min": 8,
+          "qty_max": 12,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lingmo",
+          "chance": 0.85,
+          "qty_min": 3,
+          "qty_max": 5,
           "show_in_ui": true
         }
       ]

@@ -189,6 +189,11 @@
         {
           "type": "silver",
           "amount": 80
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-gongfa-canye",
+          "qty": 3
         }
       ],
       "prereq_task_ids": [],
@@ -221,6 +226,11 @@
         {
           "type": "spirit_stones",
           "amount": 10
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-gongfa-canye",
+          "qty": 5
         }
       ],
       "prereq_task_ids": [],
@@ -260,6 +270,16 @@
           "type": "item",
           "item_def_id": "mat-012",
           "qty": 2
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-gongfa-canye",
+          "qty": 6
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-lingmo",
+          "qty": 1
         }
       ],
       "prereq_task_ids": [],
@@ -299,6 +319,16 @@
           "type": "item",
           "item_def_id": "mat-012",
           "qty": 3
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-gongfa-canye",
+          "qty": 8
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-lingmo",
+          "qty": 2
         }
       ],
       "prereq_task_ids": [],
@@ -335,6 +365,16 @@
         {
           "type": "item",
           "item_def_id": "mat-012",
+          "qty": 3
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-gongfa-canye",
+          "qty": 18
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-lingmo",
           "qty": 3
         }
       ],

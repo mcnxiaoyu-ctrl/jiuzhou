@@ -9,6 +9,8 @@ const SHOP: ShopItem[] = [
   { id: 'sect-shop-002', name: '强化符·黄×1', costContribution: 120, itemDefId: 'enhance-003', qty: 1 },
   { id: 'sect-shop-003', name: '保护符×1', costContribution: 300, itemDefId: 'enhance-005', qty: 1 },
   { id: 'sect-shop-004', name: '《纯阳功》×1', costContribution: 2200, itemDefId: 'book-chunyang-gong', qty: 1 },
+  { id: 'sect-shop-005', name: '功法残页×20', costContribution: 480, itemDefId: 'mat-gongfa-canye', qty: 20 },
+  { id: 'sect-shop-006', name: '灵墨×5', costContribution: 1800, itemDefId: 'mat-lingmo', qty: 5 },
 ];
 
 export const getSectShop = async (
