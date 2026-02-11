@@ -1364,7 +1364,7 @@
       "icon": "/assets/items/Props-baijiantie.png",
       "description": "使用后学习基础拳法",
       "long_desc": "记载基础拳法的秘籍，适合初学者入门修炼。",
-      "tags": ["秘籍", "功法", "武技", "黄品"],
+      "tags": ["秘籍", "功法", "武技"],
       "use_type": "instant",
       "effect_defs": [
         {
@@ -1394,7 +1394,7 @@
       "icon": "/assets/items/Props-baijiantie.png",
       "description": "使用后学习基础剑法",
       "long_desc": "记载基础剑法的秘籍，适合初学者入门修炼。",
-      "tags": ["秘籍", "功法", "武技", "黄品"],
+      "tags": ["秘籍", "功法", "武技"],
       "use_type": "instant",
       "effect_defs": [
         {
@@ -1424,7 +1424,7 @@
       "icon": "/assets/items/Props-baijiantie.png",
       "description": "使用后学习基础刀法",
       "long_desc": "记载基础刀法的秘籍，适合初学者入门修炼。",
-      "tags": ["秘籍", "功法", "武技", "黄品"],
+      "tags": ["秘籍", "功法", "武技"],
       "use_type": "instant",
       "effect_defs": [
         {
@@ -1454,7 +1454,7 @@
       "icon": "/assets/items/book/yangqi_jue.png",
       "description": "使用后学习养气诀",
       "long_desc": "记载养气诀的秘籍，入门心法，可提升灵气恢复。",
-      "tags": ["秘籍", "功法", "心法", "黄品"],
+      "tags": ["秘籍", "功法", "心法"],
       "use_type": "instant",
       "effect_defs": [
         {
@@ -1484,7 +1484,7 @@
       "icon": "/assets/items/book/jichu_fushu.png",
       "description": "使用后学习基础符术",
       "long_desc": "记载基础符术的秘籍，以符纸为媒介释放法术。",
-      "tags": ["秘籍", "功法", "法诀", "黄品"],
+      "tags": ["秘籍", "功法", "法诀"],
       "use_type": "instant",
       "effect_defs": [
         {
@@ -1514,7 +1514,7 @@
       "icon": "/assets/items/book/qinggong_rumen.png",
       "description": "使用后学习轻功入门",
       "long_desc": "记载轻功入门的秘籍，基础身法，略微提升闪避。",
-      "tags": ["秘籍", "功法", "身法", "黄品"],
+      "tags": ["秘籍", "功法", "身法"],
       "use_type": "instant",
       "effect_defs": [
         {
@@ -1544,7 +1544,7 @@
       "icon": "/assets/items/book/huifu_shu.png",
       "description": "使用后学习恢复术",
       "long_desc": "记载恢复术的秘籍，基础治疗术，可恢复少量气血。",
-      "tags": ["秘籍", "功法", "辅修", "黄品"],
+      "tags": ["秘籍", "功法", "辅修"],
       "use_type": "instant",
       "effect_defs": [
         {
@@ -1574,7 +1574,7 @@
       "icon": "/assets/items/book/tiebu_quan.png",
       "description": "使用后学习铁布拳",
       "long_desc": "记载铁布拳的秘籍，刚猛拳法，兼具攻防。",
-      "tags": ["秘籍", "功法", "武技", "黄品"],
+      "tags": ["秘籍", "功法", "武技"],
       "use_type": "instant",
       "effect_defs": [
         {
@@ -1605,7 +1605,7 @@
       "icon": "/assets/items/book/jingang_quan.png",
       "description": "使用后学习金刚拳",
       "long_desc": "记载金刚拳的秘籍，刚猛拳法，附带金属性破甲效果。",
-      "tags": ["秘籍", "功法", "武技", "玄品"],
+      "tags": ["秘籍", "功法", "武技"],
       "use_type": "instant",
       "use_req_realm": "炼精化炁·养气期",
       "effect_defs": [
@@ -1637,7 +1637,7 @@
       "icon": "/assets/items/book/qingfeng_jian.png",
       "description": "使用后学习清风剑法",
       "long_desc": "记载清风剑法的秘籍，轻灵剑法，出剑如风。",
-      "tags": ["秘籍", "功法", "武技", "玄品"],
+      "tags": ["秘籍", "功法", "武技"],
       "use_type": "instant",
       "use_req_realm": "炼精化炁·养气期",
       "effect_defs": [
@@ -1669,7 +1669,7 @@
       "icon": "/assets/items/book/qingmu_jue.png",
       "description": "使用后学习青木诀",
       "long_desc": "记载青木诀的秘籍，木属性法诀，擅长持续治疗。",
-      "tags": ["秘籍", "功法", "法诀", "玄品"],
+      "tags": ["秘籍", "功法", "法诀"],
       "use_type": "instant",
       "use_req_realm": "炼精化炁·养气期",
       "effect_defs": [
@@ -1701,7 +1701,7 @@
       "icon": "/assets/items/book/houtu_gong.png",
       "description": "使用后学习厚土功",
       "long_desc": "记载厚土功的秘籍，土属性心法，大幅提升防御与护盾。",
-      "tags": ["秘籍", "功法", "心法", "玄品"],
+      "tags": ["秘籍", "功法", "心法"],
       "use_type": "instant",
       "use_req_realm": "炼精化炁·养气期",
       "effect_defs": [
@@ -1733,7 +1733,7 @@
       "icon": "/assets/items/book/tuna_jue.png",
       "description": "使用后学习吐纳诀",
       "long_desc": "记载吐纳诀的秘籍，进阶心法，增强灵气循环与生存能力。",
-      "tags": ["秘籍", "功法", "心法", "玄品"],
+      "tags": ["秘籍", "功法", "心法"],
       "use_type": "instant",
       "effect_defs": [
         {
@@ -1764,7 +1764,7 @@
       "icon": "/assets/items/book/shuiyun_zhang.png",
       "description": "使用后学习水云掌",
       "long_desc": "记载水云掌的秘籍，水属性掌法，以柔克刚。",
-      "tags": ["秘籍", "功法", "武技", "玄品"],
+      "tags": ["秘籍", "功法", "武技"],
       "use_type": "instant",
       "use_req_realm": "炼精化炁·养气期",
       "effect_defs": [
@@ -1796,7 +1796,7 @@
       "icon": "/assets/items/book/lingbo_weibu.png",
       "description": "使用后学习凌波微步",
       "long_desc": "记载凌波微步的秘籍，轻灵身法，大幅提升闪避与速度。",
-      "tags": ["秘籍", "功法", "身法", "地品"],
+      "tags": ["秘籍", "功法", "身法"],
       "use_type": "instant",
       "use_req_realm": "炼精化炁·通脉期",
       "effect_defs": [
@@ -1828,7 +1828,7 @@
       "icon": "/assets/items/book/chunyang_gong.png",
       "description": "使用后学习纯阳功",
       "long_desc": "记载纯阳功的秘籍，纯阳正气，可治疗队友并提供护盾。",
-      "tags": ["秘籍", "功法", "辅修", "地品"],
+      "tags": ["秘籍", "功法", "辅修"],
       "use_type": "instant",
       "use_req_realm": "炼精化炁·通脉期",
       "effect_defs": [
@@ -1860,7 +1860,7 @@
       "icon": "/assets/items/book/lieyang_jian.png",
       "description": "使用后学习烈阳剑诀",
       "long_desc": "记载烈阳剑诀的秘籍，以烈阳之力灌注剑身，造成高额火属性伤害。",
-      "tags": ["秘籍", "功法", "武技", "天品"],
+      "tags": ["秘籍", "功法", "武技"],
       "use_type": "instant",
       "use_req_realm": "炼精化炁·凝炁期",
       "effect_defs": [
@@ -1892,7 +1892,7 @@
       "icon": "/assets/items/book/hanbing_jue.png",
       "description": "使用后学习寒冰诀",
       "long_desc": "记载寒冰诀的秘籍，操控寒冰之力，冻结敌人并造成法术伤害。",
-      "tags": ["秘籍", "功法", "法诀", "天品"],
+      "tags": ["秘籍", "功法", "法诀"],
       "use_type": "instant",
       "use_req_realm": "炼精化炁·凝炁期",
       "effect_defs": [

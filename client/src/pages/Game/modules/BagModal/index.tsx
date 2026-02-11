@@ -191,22 +191,54 @@ const coerceStringArray = (value: unknown): string[] => {
   return value.filter((v): v is string => typeof v === 'string');
 };
 
-const mapCategory = (value: unknown): Exclude<BagCategory, 'all'> => {
+const hasLearnTechniqueEffect = (effectDefs: unknown): boolean => {
+  if (!Array.isArray(effectDefs)) return false;
+  return effectDefs.some((raw) => {
+    if (!raw || typeof raw !== 'object') return false;
+    return (raw as { effect_type?: unknown }).effect_type === 'learn_technique';
+  });
+};
+
+const mapCategory = (
+  value: unknown,
+  subCategoryValue?: unknown,
+  effectDefs?: unknown,
+): Exclude<BagCategory, 'all'> => {
+  const subCategory = typeof subCategoryValue === 'string' ? subCategoryValue.trim() : '';
+  if (value === 'skillbook') return 'skill';
+  if (subCategory === 'technique_book' || subCategory === 'technique' || hasLearnTechniqueEffect(effectDefs)) {
+    return 'skill';
+  }
   if (value === 'consumable') return 'consumable';
   if (value === 'material') return 'material';
   if (value === 'equipment') return 'equipment';
-  if (value === 'skillbook') return 'skill';
   if (value === 'quest') return 'quest';
   return 'material';
 };
 
-const mapActions = (category: unknown): BagAction[] => {
-  if (category === 'consumable') return ['use', 'show'];
+const mapActions = (category: Exclude<BagCategory, 'all'>): BagAction[] => {
+  if (category === 'consumable' || category === 'skill') return ['use', 'show'];
   if (category === 'equipment') return ['equip', 'enhance', 'disassemble', 'show'];
   if (category === 'material') return ['compose', 'show'];
-  if (category === 'skillbook') return ['use', 'show'];
   if (category === 'quest') return ['show'];
   return ['show'];
+};
+
+const normalizeDisplayTags = (
+  rawTags: string[],
+  category: Exclude<BagCategory, 'all'>,
+  quality: BagQuality,
+): string[] => {
+  const blocked = new Set([categoryLabels[category], qualityLabelText[quality], `${quality}品`]);
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of rawTags) {
+    const tag = raw.trim();
+    if (!tag || blocked.has(tag) || seen.has(tag)) continue;
+    seen.add(tag);
+    tags.push(tag);
+  }
+  return tags;
 };
 
 const buildEffects = (def?: ItemDefLite): string[] => {
@@ -222,6 +254,7 @@ const buildEffects = (def?: ItemDefLite): string[] => {
 
     if (effectType === 'heal' && typeof value === 'number') effects.push(`恢复气血 ${value}`);
     else if ((effectType === 'restore_mana' || effectType === 'mana') && typeof value === 'number') effects.push(`恢复灵气 ${value}`);
+    else if (effectType === 'learn_technique') effects.push('学习功法');
     else if (typeof effectType === 'string') effects.push(`效果：${effectType}`);
 
     if (typeof durationRound === 'number' && durationRound > 0) effects.push(`持续 ${durationRound} 回合`);
@@ -812,9 +845,8 @@ const buildBagItem = (it: InventoryItemDto): BagItem | null => {
       ? it.quality.trim()
       : def.quality;
   const quality = qualityLabels.includes(rawQuality as BagQuality) ? (rawQuality as BagQuality) : '黄';
-  const tags = coerceStringArray(def.tags);
-
-  const category = mapCategory(def.category);
+  const category = mapCategory(def.category, def.sub_category, def.effect_defs);
+  const tags = normalizeDisplayTags(coerceStringArray(def.tags), category, quality);
   const isEquip = category === 'equipment';
 
   return {
@@ -833,7 +865,7 @@ const buildBagItem = (it: InventoryItemDto): BagItem | null => {
     locked: !!it.locked,
     desc: def.long_desc || def.description || '',
     effects: buildEffects(def),
-    actions: mapActions(def.category),
+    actions: mapActions(category),
     setInfo: buildSetInfo(def),
     equip: isEquip
         ? {
