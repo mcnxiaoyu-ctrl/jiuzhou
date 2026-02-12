@@ -105,6 +105,8 @@ interface TaskRewardSeed {
   type: string;
   item_def_id?: string;
   qty?: number;
+  qty_min?: number;
+  qty_max?: number;
   amount?: number;
 }
 

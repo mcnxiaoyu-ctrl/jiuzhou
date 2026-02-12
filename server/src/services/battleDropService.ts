@@ -269,6 +269,25 @@ export const distributeBattleRewards = async (
   
   try {
     await client.query('BEGIN');
+
+    const participantCharacterIds = [...new Set(
+      participants
+        .map((p) => Number(p.characterId))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    )].sort((a, b) => a - b);
+    if (participantCharacterIds.length > 0) {
+      // 统一角色行锁顺序，避免与其他事务在 characters/item_instance 间出现锁顺序反转。
+      await client.query(
+        `
+          SELECT id
+          FROM characters
+          WHERE id = ANY($1)
+          ORDER BY id
+          FOR UPDATE
+        `,
+        [participantCharacterIds]
+      );
+    }
     
     // 1. 计算总经验和银两
     let totalExp = 0;
@@ -349,7 +368,6 @@ export const distributeBattleRewards = async (
     const itemMetaCache = new Map<string, { name: string; category: string }>();
     const autoDisassembleSettings = new Map<number, AutoDisassembleSetting>();
 
-    const participantCharacterIds = [...new Set(participants.map((p) => Number(p.characterId)).filter((id) => Number.isInteger(id) && id > 0))];
     if (participantCharacterIds.length > 0) {
       const settingResult = await client.query(
         `

@@ -81,6 +81,8 @@ const REALM_SUB_TO_FULL: Record<string, string> = {
   成圣期: '炼虚合道·成圣期',
 };
 
+const DEFAULT_RANDOM_GEM_SUB_CATEGORIES = ['gem_attack', 'gem_defense', 'gem_survival'] as const;
+
 const normalizeRealm = (realmRaw: unknown, subRealmRaw?: unknown): string => {
   const realm = typeof realmRaw === 'string' ? realmRaw.trim() : '';
   const subRealm = typeof subRealmRaw === 'string' ? subRealmRaw.trim() : '';
@@ -106,6 +108,19 @@ const isRealmSufficient = (currentRealm: unknown, requiredRealm: unknown, curren
   const required = typeof requiredRealm === 'string' ? requiredRealm.trim() : '';
   if (!required) return true;
   return getRealmRank(currentRealm, currentSubRealm) >= getRealmRank(required);
+};
+
+const toPositiveInt = (value: unknown, fallback: number): number => {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.floor(n));
+};
+
+const toStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter((entry): entry is string => entry.length > 0);
 };
 
 /**
@@ -270,6 +285,16 @@ export const useItem = async (
   try {
     await client.query('BEGIN');
 
+    const charResult = await client.query(
+      'SELECT id, realm, sub_realm, qixue, max_qixue, lingqi, max_lingqi FROM characters WHERE id = $1 FOR UPDATE',
+      [characterId]
+    );
+    if (charResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '角色不存在' };
+    }
+    const charRow = charResult.rows[0];
+
     // 获取物品实例
     const instanceResult = await client.query(`
       SELECT ii.*, id.id as def_id, id.category, id.use_type, id.effect_defs, id.use_cd_round, id.use_cd_sec, id.use_limit_daily, id.use_limit_total
@@ -365,16 +390,6 @@ export const useItem = async (
       }
     }
 
-    const charResult = await client.query(
-      'SELECT id, realm, sub_realm, qixue, max_qixue, lingqi, max_lingqi FROM characters WHERE id = $1 FOR UPDATE',
-      [characterId]
-    );
-    if (charResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return { success: false, message: '角色不存在' };
-    }
-    const charRow = charResult.rows[0];
-
     const effectDefs = Array.isArray(item.effect_defs) ? item.effect_defs : [];
     let deltaQixue = 0;
     let deltaLingqi = 0;
@@ -433,6 +448,46 @@ export const useItem = async (
           if (ssAmt > 0) {
             deltaSpiritStones += ssAmt;
             lootResults.push({ type: 'spirit_stones', name: '灵石', amount: ssAmt });
+          }
+        } else if (lootType === 'random_gem') {
+          const subCategoriesRaw = toStringArray((params as { sub_categories?: unknown }).sub_categories);
+          const subCategories = subCategoriesRaw.length > 0 ? subCategoriesRaw : [...DEFAULT_RANDOM_GEM_SUB_CATEGORIES];
+          const minLevel = toPositiveInt((params as { min_level?: unknown }).min_level, 1);
+          const maxLevel = Math.max(minLevel, toPositiveInt((params as { max_level?: unknown }).max_level, 3));
+          const gemsPerUse = toPositiveInt((params as { gems_per_use?: unknown }).gems_per_use, 1);
+          const rollCount = qty * gemsPerUse;
+
+          const gemRes = await client.query(
+            `
+              SELECT id
+              FROM item_def
+              WHERE enabled = true
+                AND category = 'material'
+                AND sub_category = ANY($1::varchar[])
+                AND level BETWEEN $2 AND $3
+            `,
+            [subCategories, minLevel, maxLevel]
+          );
+
+          const gemIds = (gemRes.rows as Array<{ id?: unknown }>)
+            .map((row) => String(row.id || '').trim())
+            .filter((id): id is string => id.length > 0);
+
+          if (gemIds.length === 0) {
+            await client.query('ROLLBACK');
+            return { success: false, message: '宝石袋配置异常：没有可掉落宝石' };
+          }
+
+          const rolledGemCounts = new Map<string, number>();
+          for (let i = 0; i < rollCount; i += 1) {
+            const rolledGemId = gemIds[Math.floor(Math.random() * gemIds.length)];
+            if (!rolledGemId) continue;
+            rolledGemCounts.set(rolledGemId, (rolledGemCounts.get(rolledGemId) ?? 0) + 1);
+          }
+
+          for (const [rolledGemId, rolledQty] of rolledGemCounts.entries()) {
+            if (rolledQty <= 0) continue;
+            lootItemsToAdd.push({ itemDefId: rolledGemId, qty: rolledQty });
           }
         }
         continue;

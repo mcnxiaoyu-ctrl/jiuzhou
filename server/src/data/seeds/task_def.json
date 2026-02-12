@@ -202,8 +202,9 @@
         },
         {
           "type": "item",
-          "item_def_id": "gem-def-wf-1",
-          "qty": 1
+          "item_def_id": "box-004",
+          "qty_min": 1,
+          "qty_max": 3
         }
       ],
       "prereq_task_ids": [],
@@ -244,8 +245,9 @@
         },
         {
           "type": "item",
-          "item_def_id": "gem-sur-hp-2",
-          "qty": 1
+          "item_def_id": "box-004",
+          "qty_min": 1,
+          "qty_max": 3
         }
       ],
       "prereq_task_ids": [],
@@ -298,8 +300,9 @@
         },
         {
           "type": "item",
-          "item_def_id": "gem-atk-fg-3",
-          "qty": 1
+          "item_def_id": "box-004",
+          "qty_min": 1,
+          "qty_max": 3
         }
       ],
       "prereq_task_ids": [],
@@ -352,8 +355,9 @@
         },
         {
           "type": "item",
-          "item_def_id": "gem-def-ff-3",
-          "qty": 1
+          "item_def_id": "box-004",
+          "qty_min": 1,
+          "qty_max": 3
         }
       ],
       "prereq_task_ids": [],
@@ -404,8 +408,9 @@
         },
         {
           "type": "item",
-          "item_def_id": "gem-sur-lq-3",
-          "qty": 1
+          "item_def_id": "box-004",
+          "qty_min": 1,
+          "qty_max": 3
         }
       ],
       "prereq_task_ids": [],
@@ -496,8 +501,9 @@
         },
         {
           "type": "item",
-          "item_def_id": "gem-atk-wg-3",
-          "qty": 1
+          "item_def_id": "box-004",
+          "qty_min": 1,
+          "qty_max": 3
         }
       ],
       "prereq_task_ids": [],
@@ -640,8 +646,9 @@
         },
         {
           "type": "item",
-          "item_def_id": "gem-def-wf-3",
-          "qty": 1
+          "item_def_id": "box-004",
+          "qty_min": 1,
+          "qty_max": 3
         }
       ],
       "prereq_task_ids": [],
@@ -689,8 +696,9 @@
         },
         {
           "type": "item",
-          "item_def_id": "gem-sur-hp-3",
-          "qty": 1
+          "item_def_id": "box-004",
+          "qty_min": 1,
+          "qty_max": 3
         }
       ],
       "prereq_task_ids": [],

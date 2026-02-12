@@ -50,6 +50,8 @@ type RawReward = {
   type?: unknown;
   item_def_id?: unknown;
   qty?: unknown;
+  qty_min?: unknown;
+  qty_max?: unknown;
   amount?: unknown;
 };
 
@@ -71,6 +73,25 @@ const asFiniteNonNegativeInt = (v: unknown, fallback: number): number => {
   const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
   if (!Number.isFinite(n)) return fallback;
   return Math.max(0, Math.floor(n));
+};
+
+const resolveRewardQtyRange = (reward: RawReward): { min: number; max: number } => {
+  const fixedQty = asFiniteNonNegativeInt(reward?.qty, 0);
+  if (fixedQty > 0) return { min: fixedQty, max: fixedQty };
+
+  const minQty = Math.max(1, asFiniteNonNegativeInt(reward?.qty_min, 1));
+  const maxQty = Math.max(minQty, asFiniteNonNegativeInt(reward?.qty_max, minQty));
+  return { min: minQty, max: maxQty };
+};
+
+const rollRangeIntInclusive = (min: number, max: number): number => {
+  if (max <= min) return min;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+};
+
+const decorateRewardNameWithRange = (name: string, range: { min: number; max: number }): string => {
+  if (range.max <= range.min) return name;
+  return `${name}（${range.min}~${range.max}）`;
 };
 
 export const getCharacterIdByUserId = async (userId: number): Promise<number | null> => {
@@ -260,9 +281,15 @@ export const getTaskOverview = async (
           if (type === 'item') {
             const itemDefId = asNonEmptyString(rw?.item_def_id);
             if (!itemDefId) return null;
-            const qty = Math.max(1, asFiniteNonNegativeInt(rw?.qty, 1));
+            const qtyRange = resolveRewardQtyRange(rw);
             const meta = itemMeta.get(itemDefId) ?? { name: itemDefId, icon: null };
-            return { type: 'item', itemDefId, name: meta.name, icon: meta.icon, amount: qty };
+            return {
+              type: 'item',
+              itemDefId,
+              name: decorateRewardNameWithRange(meta.name, qtyRange),
+              icon: meta.icon,
+              amount: qtyRange.min,
+            };
           }
           return null;
         })
@@ -424,9 +451,15 @@ export const getBountyTaskOverview = async (characterId: number): Promise<{ task
           if (type === 'item') {
             const itemDefId = asNonEmptyString(rw?.item_def_id);
             if (!itemDefId) return null;
-            const qty = Math.max(1, asFiniteNonNegativeInt(rw?.qty, 1));
+            const qtyRange = resolveRewardQtyRange(rw);
             const meta = itemMeta.get(itemDefId) ?? { name: itemDefId, icon: null };
-            return { type: 'item', itemDefId, name: meta.name, icon: meta.icon, amount: qty };
+            return {
+              type: 'item',
+              itemDefId,
+              name: decorateRewardNameWithRange(meta.name, qtyRange),
+              icon: meta.icon,
+              amount: qtyRange.min,
+            };
           }
           return null;
         })
@@ -518,7 +551,8 @@ const applyTaskRewardsTx = async (
     if (type === 'item') {
       const itemDefId = asNonEmptyString(rw?.item_def_id);
       if (!itemDefId) continue;
-      const qty = Math.max(1, asFiniteNonNegativeInt(rw?.qty, 1));
+      const qtyRange = resolveRewardQtyRange(rw);
+      const qty = rollRangeIntInclusive(qtyRange.min, qtyRange.max);
       const itemDefRes = await client.query(
         `SELECT name, icon FROM item_def WHERE id = $1 AND enabled = true`,
         [itemDefId]

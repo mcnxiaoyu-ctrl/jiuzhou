@@ -1,7 +1,7 @@
 /**
  * 头像上传路由
  */
-import { Router, Request, Response } from 'express';
+import { Router, NextFunction, Request, Response } from 'express';
 import { avatarUpload, updateAvatar, deleteAvatar } from '../services/uploadService.js';
 import { verifyToken } from '../services/authService.js';
 import { getGameServer } from '../game/GameServer.js';
@@ -28,11 +28,39 @@ const authMiddleware = (req: Request, res: Response, next: () => void) => {
   next();
 };
 
+const avatarUploadMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  avatarUpload.single('avatar')(req, res, (error?: Error | string | null) => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    if (typeof error === 'string') {
+      res.status(400).json({ success: false, message: error });
+      return;
+    }
+
+    const uploadError = error as Error & { name?: string; code?: string };
+    if (uploadError.name === 'MulterError' && uploadError.code === 'LIMIT_FILE_SIZE') {
+      res.status(400).json({ success: false, message: '图片大小不能超过2MB' });
+      return;
+    }
+
+    if (uploadError.message.includes('只支持')) {
+      res.status(400).json({ success: false, message: uploadError.message });
+      return;
+    }
+
+    console.error('上传头像错误:', uploadError);
+    res.status(500).json({ success: false, message: '上传失败' });
+  });
+};
+
 // 上传头像
 router.post(
   '/avatar',
   authMiddleware,
-  avatarUpload.single('avatar'),
+  avatarUploadMiddleware,
   async (req: Request, res: Response) => {
     try {
       const userId = (req as Request & { userId: number }).userId;

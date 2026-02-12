@@ -909,6 +909,44 @@
       ]
     },
     {
+      "id": "box-004",
+      "code": "low_gem_bag",
+      "name": "低级宝石袋",
+      "category": "consumable",
+      "sub_category": "box",
+      "quality": "黄",
+      "quality_rank": 1,
+      "rarity": "common",
+      "level": 1,
+      "stack_max": 999,
+      "bind_type": "none",
+      "tradeable": true,
+      "sellable": true,
+      "sell_price_silver": 80,
+      "icon": "/assets/items/Props-baodai-2.png",
+      "description": "打开后可随机获得1个低级宝石",
+      "long_desc": "使用后随机获得1个低级宝石。",
+      "tags": [
+        "宝箱",
+        "宝石",
+        "随机"
+      ],
+      "use_type": "instant",
+      "effect_defs": [
+        {
+          "trigger": "use",
+          "target": "self",
+          "effect_type": "loot",
+          "params": {
+            "loot_type": "random_gem",
+            "min_level": 2,
+            "max_level": 3,
+            "gems_per_use": 1
+          }
+        }
+      ]
+    },
+    {
       "id": "func-001",
       "code": "bei_bao_kuo_rong",
       "name": "背包扩容符",
