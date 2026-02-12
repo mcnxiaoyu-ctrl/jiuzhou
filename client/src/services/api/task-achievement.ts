@@ -16,7 +16,7 @@ export type TaskObjectiveDto = {
 export type TaskRewardDto =
   | { type: 'silver'; name: string; amount: number }
   | { type: 'spirit_stones'; name: string; amount: number }
-  | { type: 'item'; itemDefId: string; name: string; icon: string | null; amount: number };
+  | { type: 'item'; itemDefId: string; name: string; icon: string | null; amount: number; amountMax?: number };
 
 export type TaskOverviewRowDto = {
   id: string;

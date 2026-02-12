@@ -22,7 +22,7 @@ type TaskCategory = 'main' | 'side' | 'daily' | 'event' | 'bounty';
 
 type TaskStatus = 'ongoing' | 'turnin' | 'claimable' | 'completed';
 
-type TaskReward = { id: string; name: string; icon: string; amount: number };
+type TaskReward = { id: string; name: string; icon: string; amount: number; amountMax?: number };
 
 type TaskObjective = { text: string; done: number; total: number };
 
@@ -92,6 +92,14 @@ const REALM_ORDER = [
 const getRealmRank = (realm: string): number => {
   const idx = REALM_ORDER.indexOf(realm);
   return idx >= 0 ? idx : 0;
+};
+
+const formatRewardAmount = (amount: number, amountMax?: number): string => {
+  const min = Math.max(0, Math.floor(Number(amount) || 0));
+  const maxRaw = Number(amountMax);
+  const hasRange = Number.isFinite(maxRaw) && maxRaw > min;
+  if (!hasRange) return `×${min.toLocaleString()}`;
+  return `×${min.toLocaleString()}~${Math.floor(maxRaw).toLocaleString()}`;
 };
 
 const hasMessage = (value: unknown): value is { message: string } => {
@@ -233,11 +241,15 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
         .map((t) => {
           const rewards: TaskReward[] = (t.rewards || []).map((r) => {
             if (r.type === 'item') {
+              const amount = Number.isFinite(Number(r.amount)) ? Number(r.amount) : 1;
+              const amountMaxRaw = Number((r as { amountMax?: unknown }).amountMax);
+              const amountMax = Number.isFinite(amountMaxRaw) && amountMaxRaw > amount ? amountMaxRaw : undefined;
               return {
                 id: r.itemDefId,
                 name: r.name || r.itemDefId,
                 icon: resolveRewardIcon(r.icon),
-                amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : 1,
+                amount,
+                ...(amountMax ? { amountMax } : {}),
               };
             }
             return {
@@ -281,11 +293,15 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
 
           const rewards: TaskReward[] = (t.rewards || []).map((r) => {
             if (r.type === 'item') {
+              const amount = Number.isFinite(Number(r.amount)) ? Number(r.amount) : 1;
+              const amountMaxRaw = Number((r as { amountMax?: unknown }).amountMax);
+              const amountMax = Number.isFinite(amountMaxRaw) && amountMaxRaw > amount ? amountMaxRaw : undefined;
               return {
                 id: r.itemDefId,
                 name: r.name || r.itemDefId,
                 icon: resolveRewardIcon(r.icon),
-                amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : 1,
+                amount,
+                ...(amountMax ? { amountMax } : {}),
               };
             }
             return {
@@ -660,7 +676,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
                         <div key={r.id} className="task-reward">
                           <div className="task-reward-icon-wrap">
                             <img className="task-reward-icon" src={r.icon} alt={r.name} />
-                            <div className="task-reward-amount">×{r.amount.toLocaleString()}</div>
+                            <div className="task-reward-amount">{formatRewardAmount(r.amount, r.amountMax)}</div>
                           </div>
                           <div className="task-reward-name">{r.name}</div>
                         </div>

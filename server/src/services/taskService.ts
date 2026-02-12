@@ -20,7 +20,7 @@ type TaskObjectiveDto = {
 type TaskRewardDto =
   | { type: 'silver'; name: string; amount: number }
   | { type: 'spirit_stones'; name: string; amount: number }
-  | { type: 'item'; itemDefId: string; name: string; icon: string | null; amount: number };
+  | { type: 'item'; itemDefId: string; name: string; icon: string | null; amount: number; amountMax?: number };
 
 type TaskOverviewDto = {
   id: string;
@@ -87,11 +87,6 @@ const resolveRewardQtyRange = (reward: RawReward): { min: number; max: number } 
 const rollRangeIntInclusive = (min: number, max: number): number => {
   if (max <= min) return min;
   return Math.floor(Math.random() * (max - min + 1)) + min;
-};
-
-const decorateRewardNameWithRange = (name: string, range: { min: number; max: number }): string => {
-  if (range.max <= range.min) return name;
-  return `${name}（${range.min}~${range.max}）`;
 };
 
 export const getCharacterIdByUserId = async (userId: number): Promise<number | null> => {
@@ -283,12 +278,14 @@ export const getTaskOverview = async (
             if (!itemDefId) return null;
             const qtyRange = resolveRewardQtyRange(rw);
             const meta = itemMeta.get(itemDefId) ?? { name: itemDefId, icon: null };
+            const amountMax = qtyRange.max > qtyRange.min ? qtyRange.max : undefined;
             return {
               type: 'item',
               itemDefId,
-              name: decorateRewardNameWithRange(meta.name, qtyRange),
+              name: meta.name,
               icon: meta.icon,
               amount: qtyRange.min,
+              ...(amountMax ? { amountMax } : {}),
             };
           }
           return null;
@@ -453,12 +450,14 @@ export const getBountyTaskOverview = async (characterId: number): Promise<{ task
             if (!itemDefId) return null;
             const qtyRange = resolveRewardQtyRange(rw);
             const meta = itemMeta.get(itemDefId) ?? { name: itemDefId, icon: null };
+            const amountMax = qtyRange.max > qtyRange.min ? qtyRange.max : undefined;
             return {
               type: 'item',
               itemDefId,
-              name: decorateRewardNameWithRange(meta.name, qtyRange),
+              name: meta.name,
               icon: meta.icon,
               amount: qtyRange.min,
+              ...(amountMax ? { amountMax } : {}),
             };
           }
           return null;
