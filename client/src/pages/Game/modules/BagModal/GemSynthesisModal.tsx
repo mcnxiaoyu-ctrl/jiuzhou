@@ -296,18 +296,24 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
                     </div>
 
                     <div className="bag-gem-costs">
-                      <div className={`bag-gem-cost-line ${selectedRecipe.input.owned < selectedRecipe.input.qty ? 'is-missing' : ''}`}>
-                        <span>{selectedRecipe.input.name}</span>
-                        <span>{selectedRecipe.input.qty} / {selectedRecipe.input.owned}</span>
-                      </div>
-                      <div className={`bag-gem-cost-line ${(wallet?.silver ?? 0) < selectedRecipe.costs.silver ? 'is-missing' : ''}`}>
-                        <span>银两</span>
-                        <span>{selectedRecipe.costs.silver.toLocaleString()} / {(wallet?.silver ?? 0).toLocaleString()}</span>
-                      </div>
-                      <div className={`bag-gem-cost-line ${(wallet?.spiritStones ?? 0) < selectedRecipe.costs.spiritStones ? 'is-missing' : ''}`}>
-                        <span>灵石</span>
-                        <span>{selectedRecipe.costs.spiritStones.toLocaleString()} / {(wallet?.spiritStones ?? 0).toLocaleString()}</span>
-                      </div>
+                      {selectedRecipe.input.qty > 0 ? (
+                        <div className={`bag-gem-cost-line ${selectedRecipe.input.owned < selectedRecipe.input.qty ? 'is-missing' : ''}`}>
+                          <span>{selectedRecipe.input.name}</span>
+                          <span>{selectedRecipe.input.qty} / {selectedRecipe.input.owned}</span>
+                        </div>
+                      ) : null}
+                      {selectedRecipe.costs.silver > 0 ? (
+                        <div className={`bag-gem-cost-line ${(wallet?.silver ?? 0) < selectedRecipe.costs.silver ? 'is-missing' : ''}`}>
+                          <span>银两</span>
+                          <span>{selectedRecipe.costs.silver.toLocaleString()} / {(wallet?.silver ?? 0).toLocaleString()}</span>
+                        </div>
+                      ) : null}
+                      {selectedRecipe.costs.spiritStones > 0 ? (
+                        <div className={`bag-gem-cost-line ${(wallet?.spiritStones ?? 0) < selectedRecipe.costs.spiritStones ? 'is-missing' : ''}`}>
+                          <span>灵石</span>
+                          <span>{selectedRecipe.costs.spiritStones.toLocaleString()} / {(wallet?.spiritStones ?? 0).toLocaleString()}</span>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="bag-gem-submit">
