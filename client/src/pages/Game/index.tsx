@@ -39,6 +39,8 @@ import {
   npcTalk,
   getSignInOverview,
   getAchievementList,
+  getMySect,
+  getSectApplications,
   nextDungeonInstance,
   startDungeonInstance,
   submitTaskToNpc,
@@ -660,6 +662,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null);
   const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [teamApplicationUnread, setTeamApplicationUnread] = useState(0);
+  const [sectPendingApplicationCount, setSectPendingApplicationCount] = useState(0);
   const [currentMapId, setCurrentMapId] = useState<string>('map-qingyun-village');
   const [currentRoomId, setCurrentRoomId] = useState<string>('room-village-center');
   const [trackedRoomIds, setTrackedRoomIds] = useState<string[]>([]);
@@ -1233,6 +1236,40 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     }
   }, [characterId]);
 
+  const refreshSectIndicator = useCallback(async () => {
+    if (!characterId) {
+      setSectPendingApplicationCount(0);
+      return;
+    }
+
+    try {
+      const mySectRes = await getMySect();
+      const mySectInfo = mySectRes.success ? (mySectRes.data ?? null) : null;
+      if (!mySectInfo) {
+        setSectPendingApplicationCount(0);
+        return;
+      }
+
+      const myMember = mySectInfo.members.find((m) => m.characterId === characterId);
+      const canManageApplications =
+        myMember?.position === 'leader' || myMember?.position === 'vice_leader' || myMember?.position === 'elder';
+      if (!canManageApplications) {
+        setSectPendingApplicationCount(0);
+        return;
+      }
+
+      const appsRes = await getSectApplications();
+      if (!appsRes.success || !appsRes.data) {
+        setSectPendingApplicationCount(0);
+        return;
+      }
+
+      setSectPendingApplicationCount(Math.max(0, Math.floor(appsRes.data.length)));
+    } catch {
+      setSectPendingApplicationCount(0);
+    }
+  }, [characterId]);
+
   useEffect(() => {
     if (!characterId) return;
     const t = window.setTimeout(() => {
@@ -1246,6 +1283,30 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       unsubscribe();
     };
   }, [characterId, refreshTeamData]);
+
+  useEffect(() => {
+    if (!characterId) {
+      setSectPendingApplicationCount(0);
+      return;
+    }
+
+    const runRefresh = () => {
+      void refreshSectIndicator();
+    };
+
+    const t = window.setTimeout(runRefresh, 0);
+    const pollTimer = window.setInterval(runRefresh, 30000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') runRefresh();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.clearTimeout(t);
+      window.clearInterval(pollTimer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [characterId, refreshSectIndicator]);
 
   useEffect(() => {
     gameSocket.connect();
@@ -1476,6 +1537,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         tooltip: `有${teamApplicationUnread}个入队申请待处理`,
       };
     }
+    if (sectPendingApplicationCount > 0) {
+      out.sect = {
+        badgeDot: true,
+        tooltip: `有${sectPendingApplicationCount}个入门申请待处理`,
+      };
+    }
     if (achievementClaimableCount > 0) {
       out.achievement = {
         badgeCount: achievementClaimableCount,
@@ -1483,7 +1550,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       };
     }
     return Object.keys(out).length > 0 ? out : undefined;
-  }, [achievementClaimableCount, isTeamLeader, teamApplicationUnread]);
+  }, [achievementClaimableCount, isTeamLeader, sectPendingApplicationCount, teamApplicationUnread]);
 
   const handleInfoAction = (action: string, target: InfoTarget) => {
     if (action === 'attack') {
@@ -2477,7 +2544,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       {sectModalOpen && (
         <SectModal
           open={sectModalOpen}
-          onClose={() => setSectModalOpen(false)}
+          onClose={() => {
+            setSectModalOpen(false);
+            window.setTimeout(() => {
+              void refreshSectIndicator();
+            }, 0);
+          }}
           spiritStones={spiritStones}
           playerName={playerName}
         />
