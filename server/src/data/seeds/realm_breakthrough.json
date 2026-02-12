@@ -149,7 +149,7 @@
         {
           "id": "tech-main-sub",
           "type": "main_and_sub_technique_layer_min",
-          "minLayer": 6,
+          "minLayer": 5,
           "title": "功法装配"
         },
         {
