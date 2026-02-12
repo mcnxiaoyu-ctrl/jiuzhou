@@ -595,8 +595,12 @@ const BattleArea: React.FC<BattleAreaProps> = ({
               if (hitParts.length === 0) {
                 hitParts.push(markState(`${hitSeed}:empty`, ['未造成伤害', '攻势受阻', '这一击未见成效']));
               }
-              const hitLabel = battleInlineToken('state', `第${hit.index}击`);
-              return `${hitLabel}${hitParts.join('，')}`;
+              // 只有多次攻击才显示"第X击"
+              if (t.hits.length > 1) {
+                const hitLabel = battleInlineToken('state', `第${hit.index}击`);
+                return `${hitLabel}${hitParts.join('，')}`;
+              }
+              return hitParts.join('，');
             });
             parts.push(hitTexts.join('；'));
           } else {
