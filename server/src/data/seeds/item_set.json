@@ -1065,7 +1065,7 @@
               "effect_type": "buff",
               "params": {
                 "attr_key": "lingqi_huifu",
-                "value": 300,
+                "value": 3,
                 "apply_type": "flat"
               }
             }
