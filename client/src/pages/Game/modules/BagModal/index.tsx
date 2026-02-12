@@ -1330,9 +1330,10 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                   placeholder="选择孔位"
                   options={socketState.availableSlots.map((slot) => {
                     const existed = socketState.socketed.find((g) => g.slot === slot);
+                    const displaySlot = slot + 1;
                     return {
                       value: slot,
-                      label: existed ? `孔位${slot}（已镶嵌：${existed.name ?? existed.itemDefId}）` : `孔位${slot}（空）`,
+                      label: existed ? `孔位${displaySlot}（已镶嵌：${existed.name ?? existed.itemDefId}）` : `孔位${displaySlot}（空）`,
                     };
                   })}
                 />

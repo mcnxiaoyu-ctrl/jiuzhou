@@ -752,7 +752,8 @@ export const buildEquipmentLines = (item: BagItem | null): string[] => {
   lines.push(`孔位：${socketedGems.length}/${socketMax}`);
   for (const gem of socketedGems) {
     const gemName = gem.name || gem.itemDefId;
-    lines.push(`宝石[${gem.slot}]：${gemName}`);
+    const displaySlot = gem.slot + 1;
+    lines.push(`宝石[${displaySlot}]：${gemName}`);
     for (const effect of gem.effects) {
       const label = attrLabel[effect.attrKey] ?? effect.attrKey;
       const valText =
