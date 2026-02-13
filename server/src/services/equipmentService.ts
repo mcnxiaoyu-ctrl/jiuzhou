@@ -147,6 +147,11 @@ export interface AffixDef {
   group: string;
   weight: number;
   is_legendary?: boolean;
+  trigger?: 'on_turn_start' | 'on_skill' | 'on_hit' | 'on_crit' | 'on_be_hit' | 'on_heal';
+  target?: 'self' | 'enemy';
+  effect_type?: 'buff' | 'debuff' | 'damage' | 'heal' | 'resource';
+  duration_round?: number;
+  params?: Record<string, string | number | boolean>;
   tiers: AffixTier[];
 }
 
@@ -172,11 +177,16 @@ export interface GeneratedAffix {
   key: string;
   name: string;
   attr_key: string;
-  apply_type: string;
+  apply_type: 'flat' | 'percent' | 'special';
   tier: number;
   value: number;
   is_legendary?: boolean;
   description?: string;
+  trigger?: 'on_turn_start' | 'on_skill' | 'on_hit' | 'on_crit' | 'on_be_hit' | 'on_heal';
+  target?: 'self' | 'enemy';
+  effect_type?: 'buff' | 'debuff' | 'damage' | 'heal' | 'resource';
+  duration_round?: number;
+  params?: Record<string, string | number | boolean>;
 }
 
 // 装备模板
@@ -529,8 +539,8 @@ const rollAffixValue = (
   // 在tier范围内随机数值
   const value = rng.nextInt(selectedTier.min, selectedTier.max);
   const scaledValue = Number.isFinite(attrFactor) && attrFactor !== 1 ? Math.round(value * attrFactor) : value;
-  
-  return {
+
+  const out: GeneratedAffix = {
     key: affix.key,
     name: affix.name,
     attr_key: affix.attr_key,
@@ -540,6 +550,23 @@ const rollAffixValue = (
     is_legendary: affix.is_legendary,
     description: selectedTier.description
   };
+
+  if (affix.apply_type === 'special') {
+    out.trigger = affix.trigger;
+    out.target = affix.target;
+    out.effect_type = affix.effect_type;
+    out.duration_round = affix.duration_round;
+    if (affix.params) {
+      out.params = { ...affix.params };
+      if (out.params.value === undefined) {
+        out.params.value = scaledValue;
+      }
+    } else {
+      out.params = { value: scaledValue };
+    }
+  }
+
+  return out;
 };
 
 /**

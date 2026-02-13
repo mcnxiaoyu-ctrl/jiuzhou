@@ -439,6 +439,12 @@ const MarketItemTooltipContent: React.FC<{ row: ListingItem }> = ({ row }) => {
       if (!label) continue;
       const tierText = a.tier ? `T${a.tier}` : 'T-';
       const prefix = a.is_legendary ? '传奇词条' : '词条';
+      if (a.apply_type === 'special') {
+        const descText = (a.description ?? '').trim();
+        const extraDesc = descText && !hasLatin(descText) ? `（${descText}）` : '';
+        out.push(`${prefix} ${tierText}：${label}${extraDesc}`);
+        continue;
+      }
       const key = (a.attr_key ?? '').trim();
       const isPercent = a.apply_type === 'percent' || (key ? PERMYRIAD_PERCENT_KEYS.has(key) : false);
       const valueText = typeof a.value === 'number' ? (isPercent ? formatSignedPermyriadPercent(a.value) : formatSignedNumber(a.value)) : '';

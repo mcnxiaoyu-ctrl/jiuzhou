@@ -240,7 +240,10 @@
             "fagong_flat",
             "fagong_percent"
           ]
-        ]
+        ],
+        "max_per_group": {
+          "trigger": 1
+        }
       },
       "affixes": [
         {
@@ -602,6 +605,72 @@
               "realm_rank_min": 6
             }
           ]
+        },
+        {
+          "key": "proc_zhuihun",
+          "name": "追魂斩",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 26,
+          "trigger": "on_hit",
+          "target": "enemy",
+          "effect_type": "damage",
+          "params": {
+            "damage_type": "true",
+            "scale_key": "wugong",
+            "scale_rate": 6000,
+            "chance": 2200
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 20,
+              "max": 32,
+              "realm_rank_min": 5,
+              "description": "命中时22%概率触发追魂斩，追加20~32点真伤并附加60%物攻加成"
+            },
+            {
+              "tier": 6,
+              "min": 32,
+              "max": 48,
+              "realm_rank_min": 6,
+              "description": "命中时22%概率触发追魂斩，追加32~48点真伤并附加60%物攻加成"
+            }
+          ]
+        },
+        {
+          "key": "proc_baonu",
+          "name": "暴怒意",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 22,
+          "trigger": "on_crit",
+          "target": "self",
+          "effect_type": "buff",
+          "duration_round": 2,
+          "params": {
+            "attr_key": "zengshang",
+            "apply_type": "flat",
+            "chance": 2800
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 2200,
+              "max": 3400,
+              "realm_rank_min": 5,
+              "description": "暴击时28%概率激发暴怒意，2回合内增伤提高22%~34%"
+            },
+            {
+              "tier": 6,
+              "min": 3400,
+              "max": 5000,
+              "realm_rank_min": 6,
+              "description": "暴击时28%概率激发暴怒意，2回合内增伤提高34%~50%"
+            }
+          ]
         }
       ]
     },
@@ -631,7 +700,10 @@
             "fagong_flat",
             "fagong_percent"
           ]
-        ]
+        ],
+        "max_per_group": {
+          "trigger": 1
+        }
       },
       "affixes": [
         {
@@ -1005,6 +1077,105 @@
               "min": 5,
               "max": 9,
               "realm_rank_min": 6
+            }
+          ]
+        },
+        {
+          "key": "proc_zhuihun",
+          "name": "追魂斩",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 26,
+          "trigger": "on_hit",
+          "target": "enemy",
+          "effect_type": "damage",
+          "params": {
+            "damage_type": "true",
+            "scale_key": "wugong",
+            "scale_rate": 6000,
+            "chance": 2200
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 20,
+              "max": 32,
+              "realm_rank_min": 5,
+              "description": "命中时22%概率触发追魂斩，追加20~32点真伤并附加60%物攻加成"
+            },
+            {
+              "tier": 6,
+              "min": 32,
+              "max": 48,
+              "realm_rank_min": 6,
+              "description": "命中时22%概率触发追魂斩，追加32~48点真伤并附加60%物攻加成"
+            }
+          ]
+        },
+        {
+          "key": "proc_tianlei",
+          "name": "天雷引",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 24,
+          "trigger": "on_hit",
+          "target": "enemy",
+          "effect_type": "damage",
+          "params": {
+            "damage_type": "magic",
+            "scale_key": "fagong",
+            "scale_rate": 6500,
+            "chance": 2200
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 18,
+              "max": 30,
+              "realm_rank_min": 5,
+              "description": "命中时22%概率引动天雷，追加18~30点法伤并附加65%法攻加成"
+            },
+            {
+              "tier": 6,
+              "min": 30,
+              "max": 46,
+              "realm_rank_min": 6,
+              "description": "命中时22%概率引动天雷，追加30~46点法伤并附加65%法攻加成"
+            }
+          ]
+        },
+        {
+          "key": "proc_baonu",
+          "name": "暴怒意",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 22,
+          "trigger": "on_crit",
+          "target": "self",
+          "effect_type": "buff",
+          "duration_round": 2,
+          "params": {
+            "attr_key": "zengshang",
+            "apply_type": "flat",
+            "chance": 2800
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 2200,
+              "max": 3400,
+              "realm_rank_min": 5,
+              "description": "暴击时28%概率激发暴怒意，2回合内增伤提高22%~34%"
+            },
+            {
+              "tier": 6,
+              "min": 3400,
+              "max": 5000,
+              "realm_rank_min": 6,
+              "description": "暴击时28%概率激发暴怒意，2回合内增伤提高34%~50%"
             }
           ]
         }
@@ -1438,7 +1609,10 @@
             "fafang_flat",
             "fafang_percent"
           ]
-        ]
+        ],
+        "max_per_group": {
+          "trigger": 1
+        }
       },
       "affixes": [
         {
@@ -2120,6 +2294,69 @@
               "realm_rank_min": 6
             }
           ]
+        },
+        {
+          "key": "proc_hushen",
+          "name": "护心诀",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 24,
+          "trigger": "on_be_hit",
+          "target": "self",
+          "effect_type": "heal",
+          "params": {
+            "scale_key": "max_qixue",
+            "scale_rate": 900,
+            "chance": 2600
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 24,
+              "max": 36,
+              "realm_rank_min": 5,
+              "description": "受击时26%概率触发护心诀，回复24~36点气血并附加9%生命加成"
+            },
+            {
+              "tier": 6,
+              "min": 36,
+              "max": 54,
+              "realm_rank_min": 6,
+              "description": "受击时26%概率触发护心诀，回复36~54点气血并附加9%生命加成"
+            }
+          ]
+        },
+        {
+          "key": "proc_fansha",
+          "name": "反煞甲",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 20,
+          "trigger": "on_be_hit",
+          "target": "enemy",
+          "effect_type": "damage",
+          "params": {
+            "damage_type": "reflect",
+            "chance": 2200
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 3200,
+              "max": 4600,
+              "realm_rank_min": 5,
+              "description": "受击时22%概率反煞，反弹32%~46%本次伤害"
+            },
+            {
+              "tier": 6,
+              "min": 4600,
+              "max": 6400,
+              "realm_rank_min": 6,
+              "description": "受击时22%概率反煞，反弹46%~64%本次伤害"
+            }
+          ]
         }
       ]
     },
@@ -2153,7 +2390,10 @@
             "fafang_flat",
             "fafang_percent"
           ]
-        ]
+        ],
+        "max_per_group": {
+          "trigger": 1
+        }
       },
       "affixes": [
         {
@@ -2835,6 +3075,69 @@
               "realm_rank_min": 6
             }
           ]
+        },
+        {
+          "key": "proc_hushen",
+          "name": "护心诀",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 24,
+          "trigger": "on_be_hit",
+          "target": "self",
+          "effect_type": "heal",
+          "params": {
+            "scale_key": "max_qixue",
+            "scale_rate": 900,
+            "chance": 2600
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 24,
+              "max": 36,
+              "realm_rank_min": 5,
+              "description": "受击时26%概率触发护心诀，回复24~36点气血并附加9%生命加成"
+            },
+            {
+              "tier": 6,
+              "min": 36,
+              "max": 54,
+              "realm_rank_min": 6,
+              "description": "受击时26%概率触发护心诀，回复36~54点气血并附加9%生命加成"
+            }
+          ]
+        },
+        {
+          "key": "proc_fansha",
+          "name": "反煞甲",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 20,
+          "trigger": "on_be_hit",
+          "target": "enemy",
+          "effect_type": "damage",
+          "params": {
+            "damage_type": "reflect",
+            "chance": 2200
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 3200,
+              "max": 4600,
+              "realm_rank_min": 5,
+              "description": "受击时22%概率反煞，反弹32%~46%本次伤害"
+            },
+            {
+              "tier": 6,
+              "min": 4600,
+              "max": 6400,
+              "realm_rank_min": 6,
+              "description": "受击时22%概率反煞，反弹46%~64%本次伤害"
+            }
+          ]
         }
       ]
     },
@@ -3175,7 +3478,10 @@
           }
         },
         "allow_duplicate": false,
-        "legendary_chance": 0.05
+        "legendary_chance": 0.05,
+        "max_per_group": {
+          "trigger": 1
+        }
       },
       "affixes": [
         {
@@ -3937,6 +4243,70 @@
               "realm_rank_min": 6
             }
           ]
+        },
+        {
+          "key": "proc_baonu",
+          "name": "暴怒意",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 22,
+          "trigger": "on_crit",
+          "target": "self",
+          "effect_type": "buff",
+          "duration_round": 2,
+          "params": {
+            "attr_key": "zengshang",
+            "apply_type": "flat",
+            "chance": 2800
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 2200,
+              "max": 3400,
+              "realm_rank_min": 5,
+              "description": "暴击时28%概率激发暴怒意，2回合内增伤提高22%~34%"
+            },
+            {
+              "tier": 6,
+              "min": 3400,
+              "max": 5000,
+              "realm_rank_min": 6,
+              "description": "暴击时28%概率激发暴怒意，2回合内增伤提高34%~50%"
+            }
+          ]
+        },
+        {
+          "key": "proc_lingchao",
+          "name": "灵潮息",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 24,
+          "trigger": "on_turn_start",
+          "target": "self",
+          "effect_type": "resource",
+          "params": {
+            "resource_type": "lingqi",
+            "chance": 3000
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 8,
+              "max": 12,
+              "realm_rank_min": 5,
+              "description": "回合开始时30%概率引动灵潮，恢复8~12点灵气"
+            },
+            {
+              "tier": 6,
+              "min": 12,
+              "max": 18,
+              "realm_rank_min": 6,
+              "description": "回合开始时30%概率引动灵潮，恢复12~18点灵气"
+            }
+          ]
         }
       ]
     },
@@ -4257,7 +4627,10 @@
           }
         },
         "allow_duplicate": false,
-        "legendary_chance": 0.08
+        "legendary_chance": 0.08,
+        "max_per_group": {
+          "trigger": 1
+        }
       },
       "affixes": [
         {
@@ -4931,6 +5304,70 @@
               "min": 536,
               "max": 928,
               "realm_rank_min": 6
+            }
+          ]
+        },
+        {
+          "key": "proc_tianlei",
+          "name": "天雷引",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 24,
+          "trigger": "on_hit",
+          "target": "enemy",
+          "effect_type": "damage",
+          "params": {
+            "damage_type": "magic",
+            "scale_key": "fagong",
+            "scale_rate": 6500,
+            "chance": 2200
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 18,
+              "max": 30,
+              "realm_rank_min": 5,
+              "description": "命中时22%概率引动天雷，追加18~30点法伤并附加65%法攻加成"
+            },
+            {
+              "tier": 6,
+              "min": 30,
+              "max": 46,
+              "realm_rank_min": 6,
+              "description": "命中时22%概率引动天雷，追加30~46点法伤并附加65%法攻加成"
+            }
+          ]
+        },
+        {
+          "key": "proc_lingchao",
+          "name": "灵潮息",
+          "attr_key": "",
+          "apply_type": "special",
+          "group": "trigger",
+          "weight": 24,
+          "trigger": "on_turn_start",
+          "target": "self",
+          "effect_type": "resource",
+          "params": {
+            "resource_type": "lingqi",
+            "chance": 3000
+          },
+          "tiers": [
+            {
+              "tier": 5,
+              "min": 8,
+              "max": 12,
+              "realm_rank_min": 5,
+              "description": "回合开始时30%概率引动灵潮，恢复8~12点灵气"
+            },
+            {
+              "tier": 6,
+              "min": 12,
+              "max": 18,
+              "realm_rank_min": 6,
+              "description": "回合开始时30%概率引动灵潮，恢复12~18点灵气"
             }
           ]
         }

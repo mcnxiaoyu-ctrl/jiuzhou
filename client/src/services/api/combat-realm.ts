@@ -42,6 +42,7 @@ export type BattleActionTargetDto = {
   hits: BattleActionTargetHitDto[];
   damage?: number;
   heal?: number;
+  resources?: BattleActionTargetResourceDto[];
   isMiss?: boolean;
   isCrit?: boolean;
   isParry?: boolean;
@@ -51,6 +52,11 @@ export type BattleActionTargetDto = {
   buffsRemoved?: string[];
   controlApplied?: string;
   controlResisted?: boolean;
+};
+
+export type BattleActionTargetResourceDto = {
+  type: 'qixue' | 'lingqi';
+  amount: number;
 };
 
 export type BattleLogEntryDto =

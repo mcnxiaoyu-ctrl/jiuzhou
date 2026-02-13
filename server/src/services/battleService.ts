@@ -18,6 +18,10 @@ import {
   type BattleParticipant,
   type DistributeResult
 } from './battleDropService.js';
+import {
+  extractBattleAffixEffectsFromEquippedItems,
+  type BattleAffixEffectSource,
+} from './battleAffixEffectService.js';
 import { getRoomInMap } from './mapService.js';
 import { getGameServer } from '../game/GameServer.js';
 import { recordKillMonsterEvent } from './taskService.js';
@@ -477,16 +481,52 @@ async function getCharacterBattleSetBonusEffects(characterId: number): Promise<B
   return out;
 }
 
+async function getCharacterBattleAffixEffects(characterId: number): Promise<BattleSetBonusEffect[]> {
+  if (!Number.isFinite(characterId) || characterId <= 0) return [];
+
+  const result = await query(
+    `
+      SELECT ii.id AS item_instance_id, id.name AS item_name, ii.affixes
+      FROM item_instance ii
+      JOIN item_def id ON id.id = ii.item_def_id
+      WHERE ii.owner_character_id = $1
+        AND ii.location = 'equipped'
+        AND id.category = 'equipment'
+      ORDER BY ii.id ASC
+    `,
+    [characterId]
+  );
+
+  const sources: BattleAffixEffectSource[] = [];
+  for (const row of result.rows) {
+    const record = row as Record<string, unknown>;
+    const itemInstanceId = Math.floor(toNumber(record.item_instance_id) ?? 0);
+    if (itemInstanceId <= 0) continue;
+
+    sources.push({
+      itemInstanceId,
+      itemName: toText(record.item_name),
+      affixesRaw: record.affixes,
+    });
+  }
+
+  return extractBattleAffixEffectsFromEquippedItems(sources);
+}
+
 async function attachSetBonusEffectsToCharacterData<T extends CharacterData>(
   characterId: number,
   data: T
 ): Promise<T> {
   try {
-    const setBonusEffects = await getCharacterBattleSetBonusEffects(characterId);
-    if (setBonusEffects.length === 0) return data;
+    const [setBonusEffects, affixEffects] = await Promise.all([
+      getCharacterBattleSetBonusEffects(characterId),
+      getCharacterBattleAffixEffects(characterId),
+    ]);
+    const mergedEffects = [...setBonusEffects, ...affixEffects];
+    if (mergedEffects.length === 0) return data;
     return {
       ...data,
-      setBonusEffects,
+      setBonusEffects: mergedEffects,
     };
   } catch {
     return data;

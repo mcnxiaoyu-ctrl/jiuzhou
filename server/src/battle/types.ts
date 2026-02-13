@@ -312,6 +312,7 @@ export interface TargetResult {
   hits: TargetHitResult[];
   damage?: number;
   heal?: number;
+  resources?: TargetResourceResult[];
   isMiss?: boolean;
   isCrit?: boolean;
   isParry?: boolean;
@@ -321,6 +322,11 @@ export interface TargetResult {
   buffsRemoved?: string[];
   controlApplied?: string;
   controlResisted?: boolean;
+}
+
+export interface TargetResourceResult {
+  type: 'qixue' | 'lingqi';
+  amount: number;
 }
 
 interface DotLog {

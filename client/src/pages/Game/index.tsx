@@ -341,18 +341,21 @@ const renderEquipTooltip = (uiSlot: string, it: InventoryItemDto) => {
                 const label = (key ? attrLabel[key] : undefined) ?? a.name ?? key ?? '未知';
                 const tierText = a.tier ? `T${a.tier}` : 'T-';
                 const prefix = a.is_legendary ? '传奇' : '词条';
+                const isSpecial = a.apply_type === 'special';
                 const valueText =
-                  typeof a.value === 'number'
+                  !isSpecial && typeof a.value === 'number'
                     ? a.apply_type === 'percent' || (key ? permyriadPercentKeys.has(key) : false)
                       ? formatSignedPermyriadPercent(a.value)
                       : formatSignedNumber(a.value)
                     : '';
+                const descText = isSpecial ? String(a.description ?? '').trim() : '';
                 return (
                   <div key={`${a.key ?? label}-${idx}`} className="equip-tooltip-affix">
                     <span className="equip-tooltip-affix-k">
                       {prefix} {tierText}：{label}
                     </span>
                     {valueText ? <span className="equip-tooltip-affix-v">{valueText}</span> : null}
+                    {!valueText && descText ? <span className="equip-tooltip-affix-v">（{descText}）</span> : null}
                   </div>
                 );
               })}

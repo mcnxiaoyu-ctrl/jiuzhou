@@ -40,6 +40,11 @@ export type EquipmentAffix = {
   name?: string;
   attr_key?: string;
   apply_type?: string;
+  trigger?: string;
+  target?: string;
+  effect_type?: string;
+  duration_round?: number;
+  params?: Record<string, string | number | boolean>;
   tier?: number;
   value?: number;
   is_legendary?: boolean;
@@ -336,11 +341,36 @@ export const coerceAffixes = (value: unknown): EquipmentAffix[] => {
           : typeof a.value === "string"
             ? Number(a.value)
             : undefined;
+      const durationNum =
+        typeof a.duration_round === "number"
+          ? a.duration_round
+          : typeof a.duration_round === "string"
+            ? Number(a.duration_round)
+            : undefined;
+      const paramsRaw =
+        a.params && typeof a.params === "object" && !Array.isArray(a.params)
+          ? (a.params as Record<string, unknown>)
+          : null;
+      const params: Record<string, string | number | boolean> = {};
+      if (paramsRaw) {
+        for (const [k, v] of Object.entries(paramsRaw)) {
+          if (typeof v === "string" || typeof v === "boolean") params[k] = v;
+          else if (typeof v === "number" && Number.isFinite(v)) params[k] = v;
+        }
+      }
       return {
         key: typeof a.key === "string" ? a.key : undefined,
         name: typeof a.name === "string" ? a.name : undefined,
         attr_key: typeof a.attr_key === "string" ? a.attr_key : undefined,
         apply_type: typeof a.apply_type === "string" ? a.apply_type : undefined,
+        trigger: typeof a.trigger === "string" ? a.trigger : undefined,
+        target: typeof a.target === "string" ? a.target : undefined,
+        effect_type:
+          typeof a.effect_type === "string" ? a.effect_type : undefined,
+        duration_round: Number.isFinite(durationNum ?? NaN)
+          ? durationNum
+          : undefined,
+        params: Object.keys(params).length > 0 ? params : undefined,
         tier: Number.isFinite(tierNum ?? NaN) ? tierNum : undefined,
         value: Number.isFinite(valueNum ?? NaN) ? valueNum : undefined,
         is_legendary:
@@ -777,6 +807,12 @@ export const buildEquipmentLines = (item: BagItem | null): string[] => {
     const prefix = a.is_legendary ? "传奇词条" : "词条";
     const key = a.attr_key;
     const label = (key ? attrLabel[key] : undefined) ?? a.name ?? key ?? "未知";
+    if (a.apply_type === "special") {
+      if (a.description)
+        lines.push(`${prefix} ${tierText}：${label}（${a.description}）`);
+      else lines.push(`${prefix} ${tierText}：${label}`);
+      continue;
+    }
     if (typeof a.value === "number") {
       const isPercent =
         a.apply_type === "percent" ||

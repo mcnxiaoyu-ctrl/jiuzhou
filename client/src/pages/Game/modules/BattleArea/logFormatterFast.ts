@@ -98,6 +98,20 @@ const buildTargetSummary = (target: BattleActionTargetDto): string => {
     parts.push(`治疗+${heal}`);
   }
 
+  const resources = (target.resources ?? [])
+    .map((row) => ({
+      type: String(row.type || '').trim(),
+      amount: toSafeInt(row.amount),
+    }))
+    .filter((row) => row.amount > 0 && (row.type === 'qixue' || row.type === 'lingqi'));
+  for (const resource of resources) {
+    if (resource.type === 'qixue') {
+      parts.push(`气血+${resource.amount}`);
+      continue;
+    }
+    parts.push(`灵气+${resource.amount}`);
+  }
+
   const buffsApplied = translateBuffNames(target.buffsApplied);
   if (buffsApplied.length > 0) {
     parts.push(`获得状态:${buffsApplied.join('、')}`);
@@ -119,7 +133,8 @@ const buildActionLogLine = (log: Extract<BattleLogEntryDto, { type: 'action' }>)
   const roundText = buildRoundLabel(log.round);
   const actorName = normalizeName(log.actorName, '未知单位');
   const skillName = normalizeName(log.skillName, '未知技能');
-  const actionHead = `${roundText} ${actorName} 施展【${skillName}】`;
+  const verb = String(log.skillId || '').startsWith('proc-') ? '触发' : '施展';
+  const actionHead = `${roundText} ${actorName} ${verb}【${skillName}】`;
 
   const targets = (log.targets ?? []).map((target) => buildTargetSummary(target)).filter(Boolean);
   if (targets.length === 0) return actionHead;

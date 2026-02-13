@@ -4,10 +4,12 @@
  */
 
 import type {
+  ActionLog,
   BattleLogEntry,
   BattleSetBonusEffect,
   BattleSetBonusTrigger,
   BattleState,
+  TargetResult,
   BattleUnit,
 } from '../types.js';
 import { rollChance } from '../utils/random.js';
@@ -19,6 +21,11 @@ interface SetBonusTriggerContext {
   target?: BattleUnit;
   damage?: number;
   heal?: number;
+}
+
+interface SetBonusApplyResult {
+  targetResult: TargetResult;
+  extraLogs?: BattleLogEntry[];
 }
 
 export function triggerSetBonusEffects(
@@ -40,22 +47,29 @@ export function triggerSetBonusEffects(
     const target = effect.target === 'enemy' ? context.target : owner;
     if (!target || !target.isAlive) continue;
 
+    let applyResult: SetBonusApplyResult | null = null;
     switch (effect.effectType) {
       case 'buff':
       case 'debuff':
-        applySetBuffOrDebuff(effect, owner, target, params);
+        applyResult = applySetBuffOrDebuff(effect, owner, target, params);
         break;
       case 'damage':
-        logs.push(...applySetDamage(state, owner, target, params, context.damage));
+        applyResult = applySetDamage(state, owner, target, params, context.damage);
         break;
       case 'heal':
-        applySetHeal(owner, target, params);
+        applyResult = applySetHeal(owner, target, params);
         break;
       case 'resource':
-        applySetResource(owner, target, params);
+        applyResult = applySetResource(owner, target, params);
         break;
       default:
         break;
+    }
+
+    if (!applyResult) continue;
+    logs.push(buildSetBonusActionLog(state, owner, effect, applyResult.targetResult));
+    if (Array.isArray(applyResult.extraLogs) && applyResult.extraLogs.length > 0) {
+      logs.push(...applyResult.extraLogs);
     }
   }
 
@@ -67,7 +81,7 @@ function applySetBuffOrDebuff(
   owner: BattleUnit,
   target: BattleUnit,
   params: Record<string, unknown>
-): void {
+): SetBonusApplyResult | null {
   const attrKey = asNonEmptyString(params.attr_key);
   const applyType = asApplyType(params.apply_type);
   const value = asFiniteNumber(params.value);
@@ -76,12 +90,13 @@ function applySetBuffOrDebuff(
 
   if (attrKey && value !== null && applyType) {
     const buffDefId = buildSetBuffDefId(effect, attrKey);
+    const buffName = `${effect.setName}${isDebuff ? '负面' : '增益'}`;
     addBuff(
       target,
       {
         id: `${buffDefId}-${Date.now()}`,
         buffDefId,
-        name: `${effect.setName}${isDebuff ? '负面' : '增益'}`,
+        name: buffName,
         type: isDebuff ? 'debuff' : 'buff',
         category: 'set_bonus',
         sourceUnitId: owner.id,
@@ -93,7 +108,12 @@ function applySetBuffOrDebuff(
       duration,
       1
     );
-    return;
+    return {
+      targetResult: {
+        ...buildTargetResultBase(target),
+        buffsApplied: [buffName],
+      },
+    };
   }
 
   const debuffType = asNonEmptyString(params.debuff_type);
@@ -104,12 +124,13 @@ function applySetBuffOrDebuff(
       Math.floor(owner.currentAttrs.wugong * normalizeRate(rawValue))
     );
     const buffDefId = buildSetBuffDefId(effect, 'bleed');
+    const buffName = `${effect.setName}·流血`;
     addBuff(
       target,
       {
         id: `${buffDefId}-${Date.now()}`,
         buffDefId,
-        name: `${effect.setName}·流血`,
+        name: buffName,
         type: 'debuff',
         category: 'set_bonus',
         sourceUnitId: owner.id,
@@ -124,7 +145,15 @@ function applySetBuffOrDebuff(
       duration,
       1
     );
+    return {
+      targetResult: {
+        ...buildTargetResultBase(target),
+        buffsApplied: [buffName],
+      },
+    };
   }
+
+  return null;
 }
 
 function applySetDamage(
@@ -133,8 +162,7 @@ function applySetDamage(
   target: BattleUnit,
   params: Record<string, unknown>,
   sourceDamage?: number
-): BattleLogEntry[] {
-  const logs: BattleLogEntry[] = [];
+): SetBonusApplyResult | null {
   const rawValue = asFiniteNumber(params.value) ?? 0;
   const damageTypeRaw = asNonEmptyString(params.damage_type) ?? 'true';
 
@@ -152,16 +180,17 @@ function applySetDamage(
     damage += Math.floor(attrValue * normalizeRate(scaleRateRaw));
   }
 
-  if (damage <= 0) return logs;
+  if (damage <= 0) return null;
 
   const damageType = normalizeDamageType(damageTypeRaw);
   const wasAlive = target.isAlive;
-  const { actualDamage } = applyDamage(state, target, Math.max(1, damage), damageType);
+  const { actualDamage, shieldAbsorbed } = applyDamage(state, target, Math.max(1, damage), damageType);
   owner.stats.damageDealt += Math.max(0, actualDamage);
 
+  const extraLogs: BattleLogEntry[] = [];
   if (wasAlive && !target.isAlive) {
     owner.stats.killCount += 1;
-    logs.push({
+    extraLogs.push({
       type: 'death',
       round: state.roundCount,
       unitId: target.id,
@@ -171,14 +200,34 @@ function applySetDamage(
     });
   }
 
-  return logs;
+  const safeDamage = Math.max(0, actualDamage);
+  const safeShieldAbsorbed = Math.max(0, shieldAbsorbed);
+  return {
+    targetResult: {
+      ...buildTargetResultBase(target),
+      hits: [
+        {
+          index: 1,
+          damage: safeDamage,
+          isMiss: false,
+          isCrit: false,
+          isParry: false,
+          isElementBonus: false,
+          shieldAbsorbed: safeShieldAbsorbed,
+        },
+      ],
+      damage: safeDamage,
+      shieldAbsorbed: safeShieldAbsorbed,
+    },
+    extraLogs,
+  };
 }
 
 function applySetHeal(
   owner: BattleUnit,
   target: BattleUnit,
   params: Record<string, unknown>
-): void {
+): SetBonusApplyResult | null {
   const base = asFiniteNumber(params.value) ?? 0;
   const scaleKey = asNonEmptyString(params.scale_key);
   const scaleRateRaw = asFiniteNumber(params.scale_rate);
@@ -188,35 +237,63 @@ function applySetHeal(
     const attrValue = asFiniteNumber(readAttrValue(owner, scaleKey)) ?? 0;
     healAmount += Math.floor(attrValue * normalizeRate(scaleRateRaw));
   }
-  if (healAmount <= 0) return;
+  if (healAmount <= 0) return null;
 
   const actualHeal = applyHealing(target, healAmount);
   if (actualHeal > 0) {
     owner.stats.healingDone += actualHeal;
+    return {
+      targetResult: {
+        ...buildTargetResultBase(target),
+        heal: actualHeal,
+      },
+    };
   }
+
+  return null;
 }
 
 function applySetResource(
   owner: BattleUnit,
   target: BattleUnit,
   params: Record<string, unknown>
-): void {
+): SetBonusApplyResult | null {
   const resourceType = asNonEmptyString(params.resource_type) ?? asNonEmptyString(params.resource);
   const value = asFiniteNumber(params.value);
-  if (!resourceType || value === null) return;
+  if (!resourceType || value === null) return null;
 
   const amount = Math.floor(value);
-  if (amount <= 0) return;
+  if (amount <= 0) return null;
 
   if (resourceType === 'qixue') {
     const actualHeal = applyHealing(target, amount);
-    if (actualHeal > 0) owner.stats.healingDone += actualHeal;
-    return;
+    if (actualHeal > 0) {
+      owner.stats.healingDone += actualHeal;
+      return {
+        targetResult: {
+          ...buildTargetResultBase(target),
+          heal: actualHeal,
+        },
+      };
+    }
+    return null;
   }
 
   if (resourceType === 'lingqi') {
-    target.lingqi = Math.min(target.currentAttrs.max_lingqi, target.lingqi + amount);
+    const before = target.lingqi;
+    const after = Math.min(target.currentAttrs.max_lingqi, before + amount);
+    const gain = Math.max(0, after - before);
+    target.lingqi = after;
+    if (gain <= 0) return null;
+    return {
+      targetResult: {
+        ...buildTargetResultBase(target),
+        resources: [{ type: 'lingqi', amount: gain }],
+      },
+    };
   }
+
+  return null;
 }
 
 function passChance(state: BattleState, params: Record<string, unknown>): boolean {
@@ -247,6 +324,31 @@ function normalizeDuration(value: unknown): number {
 
 function buildSetBuffDefId(effect: BattleSetBonusEffect, suffix: string): string {
   return `set-${effect.setId}-${effect.pieceCount}-${effect.trigger}-${suffix}`;
+}
+
+function buildSetBonusActionLog(
+  state: BattleState,
+  owner: BattleUnit,
+  effect: BattleSetBonusEffect,
+  targetResult: TargetResult
+): ActionLog {
+  return {
+    type: 'action',
+    round: state.roundCount,
+    actorId: owner.id,
+    actorName: owner.name,
+    skillId: `proc-${effect.setId}`,
+    skillName: effect.setName,
+    targets: [targetResult],
+  };
+}
+
+function buildTargetResultBase(target: BattleUnit): TargetResult {
+  return {
+    targetId: target.id,
+    targetName: target.name,
+    hits: [],
+  };
 }
 
 function asApplyType(value: unknown): 'flat' | 'percent' | null {

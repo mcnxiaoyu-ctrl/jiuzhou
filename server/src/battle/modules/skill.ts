@@ -362,17 +362,8 @@ export function executeSkill(
     return { success: false, error: '没有有效目标' };
   }
   
-  // 执行技能效果
+  // 先落主动作日志，再按触发时机追加触发日志，保证日志顺序符合战斗时序
   const targetResults: TargetResult[] = [];
-  const onSkillLogs = triggerSetBonusEffects(state, 'on_skill', caster);
-  state.logs.push(...onSkillLogs);
-  
-  for (const target of targets) {
-    const result = executeSkillOnTarget(state, caster, target, skill);
-    targetResults.push(result);
-  }
-  
-  // 生成日志
   const log: ActionLog = {
     type: 'action',
     round: state.roundCount,
@@ -382,8 +373,15 @@ export function executeSkill(
     skillName: skill.name,
     targets: targetResults,
   };
-  
   state.logs.push(log);
+
+  const onSkillLogs = triggerSetBonusEffects(state, 'on_skill', caster);
+  state.logs.push(...onSkillLogs);
+  
+  for (const target of targets) {
+    const result = executeSkillOnTarget(state, caster, target, skill);
+    targetResults.push(result);
+  }
   
   return { success: true, log };
 }
