@@ -52,6 +52,16 @@ interface TeamInfo {
   isPublic: boolean;
 }
 
+type TeamApplicationStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+const isPgUniqueViolation = (error: unknown, constraintName?: string): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const row = error as { code?: unknown; constraint?: unknown };
+  if (row.code !== '23505') return false;
+  if (!constraintName) return true;
+  return row.constraint === constraintName;
+};
+
 const emitTeamUpdateToUserIds = (userIds: number[], payload: any) => {
   try {
     const gameServer = getGameServer();
@@ -75,6 +85,24 @@ const notifyTeamMembersChanged = async (teamId: string, extraCharacterIds: numbe
   const allCharacterIds = Array.from(new Set([...memberIds, ...extraCharacterIds]));
   const userIds = await getUserIdsByCharacterIds(allCharacterIds);
   emitTeamUpdateToUserIds(userIds, { kind, teamId, time: Date.now() });
+};
+
+const updateTeamApplicationStatus = async (
+  applicationId: string,
+  teamId: string,
+  applicantId: number,
+  status: Exclude<TeamApplicationStatus, 'pending'>
+): Promise<void> => {
+  // 表上有 (team_id, applicant_id, status) 唯一约束，先删除同状态历史记录，避免状态更新冲突。
+  await query(
+    `DELETE FROM team_applications
+     WHERE team_id = $1 AND applicant_id = $2 AND status = $3 AND id != $4`,
+    [teamId, applicantId, status, applicationId]
+  );
+  await query(
+    `UPDATE team_applications SET status = $2, handled_at = NOW() WHERE id = $1`,
+    [applicationId, status]
+  );
 };
 
 /**
@@ -472,6 +500,9 @@ export const applyToTeam = async (characterId: number, teamId: string, message?:
 
     return { success: true, message: '申请已提交', applicationId };
   } catch (error) {
+    if (isPgUniqueViolation(error, 'team_applications_team_id_applicant_id_status_key')) {
+      return { success: false, message: '已有待处理的申请' };
+    }
     console.error('申请加入队伍失败:', error);
     return { success: false, message: '申请失败' };
   }
@@ -542,6 +573,7 @@ export const handleApplication = async (characterId: number, applicationId: stri
     }
 
     const app = appResult.rows[0];
+    const applicantId = Number(app.applicant_id);
 
     if (app.leader_id !== characterId) {
       return { success: false, message: '只有队长才能处理申请' };
@@ -550,10 +582,7 @@ export const handleApplication = async (characterId: number, applicationId: stri
     if (approve) {
       // 检查队伍是否已满
       if (app.member_count >= app.max_members) {
-        await query(
-          `UPDATE team_applications SET status = 'rejected', handled_at = NOW() WHERE id = $1`,
-          [applicationId]
-        );
+        await updateTeamApplicationStatus(applicationId, app.team_id, applicantId, 'rejected');
         return { success: false, message: '队伍已满' };
       }
 
@@ -564,10 +593,7 @@ export const handleApplication = async (characterId: number, applicationId: stri
       );
 
       if (existingMember.rows.length > 0) {
-        await query(
-          `UPDATE team_applications SET status = 'rejected', handled_at = NOW() WHERE id = $1`,
-          [applicationId]
-        );
+        await updateTeamApplicationStatus(applicationId, app.team_id, applicantId, 'rejected');
         return { success: false, message: '该玩家已加入其他队伍' };
       }
 
@@ -583,10 +609,7 @@ export const handleApplication = async (characterId: number, applicationId: stri
       );
 
       // 更新申请状态
-      await query(
-        `UPDATE team_applications SET status = 'approved', handled_at = NOW() WHERE id = $1`,
-        [applicationId]
-      );
+      await updateTeamApplicationStatus(applicationId, app.team_id, applicantId, 'approved');
 
       await notifyTeamMembersChanged(app.team_id, [app.applicant_id], 'approve_application');
 
@@ -597,12 +620,8 @@ export const handleApplication = async (characterId: number, applicationId: stri
       return { success: true, message: '已通过申请' };
     } else {
       // 拒绝申请
-      await query(
-        `UPDATE team_applications SET status = 'rejected', handled_at = NOW() WHERE id = $1`,
-        [applicationId]
-      );
+      await updateTeamApplicationStatus(applicationId, app.team_id, applicantId, 'rejected');
 
-      const applicantId = Number(app.applicant_id);
       if (Number.isFinite(applicantId)) {
         const applicantUserIds = await getUserIdsByCharacterIds([applicantId]);
         emitTeamUpdateToUserIds(applicantUserIds, { kind: 'reject_application', teamId: app.team_id, applicationId, time: Date.now() });

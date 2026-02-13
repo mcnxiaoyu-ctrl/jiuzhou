@@ -57,6 +57,14 @@ const collectItemRewardIds = (rewards: AchievementRewardConfig[]): string[] => {
   return out;
 };
 
+const extractClaimBusinessErrorMessage = (error: unknown): string | null => {
+  if (!(error instanceof Error)) return null;
+  const message = asNonEmptyString(error.message);
+  if (!message) return null;
+  if (message === '背包已满' || message === '仓库已满' || message === '背包数据异常') return message;
+  return null;
+};
+
 const applyRewardsTx = async (
   client: PoolClient,
   userId: number,
@@ -238,6 +246,10 @@ export const claimAchievement = async (
     };
   } catch (error) {
     await client.query('ROLLBACK');
+    const businessMessage = extractClaimBusinessErrorMessage(error);
+    if (businessMessage) {
+      return { success: false, message: businessMessage };
+    }
     console.error('领取成就奖励失败:', error);
     return { success: false, message: '领取成就奖励失败' };
   } finally {
@@ -430,6 +442,10 @@ export const claimAchievementPointsReward = async (
     };
   } catch (error) {
     await client.query('ROLLBACK');
+    const businessMessage = extractClaimBusinessErrorMessage(error);
+    if (businessMessage) {
+      return { success: false, message: businessMessage };
+    }
     console.error('领取成就点奖励失败:', error);
     return { success: false, message: '领取成就点奖励失败' };
   } finally {
