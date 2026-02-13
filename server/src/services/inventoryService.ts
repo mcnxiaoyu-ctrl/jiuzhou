@@ -1469,6 +1469,16 @@ export const moveItem = async (
   targetLocation: SlottedInventoryLocation,
   targetSlot?: number
 ): Promise<{ success: boolean; message: string }> => {
+  type MoveItemRow = {
+    id: number;
+    item_def_id: string;
+    qty: number;
+    location: string;
+    location_slot: number | null;
+    bind_type: string;
+    stack_max: number;
+  };
+  type StackTargetRow = { id: number; qty: number };
   const client = await pool.connect();
   
   try {
@@ -1477,8 +1487,17 @@ export const moveItem = async (
     
     // 获取物品信息
     const itemResult = await client.query(`
-      SELECT id, location, location_slot FROM item_instance
-      WHERE id = $1 AND owner_character_id = $2
+      SELECT
+        ii.id,
+        ii.item_def_id,
+        ii.qty,
+        ii.location,
+        ii.location_slot,
+        ii.bind_type,
+        id.stack_max
+      FROM item_instance ii
+      JOIN item_def id ON id.id = ii.item_def_id
+      WHERE ii.id = $1 AND ii.owner_character_id = $2
       FOR UPDATE
     `, [itemInstanceId, characterId]);
     
@@ -1487,13 +1506,91 @@ export const moveItem = async (
       return { success: false, message: '物品不存在' };
     }
 
-    if (itemResult.rows[0].location_slot === null) {
+    const item = itemResult.rows[0] as MoveItemRow;
+    const currentLocationText = String(item.location);
+    if (currentLocationText !== 'bag' && currentLocationText !== 'warehouse') {
+      await client.query('ROLLBACK');
+      return { success: false, message: '当前位置不支持移动' };
+    }
+    const currentLocation = currentLocationText as SlottedInventoryLocation;
+    const currentSlotRaw = item.location_slot;
+    if (currentSlotRaw === null) {
       await client.query('ROLLBACK');
       return { success: false, message: '物品格子状态异常' };
     }
+    const currentSlot = Number(currentSlotRaw);
+    if (!Number.isInteger(currentSlot) || currentSlot < 0) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '物品格子状态异常' };
+    }
+    const stackMax = Math.max(1, Number(item.stack_max) || 1);
+    const originalQty = Math.max(0, Number(item.qty) || 0);
+    if (originalQty <= 0) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '物品数量异常' };
+    }
+
+    let remainingQty = originalQty;
+    if (currentLocation !== targetLocation && stackMax > 1) {
+      const stackResult = await client.query(
+        `
+          SELECT id, qty FROM item_instance
+          WHERE owner_character_id = $1
+            AND location = $2
+            AND item_def_id = $3
+            AND bind_type = $4
+            AND qty < $5
+            AND id != $6
+          ORDER BY qty DESC, id ASC
+          FOR UPDATE
+        `,
+        [characterId, targetLocation, item.item_def_id, item.bind_type, stackMax, itemInstanceId]
+      );
+
+      const stackRows = stackResult.rows as StackTargetRow[];
+      for (const row of stackRows) {
+        if (remainingQty <= 0) break;
+        const stackQty = Math.max(0, Number(row.qty) || 0);
+        const canAdd = Math.min(remainingQty, Math.max(0, stackMax - stackQty));
+        if (canAdd <= 0) continue;
+
+        await client.query(
+          `
+            UPDATE item_instance
+            SET qty = qty + $1, updated_at = NOW()
+            WHERE id = $2 AND owner_character_id = $3
+          `,
+          [canAdd, Number(row.id), characterId]
+        );
+        remainingQty -= canAdd;
+      }
+
+      if (remainingQty <= 0) {
+        await client.query(
+          `
+            DELETE FROM item_instance
+            WHERE id = $1 AND owner_character_id = $2
+          `,
+          [itemInstanceId, characterId]
+        );
+        await client.query('COMMIT');
+        return { success: true, message: '移动成功' };
+      }
+
+      if (remainingQty !== originalQty) {
+        await client.query(
+          `
+            UPDATE item_instance
+            SET qty = $1, updated_at = NOW()
+            WHERE id = $2 AND owner_character_id = $3
+          `,
+          [remainingQty, itemInstanceId, characterId]
+        );
+      }
+    }
     
     // 检查目标位置容量
-    const info = await getInventoryInfo(characterId);
+    const info = await getInventoryInfoWithClient(characterId, client);
     const capacity = getSlottedCapacity(info, targetLocation);
     if (targetSlot !== undefined) {
       if (!Number.isInteger(targetSlot) || targetSlot < 0 || targetSlot >= capacity) {
@@ -1521,8 +1618,11 @@ export const moveItem = async (
       
       if (slotCheck.rows.length > 0) {
         // 交换位置
-        const otherItemId = slotCheck.rows[0].id;
-        const currentItem = itemResult.rows[0];
+        const otherItemId = Number(slotCheck.rows[0].id);
+        if (!Number.isInteger(otherItemId) || otherItemId <= 0) {
+          await client.query('ROLLBACK');
+          return { success: false, message: '目标格子状态异常' };
+        }
 
         // 先临时释放当前物品格子，再执行换位，避免唯一索引瞬时冲突
         await client.query(
@@ -1537,7 +1637,7 @@ export const moveItem = async (
         await client.query(`
           UPDATE item_instance SET location = $1, location_slot = $2, updated_at = NOW()
           WHERE id = $3 AND owner_character_id = $4
-        `, [currentItem.location, currentItem.location_slot, otherItemId, characterId]);
+        `, [currentLocation, currentSlot, otherItemId, characterId]);
       }
     }
     
