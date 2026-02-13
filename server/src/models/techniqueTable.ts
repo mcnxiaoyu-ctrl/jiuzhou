@@ -5,63 +5,12 @@
 import { query } from '../config/database.js';
 
 // ============================================
-// 1. 功法定义表 (technique_def) - 静态配置
-// ============================================
-const techniqueDefTableSQL = `
-CREATE TABLE IF NOT EXISTS technique_def (
-  id VARCHAR(64) PRIMARY KEY,                         -- 功法ID，如 'tech-tunajue'
-  code VARCHAR(64),                                   -- 功法英文码
-  name VARCHAR(50) NOT NULL,                          -- 功法名称
-  type VARCHAR(20) NOT NULL,                          -- 类型：心法/武技/法诀/身法/辅修
-  quality VARCHAR(10) NOT NULL,                       -- 品质：黄/玄/地/天
-  quality_rank INTEGER NOT NULL DEFAULT 1,            -- 品质排序值（1-4）
-  max_layer INTEGER NOT NULL,                         -- 最大层数：3/5/7/9
-  required_realm VARCHAR(50) NOT NULL,                -- 最低境界要求
-  
-  -- 功法属性（装备主功法后角色属性跟随）
-  attribute_type VARCHAR(20) NOT NULL DEFAULT 'physical', -- 属性类型：physical/magic
-  attribute_element VARCHAR(10) NOT NULL DEFAULT 'none',  -- 五行属性：none/jin/mu/shui/huo/tu
-  
-  tags TEXT[] DEFAULT '{}',                           -- 标签数组
-  description TEXT,                                   -- 功法描述
-  long_desc TEXT,                                     -- 详细描述
-  icon VARCHAR(255),                                  -- 图标路径
-  
-  -- 获取条件
-  obtain_type VARCHAR(32) DEFAULT 'drop',             -- 获取方式：drop/shop/quest/sect/event
-  obtain_hint TEXT[],                                 -- 获取途径提示
-  
-  -- 运营控制
-  sort_weight INTEGER NOT NULL DEFAULT 0,             -- 排序权重
-  version INTEGER NOT NULL DEFAULT 1,                 -- 配置版本
-  enabled BOOLEAN NOT NULL DEFAULT true,              -- 是否启用
-  
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 添加表注释
-COMMENT ON TABLE technique_def IS '功法定义表（静态配置）';
-COMMENT ON COLUMN technique_def.id IS '功法唯一ID';
-COMMENT ON COLUMN technique_def.type IS '功法类型：心法/武技/法诀/身法/辅修';
-COMMENT ON COLUMN technique_def.quality IS '品质：黄/玄/地/天';
-COMMENT ON COLUMN technique_def.max_layer IS '最大层数：黄3/玄5/地7/天9';
-COMMENT ON COLUMN technique_def.required_realm IS '学习所需最低境界';
-COMMENT ON COLUMN technique_def.tags IS '标签：流派/元素/机制等';
-
--- 创建索引
-CREATE INDEX IF NOT EXISTS idx_technique_def_type ON technique_def(type);
-CREATE INDEX IF NOT EXISTS idx_technique_def_quality ON technique_def(quality);
-CREATE INDEX IF NOT EXISTS idx_technique_def_enabled ON technique_def(enabled);
-`;
-
-// ============================================
 // 2. 功法层级表 (technique_layer) - 每层配置
 // ============================================
 const techniqueLayerTableSQL = `
 CREATE TABLE IF NOT EXISTS technique_layer (
   id SERIAL PRIMARY KEY,
-  technique_id VARCHAR(64) NOT NULL REFERENCES technique_def(id) ON DELETE CASCADE,
+  technique_id VARCHAR(64) NOT NULL,
   layer INTEGER NOT NULL,                             -- 层数 1-9
   
   -- 升级消耗
@@ -104,85 +53,13 @@ CREATE INDEX IF NOT EXISTS idx_technique_layer_tech ON technique_layer(technique
 `;
 
 // ============================================
-// 3. 技能定义表 (skill_def) - 静态配置
-// ============================================
-const skillDefTableSQL = `
-CREATE TABLE IF NOT EXISTS skill_def (
-  id VARCHAR(64) PRIMARY KEY,                         -- 技能ID
-  code VARCHAR(64),                                   -- 技能英文码
-  name VARCHAR(50) NOT NULL,                          -- 技能名称
-  description TEXT,                                   -- 技能描述
-  icon VARCHAR(255),                                  -- 图标路径
-  
-  -- 来源
-  source_type VARCHAR(20) NOT NULL,                   -- innate/technique/equipment/item
-  source_id VARCHAR(64),                              -- 来源ID（功法ID/装备ID）
-  
-  -- 消耗与冷却
-  cost_lingqi INTEGER DEFAULT 0,                      -- 灵气消耗
-  cost_qixue INTEGER DEFAULT 0,                       -- 气血消耗（百分比，万分比）
-  cooldown INTEGER DEFAULT 0,                         -- 冷却回合数
-  
-  -- 目标
-  target_type VARCHAR(20) NOT NULL,                   -- self/single_enemy/single_ally/all_enemy/all_ally/random_enemy/random_ally
-  target_count INTEGER DEFAULT 1,                     -- 目标数量
-  
-  -- 伤害/治疗
-  damage_type VARCHAR(20),                            -- physical/magic/true/null
-  element VARCHAR(10) DEFAULT 'none',                 -- 元素：none/jin/mu/shui/huo/tu
-  
-  -- 效果列表
-  effects JSONB DEFAULT '[]',                         -- SkillEffect[]
-  
-  -- 触发类型
-  trigger_type VARCHAR(20) DEFAULT 'active',          -- active/passive/counter/chase
-  
-  -- 条件
-  conditions JSONB,                                   -- 释放条件
-  
-  -- AI优先级
-  ai_priority INTEGER DEFAULT 50,                     -- AI使用优先级 0-100
-  ai_conditions JSONB,                                -- AI使用条件
-  
-  -- 技能升级定义
-  upgrades JSONB DEFAULT '[]',                        -- SkillUpgrade[]
-  
-  -- 运营控制
-  sort_weight INTEGER NOT NULL DEFAULT 0,
-  version INTEGER NOT NULL DEFAULT 1,
-  enabled BOOLEAN NOT NULL DEFAULT true,
-  
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 添加表注释
-COMMENT ON TABLE skill_def IS '技能定义表';
-COMMENT ON COLUMN skill_def.id IS '技能唯一ID';
-COMMENT ON COLUMN skill_def.source_type IS '来源类型：innate/technique/equipment/item';
-COMMENT ON COLUMN skill_def.source_id IS '来源ID（功法ID/装备ID）';
-COMMENT ON COLUMN skill_def.target_type IS '目标类型：self/single_enemy/single_ally/all_enemy/all_ally/random_enemy/random_ally';
-COMMENT ON COLUMN skill_def.damage_type IS '伤害类型：physical/magic/true';
-COMMENT ON COLUMN skill_def.element IS '元素：none/jin/mu/shui/huo/tu';
-COMMENT ON COLUMN skill_def.effects IS '技能效果列表';
-COMMENT ON COLUMN skill_def.trigger_type IS '触发类型：active/passive/counter/chase';
-COMMENT ON COLUMN skill_def.upgrades IS '技能升级定义';
-
--- 创建索引
-CREATE INDEX IF NOT EXISTS idx_skill_def_source ON skill_def(source_type, source_id);
-CREATE INDEX IF NOT EXISTS idx_skill_def_trigger ON skill_def(trigger_type);
-CREATE INDEX IF NOT EXISTS idx_skill_def_enabled ON skill_def(enabled);
-`;
-
-
-// ============================================
 // 4. 角色功法表 (character_technique) - 动态数据
 // ============================================
 const characterTechniqueTableSQL = `
 CREATE TABLE IF NOT EXISTS character_technique (
   id SERIAL PRIMARY KEY,
   character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-  technique_id VARCHAR(64) NOT NULL REFERENCES technique_def(id),
+  technique_id VARCHAR(64) NOT NULL,
   
   current_layer INTEGER DEFAULT 1,                    -- 当前层数
   slot_type VARCHAR(10),                              -- 装备槽：main/sub/null(未装备)
@@ -220,7 +97,7 @@ CREATE TABLE IF NOT EXISTS character_skill_slot (
   id SERIAL PRIMARY KEY,
   character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
   slot_index INTEGER NOT NULL,                        -- 槽位 1-10
-  skill_id VARCHAR(64) NOT NULL REFERENCES skill_def(id),
+  skill_id VARCHAR(64) NOT NULL,
   
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -244,28 +121,20 @@ CREATE INDEX IF NOT EXISTS idx_char_skill_char ON character_skill_slot(character
 // ============================================
 export const initTechniqueTables = async (): Promise<void> => {
   try {
-    // 1. 创建功法定义表
-    await query(techniqueDefTableSQL);
-    await query(
-      "ALTER TABLE technique_def ADD COLUMN IF NOT EXISTS attribute_type VARCHAR(20) NOT NULL DEFAULT 'physical'"
-    );
-    await query(
-      "ALTER TABLE technique_def ADD COLUMN IF NOT EXISTS attribute_element VARCHAR(10) NOT NULL DEFAULT 'none'"
-    );
-    await query("COMMENT ON COLUMN technique_def.attribute_type IS '属性类型：physical物理/magic法术'");
-    await query("COMMENT ON COLUMN technique_def.attribute_element IS '五行属性：none/jin/mu/shui/huo/tu'");
+    console.log('  → 功法/技能定义改为静态JSON加载，跳过建表');
     
     // 2. 创建功法层级表
     await query(techniqueLayerTableSQL);
-    
-    // 3. 创建技能定义表
-    await query(skillDefTableSQL);
     
     // 4. 创建角色功法表
     await query(characterTechniqueTableSQL);
     
     // 5. 创建角色技能槽表
     await query(characterSkillSlotTableSQL);
+
+    await query('ALTER TABLE technique_layer DROP CONSTRAINT IF EXISTS technique_layer_technique_id_fkey');
+    await query('ALTER TABLE character_technique DROP CONSTRAINT IF EXISTS character_technique_technique_id_fkey');
+    await query('ALTER TABLE character_skill_slot DROP CONSTRAINT IF EXISTS character_skill_slot_skill_id_fkey');
     
     console.log('✓ 功法系统表检测完成');
   } catch (error) {

@@ -8,6 +8,7 @@ import { updateAchievementProgress } from './achievementService.js';
 import { isCharacterInBattle } from './battleService.js';
 import { getRealmRankZeroBased } from './shared/realmOrder.js';
 import { invalidateCharacterComputedCache } from './characterComputedService.js';
+import { getSkillDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
 
 // ============================================
 // 类型定义
@@ -88,6 +89,144 @@ const isRealmSufficient = (currentRealm: unknown, requiredRealm: unknown, curren
   return getRealmRank(currentRealm, currentSubRealm) >= getRealmRank(required);
 };
 
+const asStringArray = (raw: unknown): string[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter((entry): entry is string => entry.length > 0);
+};
+
+const getTechniqueDefMap = () => {
+  return new Map(
+    getTechniqueDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.id, entry] as const),
+  );
+};
+
+const getSkillDefMap = () => {
+  return new Map(
+    getSkillDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.id, entry] as const),
+  );
+};
+
+type EquippedTechniqueLite = {
+  techniqueId: string;
+  currentLayer: number;
+  slotType: 'main' | 'sub';
+  slotIndex: number | null;
+};
+
+type AvailableSkillEntry = {
+  skillId: string;
+  techniqueId: string;
+  techniqueName: string;
+  skillName: string;
+  skillIcon: string;
+  description: string | null;
+  costLingqi: number;
+  costQixue: number;
+  cooldown: number;
+  targetType: string;
+  targetCount: number;
+  damageType: string | null;
+  element: string;
+  effects: unknown[];
+};
+
+const loadEquippedTechniqueLite = async (characterId: number): Promise<EquippedTechniqueLite[]> => {
+  const res = await query(
+    `
+      SELECT technique_id, current_layer, slot_type, slot_index
+      FROM character_technique
+      WHERE character_id = $1 AND slot_type IS NOT NULL
+    `,
+    [characterId],
+  );
+
+  return (res.rows as Array<Record<string, unknown>>)
+    .map((row) => {
+      const techniqueId = typeof row.technique_id === 'string' ? row.technique_id : '';
+      const currentLayer = Number(row.current_layer ?? 0) || 0;
+      const slotType = row.slot_type === 'main' ? 'main' : row.slot_type === 'sub' ? 'sub' : null;
+      const slotIndex = row.slot_index === null || row.slot_index === undefined ? null : Number(row.slot_index);
+      if (!techniqueId || !slotType) return null;
+      return {
+        techniqueId,
+        currentLayer,
+        slotType,
+        slotIndex: Number.isFinite(slotIndex ?? NaN) ? Math.floor(Number(slotIndex)) : null,
+      };
+    })
+    .filter((entry): entry is EquippedTechniqueLite => Boolean(entry));
+};
+
+const loadAvailableSkillEntries = async (characterId: number): Promise<AvailableSkillEntry[]> => {
+  const equipped = await loadEquippedTechniqueLite(characterId);
+  if (equipped.length === 0) return [];
+
+  const techniqueIds = Array.from(new Set(equipped.map((entry) => entry.techniqueId)));
+  const layerRes = await query(
+    `
+      SELECT technique_id, layer, unlock_skill_ids
+      FROM technique_layer
+      WHERE technique_id = ANY($1::varchar[])
+    `,
+    [techniqueIds],
+  );
+
+  const techniqueMap = getTechniqueDefMap();
+  const skillMap = getSkillDefMap();
+  const maxLayerByTechnique = new Map(equipped.map((entry) => [entry.techniqueId, entry.currentLayer] as const));
+  const unlockedByTechnique = new Map<string, Set<string>>();
+
+  for (const row of layerRes.rows as Array<Record<string, unknown>>) {
+    const techniqueId = typeof row.technique_id === 'string' ? row.technique_id : '';
+    const layer = Number(row.layer ?? 0) || 0;
+    const maxLayer = maxLayerByTechnique.get(techniqueId) ?? 0;
+    if (!techniqueId || layer <= 0 || layer > maxLayer) continue;
+    const skillIds = asStringArray(row.unlock_skill_ids);
+    const set = unlockedByTechnique.get(techniqueId) ?? new Set<string>();
+    for (const skillId of skillIds) set.add(skillId);
+    unlockedByTechnique.set(techniqueId, set);
+  }
+
+  const dedup = new Set<string>();
+  const entries: AvailableSkillEntry[] = [];
+  for (const equippedEntry of equipped) {
+    const techniqueDef = techniqueMap.get(equippedEntry.techniqueId);
+    const techniqueName = String(techniqueDef?.name || equippedEntry.techniqueId);
+    const skillIds = Array.from(unlockedByTechnique.get(equippedEntry.techniqueId) ?? []);
+    for (const skillId of skillIds) {
+      const skillDef = skillMap.get(skillId);
+      if (!skillDef) continue;
+      const key = `${equippedEntry.techniqueId}:${skillId}`;
+      if (dedup.has(key)) continue;
+      dedup.add(key);
+      entries.push({
+        skillId,
+        techniqueId: equippedEntry.techniqueId,
+        techniqueName,
+        skillName: String(skillDef.name || skillId),
+        skillIcon: String(skillDef.icon || ''),
+        description: typeof skillDef.description === 'string' ? skillDef.description : null,
+        costLingqi: Number(skillDef.cost_lingqi ?? 0) || 0,
+        costQixue: Number(skillDef.cost_qixue ?? 0) || 0,
+        cooldown: Number(skillDef.cooldown ?? 0) || 0,
+        targetType: String(skillDef.target_type || ''),
+        targetCount: Number(skillDef.target_count ?? 1) || 1,
+        damageType: typeof skillDef.damage_type === 'string' ? skillDef.damage_type : null,
+        element: String(skillDef.element || 'none'),
+        effects: Array.isArray(skillDef.effects) ? skillDef.effects : [],
+      });
+    }
+  }
+
+  return entries.sort((left, right) => left.techniqueName.localeCompare(right.techniqueName) || left.skillName.localeCompare(right.skillName));
+};
+
 // ============================================
 // 1. 获取角色已学习的功法列表
 // ============================================
@@ -95,20 +234,49 @@ export const getCharacterTechniques = async (
   characterId: number
 ): Promise<ServiceResult<CharacterTechnique[]>> => {
   try {
-    const sql = `
-      SELECT 
-        ct.id, ct.character_id, ct.technique_id, ct.current_layer,
-        ct.slot_type, ct.slot_index, ct.acquired_at,
-        td.name as technique_name, td.type as technique_type,
-        td.quality as technique_quality, td.max_layer,
-        td.attribute_type, td.attribute_element
-      FROM character_technique ct
-      JOIN technique_def td ON ct.technique_id = td.id
-      WHERE ct.character_id = $1
-      ORDER BY ct.slot_type NULLS LAST, ct.slot_index, td.quality_rank DESC
-    `;
-    const result = await query(sql, [characterId]);
-    return { success: true, message: '获取成功', data: result.rows };
+    const result = await query(
+      `
+        SELECT id, character_id, technique_id, current_layer, slot_type, slot_index, acquired_at
+        FROM character_technique
+        WHERE character_id = $1
+      `,
+      [characterId],
+    );
+    const techniqueMap = getTechniqueDefMap();
+    const rowsWithRank: Array<CharacterTechnique & { __quality_rank: number }> = [];
+    for (const row of result.rows as Array<Record<string, unknown>>) {
+      const techniqueId = typeof row.technique_id === 'string' ? row.technique_id : '';
+      const def = techniqueMap.get(techniqueId);
+      if (!def) continue;
+      rowsWithRank.push({
+        id: Number(row.id ?? 0) || 0,
+        character_id: Number(row.character_id ?? 0) || 0,
+        technique_id: techniqueId,
+        current_layer: Number(row.current_layer ?? 1) || 1,
+        slot_type: row.slot_type === 'main' ? 'main' : row.slot_type === 'sub' ? 'sub' : null,
+        slot_index: row.slot_index === null || row.slot_index === undefined ? null : Number(row.slot_index),
+        acquired_at: row.acquired_at instanceof Date ? row.acquired_at : new Date(String(row.acquired_at ?? '')),
+        technique_name: def.name,
+        technique_type: def.type,
+        technique_quality: def.quality,
+        max_layer: Number(def.max_layer ?? 1),
+        attribute_type: def.attribute_type ?? 'physical',
+        attribute_element: def.attribute_element ?? 'none',
+        __quality_rank: Number(def.quality_rank ?? 1),
+      });
+    }
+    const rows = rowsWithRank
+      .sort((left, right) => {
+        const rank = (slotType: CharacterTechnique['slot_type']): number => (slotType === 'main' ? 0 : slotType === 'sub' ? 1 : 2);
+        const slotCmp = rank(left.slot_type) - rank(right.slot_type);
+        if (slotCmp !== 0) return slotCmp;
+        const leftIndex = left.slot_index ?? Number.MAX_SAFE_INTEGER;
+        const rightIndex = right.slot_index ?? Number.MAX_SAFE_INTEGER;
+        if (leftIndex !== rightIndex) return leftIndex - rightIndex;
+        return right.__quality_rank - left.__quality_rank;
+      })
+      .map(({ __quality_rank, ...entry }) => entry);
+    return { success: true, message: '获取成功', data: rows };
   } catch (error) {
     console.error('获取角色功法失败:', error);
     return { success: false, message: '获取角色功法失败' };
@@ -122,24 +290,14 @@ export const getEquippedTechniques = async (
   characterId: number
 ): Promise<ServiceResult<{ main: CharacterTechnique | null; subs: CharacterTechnique[] }>> => {
   try {
-    const sql = `
-      SELECT 
-        ct.id, ct.character_id, ct.technique_id, ct.current_layer,
-        ct.slot_type, ct.slot_index, ct.acquired_at,
-        td.name as technique_name, td.type as technique_type,
-        td.quality as technique_quality, td.max_layer,
-        td.attribute_type, td.attribute_element
-      FROM character_technique ct
-      JOIN technique_def td ON ct.technique_id = td.id
-      WHERE ct.character_id = $1 AND ct.slot_type IS NOT NULL
-      ORDER BY ct.slot_type, ct.slot_index
-    `;
-    const result = await query(sql, [characterId]);
+    const all = await getCharacterTechniques(characterId);
+    if (!all.success) return { success: false, message: all.message };
     
     let main: CharacterTechnique | null = null;
     const subs: CharacterTechnique[] = [];
     
-    for (const row of result.rows) {
+    for (const row of all.data ?? []) {
+      if (!row.slot_type) continue;
       if (row.slot_type === 'main') {
         main = row;
       } else if (row.slot_type === 'sub') {
@@ -180,11 +338,8 @@ export const learnTechnique = async (
     }
     
     // 检查功法是否存在
-    const techResult = await client.query(
-      'SELECT id, name, required_realm FROM technique_def WHERE id = $1 AND enabled = true',
-      [techniqueId]
-    );
-    if (techResult.rows.length === 0) {
+    const techniqueDef = getTechniqueDefMap().get(techniqueId) ?? null;
+    if (!techniqueDef) {
       await client.query('ROLLBACK');
       return { success: false, message: '功法不存在' };
     }
@@ -198,9 +353,7 @@ export const learnTechnique = async (
       return { success: false, message: '角色不存在' };
     }
 
-    const requiredRealm = typeof techResult.rows[0].required_realm === 'string'
-      ? techResult.rows[0].required_realm.trim()
-      : '';
+    const requiredRealm = typeof techniqueDef.required_realm === 'string' ? techniqueDef.required_realm.trim() : '';
     const currentRealm = charResult.rows[0].realm;
     const currentSubRealm = charResult.rows[0].sub_realm;
     if (!isRealmSufficient(currentRealm, requiredRealm, currentSubRealm)) {
@@ -221,7 +374,7 @@ export const learnTechnique = async (
     await invalidateCharacterComputedCache(characterId);
     return { 
       success: true, 
-      message: `成功学习${techResult.rows[0].name}`, 
+      message: `成功学习${techniqueDef.name}`, 
       data: insertResult.rows[0] 
     };
     
@@ -253,14 +406,11 @@ export const getTechniqueUpgradeCost = async (
     const currentLayer = ctResult.rows[0].current_layer;
     
     // 获取功法最大层数
-    const tdResult = await query(
-      'SELECT max_layer FROM technique_def WHERE id = $1',
-      [techniqueId]
-    );
-    if (tdResult.rows.length === 0) {
+    const techniqueDef = getTechniqueDefMap().get(techniqueId) ?? null;
+    if (!techniqueDef) {
       return { success: false, message: '功法不存在' };
     }
-    const maxLayer = tdResult.rows[0].max_layer;
+    const maxLayer = Number(techniqueDef.max_layer ?? 1);
     
     if (currentLayer >= maxLayer) {
       return { success: false, message: '已达最高层数' };
@@ -326,12 +476,13 @@ export const upgradeTechnique = async (
     const ctId = ctResult.rows[0].id;
     
     // 获取功法最大层数
-    const tdResult = await client.query(
-      'SELECT max_layer, name FROM technique_def WHERE id = $1',
-      [techniqueId]
-    );
-    const maxLayer = tdResult.rows[0].max_layer;
-    const techName = tdResult.rows[0].name;
+    const techniqueDef = getTechniqueDefMap().get(techniqueId) ?? null;
+    if (!techniqueDef) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '功法不存在' };
+    }
+    const maxLayer = Number(techniqueDef.max_layer ?? 1);
+    const techName = techniqueDef.name;
     
     if (currentLayer >= maxLayer) {
       await client.query('ROLLBACK');
@@ -354,7 +505,7 @@ export const upgradeTechnique = async (
     const layer = layerResult.rows[0];
     const costStones = layer.cost_spirit_stones || 0;
     const costExp = layer.cost_exp || 0;
-    const costMaterials: { itemId: string; qty: number }[] = layer.cost_materials || [];
+    const costMaterials = coerceCostMaterials(layer.cost_materials);
     
     // 检查并扣除灵石和经验
     const charResult = await client.query(
@@ -543,29 +694,27 @@ export const equipTechnique = async (
     
     // 如果装备了主功法，更新角色属性类型
     if (slotType === 'main') {
-      const techResult = await client.query(
-        'SELECT attribute_type, attribute_element FROM technique_def WHERE id = $1',
-        [techniqueId]
-      );
-      if (techResult.rows.length > 0) {
+      const techniqueDef = getTechniqueDefMap().get(techniqueId) ?? null;
+      if (techniqueDef) {
         await client.query(
           'UPDATE characters SET attribute_type = $1, attribute_element = $2, updated_at = NOW() WHERE id = $3',
-          [techResult.rows[0].attribute_type, techResult.rows[0].attribute_element, characterId]
+          [techniqueDef.attribute_type ?? 'physical', techniqueDef.attribute_element ?? 'none', characterId]
         );
       }
     } else if (wasMain) {
       const mainResult = await client.query(
-        `SELECT td.attribute_type, td.attribute_element
-         FROM character_technique ct
-         JOIN technique_def td ON td.id = ct.technique_id
-         WHERE ct.character_id = $1 AND ct.slot_type = 'main'
+        `SELECT technique_id
+         FROM character_technique
+         WHERE character_id = $1 AND slot_type = 'main'
          LIMIT 1`,
         [characterId]
       );
       if (mainResult.rows.length > 0) {
+        const mainTechniqueId = typeof mainResult.rows[0].technique_id === 'string' ? mainResult.rows[0].technique_id : '';
+        const mainDef = getTechniqueDefMap().get(mainTechniqueId) ?? null;
         await client.query(
           'UPDATE characters SET attribute_type = $1, attribute_element = $2, updated_at = NOW() WHERE id = $3',
-          [mainResult.rows[0].attribute_type, mainResult.rows[0].attribute_element, characterId]
+          [mainDef?.attribute_type ?? 'physical', mainDef?.attribute_element ?? 'none', characterId]
         );
       } else {
         await client.query(
@@ -662,37 +811,21 @@ export const getAvailableSkills = async (
   effects: unknown[];
 }[]>> => {
   try {
-    const sql = `
-      SELECT DISTINCT
-        sd.id as skill_id, sd.name as skill_name, sd.icon as skill_icon,
-        td.id as technique_id, td.name as technique_name,
-        sd.description, sd.cost_lingqi, sd.cost_qixue, sd.cooldown,
-        sd.target_type, sd.target_count, sd.damage_type, sd.element,
-        sd.effects
-      FROM character_technique ct
-      JOIN technique_def td ON ct.technique_id = td.id
-      JOIN technique_layer tl ON tl.technique_id = ct.technique_id AND tl.layer <= ct.current_layer
-      JOIN skill_def sd ON sd.id = ANY(tl.unlock_skill_ids) AND sd.enabled = true
-      WHERE ct.character_id = $1 AND ct.slot_type IS NOT NULL
-      ORDER BY td.name, sd.name
-    `;
-    const result = await query(sql, [characterId]);
-    
-    const skills = result.rows.map(row => ({
-      skillId: row.skill_id,
-      skillName: row.skill_name,
-      skillIcon: row.skill_icon,
-      techniqueId: row.technique_id,
-      techniqueName: row.technique_name,
+    const skills = (await loadAvailableSkillEntries(characterId)).map((row) => ({
+      skillId: row.skillId,
+      skillName: row.skillName,
+      skillIcon: row.skillIcon,
+      techniqueId: row.techniqueId,
+      techniqueName: row.techniqueName,
       description: row.description,
-      costLingqi: row.cost_lingqi ?? 0,
-      costQixue: row.cost_qixue ?? 0,
-      cooldown: row.cooldown ?? 0,
-      targetType: row.target_type ?? '',
-      targetCount: row.target_count ?? 1,
-      damageType: row.damage_type,
-      element: row.element ?? 'none',
-      effects: Array.isArray(row.effects) ? row.effects : []
+      costLingqi: row.costLingqi,
+      costQixue: row.costQixue,
+      cooldown: row.cooldown,
+      targetType: row.targetType,
+      targetCount: row.targetCount,
+      damageType: row.damageType,
+      element: row.element,
+      effects: row.effects,
     }));
     
     return { success: true, message: '获取成功', data: skills };
@@ -709,15 +842,27 @@ export const getEquippedSkills = async (
   characterId: number
 ): Promise<ServiceResult<CharacterSkillSlot[]>> => {
   try {
-    const sql = `
-      SELECT css.slot_index, css.skill_id, sd.name as skill_name, sd.icon as skill_icon
-      FROM character_skill_slot css
-      JOIN skill_def sd ON css.skill_id = sd.id
-      WHERE css.character_id = $1
-      ORDER BY css.slot_index
-    `;
-    const result = await query(sql, [characterId]);
-    return { success: true, message: '获取成功', data: result.rows };
+    const result = await query(
+      `
+        SELECT slot_index, skill_id
+        FROM character_skill_slot
+        WHERE character_id = $1
+        ORDER BY slot_index
+      `,
+      [characterId],
+    );
+    const skillMap = getSkillDefMap();
+    const rows = (result.rows as Array<Record<string, unknown>>).map((row) => {
+      const skillId = typeof row.skill_id === 'string' ? row.skill_id : '';
+      const def = skillMap.get(skillId);
+      return {
+        slot_index: Number(row.slot_index ?? 0) || 0,
+        skill_id: skillId,
+        skill_name: String(def?.name || skillId),
+        skill_icon: String(def?.icon || ''),
+      };
+    });
+    return { success: true, message: '获取成功', data: rows };
   } catch (error) {
     console.error('获取技能槽失败:', error);
     return { success: false, message: '获取技能槽失败' };
@@ -742,15 +887,8 @@ export const equipSkill = async (
     await client.query('BEGIN');
     
     // 检查技能是否可用（来自已装备功法且已解锁）
-    const availableResult = await client.query(`
-      SELECT DISTINCT sd.id
-      FROM character_technique ct
-      JOIN technique_layer tl ON tl.technique_id = ct.technique_id AND tl.layer <= ct.current_layer
-      JOIN skill_def sd ON sd.id = ANY(tl.unlock_skill_ids) AND sd.enabled = true
-      WHERE ct.character_id = $1 AND ct.slot_type IS NOT NULL AND sd.id = $2
-    `, [characterId, skillId]);
-    
-    if (availableResult.rows.length === 0) {
+    const available = await loadAvailableSkillEntries(characterId);
+    if (!available.some((entry) => entry.skillId === skillId)) {
       await client.query('ROLLBACK');
       return { success: false, message: '技能不可用（未解锁或功法未装备）' };
     }
@@ -886,35 +1024,40 @@ export const getBattleSkills = async (
     }
 
     const uniqueSkillIds = [...new Set(orderedSkillIds)];
-    const upgradeResult = await query(
+    const skillMap = getSkillDefMap();
+    const techniqueRows = await query(
       `
-        SELECT
-          sd.id AS skill_id,
-          CASE
-            WHEN sd.source_type <> 'technique' THEN 0
-            ELSE COALESCE((
-              SELECT COUNT(*)::int
-              FROM character_technique ct
-              JOIN technique_layer tl
-                ON tl.technique_id = ct.technique_id
-               AND tl.layer <= ct.current_layer
-              WHERE ct.character_id = $1
-                AND ct.technique_id = sd.source_id
-                AND sd.id = ANY(COALESCE(tl.upgrade_skill_ids, ARRAY[]::varchar[]))
-            ), 0)
-          END AS upgrade_level
-        FROM skill_def sd
-        WHERE sd.id = ANY($2::varchar[])
+        SELECT ct.technique_id, tl.upgrade_skill_ids
+        FROM character_technique ct
+        JOIN technique_layer tl
+          ON tl.technique_id = ct.technique_id
+         AND tl.layer <= ct.current_layer
+        WHERE ct.character_id = $1
       `,
-      [characterId, uniqueSkillIds],
+      [characterId],
     );
 
+    const upgradedSkillCountByTechniqueAndSkill = new Map<string, number>();
+    for (const row of techniqueRows.rows as Array<Record<string, unknown>>) {
+      const techniqueId = typeof row.technique_id === 'string' ? row.technique_id : '';
+      if (!techniqueId) continue;
+      const upgradedSkillIds = asStringArray(row.upgrade_skill_ids);
+      for (const upgradedSkillId of upgradedSkillIds) {
+        const key = `${techniqueId}:${upgradedSkillId}`;
+        upgradedSkillCountByTechniqueAndSkill.set(key, (upgradedSkillCountByTechniqueAndSkill.get(key) ?? 0) + 1);
+      }
+    }
+
     const upgradeLevelBySkillId = new Map<string, number>();
-    for (const row of upgradeResult.rows) {
-      const skillId = typeof row.skill_id === 'string' ? row.skill_id : '';
-      if (!skillId) continue;
-      const rawLevel = Number(row.upgrade_level);
-      const upgradeLevel = Number.isFinite(rawLevel) && rawLevel > 0 ? Math.floor(rawLevel) : 0;
+    for (const skillId of uniqueSkillIds) {
+      const skillDef = skillMap.get(skillId);
+      if (!skillDef) continue;
+      if (skillDef.source_type !== 'technique' || typeof skillDef.source_id !== 'string' || !skillDef.source_id) {
+        upgradeLevelBySkillId.set(skillId, 0);
+        continue;
+      }
+      const key = `${skillDef.source_id}:${skillId}`;
+      const upgradeLevel = upgradedSkillCountByTechniqueAndSkill.get(key) ?? 0;
       upgradeLevelBySkillId.set(skillId, upgradeLevel);
     }
 

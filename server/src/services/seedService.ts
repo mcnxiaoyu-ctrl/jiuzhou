@@ -2021,19 +2021,15 @@ export const loadAllSeeds = async (): Promise<void> => {
   // 13. 加载秘境定义
   console.log('  秘境定义: 使用静态JSON加载（跳过入库）');
 
-  // 14. 加载功法定义
-  const techCount = await loadTechniqueDefSeeds();
-  console.log(`  功法定义: ${techCount} 条`);
+  // 14. 功法/技能定义改为静态 JSON 直读，不再写入数据库
+  console.log('  功法定义: 使用静态JSON加载（跳过入库）');
+  console.log('  技能定义: 使用静态JSON加载（跳过入库）');
 
-  // 15. 加载技能定义（需在功法之后，因为技能引用功法）
-  const skillCount = await loadSkillDefSeeds();
-  console.log(`  技能定义: ${skillCount} 条`);
-
-  // 16. 加载功法层级（需在功法和技能之后）
+  // 15. 加载功法层级（动态升级规则，需保留入库）
   const layerCount = await loadTechniqueLayerSeeds();
   console.log(`  功法层级: ${layerCount} 条`);
 
-  // 17. 加载主线任务章节和对话
+  // 16. 加载主线任务章节和对话
   const mainQuestCount = await loadMainQuestSeeds();
   console.log(`  主线任务: ${mainQuestCount.chapters} 章, ${mainQuestCount.sections} 节（对话${mainQuestCount.dialogues}条使用静态JSON）`);
 

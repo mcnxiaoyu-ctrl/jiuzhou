@@ -1,6 +1,6 @@
 import { query } from '../config/database.js';
 import type { MapObjectDto } from './roomObjectService.js';
-import { getMonsterDefinitions, getNpcDefinitions } from './staticConfigLoader.js';
+import { getMonsterDefinitions, getNpcDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
 
 type InfoTargetType = 'npc' | 'monster' | 'item' | 'player';
 
@@ -72,8 +72,7 @@ type EquippedRow = {
 };
 
 type EquippedTechniqueRow = {
-  technique_name: string | null;
-  technique_type: string | null;
+  technique_id: string | null;
   current_layer: number | null;
 };
 
@@ -438,13 +437,11 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
       query(
         `
           SELECT
-            td.name AS technique_name,
-            td.type AS technique_type,
+            ct.technique_id,
             ct.current_layer
           FROM character_technique ct
-          JOIN technique_def td ON td.id = ct.technique_id
           WHERE ct.character_id = $1 AND ct.slot_type IS NOT NULL
-          ORDER BY ct.slot_type ASC, ct.slot_index ASC, td.quality_rank DESC
+          ORDER BY ct.slot_type ASC, ct.slot_index ASC
         `,
         [characterId]
       ),
@@ -463,11 +460,18 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
       .filter((x): x is { slot: string; name: string; quality: string } => Boolean(x));
 
     const techRows = techRes.rows as EquippedTechniqueRow[];
+    const techniqueMap = new Map(
+      getTechniqueDefinitions()
+        .filter((entry) => entry.enabled !== false)
+        .map((entry) => [entry.id, entry] as const),
+    );
     const techniques = techRows
       .map((r) => {
-        const name = typeof r.technique_name === 'string' ? r.technique_name.trim() : '';
+        const techniqueId = typeof (r as Record<string, unknown>).technique_id === 'string' ? String((r as Record<string, unknown>).technique_id) : '';
+        const def = techniqueMap.get(techniqueId) ?? null;
+        const name = typeof def?.name === 'string' ? def.name.trim() : '';
         if (!name) return null;
-        const typeText = typeof r.technique_type === 'string' ? r.technique_type.trim() : '';
+        const typeText = typeof def?.type === 'string' ? def.type.trim() : '';
         const layer = Number(r.current_layer ?? 0) || 0;
         const level = layer > 0 ? `${layer}重` : '-';
         return { name, level, type: typeText || '功法' };
