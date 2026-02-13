@@ -153,7 +153,7 @@ type CharacterAttrKey =
   | 'qixue_huifu'
   | 'lingqi_huifu';
 
-const STATIC_ATTR_CACHE_KEY_PREFIX = 'character:computed:static:v1:';
+const STATIC_ATTR_CACHE_KEY_PREFIX = 'character:computed:static:v2:';
 const RESOURCE_CACHE_KEY_PREFIX = 'character:runtime:resource:v1:';
 const STATIC_ATTR_CACHE_TTL_SECONDS = 60;
 const STATIC_ATTR_MEMORY_TTL_MS = 20_000;
@@ -602,7 +602,7 @@ const loadEquippedAttrBonuses = async (characterId: number): Promise<CharacterCo
   }
 
   const setIds = [...setCountMap.keys()];
-  if (setIds.length === 0) return normalizeStats(stats);
+  if (setIds.length === 0) return stats;
 
   const setBonusResult = await query(
     `
@@ -635,7 +635,7 @@ const loadEquippedAttrBonuses = async (characterId: number): Promise<CharacterCo
     }
   }
 
-  return normalizeStats(stats);
+  return stats;
 };
 
 const loadEquippedTitleEffects = async (characterId: number): Promise<Record<string, number>> => {
