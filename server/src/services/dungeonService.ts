@@ -1,4 +1,4 @@
-import { getDungeonDefinitions, getMonsterDefinitions } from './staticConfigLoader.js';
+import { getDropPoolDefinitions, getDungeonDefinitions, getMonsterDefinitions } from './staticConfigLoader.js';
 import { pool, query } from '../config/database.js';
 import crypto from 'crypto';
 import { getBattleState, startDungeonPVEBattle } from './battleService.js';
@@ -579,48 +579,80 @@ export const getDungeonPreview = async (
 
   type DropPreviewRow = {
     drop_pool_id: string;
-    mode: string;
+    mode: 'prob' | 'weight';
     item_def_id: string;
-    chance: unknown;
-    weight: unknown;
-    qty_min: unknown;
-    qty_max: unknown;
-    quality_weights: unknown;
-    bind_type: unknown;
-    name: string;
-    quality: string | null;
-    icon: string | null;
+    chance: number;
+    weight: number;
+    qty_min: number;
+    qty_max: number;
+    quality_weights: Record<string, unknown> | null;
+    bind_type: string | null;
+    sort_order: number;
   };
 
-  const dropPreviewRes =
-    monsterDropPoolIds.length === 0
-      ? { rows: [] as DropPreviewRow[] }
+  const staticDropPoolMap = new Map(
+    getDropPoolDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.id, entry] as const),
+  );
+
+  const dropPreviewRows: DropPreviewRow[] = [];
+  for (const poolId of monsterDropPoolIds) {
+    const pool = staticDropPoolMap.get(poolId);
+    if (!pool) continue;
+    const mode: 'prob' | 'weight' = pool.mode === 'weight' ? 'weight' : 'prob';
+    const entries = Array.isArray(pool.entries) ? pool.entries : [];
+    for (const entry of entries) {
+      if (entry.show_in_ui === false) continue;
+      const itemDefId = typeof entry.item_def_id === 'string' ? entry.item_def_id.trim() : '';
+      if (!itemDefId) continue;
+      const qtyMin = Math.max(1, Math.floor(asNumber(entry.qty_min, 1)));
+      const qtyMax = Math.max(qtyMin, Math.floor(asNumber(entry.qty_max, qtyMin)));
+      const qualityWeights =
+        entry.quality_weights && typeof entry.quality_weights === 'object' && !Array.isArray(entry.quality_weights)
+          ? entry.quality_weights
+          : null;
+      dropPreviewRows.push({
+        drop_pool_id: poolId,
+        mode,
+        item_def_id: itemDefId,
+        chance: asNumber(entry.chance, 0),
+        weight: asNumber(entry.weight, 0),
+        qty_min: qtyMin,
+        qty_max: qtyMax,
+        quality_weights: qualityWeights,
+        bind_type: typeof entry.bind_type === 'string' ? entry.bind_type : null,
+        sort_order: Math.max(0, Math.floor(asNumber(entry.sort_order, 0))),
+      });
+    }
+  }
+
+  dropPreviewRows.sort(
+    (left, right) =>
+      left.drop_pool_id.localeCompare(right.drop_pool_id) ||
+      left.sort_order - right.sort_order ||
+      left.item_def_id.localeCompare(right.item_def_id),
+  );
+
+  const dropPreviewItemIds = Array.from(new Set(dropPreviewRows.map((row) => row.item_def_id)));
+  const dropPreviewItemRes =
+    dropPreviewItemIds.length === 0
+      ? { rows: [] as Array<{ id: string; name: string; quality: string | null; icon: string | null }> }
       : await query(
           `
-            SELECT
-              dp.id AS drop_pool_id,
-              dp.mode,
-              dpe.item_def_id,
-              dpe.chance,
-              dpe.weight,
-              dpe.qty_min,
-              dpe.qty_max,
-              dpe.quality_weights,
-              dpe.bind_type,
-              it.name,
-              it.quality,
-              it.icon
-            FROM drop_pool dp
-            JOIN drop_pool_entry dpe ON dpe.drop_pool_id = dp.id
-            JOIN item_def it ON it.id = dpe.item_def_id
-            WHERE dp.enabled = true
-              AND dpe.show_in_ui = true
-              AND it.enabled = true
-              AND dp.id = ANY($1)
-            ORDER BY dp.id ASC, dpe.sort_order ASC, dpe.id ASC
+            SELECT id, name, quality, icon
+            FROM item_def
+            WHERE enabled = true
+              AND id = ANY($1::varchar[])
           `,
-          [monsterDropPoolIds]
+          [dropPreviewItemIds],
         );
+  const dropPreviewItemMap = new Map(
+    (dropPreviewItemRes.rows as Array<{ id: string; name: string; quality: string | null; icon: string | null }>).map((row) => [
+      row.id,
+      row,
+    ]),
+  );
 
   const dropPreviewByPoolId = new Map<
     string,
@@ -636,24 +668,30 @@ export const getDungeonPreview = async (
     }>
   >();
 
-  for (const r of dropPreviewRes.rows as unknown as DropPreviewRow[]) {
-    const poolId = String((r as Record<string, unknown>).drop_pool_id || '');
+  for (const r of dropPreviewRows) {
+    const poolId = String(r.drop_pool_id || '');
     if (!poolId) continue;
-    const mode = r.mode === 'weight' ? 'weight' : 'prob';
-    const chanceNum = mode === 'prob' ? asNumber(r.chance, 0) : null;
-    const weightNum = mode === 'weight' ? asNumber(r.weight, 0) : null;
-    const qtyMin = Math.max(1, Math.floor(asNumber(r.qty_min, 1)));
-    const qtyMax = Math.max(qtyMin, Math.floor(asNumber(r.qty_max, qtyMin)));
+    const mode = r.mode;
+    const chanceNum = mode === 'prob' ? r.chance : null;
+    const weightNum = mode === 'weight' ? r.weight : null;
+    const qtyMin = r.qty_min;
+    const qtyMax = r.qty_max;
+    const itemMeta = dropPreviewItemMap.get(r.item_def_id);
     const list = dropPreviewByPoolId.get(poolId) ?? [];
     list.push({
-      item: { id: r.item_def_id, name: r.name, quality: r.quality ?? null, icon: r.icon ?? null },
+      item: {
+        id: r.item_def_id,
+        name: itemMeta?.name ?? r.item_def_id,
+        quality: itemMeta?.quality ?? null,
+        icon: itemMeta?.icon ?? null,
+      },
       mode,
       chance: chanceNum,
       weight: weightNum,
       qty_min: qtyMin,
       qty_max: qtyMax,
-      quality_weights: asObject(r.quality_weights),
-      bind_type: typeof r.bind_type === 'string' ? r.bind_type : null,
+      quality_weights: r.quality_weights,
+      bind_type: r.bind_type,
     });
     dropPreviewByPoolId.set(poolId, list);
   }

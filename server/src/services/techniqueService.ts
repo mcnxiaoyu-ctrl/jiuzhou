@@ -1,5 +1,5 @@
 import { query } from '../config/database.js';
-import { getSkillDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
+import { getSkillDefinitions, getTechniqueDefinitions, getTechniqueLayerDefinitions } from './staticConfigLoader.js';
 
 export type TechniqueDefRow = {
   id: string;
@@ -141,18 +141,23 @@ export const getTechniqueDefById = async (techniqueId: string): Promise<Techniqu
 };
 
 export const getTechniqueLayersByTechniqueId = async (techniqueId: string): Promise<TechniqueLayerRow[]> => {
-  const result = await query(
-    `
-      SELECT
-        technique_id, layer, cost_spirit_stones, cost_exp, cost_materials,
-        passives, unlock_skill_ids, upgrade_skill_ids, required_realm, required_quest_id, layer_desc
-      FROM technique_layer
-      WHERE technique_id = $1
-      ORDER BY layer ASC
-    `,
-    [techniqueId]
-  );
-  const rows = result.rows as TechniqueLayerRow[];
+  const rows = getTechniqueLayerDefinitions()
+    .filter((entry) => entry.enabled !== false)
+    .filter((entry) => entry.technique_id === techniqueId)
+    .map((entry) => ({
+      technique_id: entry.technique_id,
+      layer: Number(entry.layer),
+      cost_spirit_stones: Number(entry.cost_spirit_stones ?? 0),
+      cost_exp: Number(entry.cost_exp ?? 0),
+      cost_materials: Array.isArray(entry.cost_materials) ? entry.cost_materials : [],
+      passives: Array.isArray(entry.passives) ? entry.passives : [],
+      unlock_skill_ids: Array.isArray(entry.unlock_skill_ids) ? entry.unlock_skill_ids : [],
+      upgrade_skill_ids: Array.isArray(entry.upgrade_skill_ids) ? entry.upgrade_skill_ids : [],
+      required_realm: typeof entry.required_realm === 'string' ? entry.required_realm : null,
+      required_quest_id: typeof entry.required_quest_id === 'string' ? entry.required_quest_id : null,
+      layer_desc: typeof entry.layer_desc === 'string' ? entry.layer_desc : null,
+    } satisfies TechniqueLayerRow))
+    .sort((left, right) => left.layer - right.layer);
   const itemIds: string[] = [];
   for (const r of rows) {
     for (const m of coerceCostMaterials(r.cost_materials)) {

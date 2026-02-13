@@ -26,6 +26,7 @@ import {
   isRealmName,
   type RealmName,
 } from './shared/realmOrder.js';
+import { getAffixPoolDefinitions } from './staticConfigLoader.js';
 
 // ============================================
 // 类型定义
@@ -359,16 +360,11 @@ export const getEquipmentDef = async (itemDefId: string): Promise<EquipmentDef |
  * 获取词条池
  */
 export const getAffixPool = async (poolId: string): Promise<{ rules: AffixPoolRules; affixes: AffixDef[] } | null> => {
-  const result = await query(
-    'SELECT rules, affixes FROM affix_pool WHERE id = $1 AND enabled = true',
-    [poolId]
-  );
-  
-  if (result.rows.length === 0) return null;
-  
+  const result = getAffixPoolDefinitions().find((entry) => entry.enabled !== false && entry.id === poolId) ?? null;
+  if (!result) return null;
   return {
-    rules: result.rows[0].rules,
-    affixes: result.rows[0].affixes
+    rules: result.rules as AffixPoolRules,
+    affixes: result.affixes as AffixDef[]
   };
 };
 

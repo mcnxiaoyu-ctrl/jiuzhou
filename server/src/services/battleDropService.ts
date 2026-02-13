@@ -17,7 +17,7 @@ import {
 } from './autoDisassembleRewardService.js';
 import { normalizeAutoDisassembleSetting } from './autoDisassembleRules.js';
 import type { MonsterData } from '../battle/BattleFactory.js';
-import { getMonsterDefinitions } from './staticConfigLoader.js';
+import { getDropPoolDefinitions, getMonsterDefinitions } from './staticConfigLoader.js';
 
 // ============================================
 // 类型定义
@@ -99,39 +99,37 @@ export interface BattleParticipant {
  * 获取掉落池及其条目
  */
 export const getDropPool = async (poolId: string): Promise<DropPool | null> => {
-  // 获取掉落池基本信息
-  const poolResult = await query(
-    `SELECT id, name, mode FROM drop_pool WHERE id = $1 AND enabled = true`,
-    [poolId]
-  );
-  
-  if (poolResult.rows.length === 0) return null;
-  
-  const poolRow = poolResult.rows[0];
-  
-  // 获取掉落池条目
-  const entriesResult = await query(
-    `SELECT id, item_def_id, chance, weight, qty_min, qty_max, quality_weights, bind_type
-     FROM drop_pool_entry
-     WHERE drop_pool_id = $1
-     ORDER BY id`,
-    [poolId]
-  );
-  
+  const poolRow =
+    getDropPoolDefinitions().find((entry) => entry.enabled !== false && entry.id === poolId) ?? null;
+  if (!poolRow) return null;
+
+  const entries = Array.isArray(poolRow.entries) ? poolRow.entries : [];
   return {
-    id: poolRow.id,
-    name: poolRow.name,
-    mode: poolRow.mode,
-    entries: entriesResult.rows.map(row => ({
-      id: row.id,
-      item_def_id: row.item_def_id,
-      chance: parseFloat(row.chance) || 0,
-      weight: parseInt(row.weight) || 0,
-      qty_min: parseInt(row.qty_min) || 1,
-      qty_max: parseInt(row.qty_max) || 1,
-      quality_weights: row.quality_weights,
-      bind_type: row.bind_type || 'none',
-    })),
+    id: String(poolRow.id),
+    name: String(poolRow.name || poolRow.id),
+    mode: poolRow.mode === 'weight' ? 'weight' : 'prob',
+    entries: entries
+      .filter((entry) => typeof entry.item_def_id === 'string' && entry.item_def_id.trim().length > 0)
+      .map((entry, idx) => ({
+        id: idx + 1,
+        item_def_id: String(entry.item_def_id),
+        chance: Number.isFinite(Number(entry.chance)) ? Number(entry.chance) : 0,
+        weight: Number.isFinite(Number(entry.weight)) ? Math.floor(Number(entry.weight)) : 0,
+        qty_min: Number.isFinite(Number(entry.qty_min)) ? Math.max(1, Math.floor(Number(entry.qty_min))) : 1,
+        qty_max: Number.isFinite(Number(entry.qty_max))
+          ? Math.max(
+              Number.isFinite(Number(entry.qty_min)) ? Math.max(1, Math.floor(Number(entry.qty_min))) : 1,
+              Math.floor(Number(entry.qty_max)),
+            )
+          : Number.isFinite(Number(entry.qty_min))
+          ? Math.max(1, Math.floor(Number(entry.qty_min)))
+          : 1,
+        quality_weights:
+          entry.quality_weights && typeof entry.quality_weights === 'object' && !Array.isArray(entry.quality_weights)
+            ? (entry.quality_weights as Record<string, number> | null)
+            : null,
+        bind_type: typeof entry.bind_type === 'string' && entry.bind_type.trim().length > 0 ? entry.bind_type : 'none',
+      })),
   };
 };
 

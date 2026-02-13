@@ -35,7 +35,7 @@ import {
   recoverBattleStartResourcesByUserIds,
   setCharacterResourcesByCharacterId,
 } from './characterComputedService.js';
-import { getMonsterDefinitions, getSkillDefinitions } from './staticConfigLoader.js';
+import { getItemSetDefinitions, getMonsterDefinitions, getSkillDefinitions } from './staticConfigLoader.js';
 
 // 活跃战斗缓存
 const activeBattles = new Map<string, BattleEngine>();
@@ -356,56 +356,73 @@ async function getCharacterBattleSetBonusEffects(characterId: number): Promise<B
 
   const result = await query(
     `
-      WITH set_counts AS (
-        SELECT id.set_id, COUNT(*)::int AS equipped_count
-        FROM item_instance ii
-        JOIN item_def id ON id.id = ii.item_def_id
-        WHERE ii.owner_character_id = $1
-          AND ii.location = 'equipped'
-          AND id.set_id IS NOT NULL
-        GROUP BY id.set_id
-      )
-      SELECT sc.set_id, s.name AS set_name, b.piece_count, b.effect_defs
-      FROM set_counts sc
-      JOIN item_set s ON s.id = sc.set_id
-      JOIN item_set_bonus b ON b.set_id = sc.set_id
-      WHERE sc.equipped_count >= b.piece_count
-      ORDER BY b.priority ASC, b.piece_count ASC
+      SELECT id.set_id, COUNT(*)::int AS equipped_count
+      FROM item_instance ii
+      JOIN item_def id ON id.id = ii.item_def_id
+      WHERE ii.owner_character_id = $1
+        AND ii.location = 'equipped'
+        AND id.set_id IS NOT NULL
+      GROUP BY id.set_id
     `,
     [characterId]
   );
 
+  const setCountMap = new Map<string, number>();
+  for (const row of result.rows as Array<Record<string, unknown>>) {
+    const setId = toText(row.set_id);
+    if (!setId) continue;
+    const equippedCount = Math.max(0, Math.floor(toNumber(row.equipped_count) ?? 0));
+    if (equippedCount <= 0) continue;
+    setCountMap.set(setId, equippedCount);
+  }
+
+  const staticSetMap = new Map(
+    getItemSetDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.id, entry] as const)
+  );
+
   const out: BattleSetBonusEffect[] = [];
-  for (const row of result.rows) {
-    const setId = toText((row as any).set_id);
-    const setName = toText((row as any).set_name) || setId;
-    const pieceCount = Math.max(1, Math.floor(toNumber((row as any).piece_count) ?? 1));
-    const effectDefs = Array.isArray((row as any).effect_defs) ? (row as any).effect_defs as unknown[] : [];
+  for (const [setId, equippedCount] of setCountMap.entries()) {
+    const setDef = staticSetMap.get(setId);
+    if (!setDef) continue;
+    const setName = toText(setDef.name) || setId;
+    const bonuses = Array.isArray(setDef.bonuses) ? setDef.bonuses : [];
+    const sortedBonuses = bonuses
+      .map((bonus) => ({
+        pieceCount: Math.max(1, Math.floor(Number(bonus.piece_count) || 1)),
+        priority: Math.max(0, Math.floor(Number(bonus.priority) || 0)),
+        effectDefs: Array.isArray(bonus.effect_defs) ? bonus.effect_defs : [],
+      }))
+      .sort((left, right) => left.priority - right.priority || left.pieceCount - right.pieceCount);
 
-    for (const raw of effectDefs) {
-      const effectRow = toRecord(raw);
-      const trigger = toText(effectRow.trigger);
-      const effectType = toText(effectRow.effect_type);
-      if (!BATTLE_SET_BONUS_TRIGGER_SET.has(trigger)) continue;
-      if (!BATTLE_SET_BONUS_EFFECT_TYPE_SET.has(effectType)) continue;
+    for (const bonus of sortedBonuses) {
+      if (equippedCount < bonus.pieceCount) continue;
+      for (const raw of bonus.effectDefs) {
+        const effectRow = toRecord(raw);
+        const trigger = toText(effectRow.trigger);
+        const effectType = toText(effectRow.effect_type);
+        if (!BATTLE_SET_BONUS_TRIGGER_SET.has(trigger)) continue;
+        if (!BATTLE_SET_BONUS_EFFECT_TYPE_SET.has(effectType)) continue;
 
-      const targetRaw = toText(effectRow.target);
-      const target = targetRaw === 'enemy' ? 'enemy' : 'self';
-      const params = toRecord(effectRow.params);
-      const duration = toNumber(effectRow.duration_round);
-      const element = toText(effectRow.element);
+        const targetRaw = toText(effectRow.target);
+        const target = targetRaw === 'enemy' ? 'enemy' : 'self';
+        const params = toRecord(effectRow.params);
+        const duration = toNumber(effectRow.duration_round);
+        const element = toText(effectRow.element);
 
-      out.push({
-        setId,
-        setName,
-        pieceCount,
-        trigger: trigger as BattleSetBonusEffect['trigger'],
-        target,
-        effectType: effectType as BattleSetBonusEffect['effectType'],
-        durationRound: duration === null ? undefined : Math.max(1, Math.floor(duration)),
-        element: element || undefined,
-        params,
-      });
+        out.push({
+          setId,
+          setName,
+          pieceCount: bonus.pieceCount,
+          trigger: trigger as BattleSetBonusEffect['trigger'],
+          target,
+          effectType: effectType as BattleSetBonusEffect['effectType'],
+          durationRound: duration === null ? undefined : Math.max(1, Math.floor(duration)),
+          element: element || undefined,
+          params,
+        });
+      }
     }
   }
 

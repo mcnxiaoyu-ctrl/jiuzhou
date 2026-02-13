@@ -13,6 +13,7 @@ import {
   buildEquipmentDisplayBaseAttrs,
 } from '../services/equipmentGrowthRules.js';
 import { getCharacterComputedByCharacterId } from '../services/characterComputedService.js';
+import { getItemSetDefinitions } from '../services/staticConfigLoader.js';
 
 const router = Router();
 
@@ -141,9 +142,8 @@ router.get('/items', async (req: Request, res: Response) => {
            d.description, d.long_desc, d.tags, d.effect_defs, d.base_attrs, d.equip_slot, d.use_type,
            d.use_req_realm, d.equip_req_realm, d.use_req_level, d.use_limit_daily, d.use_limit_total,
            d.socket_max, d.gem_slot_types, d.level,
-           d.set_id, s.name AS set_name
+           d.set_id
          FROM item_def d
-         LEFT JOIN item_set s ON s.id = d.set_id
          WHERE d.id = ANY($1)`,
         [itemDefIds]
       );
@@ -156,26 +156,30 @@ router.get('/items', async (req: Request, res: Response) => {
 
       const setBonusMap = new Map<string, Array<{ piece_count: number; effect_defs: unknown }>>();
       const equippedSetCountMap = new Map<string, number>();
+      const setNameMap = new Map<string, string>();
 
       if (setIds.length > 0) {
-        const setBonusResult = await query(
-          `
-            SELECT set_id, piece_count, effect_defs
-            FROM item_set_bonus
-            WHERE set_id = ANY($1)
-            ORDER BY priority ASC, piece_count ASC
-          `,
-          [setIds]
+        const staticSetMap = new Map(
+          getItemSetDefinitions()
+            .filter((entry) => entry.enabled !== false)
+            .map((entry) => [entry.id, entry] as const)
         );
-        for (const row of setBonusResult.rows as Array<{ set_id: string; piece_count: number; effect_defs: unknown }>) {
-          const setId = String(row.set_id || '').trim();
-          if (!setId) continue;
-          const list = setBonusMap.get(setId) || [];
-          list.push({
-            piece_count: Number(row.piece_count) || 0,
-            effect_defs: Array.isArray(row.effect_defs) ? row.effect_defs : [],
-          });
-          setBonusMap.set(setId, list);
+        for (const setId of setIds) {
+          const setDef = staticSetMap.get(setId);
+          if (!setDef) continue;
+          setNameMap.set(setId, String(setDef.name || setId));
+          const normalizedBonuses = (Array.isArray(setDef.bonuses) ? setDef.bonuses : [])
+            .map((bonus) => ({
+              piece_count: Math.max(1, Math.floor(Number(bonus.piece_count) || 1)),
+              priority: Math.max(0, Math.floor(Number(bonus.priority) || 0)),
+              effect_defs: Array.isArray(bonus.effect_defs) ? bonus.effect_defs : [],
+            }))
+            .sort((left, right) => left.priority - right.priority || left.piece_count - right.piece_count)
+            .map((bonus) => ({
+              piece_count: bonus.piece_count,
+              effect_defs: bonus.effect_defs,
+            }));
+          setBonusMap.set(setId, normalizedBonuses);
         }
 
         const equippedResult = await query(
@@ -208,7 +212,7 @@ router.get('/items', async (req: Request, res: Response) => {
         const baseDef = {
           ...def,
           set_id: setId || null,
-          set_name: typeof def.set_name === 'string' ? def.set_name : null,
+          set_name: setId ? (setNameMap.get(setId) ?? null) : null,
           set_bonuses: setBonuses,
           set_equipped_count: setEquippedCount,
         };

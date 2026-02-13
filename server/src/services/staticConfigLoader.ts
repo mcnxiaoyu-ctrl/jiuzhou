@@ -375,6 +375,137 @@ type TechniqueDefFile = { techniques: TechniqueDefConfig[] };
 type SkillDefFile = { skills: SkillDefConfig[] };
 type TaskDefFile = { tasks: TaskDefConfig[] };
 
+export type DropPoolEntryConfig = {
+  item_def_id: string;
+  chance?: number;
+  weight?: number;
+  qty_min?: number;
+  qty_max?: number;
+  quality_weights?: Record<string, unknown> | null;
+  bind_type?: string;
+  show_in_ui?: boolean;
+  sort_order?: number;
+};
+
+export type DropPoolDefConfig = {
+  id: string;
+  name: string;
+  description?: string;
+  mode?: 'prob' | 'weight';
+  entries?: DropPoolEntryConfig[];
+  enabled?: boolean;
+  sort_weight?: number;
+  version?: number;
+};
+
+type DropPoolFile = {
+  pools: DropPoolDefConfig[];
+};
+
+export type AffixTierConfig = {
+  tier: number;
+  min: number;
+  max: number;
+  realm_rank_min: number;
+  description?: string;
+};
+
+export type AffixDefConfig = {
+  key: string;
+  name: string;
+  attr_key: string;
+  apply_type: 'flat' | 'percent' | 'special';
+  group: string;
+  weight: number;
+  is_legendary?: boolean;
+  trigger?: 'on_turn_start' | 'on_skill' | 'on_hit' | 'on_crit' | 'on_be_hit' | 'on_heal';
+  target?: 'self' | 'enemy';
+  effect_type?: 'buff' | 'debuff' | 'damage' | 'heal' | 'resource';
+  duration_round?: number;
+  params?: Record<string, string | number | boolean>;
+  tiers: AffixTierConfig[];
+};
+
+export type AffixPoolRulesConfig = {
+  count_by_quality?: Record<string, { min: number; max: number }>;
+  allow_duplicate?: boolean;
+  mutex_groups?: string[][];
+  max_per_group?: Record<string, number>;
+  legendary_chance?: number;
+};
+
+export type AffixPoolDefConfig = {
+  id: string;
+  name: string;
+  description?: string;
+  rules: AffixPoolRulesConfig;
+  affixes: AffixDefConfig[];
+  enabled?: boolean;
+  version?: number;
+};
+
+type AffixPoolFile = {
+  pools: AffixPoolDefConfig[];
+};
+
+export type ItemSetPieceConfig = {
+  equip_slot: string;
+  item_def_id: string;
+  piece_key: string;
+};
+
+export type ItemSetBonusConfig = {
+  piece_count: number;
+  effect_defs: unknown[];
+  priority?: number;
+};
+
+export type ItemSetDefConfig = {
+  id: string;
+  name: string;
+  description?: string;
+  quality_rank?: number;
+  min_realm?: string;
+  pieces?: ItemSetPieceConfig[];
+  bonuses?: ItemSetBonusConfig[];
+  enabled?: boolean;
+  sort_weight?: number;
+  version?: number;
+};
+
+type ItemSetFile = {
+  sets: ItemSetDefConfig[];
+};
+
+export type TechniqueLayerCostMaterialConfig = {
+  itemId: string;
+  qty: number;
+};
+
+export type TechniqueLayerPassiveConfig = {
+  key: string;
+  value: number;
+};
+
+export type TechniqueLayerConfig = {
+  technique_id: string;
+  layer: number;
+  cost_spirit_stones?: number;
+  cost_exp?: number;
+  cost_materials?: TechniqueLayerCostMaterialConfig[];
+  passives?: TechniqueLayerPassiveConfig[];
+  unlock_skill_ids?: string[];
+  upgrade_skill_ids?: string[];
+  required_realm?: string | null;
+  required_quest_id?: string | null;
+  layer_desc?: string | null;
+  enabled?: boolean;
+};
+
+type TechniqueLayerFile = {
+  layers: TechniqueLayerConfig[];
+};
+
 let battlePassCache: BattlePassStaticConfig | null | undefined;
 let monthCardCache: MonthCardDef[] | null | undefined;
 let achievementDefCache: AchievementDefConfig[] | null | undefined;
@@ -391,6 +522,10 @@ let dialogueDefCache: DialogueDefConfig[] | null | undefined;
 let techniqueDefCache: TechniqueDefConfig[] | null | undefined;
 let skillDefCache: SkillDefConfig[] | null | undefined;
 let taskDefCache: TaskDefConfig[] | null | undefined;
+let dropPoolDefCache: DropPoolDefConfig[] | null | undefined;
+let affixPoolDefCache: AffixPoolDefConfig[] | null | undefined;
+let itemSetDefCache: ItemSetDefConfig[] | null | undefined;
+let techniqueLayerCache: TechniqueLayerConfig[] | null | undefined;
 
 export const getBattlePassStaticConfig = (): BattlePassStaticConfig | null => {
   if (battlePassCache !== undefined) return battlePassCache;
@@ -573,3 +708,30 @@ export const getTaskDefinitions = (): TaskDefConfig[] => {
   return taskDefCache;
 };
 
+export const getDropPoolDefinitions = (): DropPoolDefConfig[] => {
+  if (dropPoolDefCache !== undefined) return dropPoolDefCache ?? [];
+  const file = readJsonFile<DropPoolFile>('drop_pool.json');
+  dropPoolDefCache = Array.isArray(file?.pools) ? file.pools : [];
+  return dropPoolDefCache;
+};
+
+export const getAffixPoolDefinitions = (): AffixPoolDefConfig[] => {
+  if (affixPoolDefCache !== undefined) return affixPoolDefCache ?? [];
+  const file = readJsonFile<AffixPoolFile>('affix_pool.json');
+  affixPoolDefCache = Array.isArray(file?.pools) ? file.pools : [];
+  return affixPoolDefCache;
+};
+
+export const getItemSetDefinitions = (): ItemSetDefConfig[] => {
+  if (itemSetDefCache !== undefined) return itemSetDefCache ?? [];
+  const file = readJsonFile<ItemSetFile>('item_set.json');
+  itemSetDefCache = Array.isArray(file?.sets) ? file.sets : [];
+  return itemSetDefCache;
+};
+
+export const getTechniqueLayerDefinitions = (): TechniqueLayerConfig[] => {
+  if (techniqueLayerCache !== undefined) return techniqueLayerCache ?? [];
+  const file = readJsonFile<TechniqueLayerFile>('technique_layer.json');
+  techniqueLayerCache = Array.isArray(file?.layers) ? file.layers : [];
+  return techniqueLayerCache;
+};

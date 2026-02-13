@@ -8,7 +8,7 @@ import { updateAchievementProgress } from './achievementService.js';
 import { isCharacterInBattle } from './battleService.js';
 import { getRealmRankZeroBased } from './shared/realmOrder.js';
 import { invalidateCharacterComputedCache } from './characterComputedService.js';
-import { getSkillDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
+import { getSkillDefinitions, getTechniqueDefinitions, getTechniqueLayerDefinitions } from './staticConfigLoader.js';
 
 // ============================================
 // 类型定义
@@ -112,6 +112,91 @@ const getSkillDefMap = () => {
   );
 };
 
+type TechniqueLayerStaticRow = {
+  techniqueId: string;
+  layer: number;
+  costSpiritStones: number;
+  costExp: number;
+  costMaterials: Array<{ itemId: string; qty: number }>;
+  passives: TechniquePassive[];
+  unlockSkillIds: string[];
+  upgradeSkillIds: string[];
+  requiredRealm: string | null;
+};
+
+const getTechniqueLayerStaticRows = (): TechniqueLayerStaticRow[] => {
+  const rows: TechniqueLayerStaticRow[] = [];
+  for (const entry of getTechniqueLayerDefinitions()) {
+    if (entry.enabled === false) continue;
+    const techniqueId = typeof entry.technique_id === 'string' ? entry.technique_id.trim() : '';
+    if (!techniqueId) continue;
+    const layer = Number(entry.layer);
+    if (!Number.isFinite(layer) || layer <= 0) continue;
+
+    const costMaterials = coerceCostMaterials(entry.cost_materials);
+    const passives = Array.isArray(entry.passives)
+      ? entry.passives
+          .map((raw) => {
+            if (!raw || typeof raw !== 'object') return null;
+            const key = typeof raw.key === 'string' ? raw.key.trim() : '';
+            const value = typeof raw.value === 'number' ? raw.value : Number(raw.value);
+            if (!key || !Number.isFinite(value)) return null;
+            return { key, value } satisfies TechniquePassive;
+          })
+          .filter((v): v is TechniquePassive => Boolean(v))
+      : [];
+
+    const unlockSkillIds = Array.isArray(entry.unlock_skill_ids)
+      ? entry.unlock_skill_ids
+          .map((skillId) => (typeof skillId === 'string' ? skillId.trim() : ''))
+          .filter((skillId): skillId is string => skillId.length > 0)
+      : [];
+
+    const upgradeSkillIds = Array.isArray(entry.upgrade_skill_ids)
+      ? entry.upgrade_skill_ids
+          .map((skillId) => (typeof skillId === 'string' ? skillId.trim() : ''))
+          .filter((skillId): skillId is string => skillId.length > 0)
+      : [];
+
+    rows.push({
+      techniqueId,
+      layer: Math.floor(layer),
+      costSpiritStones: Math.max(0, Math.floor(Number(entry.cost_spirit_stones ?? 0))),
+      costExp: Math.max(0, Math.floor(Number(entry.cost_exp ?? 0))),
+      costMaterials,
+      passives,
+      unlockSkillIds,
+      upgradeSkillIds,
+      requiredRealm: typeof entry.required_realm === 'string' && entry.required_realm.trim() ? entry.required_realm.trim() : null,
+    });
+  }
+  return rows;
+};
+
+const getTechniqueLayersByTechniqueIds = (techniqueIds: string[]): TechniqueLayerStaticRow[] => {
+  if (techniqueIds.length === 0) return [];
+  const idSet = new Set(techniqueIds);
+  return getTechniqueLayerStaticRows()
+    .filter((entry) => idSet.has(entry.techniqueId))
+    .sort((left, right) => left.techniqueId.localeCompare(right.techniqueId) || left.layer - right.layer);
+};
+
+const getTechniqueLayersByTechniqueIdStatic = (techniqueId: string): TechniqueLayerStaticRow[] => {
+  return getTechniqueLayersByTechniqueIds([techniqueId]).filter((entry) => entry.techniqueId === techniqueId);
+};
+
+const getTechniqueLayerByTechniqueAndLayerStatic = (
+  techniqueId: string,
+  layer: number
+): TechniqueLayerStaticRow | null => {
+  if (!techniqueId || !Number.isFinite(layer) || layer <= 0) return null;
+  return (
+    getTechniqueLayerStaticRows().find(
+      (entry) => entry.techniqueId === techniqueId && entry.layer === Math.floor(layer)
+    ) ?? null
+  );
+};
+
 type EquippedTechniqueLite = {
   techniqueId: string;
   currentLayer: number;
@@ -168,26 +253,19 @@ const loadAvailableSkillEntries = async (characterId: number): Promise<Available
   if (equipped.length === 0) return [];
 
   const techniqueIds = Array.from(new Set(equipped.map((entry) => entry.techniqueId)));
-  const layerRes = await query(
-    `
-      SELECT technique_id, layer, unlock_skill_ids
-      FROM technique_layer
-      WHERE technique_id = ANY($1::varchar[])
-    `,
-    [techniqueIds],
-  );
+  const layerRows = getTechniqueLayersByTechniqueIds(techniqueIds);
 
   const techniqueMap = getTechniqueDefMap();
   const skillMap = getSkillDefMap();
   const maxLayerByTechnique = new Map(equipped.map((entry) => [entry.techniqueId, entry.currentLayer] as const));
   const unlockedByTechnique = new Map<string, Set<string>>();
 
-  for (const row of layerRes.rows as Array<Record<string, unknown>>) {
-    const techniqueId = typeof row.technique_id === 'string' ? row.technique_id : '';
-    const layer = Number(row.layer ?? 0) || 0;
+  for (const row of layerRows) {
+    const techniqueId = row.techniqueId;
+    const layer = row.layer;
     const maxLayer = maxLayerByTechnique.get(techniqueId) ?? 0;
     if (!techniqueId || layer <= 0 || layer > maxLayer) continue;
-    const skillIds = asStringArray(row.unlock_skill_ids);
+    const skillIds = row.unlockSkillIds;
     const set = unlockedByTechnique.get(techniqueId) ?? new Set<string>();
     for (const skillId of skillIds) set.add(skillId);
     unlockedByTechnique.set(techniqueId, set);
@@ -418,16 +496,12 @@ export const getTechniqueUpgradeCost = async (
     
     // 获取下一层消耗
     const nextLayer = currentLayer + 1;
-    const layerResult = await query(
-      'SELECT cost_spirit_stones, cost_exp, cost_materials FROM technique_layer WHERE technique_id = $1 AND layer = $2',
-      [techniqueId, nextLayer]
-    );
-    if (layerResult.rows.length === 0) {
+    const layer = getTechniqueLayerByTechniqueAndLayerStatic(techniqueId, nextLayer);
+    if (!layer) {
       return { success: false, message: '层级配置不存在' };
     }
-    
-    const layer = layerResult.rows[0];
-    const rawMaterials = coerceCostMaterials(layer.cost_materials);
+
+    const rawMaterials = layer.costMaterials;
     const metaMap = await getItemMetaMap(rawMaterials.map((m) => m.itemId));
     const materials = rawMaterials.map((m) => {
       const meta = metaMap.get(m.itemId) ?? null;
@@ -439,8 +513,8 @@ export const getTechniqueUpgradeCost = async (
       data: {
         currentLayer,
         maxLayer,
-        spirit_stones: layer.cost_spirit_stones,
-        exp: layer.cost_exp,
+        spirit_stones: layer.costSpiritStones,
+        exp: layer.costExp,
         materials
       }
     };
@@ -491,21 +565,15 @@ export const upgradeTechnique = async (
     
     // 获取下一层消耗和奖励
     const nextLayer = currentLayer + 1;
-    const layerResult = await client.query(
-      `SELECT cost_spirit_stones, cost_exp, cost_materials, 
-              unlock_skill_ids, upgrade_skill_ids, required_realm
-       FROM technique_layer WHERE technique_id = $1 AND layer = $2`,
-      [techniqueId, nextLayer]
-    );
-    if (layerResult.rows.length === 0) {
+    const layer = getTechniqueLayerByTechniqueAndLayerStatic(techniqueId, nextLayer);
+    if (!layer) {
       await client.query('ROLLBACK');
       return { success: false, message: '层级配置不存在' };
     }
-    
-    const layer = layerResult.rows[0];
-    const costStones = layer.cost_spirit_stones || 0;
-    const costExp = layer.cost_exp || 0;
-    const costMaterials = coerceCostMaterials(layer.cost_materials);
+
+    const costStones = layer.costSpiritStones || 0;
+    const costExp = layer.costExp || 0;
+    const costMaterials = layer.costMaterials;
     
     // 检查并扣除灵石和经验
     const charResult = await client.query(
@@ -518,7 +586,7 @@ export const upgradeTechnique = async (
     }
     
     const char = charResult.rows[0];
-    const requiredRealm = typeof layer.required_realm === 'string' ? layer.required_realm.trim() : '';
+    const requiredRealm = typeof layer.requiredRealm === 'string' ? layer.requiredRealm.trim() : '';
     const currentRealm = char.realm;
     const currentSubRealm = char.sub_realm;
     if (!isRealmSufficient(currentRealm, requiredRealm, currentSubRealm)) {
@@ -610,8 +678,8 @@ export const upgradeTechnique = async (
       message: `${techName}修炼至第${nextLayer}层`,
       data: {
         newLayer: nextLayer,
-        unlockedSkills: layer.unlock_skill_ids || [],
-        upgradedSkills: layer.upgrade_skill_ids || []
+        unlockedSkills: layer.unlockSkillIds || [],
+        upgradedSkills: layer.upgradeSkillIds || []
       }
     };
     
@@ -962,13 +1030,10 @@ export const calculateTechniquePassives = async (
   characterId: number
 ): Promise<ServiceResult<Record<string, number>>> => {
   try {
-    const passiveRows = await query(
+    const equippedTechniqueRows = await query(
       `
-        SELECT ct.slot_type, tl.passives
+        SELECT technique_id, current_layer, slot_type
         FROM character_technique ct
-        JOIN technique_layer tl
-          ON tl.technique_id = ct.technique_id
-         AND tl.layer <= ct.current_layer
         WHERE ct.character_id = $1
           AND ct.slot_type IS NOT NULL
       `,
@@ -977,18 +1042,24 @@ export const calculateTechniquePassives = async (
 
     const passives: Record<string, number> = {};
 
-    for (const row of passiveRows.rows) {
+    for (const row of equippedTechniqueRows.rows as Array<Record<string, unknown>>) {
       const slotType = row.slot_type === 'main' ? 'main' : row.slot_type === 'sub' ? 'sub' : null;
       if (!slotType) continue;
 
+      const techniqueId = typeof row.technique_id === 'string' ? row.technique_id.trim() : '';
+      if (!techniqueId) continue;
+      const currentLayer = Math.max(0, Math.floor(Number(row.current_layer ?? 0) || 0));
+      if (currentLayer <= 0) continue;
+
       const ratio = slotType === 'main' ? 1 : 0.3;
-      const layerPassives = Array.isArray(row.passives) ? (row.passives as TechniquePassive[]) : [];
-      for (const p of layerPassives) {
-        if (!p || typeof p !== 'object') continue;
-        if (typeof p.key !== 'string' || p.key.length === 0) continue;
-        if (typeof p.value !== 'number' || !Number.isFinite(p.value)) continue;
-        const effectiveValue = calcTechniquePassiveEffectiveValue(p.value, ratio);
-        passives[p.key] = (passives[p.key] || 0) + effectiveValue;
+      const layerRows = getTechniqueLayersByTechniqueIdStatic(techniqueId).filter((entry) => entry.layer <= currentLayer);
+      for (const layerRow of layerRows) {
+        for (const p of layerRow.passives) {
+          if (typeof p.key !== 'string' || p.key.length === 0) continue;
+          if (typeof p.value !== 'number' || !Number.isFinite(p.value)) continue;
+          const effectiveValue = calcTechniquePassiveEffectiveValue(p.value, ratio);
+          passives[p.key] = (passives[p.key] || 0) + effectiveValue;
+        }
       }
     }
     
@@ -1027,11 +1098,8 @@ export const getBattleSkills = async (
     const skillMap = getSkillDefMap();
     const techniqueRows = await query(
       `
-        SELECT ct.technique_id, tl.upgrade_skill_ids
+        SELECT technique_id, current_layer
         FROM character_technique ct
-        JOIN technique_layer tl
-          ON tl.technique_id = ct.technique_id
-         AND tl.layer <= ct.current_layer
         WHERE ct.character_id = $1
       `,
       [characterId],
@@ -1041,10 +1109,14 @@ export const getBattleSkills = async (
     for (const row of techniqueRows.rows as Array<Record<string, unknown>>) {
       const techniqueId = typeof row.technique_id === 'string' ? row.technique_id : '';
       if (!techniqueId) continue;
-      const upgradedSkillIds = asStringArray(row.upgrade_skill_ids);
-      for (const upgradedSkillId of upgradedSkillIds) {
-        const key = `${techniqueId}:${upgradedSkillId}`;
-        upgradedSkillCountByTechniqueAndSkill.set(key, (upgradedSkillCountByTechniqueAndSkill.get(key) ?? 0) + 1);
+      const currentLayer = Math.max(0, Math.floor(Number(row.current_layer ?? 0) || 0));
+      if (currentLayer <= 0) continue;
+      const layerRows = getTechniqueLayersByTechniqueIdStatic(techniqueId).filter((entry) => entry.layer <= currentLayer);
+      for (const layerRow of layerRows) {
+        for (const upgradedSkillId of layerRow.upgradeSkillIds) {
+          const key = `${techniqueId}:${upgradedSkillId}`;
+          upgradedSkillCountByTechniqueAndSkill.set(key, (upgradedSkillCountByTechniqueAndSkill.get(key) ?? 0) + 1);
+        }
       }
     }
 

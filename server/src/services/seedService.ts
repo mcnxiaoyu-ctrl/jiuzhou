@@ -1978,13 +1978,11 @@ export const loadAllSeeds = async (): Promise<void> => {
   const equipCount = await loadEquipmentDefSeeds();
   console.log(`  装备定义: ${equipCount} 条`);
 
-  // 3. 加载词条池
-  const affixCount = await loadAffixPoolSeeds();
-  console.log(`  词条池: ${affixCount} 条`);
+  // 3. 词条池改为静态 JSON 直读，不再写入数据库
+  console.log('  词条池: 使用静态JSON加载（跳过入库）');
 
-  // 4. 加载套装定义
-  const setCount = await loadItemSetSeeds();
-  console.log(`  套装定义: ${setCount} 条`);
+  // 4. 套装定义改为静态 JSON 直读，不再写入数据库
+  console.log('  套装定义: 使用静态JSON加载（跳过入库）');
 
   // 5. 加载配方
   const recipeCount = await loadRecipeSeeds();
@@ -1995,9 +1993,8 @@ export const loadAllSeeds = async (): Promise<void> => {
   console.log('  对话树定义: 使用静态JSON加载（跳过入库）');
   console.log('  怪物定义: 使用静态JSON加载（跳过入库）');
 
-  // 8. 加载掉落池
-  const dropPoolCount = await loadDropPoolSeeds();
-  console.log(`  掉落池: ${dropPoolCount} 条`);
+  // 8. 掉落池改为静态 JSON 直读，不再写入数据库
+  console.log('  掉落池: 使用静态JSON加载（跳过入库）');
 
   // 9. 刷新规则/地图定义改为静态 JSON 直读，不再写入数据库
   console.log('  刷新规则: 使用静态JSON加载（跳过入库）');
@@ -2025,9 +2022,8 @@ export const loadAllSeeds = async (): Promise<void> => {
   console.log('  功法定义: 使用静态JSON加载（跳过入库）');
   console.log('  技能定义: 使用静态JSON加载（跳过入库）');
 
-  // 15. 加载功法层级（动态升级规则，需保留入库）
-  const layerCount = await loadTechniqueLayerSeeds();
-  console.log(`  功法层级: ${layerCount} 条`);
+  // 15. 功法层级改为静态 JSON 直读，不再写入数据库
+  console.log('  功法层级: 使用静态JSON加载（跳过入库）');
 
   // 16. 加载主线任务章节和对话
   const mainQuestCount = await loadMainQuestSeeds();

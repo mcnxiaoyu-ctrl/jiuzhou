@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { AffixDef, AffixPoolRules, GeneratedAffix, Quality } from './equipmentService.js';
 import { QUALITY_BY_RANK, QUALITY_MULTIPLIER_BY_RANK, isQualityName } from './shared/itemQuality.js';
+import { getAffixPoolDefinitions } from './staticConfigLoader.js';
 import {
   REALM_MAJOR_TO_FIRST,
   REALM_ORDER,
@@ -244,16 +245,12 @@ export const loadAffixPoolForRerollTx = async (
   client: PoolClient,
   poolId: string
 ): Promise<RerollAffixPool | null> => {
-  const result = await client.query(
-    'SELECT rules, affixes FROM affix_pool WHERE id = $1 AND enabled = true LIMIT 1',
-    [poolId]
-  );
-  if (result.rows.length === 0) return null;
-  const row = result.rows[0] as { rules: AffixPoolRules; affixes: AffixDef[] };
+  void client;
+  const row = getAffixPoolDefinitions().find((entry) => entry.enabled !== false && entry.id === poolId) ?? null;
   if (!row || !row.rules || !Array.isArray(row.affixes)) return null;
   return {
-    rules: row.rules,
-    affixes: row.affixes,
+    rules: row.rules as AffixPoolRules,
+    affixes: row.affixes as AffixDef[],
   };
 };
 

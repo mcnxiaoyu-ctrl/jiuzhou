@@ -1,19 +1,18 @@
 import { query } from '../config/database.js';
 import type { MapObjectDto } from './roomObjectService.js';
-import { getMonsterDefinitions, getNpcDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
+import { getDropPoolDefinitions, getMonsterDefinitions, getNpcDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
 
 type InfoTargetType = 'npc' | 'monster' | 'item' | 'player';
 
 type DropEntryRow = {
-  mode: string;
+  mode: 'prob' | 'weight';
   item_def_id: string;
-  chance: number | null;
-  weight: number | null;
-  qty_min: number | null;
-  qty_max: number | null;
-  sort_order: number | null;
-  item_name: string | null;
-  item_quality: string | null;
+  chance: number;
+  weight: number;
+  qty_min: number;
+  qty_max: number;
+  sort_order: number;
+  bind_type: string | null;
 };
 
 type NpcRow = {
@@ -277,42 +276,59 @@ const EQUIPPED_SLOT_TO_UI_LABEL: Record<string, string> = {
 };
 
 const getDropsByPoolId = async (dropPoolId: string): Promise<Array<{ name: string; quality: string; chance: string }>> => {
-  const result = await query(
-    `
-      SELECT
-        p.mode,
-        e.item_def_id,
-        e.chance,
-        e.weight,
-        e.qty_min,
-        e.qty_max,
-        e.sort_order,
-        d.name AS item_name,
-        d.quality AS item_quality
-      FROM drop_pool p
-      JOIN drop_pool_entry e ON e.drop_pool_id = p.id
-      LEFT JOIN item_def d ON d.id = e.item_def_id
-      WHERE p.enabled = true AND p.id = $1 AND e.show_in_ui = true
-      ORDER BY e.sort_order ASC, e.id ASC
-    `,
-    [dropPoolId]
-  );
+  const pool = getDropPoolDefinitions().find((entry) => entry.enabled !== false && entry.id === dropPoolId) ?? null;
+  if (!pool) return [];
 
-  const rows = result.rows as DropEntryRow[];
+  const mode: 'prob' | 'weight' = pool.mode === 'weight' ? 'weight' : 'prob';
+  const entries = (Array.isArray(pool.entries) ? pool.entries : [])
+    .filter((entry) => entry.show_in_ui !== false)
+    .map((entry) => {
+      const itemDefId = typeof entry.item_def_id === 'string' ? entry.item_def_id.trim() : '';
+      const qtyMin = Math.max(1, Number(entry.qty_min ?? 1) || 1);
+      const qtyMax = Math.max(qtyMin, Number(entry.qty_max ?? qtyMin) || qtyMin);
+      return {
+        mode,
+        item_def_id: itemDefId,
+        chance: Number(entry.chance ?? 0) || 0,
+        weight: Number(entry.weight ?? 0) || 0,
+        qty_min: qtyMin,
+        qty_max: qtyMax,
+        sort_order: Math.max(0, Math.floor(Number(entry.sort_order ?? 0) || 0)),
+        bind_type: typeof entry.bind_type === 'string' ? entry.bind_type : null,
+      } satisfies DropEntryRow;
+    })
+    .filter((entry) => entry.item_def_id.length > 0)
+    .sort((left, right) => left.sort_order - right.sort_order || left.item_def_id.localeCompare(right.item_def_id));
+
+  const rows = entries;
   if (rows.length === 0) return [];
 
-  const mode = rows[0]?.mode || 'prob';
+  const itemDefIds = Array.from(new Set(rows.map((entry) => entry.item_def_id)));
+  const itemDefRes =
+    itemDefIds.length === 0
+      ? { rows: [] as Array<{ id: string; name: string; quality: string | null }> }
+      : await query(
+          `
+            SELECT id, name, quality
+            FROM item_def
+            WHERE id = ANY($1::varchar[])
+          `,
+          [itemDefIds]
+        );
+  const itemDefMap = new Map((itemDefRes.rows as Array<{ id: string; name: string; quality: string | null }>).map((row) => [row.id, row]));
+
   const totalWeight = mode === 'weight' ? rows.reduce((sum, r) => sum + Number(r.weight ?? 0), 0) : 0;
 
   return rows.map((r) => {
-    const baseName = (r.item_name ?? r.item_def_id ?? '未知').trim() || '未知';
+    const itemDef = itemDefMap.get(r.item_def_id);
+    const baseName = (itemDef?.name ?? r.item_def_id ?? '未知').trim() || '未知';
     const qtyMin = Number(r.qty_min ?? 1);
     const qtyMax = Number(r.qty_max ?? 1);
     const qtyText =
       qtyMin === qtyMax ? (qtyMin > 1 ? `×${qtyMin}` : '') : `×${Math.max(1, qtyMin)}-${Math.max(qtyMin, qtyMax)}`;
     const name = `${baseName}${qtyText}`;
 
-    const quality = (r.item_quality ?? '-').trim() || '-';
+    const quality = (itemDef?.quality ?? '-').trim() || '-';
     const chanceVal = Number(r.chance ?? 0);
     const weightVal = Number(r.weight ?? 0);
     const chance = formatChance(mode, chanceVal, weightVal, totalWeight);

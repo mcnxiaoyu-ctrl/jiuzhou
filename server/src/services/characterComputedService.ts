@@ -17,7 +17,7 @@ import path from 'path';
 import { query } from '../config/database.js';
 import { redis } from '../config/redis.js';
 import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
-import { getTitleDefinitions } from './staticConfigLoader.js';
+import { getItemSetDefinitions, getTechniqueLayerDefinitions, getTitleDefinitions } from './staticConfigLoader.js';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -480,16 +480,40 @@ const loadTechniquePassives = async (characterId: number): Promise<Record<string
 
   const passiveRows = await query(
     `
-      SELECT ct.slot_type, tl.passives
+      SELECT technique_id, current_layer, slot_type
       FROM character_technique ct
-      JOIN technique_layer tl
-        ON tl.technique_id = ct.technique_id
-       AND tl.layer <= ct.current_layer
       WHERE ct.character_id = $1
         AND ct.slot_type IS NOT NULL
     `,
     [id],
   );
+
+  const layersByTechnique = new Map<string, Array<{ layer: number; passives: Array<{ key: string; value: number }> }>>();
+  for (const entry of getTechniqueLayerDefinitions()) {
+    if (entry.enabled === false) continue;
+    const techniqueId = String(entry.technique_id || '').trim();
+    const layer = Math.floor(Number(entry.layer) || 0);
+    if (!techniqueId || layer <= 0) continue;
+
+    const passives = Array.isArray(entry.passives)
+      ? entry.passives
+          .map((raw) => {
+            const rec = toRecord(raw);
+            const key = String(rec.key || '').trim();
+            const value = safeNumber(rec.value);
+            if (!key || !Number.isFinite(value)) return null;
+            return { key, value };
+          })
+          .filter((v): v is { key: string; value: number } => Boolean(v))
+      : [];
+
+    const list = layersByTechnique.get(techniqueId) ?? [];
+    list.push({ layer, passives });
+    layersByTechnique.set(techniqueId, list);
+  }
+  for (const list of layersByTechnique.values()) {
+    list.sort((left, right) => left.layer - right.layer);
+  }
 
   const passives: Record<string, number> = {};
   for (const row of passiveRows.rows as Array<Record<string, unknown>>) {
@@ -497,14 +521,19 @@ const loadTechniquePassives = async (characterId: number): Promise<Record<string
     const ratio = slotTypeRaw === 'main' ? 1 : slotTypeRaw === 'sub' ? 0.3 : 0;
     if (ratio <= 0) continue;
 
-    const layerPassives = Array.isArray(row.passives) ? row.passives : [];
-    for (const item of layerPassives) {
-      const rec = toRecord(item);
-      const key = String(rec.key || '').trim();
-      const value = safeNumber(rec.value);
-      if (!key || !Number.isFinite(value) || value === 0) continue;
-      const effectiveValue = roundRatio(value * ratio);
-      passives[key] = roundRatio((passives[key] || 0) + effectiveValue);
+    const techniqueId = String(row.technique_id || '').trim();
+    if (!techniqueId) continue;
+    const currentLayer = Math.max(0, Math.floor(Number(row.current_layer) || 0));
+    if (currentLayer <= 0) continue;
+
+    const layerRows = layersByTechnique.get(techniqueId) ?? [];
+    for (const layerRow of layerRows) {
+      if (layerRow.layer > currentLayer) continue;
+      for (const passive of layerRow.passives) {
+        if (!passive.key || !Number.isFinite(passive.value) || passive.value === 0) continue;
+        const effectiveValue = roundRatio(passive.value * ratio);
+        passives[passive.key] = roundRatio((passives[passive.key] || 0) + effectiveValue);
+      }
     }
   }
   return passives;
@@ -605,34 +634,42 @@ const loadEquippedAttrBonuses = async (characterId: number): Promise<CharacterCo
   const setIds = [...setCountMap.keys()];
   if (setIds.length === 0) return stats;
 
-  const setBonusResult = await query(
-    `
-      SELECT set_id, piece_count, effect_defs
-      FROM item_set_bonus
-      WHERE set_id = ANY($1)
-      ORDER BY priority ASC, piece_count ASC
-    `,
-    [setIds],
-  );
-
-  for (const row of setBonusResult.rows as Array<Record<string, unknown>>) {
-    const setId = String(row.set_id || '').trim();
+  const staticSetBonusBySetId = new Map<
+    string,
+    Array<{ piece_count: number; priority: number; effect_defs: unknown[] }>
+  >();
+  for (const setDef of getItemSetDefinitions()) {
+    if (setDef.enabled === false) continue;
+    const setId = String(setDef.id || '').trim();
     if (!setId) continue;
-    const equippedCount = setCountMap.get(setId) || 0;
-    const needCount = toNonNegativeInt(row.piece_count);
-    if (needCount <= 0 || equippedCount < needCount) continue;
+    const bonuses = Array.isArray(setDef.bonuses) ? setDef.bonuses : [];
+    const normalizedBonuses = bonuses
+      .map((bonus) => ({
+        piece_count: Math.max(0, Math.floor(Number(bonus.piece_count) || 0)),
+        priority: Math.max(0, Math.floor(Number(bonus.priority) || 0)),
+        effect_defs: Array.isArray(bonus.effect_defs) ? bonus.effect_defs : [],
+      }))
+      .filter((bonus) => bonus.piece_count > 0)
+      .sort((left, right) => left.priority - right.priority || left.piece_count - right.piece_count);
+    staticSetBonusBySetId.set(setId, normalizedBonuses);
+  }
 
-    const effectDefs = toArray(row.effect_defs);
-    for (const effectRaw of effectDefs) {
-      const effect = toRecord(effectRaw);
-      if (String(effect.effect_type || '') !== 'buff') continue;
-      if (String(effect.trigger || '') !== 'equip') continue;
-      if (String(effect.target || '') !== 'self') continue;
-      const params = toRecord(effect.params);
-      if (String(params.apply_type || '') !== 'flat') continue;
-      const attrKey = String(params.attr_key || '').trim();
-      if (!attrKey) continue;
-      applyAttrDelta(stats, attrKey, params.value);
+  for (const setId of setIds) {
+    const equippedCount = setCountMap.get(setId) || 0;
+    const bonusRows = staticSetBonusBySetId.get(setId) ?? [];
+    for (const bonus of bonusRows) {
+      if (equippedCount < bonus.piece_count) continue;
+      for (const effectRaw of bonus.effect_defs) {
+        const effect = toRecord(effectRaw);
+        if (String(effect.effect_type || '') !== 'buff') continue;
+        if (String(effect.trigger || '') !== 'equip') continue;
+        if (String(effect.target || '') !== 'self') continue;
+        const params = toRecord(effect.params);
+        if (String(params.apply_type || '') !== 'flat') continue;
+        const attrKey = String(params.attr_key || '').trim();
+        if (!attrKey) continue;
+        applyAttrDelta(stats, attrKey, params.value);
+      }
     }
   }
 
@@ -1069,4 +1106,3 @@ export const clearCharacterRuntimeResourceCache = async (characterId: number): P
     // ignore redis failure
   }
 };
-

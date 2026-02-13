@@ -14,6 +14,7 @@ import {
   getCharacterComputedByCharacterId,
   invalidateCharacterComputedCache,
 } from './characterComputedService.js';
+import { getItemSetDefinitions } from './staticConfigLoader.js';
 import {
   ENHANCE_MAX_LEVEL,
   REFINE_MAX_LEVEL,
@@ -1113,42 +1114,47 @@ const getEquippedSetBonusDeltaTx = async (
   const setIds = [...counts.keys()];
   if (setIds.length === 0) return new Map();
 
-  const bonusResult = await client.query(
-    `
-      SELECT set_id, piece_count, effect_defs
-      FROM item_set_bonus
-      WHERE set_id = ANY($1)
-      ORDER BY priority ASC, piece_count ASC
-    `,
-    [setIds]
+  const staticSetMap = new Map(
+    getItemSetDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.id, entry] as const)
   );
 
   const delta = new Map<CharacterAttrKey, number>();
 
-  for (const row of bonusResult.rows) {
-    const setId = String(row.set_id || '');
+  for (const setId of setIds) {
     const pieces = counts.get(setId) || 0;
-    const need = safeNumber(row.piece_count);
-    if (pieces < need) continue;
+    const setDef = staticSetMap.get(setId);
+    if (!setDef) continue;
 
-    const effects: unknown[] = Array.isArray(row.effect_defs) ? row.effect_defs : [];
-    for (const effect of effects) {
-      if (!effect || typeof effect !== 'object') continue;
-      const e = effect as {
-        trigger?: unknown;
-        target?: unknown;
-        effect_type?: unknown;
-        params?: unknown;
-      };
-      if (e.effect_type !== 'buff') continue;
-      if (e.trigger !== 'equip') continue;
-      if (e.target !== 'self') continue;
-      if (!e.params || typeof e.params !== 'object') continue;
+    const bonuses = (Array.isArray(setDef.bonuses) ? setDef.bonuses : [])
+      .map((bonus) => ({
+        pieceCount: Math.max(1, Math.floor(Number(bonus.piece_count) || 1)),
+        priority: Math.max(0, Math.floor(Number(bonus.priority) || 0)),
+        effectDefs: Array.isArray(bonus.effect_defs) ? bonus.effect_defs : [],
+      }))
+      .sort((left, right) => left.priority - right.priority || left.pieceCount - right.pieceCount);
 
-      const p = e.params as { attr_key?: unknown; value?: unknown; apply_type?: unknown };
-      if (p.apply_type !== 'flat') continue;
-      if (typeof p.attr_key !== 'string') continue;
-      addToDelta(delta, p.attr_key, p.value);
+    for (const bonus of bonuses) {
+      if (pieces < bonus.pieceCount) continue;
+      for (const effect of bonus.effectDefs) {
+        if (!effect || typeof effect !== 'object') continue;
+        const e = effect as {
+          trigger?: unknown;
+          target?: unknown;
+          effect_type?: unknown;
+          params?: unknown;
+        };
+        if (e.effect_type !== 'buff') continue;
+        if (e.trigger !== 'equip') continue;
+        if (e.target !== 'self') continue;
+        if (!e.params || typeof e.params !== 'object') continue;
+
+        const p = e.params as { attr_key?: unknown; value?: unknown; apply_type?: unknown };
+        if (p.apply_type !== 'flat') continue;
+        if (typeof p.attr_key !== 'string') continue;
+        addToDelta(delta, p.attr_key, p.value);
+      }
     }
   }
 
