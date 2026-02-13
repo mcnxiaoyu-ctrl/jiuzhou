@@ -2944,7 +2944,7 @@ export const disassembleEquipmentBatch = async (
     const rewardItemQtyByDefId = new Map<string, number>();
 
     for (const row of itemResult.rows as Array<{
-      id: number;
+      id: number | string;
       qty: number;
       location: InventoryLocation;
       locked: boolean;
@@ -2971,7 +2971,16 @@ export const disassembleEquipmentBatch = async (
         await client.query('ROLLBACK');
         return { success: false, message: '包含不可分解位置的物品' };
       }
-      const requestQty = qtyById.get(row.id) ?? 0;
+
+      // item_instance.id 为 BIGSERIAL，pg 在部分配置下会返回 string。
+      // 这里统一转为 number 再参与 Map<number, number> 查找，避免误报 items参数错误。
+      const rowId = Number(row.id);
+      if (!Number.isInteger(rowId) || rowId <= 0) {
+        await client.query('ROLLBACK');
+        return { success: false, message: 'items参数错误' };
+      }
+
+      const requestQty = qtyById.get(rowId) ?? 0;
       if (requestQty <= 0) {
         await client.query('ROLLBACK');
         return { success: false, message: 'items参数错误' };
@@ -3004,7 +3013,7 @@ export const disassembleEquipmentBatch = async (
         rewardItemQtyByDefId.set(itemReward.itemDefId, prevQty + itemReward.qty);
       }
 
-      consumeOperations.push({ id: row.id, rowQty, consumeQty: requestQty });
+      consumeOperations.push({ id: rowId, rowQty, consumeQty: requestQty });
       disassembledQtyTotal += requestQty;
     }
 
