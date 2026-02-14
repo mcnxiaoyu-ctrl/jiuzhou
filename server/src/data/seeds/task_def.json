@@ -656,6 +656,45 @@
       "sort_weight": 523
     },
     {
+      "id": "task-lianji-daily-005",
+      "category": "daily",
+      "title": "裂渊试锋",
+      "realm": "炼炁化神·炼己期",
+      "description": "完成一次炎霜裂渊修行，领取进阶宝石袋。",
+      "giver_npc_id": "npc-yanbing-watcher",
+      "map_id": "map-yanbing-rift",
+      "room_id": "room-yanbing-outpost",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "text": "通关炎霜裂渊 1 次",
+          "target": 1,
+          "params": {
+            "dungeon_id": "dungeon-lianqi-yanbing-lieyuan"
+          }
+        }
+      ],
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 420
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 52
+        },
+        {
+          "type": "item",
+          "item_def_id": "box-005",
+          "qty": 1
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 524
+    },
+    {
       "id": "task-lianji-weekly-001",
       "category": "event",
       "title": "周常：秘境深入",

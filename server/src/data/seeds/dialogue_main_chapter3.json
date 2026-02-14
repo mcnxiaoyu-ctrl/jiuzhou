@@ -1,0 +1,160 @@
+{
+  "dialogues": [
+    {
+      "id": "dlg-main-3-001",
+      "name": "第三章-001 裂谷告急",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "narration",
+          "text": "炎霜潮汐在裂谷上空撕开两道灵弧，前哨警铃彻夜未停。",
+          "next": "npc-1"
+        },
+        {
+          "id": "npc-1",
+          "type": "npc",
+          "speaker": "炎冰巡守",
+          "text": "你来得正好，裂谷平衡快守不住了。先把前哨防线稳住，我们再谈深入。",
+          "next": "end"
+        },
+        {
+          "id": "end",
+          "type": "system",
+          "text": "目标更新：在炎冰裂谷展开侦巡。"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dlg-main-3-002",
+      "name": "第三章-002 双潮侦巡",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "炎冰巡守",
+          "text": "炎潮岸与霜蚀沟同时异动，你各走一趟，看看是哪一端先失控。",
+          "next": "end"
+        },
+        {
+          "id": "end",
+          "type": "system",
+          "text": "目标更新：前往炎潮岸与霜蚀沟。"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dlg-main-3-003",
+      "name": "第三章-003 交汇清剿",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "narration",
+          "text": "双核交汇处灵压暴涨，海蛟与鬼卒在乱流中同时现身。",
+          "next": "end"
+        },
+        {
+          "id": "end",
+          "type": "system",
+          "text": "目标更新：清剿交汇区妖潮。"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dlg-main-3-004",
+      "name": "第三章-004 稳脉采集",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "炎冰巡守",
+          "text": "阵基不够稳，去采灵脉晶石和南海灵珠。没有材料，封阵只会反噬。",
+          "next": "end"
+        },
+        {
+          "id": "end",
+          "type": "system",
+          "text": "目标更新：采集稳脉材料。"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dlg-main-3-005",
+      "name": "第三章-005 裂渊初探",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "炎冰巡守",
+          "text": "入口暂时稳定，你先跑一趟普通强度，把裂渊内部的节奏摸清楚。",
+          "next": "end"
+        },
+        {
+          "id": "end",
+          "type": "system",
+          "text": "目标更新：通关炎霜裂渊（普通）。"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dlg-main-3-006",
+      "name": "第三章-006 寒炎复压",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "炎冰巡守",
+          "text": "第二轮冲击更猛，你要在困难强度下压住它，再带回心魔精华做比对。",
+          "next": "end"
+        },
+        {
+          "id": "end",
+          "type": "system",
+          "text": "目标更新：通关炎霜裂渊（困难）并收集心魔精华。"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dlg-main-3-007",
+      "name": "第三章-007 采药门槛",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "narration",
+          "text": "裂谷灵潮与心魔残念尽数淬入经脉，你已逼近采药门槛。",
+          "next": "end"
+        },
+        {
+          "id": "end",
+          "type": "system",
+          "text": "目标更新：突破到炼炁化神·采药期。"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dlg-main-3-008",
+      "name": "第三章-008 裂谷新序",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "炎冰巡守",
+          "text": "你既能压住炎霜乱潮，又已踏入采药期。自今日起，裂谷防线由你主导。",
+          "next": "end"
+        },
+        {
+          "id": "end",
+          "type": "system",
+          "text": "第三章完成：炎霜裂渊。"
+        }
+      ],
+      "enabled": true
+    }
+  ]
+}

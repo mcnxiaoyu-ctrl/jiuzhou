@@ -2148,6 +2148,11 @@
             {
               "direction": "south",
               "target_room_id": "room-nanhai-dragon-bone"
+            },
+            {
+              "direction": "north",
+              "target_map_id": "map-yanbing-rift",
+              "target_room_id": "room-yanbing-outpost"
             }
           ],
           "npcs": [],
@@ -2163,6 +2168,270 @@
               "respawn_sec": 180
             }
           ],
+          "resources": [],
+          "items": [],
+          "portals": [],
+          "events": []
+        }
+      ]
+    },
+    {
+      "id": "map-yanbing-rift",
+      "code": "yanbing_rift",
+      "name": "炎冰裂谷",
+      "description": "赤潮与寒雾交织的裂谷，地脉冷热失衡，孕育出诡异的双相灵灾。修士在此磨砺道心，方能冲击采药之境。",
+      "background_image": "/assets/map/yanbing_rift.png",
+      "map_type": "field",
+      "parent_map_id": "map-nanhai-coast",
+      "region": "东洲",
+      "world_position": {
+        "x": 180,
+        "y": 248
+      },
+      "req_realm_min": "炼炁化神·炼己期",
+      "safe_zone": false,
+      "pk_mode": "normal",
+      "revive_map_id": "map-yanbing-rift",
+      "revive_room_id": "room-yanbing-outpost",
+      "sort_weight": 590,
+      "enabled": true,
+      "rooms": [
+        {
+          "id": "room-yanbing-outpost",
+          "name": "裂谷前哨",
+          "description": "临时搭建的前哨营地，巡守在此记录炎霜潮汐变化。",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "room_type": "safe",
+          "connections": [
+            {
+              "direction": "north",
+              "target_room_id": "room-yanbing-scorch-bank"
+            },
+            {
+              "direction": "east",
+              "target_room_id": "room-yanbing-frost-ravine"
+            },
+            {
+              "direction": "south",
+              "target_map_id": "map-nanhai-coast",
+              "target_room_id": "room-nanhai-island-pier"
+            }
+          ],
+          "npcs": [
+            "npc-yanbing-watcher"
+          ],
+          "monsters": [],
+          "resources": [],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-yanbing-scorch-bank",
+          "name": "炎潮岸",
+          "description": "炽热潮汐拍击岩岸，空气中满是灼烧般的灵压。",
+          "position": {
+            "x": 0,
+            "y": 1
+          },
+          "room_type": "field",
+          "connections": [
+            {
+              "direction": "south",
+              "target_room_id": "room-yanbing-outpost"
+            },
+            {
+              "direction": "north",
+              "target_room_id": "room-yanbing-dualcore-crossing"
+            }
+          ],
+          "npcs": [],
+          "monsters": [
+            {
+              "monster_def_id": "monster-nanhai-haijiao",
+              "count": 3,
+              "respawn_sec": 55
+            },
+            {
+              "monster_def_id": "monster-lingmai-shimo",
+              "count": 2,
+              "respawn_sec": 70
+            }
+          ],
+          "resources": [
+            {
+              "resource_id": "mat-lingmai-jingshi",
+              "count": 10,
+              "collect_limit": 10,
+              "respawn_sec": 280
+            }
+          ],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-yanbing-frost-ravine",
+          "name": "霜蚀沟",
+          "description": "寒雾凝霜，沟壑深处不时传来幽冥低语。",
+          "position": {
+            "x": 1,
+            "y": 0
+          },
+          "room_type": "field",
+          "connections": [
+            {
+              "direction": "west",
+              "target_room_id": "room-yanbing-outpost"
+            },
+            {
+              "direction": "north",
+              "target_room_id": "room-yanbing-dualcore-crossing"
+            },
+            {
+              "direction": "east",
+              "target_room_id": "room-yanbing-crystal-shore"
+            }
+          ],
+          "npcs": [],
+          "monsters": [
+            {
+              "monster_def_id": "monster-youming-guizu",
+              "count": 3,
+              "respawn_sec": 55
+            },
+            {
+              "monster_def_id": "monster-xinmo-huanying",
+              "count": 2,
+              "respawn_sec": 65
+            }
+          ],
+          "resources": [
+            {
+              "resource_id": "mat-xinmo-jinghua",
+              "count": 8,
+              "collect_limit": 8,
+              "respawn_sec": 360
+            }
+          ],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-yanbing-dualcore-crossing",
+          "name": "双核交汇",
+          "description": "冷热地脉在此交织碰撞，灵压暴涨，稍有分神便会走火。",
+          "position": {
+            "x": 0,
+            "y": 2
+          },
+          "room_type": "field",
+          "connections": [
+            {
+              "direction": "south",
+              "target_room_id": "room-yanbing-scorch-bank"
+            },
+            {
+              "direction": "east",
+              "target_room_id": "room-yanbing-frost-ravine"
+            },
+            {
+              "direction": "north",
+              "target_room_id": "room-yanbing-rift-gate"
+            }
+          ],
+          "npcs": [],
+          "monsters": [
+            {
+              "monster_def_id": "monster-lingmai-jingkuangshou",
+              "count": 2,
+              "respawn_sec": 65
+            },
+            {
+              "monster_def_id": "monster-nanhai-haijiao",
+              "count": 2,
+              "respawn_sec": 55
+            },
+            {
+              "monster_def_id": "monster-youming-guizu",
+              "count": 2,
+              "respawn_sec": 55
+            }
+          ],
+          "resources": [],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-yanbing-crystal-shore",
+          "name": "晶滩",
+          "description": "潮汐退去后留下大量晶屑，远处可见裂渊入口的符阵残光。",
+          "position": {
+            "x": 2,
+            "y": 0
+          },
+          "room_type": "field",
+          "connections": [
+            {
+              "direction": "west",
+              "target_room_id": "room-yanbing-frost-ravine"
+            },
+            {
+              "direction": "north",
+              "target_room_id": "room-yanbing-rift-gate"
+            }
+          ],
+          "npcs": [],
+          "monsters": [
+            {
+              "monster_def_id": "monster-lingmai-jingkuangshou",
+              "count": 2,
+              "respawn_sec": 65
+            },
+            {
+              "monster_def_id": "monster-xinmo-huanying",
+              "count": 1,
+              "respawn_sec": 70
+            }
+          ],
+          "resources": [
+            {
+              "resource_id": "mat-nanhai-lingzhu",
+              "count": 10,
+              "collect_limit": 10,
+              "respawn_sec": 300
+            }
+          ],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-yanbing-rift-gate",
+          "name": "裂渊前庭",
+          "description": "古阵残碑围绕着深渊入口，炎霜二气在此形成稳定旋涡。",
+          "position": {
+            "x": 1,
+            "y": 3
+          },
+          "room_type": "safe",
+          "connections": [
+            {
+              "direction": "south",
+              "target_room_id": "room-yanbing-dualcore-crossing"
+            },
+            {
+              "direction": "west",
+              "target_room_id": "room-yanbing-crystal-shore"
+            }
+          ],
+          "npcs": [],
+          "monsters": [],
           "resources": [],
           "items": [],
           "portals": [],

@@ -881,6 +881,48 @@
       ]
     },
     {
+      "id": "box-005",
+      "code": "advanced_gem_bag",
+      "name": "进阶宝石袋",
+      "category": "consumable",
+      "sub_category": "box",
+      "quality": "玄",
+      "quality_rank": 2,
+      "rarity": "uncommon",
+      "level": 26,
+      "stack_max": 999,
+      "bind_type": "pickup",
+      "tradeable": false,
+      "icon": "/assets/items/Props-baodai-2.png",
+      "description": "打开后可随机获得1个2~4级宝石",
+      "long_desc": "使用后随机获得1个2~4级攻击/防御/生存类宝石。",
+      "tags": [
+        "宝箱",
+        "宝石",
+        "进阶",
+        "随机"
+      ],
+      "use_type": "instant",
+      "effect_defs": [
+        {
+          "trigger": "use",
+          "target": "self",
+          "effect_type": "loot",
+          "params": {
+            "loot_type": "random_gem",
+            "sub_categories": [
+              "gem_attack",
+              "gem_defense",
+              "gem_survival"
+            ],
+            "min_level": 2,
+            "max_level": 4,
+            "gems_per_use": 1
+          }
+        }
+      ]
+    },
+    {
       "id": "func-001",
       "code": "bei_bao_kuo_rong",
       "name": "背包扩容符",
@@ -2205,7 +2247,7 @@
         }
       ],
       "source_hint": [
-        "火焰秘境",
+        "炎霜裂渊",
         "烈阳宗遗迹"
       ]
     },
@@ -2243,7 +2285,7 @@
         }
       ],
       "source_hint": [
-        "寒冰洞窟",
+        "炎霜裂渊",
         "北冥宗秘境"
       ]
     },

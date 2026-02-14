@@ -320,6 +320,31 @@
       "quest_giver_id": "qg-lianji-main",
       "sort_weight": 230,
       "enabled": true
+    },
+    {
+      "id": "npc-yanbing-watcher",
+      "code": "yanbing_watcher",
+      "name": "炎冰巡守",
+      "title": "裂谷守望者",
+      "gender": "女",
+      "realm": "炼炁化神·炼己期",
+      "avatar": "/assets/npc/teleporter.png",
+      "description": "常驻炎冰裂谷前哨，负责侦测炎霜潮汐与地脉异动。",
+      "npc_type": "quest",
+      "area": "S",
+      "base_attrs": {
+        "qixue": 7000,
+        "max_qixue": 7000,
+        "wugong": 210,
+        "fagong": 210,
+        "wufang": 185,
+        "fafang": 185,
+        "sudu": 10
+      },
+      "talk_tree_id": "talk-yanbing-watcher",
+      "quest_giver_id": "qg-chapter3-main",
+      "sort_weight": 235,
+      "enabled": true
     }
   ],
   "talk_trees": [
@@ -409,6 +434,17 @@
       ],
       "enabled": true,
       "sort_weight": 230,
+      "version": 1
+    },
+    {
+      "id": "talk-yanbing-watcher",
+      "name": "炎冰巡守对话",
+      "greeting_lines": [
+        "裂谷的潮汐比矿渊更凶，先稳住气机再深入。",
+        "炎霜裂渊每次开启都不同，别把上次经验当真理。"
+      ],
+      "enabled": true,
+      "sort_weight": 235,
       "version": 1
     }
   ]

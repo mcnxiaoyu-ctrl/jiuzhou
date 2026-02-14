@@ -226,6 +226,12 @@
           "title": "灵脉矿渊困难通关"
         },
         {
+          "id": "main-quest-chapter-3",
+          "type": "main_quest_chapter_completed",
+          "chapterId": "mq-chapter-3",
+          "title": "完成第三章主线"
+        },
+        {
           "id": "item-xinmo-jinghua-10",
           "type": "item_qty_min",
           "itemDefId": "mat-xinmo-jinghua",

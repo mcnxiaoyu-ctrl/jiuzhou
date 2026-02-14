@@ -9,6 +9,7 @@ import {
   getDungeonDefinitions,
   getDungeonDifficultyById,
   getItemDefinitionsByIds,
+  getMainQuestChapterById,
   getTechniqueDefinitions,
 } from './staticConfigLoader.js';
 
@@ -94,6 +95,12 @@ type DungeonClearMinRequirement = {
   dungeonId?: string;
   difficultyId?: string;
 };
+type MainQuestChapterCompletedRequirement = {
+  id: string;
+  type: 'main_quest_chapter_completed';
+  title: string;
+  chapterId: string;
+};
 type VersionLockedRequirement = {
   id: string;
   type: 'version_locked';
@@ -110,6 +117,7 @@ type BreakthroughRequirement =
   | TechniquesCountMinLayerRequirement
   | ItemQtyMinRequirement
   | DungeonClearMinRequirement
+  | MainQuestChapterCompletedRequirement
   | VersionLockedRequirement
   | { id: string; type: string; title: string };
 
@@ -402,6 +410,28 @@ const getDungeonClearCount = async (args: {
   return Number(res.rows?.[0]?.cnt ?? 0) || 0;
 };
 
+const getCompletedMainQuestChapterSet = async (client: PoolClient, characterId: number): Promise<Set<string>> => {
+  const res = await client.query(
+    `
+      SELECT completed_chapters
+      FROM character_main_quest_progress
+      WHERE character_id = $1
+      LIMIT 1
+    `,
+    [characterId]
+  );
+
+  const raw = res.rows?.[0]?.completed_chapters;
+  const values = Array.isArray(raw) ? raw : [];
+  const chapterSet = new Set<string>();
+  for (const value of values) {
+    const chapterId = String(value ?? '').trim();
+    if (!chapterId) continue;
+    chapterSet.add(chapterId);
+  }
+  return chapterSet;
+};
+
 const evaluateRequirements = async (args: {
   client: PoolClient;
   characterId: number;
@@ -432,6 +462,7 @@ const evaluateRequirements = async (args: {
   const out: RealmRequirementView[] = [];
   const mainTech = await getEquippedMainTechnique(client, characterId);
   let equippedSubs: Array<{ techniqueId: string; name: string; layer: number; slotIndex: number }> | null = null;
+  let completedChapterSet: Set<string> | null = null;
   const dungeonClearCountCache = new Map<string, number>();
 
   const getCachedDungeonClearCount = async (dungeonId?: string, difficultyId?: string): Promise<number> => {
@@ -596,6 +627,24 @@ const evaluateRequirements = async (args: {
           : dungeonId
             ? `dungeon:${dungeonId}`
             : 'dungeon:*',
+      });
+      continue;
+    }
+
+    if (type === 'main_quest_chapter_completed') {
+      const chapterId = String((r as any).chapterId || '').trim();
+      if (!completedChapterSet) {
+        completedChapterSet = await getCompletedMainQuestChapterSet(client, characterId);
+      }
+      const done = chapterId ? completedChapterSet.has(chapterId) : false;
+      const chapterName = chapterId ? (getMainQuestChapterById(chapterId)?.name ?? chapterId) : '指定主线章节';
+      out.push({
+        id: id || `main-quest-chapter-${chapterId || 'unknown'}`,
+        title,
+        detail: `${chapterName}（当前${done ? '已完成' : '未完成'}）`,
+        status: done ? 'done' : 'todo',
+        sourceType: 'main_quest',
+        sourceRef: chapterId ? `chapter:${chapterId}` : 'chapter:*',
       });
       continue;
     }

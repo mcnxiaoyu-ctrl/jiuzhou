@@ -1,0 +1,390 @@
+{
+  "chapters": [
+    {
+      "id": "mq-chapter-3",
+      "chapter_num": 3,
+      "name": "第三章：炎霜裂渊",
+      "description": "你在炎冰裂谷应对双相灵灾，借秘境淬炼道基，迈向采药期。",
+      "background": "南海岸以北的炎冰裂谷出现冷热逆冲，地脉与心魔残潮相互牵引。你必须先稳住裂谷，再以炎霜裂渊试炼锻骨炼神。",
+      "min_realm": "炼炁化神·炼己期",
+      "chapter_rewards": {
+        "exp": 9800,
+        "silver": 12800,
+        "spirit_stones": 1260,
+        "items": [
+          {
+            "item_def_id": "box-005",
+            "quantity": 2
+          },
+          {
+            "item_def_id": "scroll-004",
+            "quantity": 1
+          }
+        ]
+      },
+      "unlock_features": [
+        "map-yanbing-rift",
+        "dungeon-lianqi-yanbing-lieyuan"
+      ],
+      "sort_weight": 800,
+      "enabled": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "main-3-001",
+      "chapter_id": "mq-chapter-3",
+      "section_num": 1,
+      "name": "裂谷告急",
+      "description": "炎冰裂谷前哨传来急报，你赶赴现场与巡守会合。",
+      "brief": "抵达裂谷前哨并与炎冰巡守交谈。",
+      "npc_id": "npc-yanbing-watcher",
+      "map_id": "map-yanbing-rift",
+      "room_id": "room-yanbing-outpost",
+      "min_realm": "炼炁化神·炼己期",
+      "dialogue_id": "dlg-main-3-001",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "reach",
+          "text": "抵达裂谷前哨",
+          "target": 1,
+          "params": {
+            "room_id": "room-yanbing-outpost"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "talk_npc",
+          "text": "与炎冰巡守交谈",
+          "target": 1,
+          "params": {
+            "npc_id": "npc-yanbing-watcher"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 520,
+        "silver": 680,
+        "spirit_stones": 58
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 800,
+      "enabled": true
+    },
+    {
+      "id": "main-3-002",
+      "chapter_id": "mq-chapter-3",
+      "section_num": 2,
+      "name": "双潮侦巡",
+      "description": "炎潮岸与霜蚀沟同时异动，你需实地勘察两端脉象。",
+      "brief": "前往炎潮岸与霜蚀沟。",
+      "npc_id": "npc-yanbing-watcher",
+      "map_id": "map-yanbing-rift",
+      "room_id": "room-yanbing-outpost",
+      "min_realm": "炼炁化神·炼己期",
+      "dialogue_id": "dlg-main-3-002",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "reach",
+          "text": "前往炎潮岸",
+          "target": 1,
+          "params": {
+            "room_id": "room-yanbing-scorch-bank"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "reach",
+          "text": "前往霜蚀沟",
+          "target": 1,
+          "params": {
+            "room_id": "room-yanbing-frost-ravine"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 580,
+        "silver": 760,
+        "spirit_stones": 64
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 790,
+      "enabled": true
+    },
+    {
+      "id": "main-3-003",
+      "chapter_id": "mq-chapter-3",
+      "section_num": 3,
+      "name": "交汇清剿",
+      "description": "双核交汇处妖潮成群，先清场再推进裂渊防线。",
+      "brief": "击退海蛟与幽冥鬼卒。",
+      "npc_id": "npc-yanbing-watcher",
+      "map_id": "map-yanbing-rift",
+      "room_id": "room-yanbing-outpost",
+      "min_realm": "炼炁化神·炼己期",
+      "dialogue_id": "dlg-main-3-003",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "kill_monster",
+          "text": "击退南海海蛟 8 只",
+          "target": 8,
+          "params": {
+            "monster_id": "monster-nanhai-haijiao"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "kill_monster",
+          "text": "击退幽冥鬼卒 6 只",
+          "target": 6,
+          "params": {
+            "monster_id": "monster-youming-guizu"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 700,
+        "silver": 920,
+        "spirit_stones": 72,
+        "items": [
+          {
+            "item_def_id": "mat-xinmo-jinghua",
+            "quantity": 2
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 780,
+      "enabled": true
+    },
+    {
+      "id": "main-3-004",
+      "chapter_id": "mq-chapter-3",
+      "section_num": 4,
+      "name": "稳脉采集",
+      "description": "巡守需要你补齐阵基材料，稳定裂谷入口法阵。",
+      "brief": "采集灵脉晶石与南海灵珠。",
+      "npc_id": "npc-yanbing-watcher",
+      "map_id": "map-yanbing-rift",
+      "room_id": "room-yanbing-outpost",
+      "min_realm": "炼炁化神·炼己期",
+      "dialogue_id": "dlg-main-3-004",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "gather_resource",
+          "text": "采集灵脉晶石 5 份",
+          "target": 5,
+          "params": {
+            "resource_id": "mat-lingmai-jingshi"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "gather_resource",
+          "text": "采集南海灵珠 4 份",
+          "target": 4,
+          "params": {
+            "resource_id": "mat-nanhai-lingzhu"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 780,
+        "silver": 1020,
+        "spirit_stones": 78,
+        "items": [
+          {
+            "item_def_id": "box-005",
+            "quantity": 1
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 770,
+      "enabled": true
+    },
+    {
+      "id": "main-3-005",
+      "chapter_id": "mq-chapter-3",
+      "section_num": 5,
+      "name": "裂渊初探",
+      "description": "法阵初稳后，你第一次进入炎霜裂渊，测试可控区间。",
+      "brief": "通关炎霜裂渊（普通）1 次。",
+      "npc_id": "npc-yanbing-watcher",
+      "map_id": "map-yanbing-rift",
+      "room_id": "room-yanbing-rift-gate",
+      "min_realm": "炼炁化神·炼己期",
+      "dialogue_id": "dlg-main-3-005",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "dungeon_clear",
+          "text": "通关炎霜裂渊（普通）",
+          "target": 1,
+          "params": {
+            "dungeon_id": "dungeon-lianqi-yanbing-lieyuan",
+            "difficulty_id": "dd-lianqi-yanbing-n"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 980,
+        "silver": 1260,
+        "spirit_stones": 96,
+        "items": [
+          {
+            "item_def_id": "mat-lingmai-jingshi",
+            "quantity": 3
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 760,
+      "enabled": true
+    },
+    {
+      "id": "main-3-006",
+      "chapter_id": "mq-chapter-3",
+      "section_num": 6,
+      "name": "寒炎复压",
+      "description": "裂渊二次暴走，你需在更高强度中完成压制并带回核心样本。",
+      "brief": "通关炎霜裂渊（困难）并收集心魔精华。",
+      "npc_id": "npc-yanbing-watcher",
+      "map_id": "map-yanbing-rift",
+      "room_id": "room-yanbing-rift-gate",
+      "min_realm": "炼炁化神·炼己期",
+      "dialogue_id": "dlg-main-3-006",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "dungeon_clear",
+          "text": "通关炎霜裂渊（困难）",
+          "target": 1,
+          "params": {
+            "dungeon_id": "dungeon-lianqi-yanbing-lieyuan",
+            "difficulty_id": "dd-lianqi-yanbing-h"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "collect",
+          "text": "收集心魔精华 4 份",
+          "target": 4,
+          "params": {
+            "item_id": "mat-xinmo-jinghua"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 1180,
+        "silver": 1520,
+        "spirit_stones": 116,
+        "items": [
+          {
+            "item_def_id": "box-005",
+            "quantity": 1
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 750,
+      "enabled": true
+    },
+    {
+      "id": "main-3-007",
+      "chapter_id": "mq-chapter-3",
+      "section_num": 7,
+      "name": "采药门槛",
+      "description": "炎霜试炼已毕，你需将积累化为突破，冲击采药期门槛。",
+      "brief": "突破至炼炁化神·采药期。",
+      "npc_id": "npc-yanbing-watcher",
+      "map_id": "map-yanbing-rift",
+      "room_id": "room-yanbing-outpost",
+      "min_realm": "炼炁化神·炼己期",
+      "dialogue_id": "dlg-main-3-007",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "upgrade_realm",
+          "text": "突破至炼炁化神·采药期",
+          "target": 1,
+          "params": {
+            "realm": "炼炁化神·采药期"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 1500,
+        "silver": 1900,
+        "spirit_stones": 155,
+        "items": [
+          {
+            "item_def_id": "scroll-004",
+            "quantity": 1
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 740,
+      "enabled": true
+    },
+    {
+      "id": "main-3-008",
+      "chapter_id": "mq-chapter-3",
+      "section_num": 8,
+      "name": "裂谷新序",
+      "description": "你完成突破后回到前哨复命，炎冰巡守正式将裂渊防线交由你统筹。",
+      "brief": "与炎冰巡守复命，完成第三章。",
+      "npc_id": "npc-yanbing-watcher",
+      "map_id": "map-yanbing-rift",
+      "room_id": "room-yanbing-outpost",
+      "min_realm": "炼炁化神·采药期",
+      "dialogue_id": "dlg-main-3-008",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "talk_npc",
+          "text": "与炎冰巡守复命",
+          "target": 1,
+          "params": {
+            "npc_id": "npc-yanbing-watcher"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 2100,
+        "silver": 2600,
+        "spirit_stones": 220,
+        "items": [
+          {
+            "item_def_id": "box-005",
+            "quantity": 1
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": true,
+      "sort_weight": 730,
+      "enabled": true
+    }
+  ]
+}
