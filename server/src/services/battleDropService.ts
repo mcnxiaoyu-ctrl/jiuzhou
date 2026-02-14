@@ -37,6 +37,8 @@ interface DropPoolEntry {
   qty_max: number;
   quality_weights: Record<string, number> | null;  // 装备品质权重
   bind_type: string;
+  sourceType: 'common' | 'exclusive';
+  sourcePoolId: string;
 }
 
 // 掉落池
@@ -46,6 +48,37 @@ interface DropPool {
   mode: DropPoolMode;
   entries: DropPoolEntry[];
 }
+
+type MonsterKind = 'normal' | 'elite' | 'boss';
+
+type RollDropsOptions = {
+  isDungeonBattle?: boolean;
+  monsterKind?: MonsterKind;
+};
+
+const COMMON_POOL_MULTIPLIER = {
+  normal: {
+    normalBattle: 1,
+    dungeonBattle: 2,
+  },
+  elite: {
+    normalBattle: 2,
+    dungeonBattle: 4,
+  },
+  boss: {
+    normalBattle: 4,
+    dungeonBattle: 6,
+  },
+} as const;
+
+const EXCLUDED_COMMON_POOLS_FOR_MULTIPLIER = new Set<string>([
+  'dp-common-monster-elite',
+  'dp-common-monster-boss',
+]);
+
+type DistributeBattleRewardsOptions = {
+  isDungeonBattle?: boolean;
+};
 
 // 掉落结果
 export interface DropResult {
@@ -115,6 +148,8 @@ export const getDropPool = async (poolId: string): Promise<DropPool | null> => {
       qty_max: entry.qty_max,
       quality_weights: entry.quality_weights,
       bind_type: entry.bind_type,
+      sourceType: entry.sourceType,
+      sourcePoolId: entry.sourcePoolId,
     })),
   };
 };
@@ -126,15 +161,40 @@ export const getDropPool = async (poolId: string): Promise<DropPool | null> => {
 /**
  * 从掉落池计算掉落物品
  */
-export const rollDrops = (dropPool: DropPool, fuyuan: number = 0): DropResult[] => {
+const normalizeMonsterKind = (kind: unknown): MonsterKind => {
+  const normalizedKind = String(kind || '').trim().toLowerCase();
+  if (normalizedKind === 'boss') return 'boss';
+  if (normalizedKind === 'elite') return 'elite';
+  return 'normal';
+};
+
+const getCommonPoolMultiplier = (
+  entry: DropPoolEntry,
+  isDungeonBattle: boolean,
+  monsterKind: MonsterKind = 'normal'
+): number => {
+  if (entry.sourceType !== 'common') return 1;
+  if (EXCLUDED_COMMON_POOLS_FOR_MULTIPLIER.has(entry.sourcePoolId)) return 1;
+  const multiplierConfig = COMMON_POOL_MULTIPLIER[monsterKind];
+  return isDungeonBattle ? multiplierConfig.dungeonBattle : multiplierConfig.normalBattle;
+};
+
+export const rollDrops = (
+  dropPool: DropPool,
+  fuyuan: number = 0,
+  options: RollDropsOptions = {}
+): DropResult[] => {
   const results: DropResult[] = [];
   const cappedFuyuan = Math.min(200, Math.max(0, Number(fuyuan ?? 0)));
   const chanceMultiplier = 1 + cappedFuyuan * 0.0025;
+  const isDungeonBattle = options.isDungeonBattle === true;
+  const monsterKind = normalizeMonsterKind(options.monsterKind);
   
   if (dropPool.mode === 'prob') {
     // 概率模式：每个条目独立判定
     for (const entry of dropPool.entries) {
-      const effectiveChance = Math.max(0, Math.min(1, entry.chance * chanceMultiplier));
+      const poolMultiplier = getCommonPoolMultiplier(entry, isDungeonBattle, monsterKind);
+      const effectiveChance = Math.max(0, Math.min(1, entry.chance * chanceMultiplier * poolMultiplier));
       if (Math.random() < effectiveChance) {
         const quantity = randomInt(entry.qty_min, entry.qty_max);
         results.push({
@@ -147,11 +207,13 @@ export const rollDrops = (dropPool: DropPool, fuyuan: number = 0): DropResult[] 
     }
   } else if (dropPool.mode === 'weight') {
     // 权重模式：按权重随机选择一个
-    const totalWeight = dropPool.entries.reduce((sum, e) => sum + e.weight, 0);
+    const totalWeight = dropPool.entries.reduce((sum, entry) => {
+      return sum + entry.weight * getCommonPoolMultiplier(entry, isDungeonBattle, monsterKind);
+    }, 0);
     if (totalWeight > 0) {
       let roll = Math.random() * totalWeight;
       for (const entry of dropPool.entries) {
-        roll -= entry.weight;
+        roll -= entry.weight * getCommonPoolMultiplier(entry, isDungeonBattle, monsterKind);
         if (roll <= 0) {
           const quantity = randomInt(entry.qty_min, entry.qty_max);
           results.push({
@@ -181,7 +243,8 @@ export const calculateAllDrops = async (monsters: MonsterData[]): Promise<DropRe
     const dropPool = await getDropPool(monster.drop_pool_id);
     if (!dropPool) continue;
     
-    const drops = rollDrops(dropPool);
+    const monsterKind = normalizeMonsterKind(monster.kind);
+    const drops = rollDrops(dropPool, 0, { monsterKind });
     allDrops.push(...drops);
   }
   
@@ -233,7 +296,8 @@ const mergeDrops = (drops: DropResult[]): DropResult[] => {
 export const distributeBattleRewards = async (
   monsters: MonsterData[],
   participants: BattleParticipant[],
-  isVictory: boolean
+  isVictory: boolean,
+  options: DistributeBattleRewardsOptions = {}
 ): Promise<DistributeResult> => {
   if (!isVictory || participants.length === 0) {
     return {
@@ -293,6 +357,7 @@ export const distributeBattleRewards = async (
     };
 
     const participantCount = participants.length;
+    const isDungeonBattle = options.isDungeonBattle === true;
     const mergedDropsByReceiver = new Map<
       string,
       { receiver: BattleParticipant; drop: DropResult; receiverFuyuan: number }
@@ -308,7 +373,10 @@ export const distributeBattleRewards = async (
       const receiver = participants[receiverIndex];
       const receiverFuyuan = Number(receiver.fuyuan ?? 1);
 
-      const drops = rollDrops(dropPool, receiverFuyuan);
+      const drops = rollDrops(dropPool, receiverFuyuan, {
+        isDungeonBattle,
+        monsterKind: normalizeMonsterKind(monster.kind),
+      });
       for (const drop of drops) {
         const key = `${receiver.characterId}|${drop.itemDefId}|${drop.bindType}|${stableQualityWeightsKey(drop.qualityWeights)}`;
         const existing = mergedDropsByReceiver.get(key);

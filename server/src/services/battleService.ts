@@ -666,6 +666,7 @@ function resolveMonsterRuntime(
     exp_reward: Math.max(0, Math.floor(Number(def.exp_reward ?? 0) || 0)),
     silver_reward_min: Math.max(0, Math.floor(Number(def.silver_reward_min ?? 0) || 0)),
     silver_reward_max: Math.max(0, Math.floor(Number(def.silver_reward_max ?? 0) || 0)),
+    kind: toText(def.kind) || 'normal',
     drop_pool_id: toText(def.drop_pool_id) || undefined,
   };
   const entry: MonsterRuntimeCacheEntry = {
@@ -1791,6 +1792,7 @@ async function finishBattle(
   const participantUserIds = (battleParticipants.get(battleId) || []).slice();
   const participantCount = Math.max(1, participantUserIds.length);
   const isVictory = result.result === 'attacker_win';
+  const isDungeonBattle = battleId.startsWith('dungeon-battle-');
   
   // 构建参与者信息
   const participants: BattleParticipant[] = [];
@@ -1810,7 +1812,7 @@ async function finishBattle(
 
   if (state.battleType === 'pve') {
     if (isVictory) {
-      dropResult = await distributeBattleRewards(monsters, participants, true);
+      dropResult = await distributeBattleRewards(monsters, participants, true, { isDungeonBattle });
 
       for (const participantUserId of participantUserIds) {
         const computed = await getCharacterComputedByUserId(participantUserId);

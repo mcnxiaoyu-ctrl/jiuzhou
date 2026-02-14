@@ -99,6 +99,7 @@ export interface MonsterData {
   exp_reward: number;
   silver_reward_min: number;
   silver_reward_max: number;
+  kind?: string;
   drop_pool_id?: string;
 }
 

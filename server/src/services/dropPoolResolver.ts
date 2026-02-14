@@ -36,6 +36,8 @@ export type ResolvedDropPoolEntry = {
   bind_type: string;
   show_in_ui: boolean;
   sort_order: number;
+  sourceType: 'common' | 'exclusive';
+  sourcePoolId: string;
 };
 
 export type ResolvedDropPool = {
@@ -71,7 +73,7 @@ const normalizeQualityWeights = (value: DropPoolEntryConfig['quality_weights']):
   return Object.keys(normalized).length > 0 ? normalized : null;
 };
 
-const normalizeEntry = (entry: DropPoolEntryConfig): ResolvedDropPoolEntry | null => {
+const normalizeEntry = (entry: DropPoolEntryConfig): Omit<ResolvedDropPoolEntry, 'sourceType' | 'sourcePoolId'> | null => {
   const itemDefId = typeof entry.item_def_id === 'string' ? entry.item_def_id.trim() : '';
   if (!itemDefId) return null;
 
@@ -88,6 +90,16 @@ const normalizeEntry = (entry: DropPoolEntryConfig): ResolvedDropPoolEntry | nul
     sort_order: Math.max(0, Math.floor(toFiniteNumber(entry.sort_order, 0))),
   };
 };
+
+const withPoolSource = (
+  entry: Omit<ResolvedDropPoolEntry, 'sourceType' | 'sourcePoolId'>,
+  sourceType: ResolvedDropPoolEntry['sourceType'],
+  sourcePoolId: string
+): ResolvedDropPoolEntry => ({
+  ...entry,
+  sourceType,
+  sourcePoolId,
+});
 
 const normalizeMode = (mode: DropPoolDefConfig['mode']): ResolvedDropPoolMode => {
   return mode === 'weight' ? 'weight' : 'prob';
@@ -145,7 +157,10 @@ export const resolveDropPoolById = (poolId: string): ResolvedDropPool | null => 
     for (const rawEntry of commonEntries) {
       const normalizedEntry = normalizeEntry(rawEntry);
       if (!normalizedEntry) continue;
-      mergedByItemDefId.set(normalizedEntry.item_def_id, normalizedEntry);
+      mergedByItemDefId.set(
+        normalizedEntry.item_def_id,
+        withPoolSource(normalizedEntry, 'common', commonPoolId),
+      );
     }
   }
 
@@ -153,7 +168,10 @@ export const resolveDropPoolById = (poolId: string): ResolvedDropPool | null => 
   for (const rawEntry of exclusiveEntries) {
     const normalizedEntry = normalizeEntry(rawEntry);
     if (!normalizedEntry) continue;
-    mergedByItemDefId.set(normalizedEntry.item_def_id, normalizedEntry);
+    mergedByItemDefId.set(
+      normalizedEntry.item_def_id,
+      withPoolSource(normalizedEntry, 'exclusive', id),
+    );
   }
 
   const entries = Array.from(mergedByItemDefId.values()).sort(
