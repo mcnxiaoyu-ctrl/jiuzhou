@@ -9,7 +9,9 @@ import type {
   BattleAttrs,
   BattleSkill,
   BattleStats,
-  BattleSetBonusEffect
+  BattleSetBonusEffect,
+  MonsterAIProfile,
+  SkillEffect
 } from './types.js';
 import { generateBattleSeed, getNextRandom } from './utils/random.js';
 import { getNormalAttack } from './modules/skill.js';
@@ -93,6 +95,7 @@ export interface MonsterData {
     lingqi_huifu?: number;
   };
   skills?: string[];
+  ai_profile?: MonsterAIProfile;
   exp_reward: number;
   silver_reward_min: number;
   silver_reward_max: number;
@@ -203,7 +206,7 @@ export interface SkillData {
   target_count: number;
   damage_type: string;
   element: string;
-  effects: any[];
+  effects: SkillEffect[];
   ai_priority: number;
 }
 
@@ -388,6 +391,8 @@ function createMonsterUnit(state: BattleState, data: MonsterData, skills: SkillD
     shields: [],
     buffs: [],
     setBonusEffects: [],
+    aiProfile: data.ai_profile,
+    triggeredPhaseIds: [],
     skills: battleSkills,
     skillCooldowns: {},
     controlDiminishing: {},

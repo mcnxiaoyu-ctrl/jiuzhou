@@ -12,7 +12,16 @@ import {
   type SkillData
 } from '../battle/BattleFactory.js';
 import { BattleEngine } from '../battle/BattleEngine.js';
-import type { BattleState, BattleSetBonusEffect } from '../battle/types.js';
+import type {
+  BattleAttrs,
+  BattleSkill,
+  BattleState,
+  BattleSetBonusEffect,
+  MonsterAIBehavior,
+  MonsterAIPhaseTrigger,
+  MonsterAIProfile,
+  SkillEffect,
+} from '../battle/types.js';
 import {
   distributeBattleRewards,
   type BattleParticipant,
@@ -35,7 +44,16 @@ import {
   recoverBattleStartResourcesByUserIds,
   setCharacterResourcesByCharacterId,
 } from './characterComputedService.js';
-import { getItemDefinitionsByIds, getItemSetDefinitions, getMonsterDefinitions, getSkillDefinitions } from './staticConfigLoader.js';
+import {
+  getItemDefinitionsByIds,
+  getItemSetDefinitions,
+  getMonsterDefinitions,
+  getSkillDefinitions,
+  type MonsterAIProfileConfig,
+  type MonsterDefConfig,
+  type MonsterPhaseTriggerConfig,
+  type SkillDefConfig,
+} from './staticConfigLoader.js';
 
 // 活跃战斗缓存
 const activeBattles = new Map<string, BattleEngine>();
@@ -257,6 +275,446 @@ function toNumber(value: unknown): number | null {
 
 function toText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+const MONSTER_AI_BEHAVIOR_SET = new Set<MonsterAIBehavior>([
+  'passive',
+  'aggressive',
+  'defensive',
+  'support',
+  'boss',
+  'normal',
+  'elite',
+]);
+const MONSTER_PHASE_ACTION_SET = new Set(['enrage', 'summon']);
+const MONSTER_PHASE_BUFF_PATTERN = /^(buff|debuff)-([a-z0-9-]+)-(up|down)$/i;
+const MONSTER_SKILL_TARGET_TYPE_SET = new Set<BattleSkill['targetType']>([
+  'self',
+  'single_enemy',
+  'single_ally',
+  'all_enemy',
+  'all_ally',
+  'random_enemy',
+  'random_ally',
+]);
+
+type MonsterRuntimeCacheEntry = {
+  monster: MonsterData;
+  skills: SkillData[];
+  attrs: BattleAttrs;
+  battleSkills: BattleSkill[];
+  aiProfile: MonsterAIProfile;
+};
+
+type MonsterRuntimeResolveResult =
+  | { success: true; entry: MonsterRuntimeCacheEntry }
+  | { success: false; error: string };
+
+type OrderedMonstersResolveResult =
+  | { success: true; monsters: MonsterData[]; monsterSkillsMap: Record<string, SkillData[]> }
+  | { success: false; error: string };
+
+function normalizeSkillTargetType(raw: unknown): BattleSkill['targetType'] {
+  const target = toText(raw);
+  return MONSTER_SKILL_TARGET_TYPE_SET.has(target as BattleSkill['targetType'])
+    ? (target as BattleSkill['targetType'])
+    : 'single_enemy';
+}
+
+function normalizeSkillDamageType(raw: unknown): BattleSkill['damageType'] {
+  const value = toText(raw);
+  if (value === 'physical' || value === 'magic' || value === 'true') return value;
+  return undefined;
+}
+
+function cloneSkillEffectList(raw: unknown): SkillEffect[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SkillEffect[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+    out.push({ ...(row as SkillEffect) });
+  }
+  return out;
+}
+
+function toBattleSkillData(row: SkillDefConfig): SkillData {
+  return {
+    id: String(row.id),
+    name: String(row.name || row.id),
+    cost_lingqi: Math.max(0, Math.floor(Number(row.cost_lingqi ?? 0) || 0)),
+    cost_qixue: Math.max(0, Math.floor(Number(row.cost_qixue ?? 0) || 0)),
+    cooldown: Math.max(0, Math.floor(Number(row.cooldown ?? 0) || 0)),
+    target_type: String(row.target_type || 'single_enemy'),
+    target_count: Math.max(1, Math.floor(Number(row.target_count ?? 1) || 1)),
+    damage_type: String(row.damage_type || 'none'),
+    element: String(row.element || 'none'),
+    effects: cloneSkillEffectList(row.effects),
+    ai_priority: Math.max(0, Math.floor(Number(row.ai_priority ?? 50) || 50)),
+  };
+}
+
+function toBattleSkill(skill: SkillData): BattleSkill {
+  return {
+    id: skill.id,
+    name: skill.name,
+    source: 'innate',
+    cost: {
+      lingqi: skill.cost_lingqi,
+      qixue: skill.cost_qixue,
+    },
+    cooldown: skill.cooldown,
+    targetType: normalizeSkillTargetType(skill.target_type),
+    targetCount: Math.max(1, Math.floor(skill.target_count || 1)),
+    damageType: normalizeSkillDamageType(skill.damage_type),
+    element: String(skill.element || 'none'),
+    effects: skill.effects.map((effect) => ({ ...effect })),
+    triggerType: 'active',
+    aiPriority: Math.max(0, Math.floor(skill.ai_priority || 0)),
+  };
+}
+
+function cloneBattleSkill(skill: BattleSkill): BattleSkill {
+  return {
+    ...skill,
+    cost: { ...skill.cost },
+    effects: skill.effects.map((effect) => ({ ...effect })),
+  };
+}
+
+function toOptionalNumber(value: unknown): number | undefined {
+  const n = toNumber(value);
+  return n === null ? undefined : n;
+}
+
+function normalizeMonsterBaseAttrs(raw: unknown): MonsterData['base_attrs'] {
+  const attrs = toRecord(raw);
+  return {
+    qixue: toOptionalNumber(attrs.qixue),
+    max_qixue: toOptionalNumber(attrs.max_qixue),
+    lingqi: toOptionalNumber(attrs.lingqi),
+    max_lingqi: toOptionalNumber(attrs.max_lingqi),
+    wugong: toOptionalNumber(attrs.wugong),
+    fagong: toOptionalNumber(attrs.fagong),
+    wufang: toOptionalNumber(attrs.wufang),
+    fafang: toOptionalNumber(attrs.fafang),
+    sudu: toOptionalNumber(attrs.sudu),
+    mingzhong: toOptionalNumber(attrs.mingzhong),
+    shanbi: toOptionalNumber(attrs.shanbi),
+    zhaojia: toOptionalNumber(attrs.zhaojia),
+    baoji: toOptionalNumber(attrs.baoji),
+    baoshang: toOptionalNumber(attrs.baoshang),
+    kangbao: toOptionalNumber(attrs.kangbao),
+    zengshang: toOptionalNumber(attrs.zengshang),
+    zhiliao: toOptionalNumber(attrs.zhiliao),
+    jianliao: toOptionalNumber(attrs.jianliao),
+    xixue: toOptionalNumber(attrs.xixue),
+    lengque: toOptionalNumber(attrs.lengque),
+    kongzhi_kangxing: toOptionalNumber(attrs.kongzhi_kangxing),
+    jin_kangxing: toOptionalNumber(attrs.jin_kangxing),
+    mu_kangxing: toOptionalNumber(attrs.mu_kangxing),
+    shui_kangxing: toOptionalNumber(attrs.shui_kangxing),
+    huo_kangxing: toOptionalNumber(attrs.huo_kangxing),
+    tu_kangxing: toOptionalNumber(attrs.tu_kangxing),
+    qixue_huifu: toOptionalNumber(attrs.qixue_huifu),
+    lingqi_huifu: toOptionalNumber(attrs.lingqi_huifu),
+  };
+}
+
+function extractMonsterAttrsForSummon(def: MonsterDefConfig): BattleAttrs {
+  const attrs = normalizeMonsterBaseAttrs(def.base_attrs);
+  return {
+    max_qixue: toNumber(attrs.max_qixue ?? attrs.qixue) ?? 100,
+    max_lingqi: toNumber(attrs.max_lingqi ?? attrs.lingqi) ?? 0,
+    wugong: toNumber(attrs.wugong) ?? 0,
+    fagong: toNumber(attrs.fagong) ?? 0,
+    wufang: toNumber(attrs.wufang) ?? 0,
+    fafang: toNumber(attrs.fafang) ?? 0,
+    sudu: Math.max(1, toNumber(attrs.sudu) ?? 1),
+    mingzhong: toNumber(attrs.mingzhong) ?? 0.9,
+    shanbi: toNumber(attrs.shanbi) ?? 0,
+    zhaojia: toNumber(attrs.zhaojia) ?? 0,
+    baoji: toNumber(attrs.baoji) ?? 0,
+    baoshang: toNumber(attrs.baoshang) ?? 0,
+    kangbao: toNumber(attrs.kangbao) ?? 0,
+    zengshang: toNumber(attrs.zengshang) ?? 0,
+    zhiliao: toNumber(attrs.zhiliao) ?? 0,
+    jianliao: toNumber(attrs.jianliao) ?? 0,
+    xixue: toNumber(attrs.xixue) ?? 0,
+    lengque: toNumber(attrs.lengque) ?? 0,
+    kongzhi_kangxing: toNumber(attrs.kongzhi_kangxing) ?? 0,
+    jin_kangxing: toNumber(attrs.jin_kangxing) ?? 0,
+    mu_kangxing: toNumber(attrs.mu_kangxing) ?? 0,
+    shui_kangxing: toNumber(attrs.shui_kangxing) ?? 0,
+    huo_kangxing: toNumber(attrs.huo_kangxing) ?? 0,
+    tu_kangxing: toNumber(attrs.tu_kangxing) ?? 0,
+    qixue_huifu: toNumber(attrs.qixue_huifu) ?? 0,
+    lingqi_huifu: toNumber(attrs.lingqi_huifu) ?? 0,
+    realm: toText(def.realm) || '凡人',
+    element: toText(def.element) || 'none',
+  };
+}
+
+function parseMonsterBehavior(raw: unknown, monsterId: string): MonsterAIBehavior | null {
+  const behaviorText = toText(raw);
+  if (!behaviorText) return 'aggressive';
+  if (!MONSTER_AI_BEHAVIOR_SET.has(behaviorText as MonsterAIBehavior)) {
+    return null;
+  }
+  return behaviorText as MonsterAIBehavior;
+}
+
+function parsePhaseEffects(
+  raw: unknown,
+  monsterId: string,
+  triggerIndex: number
+): { success: true; effects: SkillEffect[] } | { success: false; error: string } {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return { success: false, error: `怪物[${monsterId}] 第${triggerIndex}条阶段触发缺少effects配置` };
+  }
+
+  const effects: SkillEffect[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const effect = toRecord(raw[i]);
+    const effectType = toText(effect.type);
+    if (effectType !== 'buff' && effectType !== 'debuff') {
+      return {
+        success: false,
+        error: `怪物[${monsterId}] 第${triggerIndex}条阶段触发第${i + 1}个effect仅支持buff/debuff`,
+      };
+    }
+
+    const buffId = toText(effect.buffId);
+    if (!MONSTER_PHASE_BUFF_PATTERN.test(buffId)) {
+      return {
+        success: false,
+        error: `怪物[${monsterId}] 第${triggerIndex}条阶段触发第${i + 1}个effect的buffId非法: ${buffId}`,
+      };
+    }
+
+    const value = toNumber(effect.value);
+    if (value === null || value <= 0) {
+      return {
+        success: false,
+        error: `怪物[${monsterId}] 第${triggerIndex}条阶段触发第${i + 1}个effect的value必须>0`,
+      };
+    }
+
+    const durationRaw = toNumber(effect.duration);
+    const duration = durationRaw === null ? 1 : Math.max(1, Math.floor(durationRaw));
+    const stacksRaw = toNumber(effect.stacks);
+    const stacks = stacksRaw === null ? 1 : Math.max(1, Math.floor(stacksRaw));
+    effects.push({
+      type: effectType,
+      buffId,
+      value,
+      duration,
+      stacks,
+    });
+  }
+  return { success: true, effects };
+}
+
+function resolveMonsterRuntime(
+  monsterId: string,
+  monsterDefMap: Map<string, MonsterDefConfig>,
+  skillDefMap: Map<string, SkillDefConfig>,
+  cache: Map<string, MonsterRuntimeCacheEntry>,
+  resolvingPath: Set<string>,
+): MonsterRuntimeResolveResult {
+  const cached = cache.get(monsterId);
+  if (cached) return { success: true, entry: cached };
+  if (resolvingPath.has(monsterId)) {
+    return { success: false, error: `怪物AI配置存在循环召唤: ${monsterId}` };
+  }
+
+  const def = monsterDefMap.get(monsterId);
+  if (!def || def.enabled === false) {
+    return { success: false, error: `怪物配置不存在或未启用: ${monsterId}` };
+  }
+
+  resolvingPath.add(monsterId);
+  const aiProfileRaw: MonsterAIProfileConfig = def.ai_profile ?? {};
+  const behavior = parseMonsterBehavior(aiProfileRaw.behavior, monsterId);
+  if (!behavior) {
+    resolvingPath.delete(monsterId);
+    return { success: false, error: `怪物[${monsterId}] behavior非法: ${toText(aiProfileRaw.behavior)}` };
+  }
+
+  const skillIds = uniqueStringIds(
+    (Array.isArray(aiProfileRaw.skills) ? aiProfileRaw.skills : [])
+      .map((skillId) => String(skillId || '').trim())
+      .filter((skillId) => skillId.length > 0)
+  );
+  const skills: SkillData[] = [];
+  for (const skillId of skillIds) {
+    const skillDef = skillDefMap.get(skillId);
+    if (!skillDef || skillDef.enabled === false) {
+      resolvingPath.delete(monsterId);
+      return { success: false, error: `怪物[${monsterId}] 引用了不存在的技能: ${skillId}` };
+    }
+    skills.push(toBattleSkillData(skillDef));
+  }
+
+  const skillWeights: Record<string, number> = {};
+  const skillWeightRaw = toRecord(aiProfileRaw.skill_weights);
+  for (const [skillIdRaw, weightRaw] of Object.entries(skillWeightRaw)) {
+    const skillId = String(skillIdRaw || '').trim();
+    if (!skillId) continue;
+    if (!skillIds.includes(skillId)) {
+      resolvingPath.delete(monsterId);
+      return { success: false, error: `怪物[${monsterId}] skill_weights包含未配置技能: ${skillId}` };
+    }
+    const weight = toNumber(weightRaw);
+    if (weight === null || weight <= 0) {
+      resolvingPath.delete(monsterId);
+      return { success: false, error: `怪物[${monsterId}] 技能权重非法: ${skillId}` };
+    }
+    skillWeights[skillId] = weight;
+  }
+
+  const phaseTriggers: MonsterAIPhaseTrigger[] = [];
+  const rawPhaseTriggers = Array.isArray(aiProfileRaw.phase_triggers) ? aiProfileRaw.phase_triggers : [];
+  for (let i = 0; i < rawPhaseTriggers.length; i++) {
+    const triggerRaw = (rawPhaseTriggers[i] ?? {}) as MonsterPhaseTriggerConfig;
+    const hpPercentRaw = toNumber(triggerRaw.hp_percent);
+    if (hpPercentRaw === null || hpPercentRaw <= 0 || hpPercentRaw > 1) {
+      resolvingPath.delete(monsterId);
+      return { success: false, error: `怪物[${monsterId}] 第${i + 1}条阶段触发hp_percent非法` };
+    }
+
+    const action = toText(triggerRaw.action);
+    if (!MONSTER_PHASE_ACTION_SET.has(action)) {
+      resolvingPath.delete(monsterId);
+      return { success: false, error: `怪物[${monsterId}] 第${i + 1}条阶段触发action非法: ${action}` };
+    }
+
+    const triggerId = `${monsterId}-phase-${i + 1}`;
+    if (action === 'enrage') {
+      const effectResult = parsePhaseEffects(triggerRaw.effects, monsterId, i + 1);
+      if (!effectResult.success) {
+        resolvingPath.delete(monsterId);
+        return { success: false, error: effectResult.error };
+      }
+      phaseTriggers.push({
+        id: triggerId,
+        hpPercent: hpPercentRaw,
+        action: 'enrage',
+        effects: effectResult.effects,
+        summonCount: 1,
+      });
+      continue;
+    }
+
+    const summonMonsterId = toText(triggerRaw.summon_id);
+    if (!summonMonsterId) {
+      resolvingPath.delete(monsterId);
+      return { success: false, error: `怪物[${monsterId}] 第${i + 1}条召唤触发缺少summon_id` };
+    }
+    const summonCountRaw = toNumber(triggerRaw.summon_count);
+    const summonCount = summonCountRaw === null ? 1 : Math.max(1, Math.floor(summonCountRaw));
+    if (summonCount !== 1) {
+      resolvingPath.delete(monsterId);
+      return { success: false, error: `怪物[${monsterId}] 第${i + 1}条召唤触发仅支持summon_count=1` };
+    }
+    const summonResult = resolveMonsterRuntime(
+      summonMonsterId,
+      monsterDefMap,
+      skillDefMap,
+      cache,
+      resolvingPath,
+    );
+    if (!summonResult.success) {
+      resolvingPath.delete(monsterId);
+      return { success: false, error: summonResult.error };
+    }
+    phaseTriggers.push({
+      id: triggerId,
+      hpPercent: hpPercentRaw,
+      action: 'summon',
+      effects: [],
+      summonMonsterId,
+      summonCount,
+      summonTemplate: {
+        id: summonMonsterId,
+        name: summonResult.entry.monster.name,
+        realm: summonResult.entry.monster.realm,
+        element: summonResult.entry.monster.element,
+        baseAttrs: { ...summonResult.entry.attrs },
+        skills: summonResult.entry.battleSkills.map((skill) => cloneBattleSkill(skill)),
+        aiProfile: summonResult.entry.aiProfile,
+      },
+    });
+  }
+
+  const aiProfile: MonsterAIProfile = {
+    behavior,
+    skillIds,
+    skillWeights,
+    phaseTriggers,
+  };
+  const monster: MonsterData = {
+    id: monsterId,
+    name: toText(def.name) || monsterId,
+    realm: toText(def.realm) || '凡人',
+    element: toText(def.element) || 'none',
+    attr_variance: def.attr_variance,
+    attr_multiplier_min: def.attr_multiplier_min,
+    attr_multiplier_max: def.attr_multiplier_max,
+    base_attrs: normalizeMonsterBaseAttrs(def.base_attrs),
+    skills: [...skillIds],
+    ai_profile: aiProfile,
+    exp_reward: Math.max(0, Math.floor(Number(def.exp_reward ?? 0) || 0)),
+    silver_reward_min: Math.max(0, Math.floor(Number(def.silver_reward_min ?? 0) || 0)),
+    silver_reward_max: Math.max(0, Math.floor(Number(def.silver_reward_max ?? 0) || 0)),
+    drop_pool_id: toText(def.drop_pool_id) || undefined,
+  };
+  const entry: MonsterRuntimeCacheEntry = {
+    monster,
+    skills,
+    attrs: extractMonsterAttrsForSummon(def),
+    battleSkills: skills.map((skill) => toBattleSkill(skill)),
+    aiProfile,
+  };
+  cache.set(monsterId, entry);
+  resolvingPath.delete(monsterId);
+  return { success: true, entry };
+}
+
+function resolveOrderedMonsters(monsterIds: string[]): OrderedMonstersResolveResult {
+  const ids = monsterIds
+    .map((id) => String(id || '').trim())
+    .filter((id) => id.length > 0);
+  if (ids.length === 0) {
+    return { success: false, error: '请指定战斗目标' };
+  }
+
+  const monsterDefMap = new Map(
+    getMonsterDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.id, entry] as const)
+  );
+  const skillDefMap = new Map(
+    getSkillDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.id, entry] as const)
+  );
+
+  const cache = new Map<string, MonsterRuntimeCacheEntry>();
+  const monsters: MonsterData[] = [];
+  const monsterSkillsMap: Record<string, SkillData[]> = {};
+  for (const id of ids) {
+    const runtimeResult = resolveMonsterRuntime(id, monsterDefMap, skillDefMap, cache, new Set<string>());
+    if (!runtimeResult.success) {
+      return { success: false, error: runtimeResult.error };
+    }
+    monsters.push(runtimeResult.entry.monster);
+    monsterSkillsMap[id] = runtimeResult.entry.skills.map((skill) => ({
+      ...skill,
+      effects: skill.effects.map((effect) => ({ ...effect })),
+    }));
+  }
+
+  return { success: true, monsters, monsterSkillsMap };
 }
 
 type SkillUpgradeRule = {
@@ -532,7 +990,7 @@ async function getCharacterBattleSkillData(characterId: number): Promise<SkillDa
       cost_qixue: Math.max(0, Math.floor(Number(row.cost_qixue ?? 0) || 0)),
       cooldown: Math.max(0, Math.floor(Number(row.cooldown ?? 0) || 0)),
       target_count: Math.max(1, Math.floor(Number(row.target_count ?? 1) || 1)),
-      effects: cloneEffects(Array.isArray(row.effects) ? row.effects : (row.effects ?? [])),
+      effects: cloneSkillEffectList(Array.isArray(row.effects) ? row.effects : (row.effects ?? [])),
       ai_priority: Math.max(0, Math.floor(Number(row.ai_priority ?? 50) || 50)),
     };
 
@@ -877,29 +1335,12 @@ export async function startPVEBattle(
       }
     }
 
-    const uniqIds = uniqueStringIds(finalMonsterIds);
-    const idSet = new Set(uniqIds);
-    const monsterDefs = getMonsterDefinitions()
-      .filter((entry) => entry.enabled !== false)
-      .filter((entry) => idSet.has(entry.id)) as MonsterData[];
-
-    if (monsterDefs.length === 0) {
-      return { success: false, message: '怪物不存在' };
+    const monsterResolveResult = resolveOrderedMonsters(finalMonsterIds);
+    if (!monsterResolveResult.success) {
+      return { success: false, message: monsterResolveResult.error };
     }
-    const monsterDefMap = new Map(monsterDefs.map((m) => [m.id, m] as const));
-    const monsters: MonsterData[] = [];
-    for (const id of finalMonsterIds) {
-      const def = monsterDefMap.get(id);
-      if (!def) {
-        return { success: false, message: '怪物不存在' };
-      }
-      monsters.push(def);
-    }
-
-    const monsterSkillsMap: Record<string, SkillData[]> = {};
-    for (const monster of monsters) {
-      monsterSkillsMap[monster.id] = [];
-    }
+    const monsters = monsterResolveResult.monsters;
+    const monsterSkillsMap = monsterResolveResult.monsterSkillsMap;
     
     // 生成战斗ID
     const battleId = `battle-${userId}-${Date.now()}`;
@@ -1081,28 +1522,12 @@ export async function startDungeonPVEBattle(
     const maxMonsters = Math.min(5, Math.max(1, playerCount > 1 ? playerCount : 3));
     const finalMonsterIds = requestedMonsterIds.slice(0, maxMonsters);
 
-    const uniqIds = uniqueStringIds(finalMonsterIds);
-    const idSet = new Set(uniqIds);
-    const monsterDefs = getMonsterDefinitions()
-      .filter((entry) => entry.enabled !== false)
-      .filter((entry) => idSet.has(entry.id)) as MonsterData[];
-    if (monsterDefs.length === 0) {
-      return { success: false, message: '怪物不存在' };
+    const monsterResolveResult = resolveOrderedMonsters(finalMonsterIds);
+    if (!monsterResolveResult.success) {
+      return { success: false, message: monsterResolveResult.error };
     }
-    const monsterDefMap = new Map(monsterDefs.map((m) => [m.id, m] as const));
-    const monsters: MonsterData[] = [];
-    for (const id of finalMonsterIds) {
-      const def = monsterDefMap.get(id);
-      if (!def) {
-        return { success: false, message: '怪物不存在' };
-      }
-      monsters.push(def);
-    }
-
-    const monsterSkillsMap: Record<string, SkillData[]> = {};
-    for (const monster of monsters) {
-      monsterSkillsMap[monster.id] = [];
-    }
+    const monsters = monsterResolveResult.monsters;
+    const monsterSkillsMap = monsterResolveResult.monsterSkillsMap;
 
     const battleId = `dungeon-battle-${userId}-${Date.now()}`;
     const battleState = createPVEBattle(

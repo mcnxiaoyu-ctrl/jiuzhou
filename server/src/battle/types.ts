@@ -3,6 +3,47 @@
  */
 
 // ============================================
+// 怪物AI配置
+// ============================================
+export type MonsterAIBehavior =
+  | 'passive'
+  | 'aggressive'
+  | 'defensive'
+  | 'support'
+  | 'boss'
+  | 'normal'
+  | 'elite';
+
+export type MonsterPhaseTriggerAction = 'enrage' | 'summon';
+
+export interface MonsterAISummonTemplate {
+  id: string;
+  name: string;
+  realm: string;
+  element: string;
+  baseAttrs: BattleAttrs;
+  skills: BattleSkill[];
+  aiProfile?: MonsterAIProfile;
+}
+
+export interface MonsterAIPhaseTrigger {
+  id: string;
+  hpPercent: number;
+  action: MonsterPhaseTriggerAction;
+  effects: SkillEffect[];
+  summonMonsterId?: string;
+  summonCount: number;
+  summonTemplate?: MonsterAISummonTemplate;
+}
+
+export interface MonsterAIProfile {
+  behavior: MonsterAIBehavior;
+  skillIds: string[];
+  skillWeights: Record<string, number>;
+  phaseTriggers: MonsterAIPhaseTrigger[];
+}
+
+// ============================================
 // 战斗单位
 // ============================================
 export interface BattleUnit {
@@ -32,6 +73,14 @@ export interface BattleUnit {
 
   // 套装战斗效果（仅战斗期触发型效果）
   setBonusEffects: BattleSetBonusEffect[];
+
+  // 怪物AI配置（怪物/召唤物可选）
+  aiProfile?: MonsterAIProfile;
+  // 阶段触发去重（同一条phase trigger仅触发一次）
+  triggeredPhaseIds?: string[];
+  // 召唤关系（用于结算口径）
+  isSummon?: boolean;
+  summonerId?: string;
   
   // 控制递减（PVP用）
   controlDiminishing: Record<string, ControlDiminishing>;

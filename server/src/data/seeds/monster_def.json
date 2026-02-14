@@ -509,12 +509,21 @@
           {
             "hp_percent": 0.5,
             "action": "enrage",
-            "buff": "damage_up_20"
+            "effects": [
+              {
+                "type": "buff",
+                "buffId": "buff-zengshang-up",
+                "value": 0.2,
+                "duration": 99,
+                "stacks": 1
+              }
+            ]
           },
           {
             "hp_percent": 0.2,
             "action": "summon",
-            "summon_id": "monster-tree-spirit"
+            "summon_id": "monster-tree-spirit",
+            "summon_count": 1
           }
         ]
       },
@@ -911,12 +920,21 @@
           {
             "hp_percent": 0.6,
             "action": "enrage",
-            "buff": "damage_up_20"
+            "effects": [
+              {
+                "type": "buff",
+                "buffId": "buff-zengshang-up",
+                "value": 0.2,
+                "duration": 99,
+                "stacks": 1
+              }
+            ]
           },
           {
             "hp_percent": 0.3,
             "action": "summon",
-            "summon_id": "monster-shadow-viper"
+            "summon_id": "monster-shadow-viper",
+            "summon_count": 1
           }
         ]
       },
@@ -1543,12 +1561,21 @@
           {
             "hp_percent": 0.6,
             "action": "enrage",
-            "buff": "damage_up_25"
+            "effects": [
+              {
+                "type": "buff",
+                "buffId": "buff-zengshang-up",
+                "value": 0.25,
+                "duration": 99,
+                "stacks": 1
+              }
+            ]
           },
           {
             "hp_percent": 0.35,
             "action": "summon",
-            "summon_id": "monster-xinmo-huanying"
+            "summon_id": "monster-xinmo-huanying",
+            "summon_count": 1
           }
         ]
       },
@@ -1627,12 +1654,28 @@
           {
             "hp_percent": 0.65,
             "action": "enrage",
-            "buff": "def_up_20"
+            "effects": [
+              {
+                "type": "buff",
+                "buffId": "buff-wufang-up",
+                "value": 0.2,
+                "duration": 99,
+                "stacks": 1
+              },
+              {
+                "type": "buff",
+                "buffId": "buff-fafang-up",
+                "value": 0.2,
+                "duration": 99,
+                "stacks": 1
+              }
+            ]
           },
           {
             "hp_percent": 0.3,
             "action": "summon",
-            "summon_id": "monster-lingmai-jingkuangshou"
+            "summon_id": "monster-lingmai-jingkuangshou",
+            "summon_count": 1
           }
         ]
       },
@@ -2123,12 +2166,28 @@
           {
             "hp_percent": 0.65,
             "action": "enrage",
-            "buff": "def_up_20"
+            "effects": [
+              {
+                "type": "buff",
+                "buffId": "buff-wufang-up",
+                "value": 0.2,
+                "duration": 99,
+                "stacks": 1
+              },
+              {
+                "type": "buff",
+                "buffId": "buff-fafang-up",
+                "value": 0.2,
+                "duration": 99,
+                "stacks": 1
+              }
+            ]
           },
           {
             "hp_percent": 0.3,
             "action": "summon",
-            "summon_id": "monster-yanbing-jingjia-shou"
+            "summon_id": "monster-yanbing-jingjia-shou",
+            "summon_count": 1
           }
         ]
       },
@@ -2207,12 +2266,21 @@
           {
             "hp_percent": 0.6,
             "action": "enrage",
-            "buff": "damage_up_25"
+            "effects": [
+              {
+                "type": "buff",
+                "buffId": "buff-zengshang-up",
+                "value": 0.25,
+                "duration": 99,
+                "stacks": 1
+              }
+            ]
           },
           {
             "hp_percent": 0.35,
             "action": "summon",
-            "summon_id": "monster-yanbing-mojing-huanying"
+            "summon_id": "monster-yanbing-mojing-huanying",
+            "summon_count": 1
           }
         ]
       },
@@ -2220,6 +2288,71 @@
       "exp_reward": 1620,
       "silver_reward_min": 540,
       "silver_reward_max": 840,
+      "enabled": true
+    },
+    {
+      "id": "monster-tree-spirit",
+      "code": "tree_spirit",
+      "name": "树灵",
+      "title": "召唤物",
+      "realm": "炼精化炁·通脉期",
+      "level": 9,
+      "avatar": "/assets/monster/ancient_tree.png",
+      "kind": "summon",
+      "element": "木",
+      "base_attrs": {
+        "qixue": 560,
+        "max_qixue": 560,
+        "lingqi": 120,
+        "max_lingqi": 120,
+        "wugong": 18,
+        "fagong": 42,
+        "wufang": 18,
+        "fafang": 24,
+        "mingzhong": 0.92,
+        "shanbi": 0.04,
+        "baoji": 0.06,
+        "baoshang": 1.6,
+        "sudu": 4,
+        "kongzhi_kangxing": 0.35
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1,
+      "attr_multiplier_max": 1,
+      "display_stats": [
+        {
+          "label": "等级",
+          "value": 9
+        },
+        {
+          "label": "气血",
+          "value": 560
+        },
+        {
+          "label": "法攻",
+          "value": 42
+        },
+        {
+          "label": "物防",
+          "value": 18
+        },
+        {
+          "label": "法防",
+          "value": 24
+        }
+      ],
+      "ai_profile": {
+        "behavior": "normal",
+        "skills": [
+          "sk-vine-whip"
+        ],
+        "skill_weights": {
+          "sk-vine-whip": 100
+        }
+      },
+      "exp_reward": 0,
+      "silver_reward_min": 0,
+      "silver_reward_max": 0,
       "enabled": true
     }
   ]

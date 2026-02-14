@@ -1899,6 +1899,883 @@
       ],
       "sort_weight": 332,
       "enabled": true
+    },
+    {
+      "id": "sk-bite",
+      "code": "sk_bite",
+      "name": "撕咬",
+      "description": "野兽扑咬目标。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 0,
+      "cost_qixue": 0,
+      "cooldown": 1,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "none",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.15
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 52,
+      "sort_weight": 333,
+      "enabled": true
+    },
+    {
+      "id": "sk-howl",
+      "code": "sk_howl",
+      "name": "狼嚎",
+      "description": "以嚎叫激发凶性，短暂提升物攻。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 8,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "self",
+      "target_count": 1,
+      "damage_type": "none",
+      "element": "none",
+      "effects": [
+        {
+          "type": "buff",
+          "buffId": "buff-wugong-up",
+          "duration": 2,
+          "value": 0.18
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 58,
+      "sort_weight": 334,
+      "enabled": true
+    },
+    {
+      "id": "sk-pack-attack",
+      "code": "sk_pack_attack",
+      "name": "群狼扑袭",
+      "description": "呼应同伴对敌方全体发动扑杀。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 16,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "none",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 0.95
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 72,
+      "sort_weight": 335,
+      "enabled": true
+    },
+    {
+      "id": "sk-poison-bite",
+      "code": "sk_poison_bite",
+      "name": "毒牙撕咬",
+      "description": "附带毒蚀效果的咬击。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 10,
+      "cost_qixue": 0,
+      "cooldown": 2,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "mu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.05
+        },
+        {
+          "type": "debuff",
+          "buffId": "debuff-burn",
+          "duration": 2,
+          "value": 0.35,
+          "chance": 0.6
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 66,
+      "sort_weight": 336,
+      "enabled": true
+    },
+    {
+      "id": "sk-stone-smash",
+      "code": "sk_stone_smash",
+      "name": "岩拳重击",
+      "description": "沉重岩拳打击并有概率击晕。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 8,
+      "cost_qixue": 0,
+      "cooldown": 2,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "tu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.25
+        },
+        {
+          "type": "control",
+          "controlType": "stun",
+          "duration": 1,
+          "chance": 0.2
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 70,
+      "sort_weight": 337,
+      "enabled": true
+    },
+    {
+      "id": "sk-vine-whip",
+      "code": "sk_vine_whip",
+      "name": "藤鞭抽击",
+      "description": "木灵之力抽击单体目标。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 6,
+      "cost_qixue": 0,
+      "cooldown": 1,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "mu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.2
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 64,
+      "sort_weight": 338,
+      "enabled": true
+    },
+    {
+      "id": "sk-poison-spore",
+      "code": "sk_poison_spore",
+      "name": "毒孢扩散",
+      "description": "向敌方全体散播毒孢。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 18,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "mu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.85
+        },
+        {
+          "type": "debuff",
+          "buffId": "debuff-burn",
+          "duration": 2,
+          "value": 0.25,
+          "chance": 0.45
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 74,
+      "sort_weight": 339,
+      "enabled": true
+    },
+    {
+      "id": "sk-root-bind",
+      "code": "sk_root_bind",
+      "name": "根须缠缚",
+      "description": "藤根束缚目标并造成法伤。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 14,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "mu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.8
+        },
+        {
+          "type": "control",
+          "controlType": "root",
+          "duration": 1,
+          "chance": 0.65
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 71,
+      "sort_weight": 340,
+      "enabled": true
+    },
+    {
+      "id": "sk-nature-heal",
+      "code": "sk_nature_heal",
+      "name": "自然复苏",
+      "description": "汲取自然气息恢复自身。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 20,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "self",
+      "target_count": 1,
+      "damage_type": "none",
+      "element": "mu",
+      "effects": [
+        {
+          "type": "heal",
+          "valueType": "scale",
+          "scaleAttr": "max_qixue",
+          "scaleRate": 0.18
+        },
+        {
+          "type": "restore_lingqi",
+          "value": 20,
+          "valueType": "flat"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 67,
+      "sort_weight": 341,
+      "enabled": true
+    },
+    {
+      "id": "sk-quake-stomp",
+      "code": "sk_quake_stomp",
+      "name": "震地践踏",
+      "description": "践踏地面冲击敌方全体。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 20,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "tu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 0.9
+        },
+        {
+          "type": "control",
+          "controlType": "stun",
+          "duration": 1,
+          "chance": 0.25
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 76,
+      "sort_weight": 342,
+      "enabled": true
+    },
+    {
+      "id": "sk-shadow-claw",
+      "code": "sk_shadow_claw",
+      "name": "影爪",
+      "description": "以幽影爪刃撕裂并吸取生机。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 10,
+      "cost_qixue": 0,
+      "cooldown": 2,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.18
+        },
+        {
+          "type": "lifesteal",
+          "value": 0.2
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 69,
+      "sort_weight": 343,
+      "enabled": true
+    },
+    {
+      "id": "sk-ghost-curse",
+      "code": "sk_ghost_curse",
+      "name": "鬼咒",
+      "description": "诅咒目标削弱法防。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 14,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.9
+        },
+        {
+          "type": "debuff",
+          "buffId": "buff-fafang-down",
+          "duration": 2,
+          "value": 0.2
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 68,
+      "sort_weight": 344,
+      "enabled": true
+    },
+    {
+      "id": "sk-venom-spray",
+      "code": "sk_venom_spray",
+      "name": "毒雾喷吐",
+      "description": "对敌方全体喷吐蚀骨毒雾。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 18,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "mu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.88
+        },
+        {
+          "type": "debuff",
+          "buffId": "debuff-burn",
+          "duration": 2,
+          "value": 0.22,
+          "chance": 0.5
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 73,
+      "sort_weight": 345,
+      "enabled": true
+    },
+    {
+      "id": "sk-tide-spike",
+      "code": "sk_tide_spike",
+      "name": "潮刺",
+      "description": "水灵凝刺穿透单体目标。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 10,
+      "cost_qixue": 0,
+      "cooldown": 2,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "shui",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.22
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 65,
+      "sort_weight": 346,
+      "enabled": true
+    },
+    {
+      "id": "sk-cold-surge",
+      "code": "sk_cold_surge",
+      "name": "寒潮",
+      "description": "寒潮席卷敌方全体并有概率冻结。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 20,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "shui",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.86
+        },
+        {
+          "type": "control",
+          "controlType": "freeze",
+          "duration": 1,
+          "chance": 0.22
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 75,
+      "sort_weight": 347,
+      "enabled": true
+    },
+    {
+      "id": "sk-xinmo-thorn",
+      "code": "sk_xinmo_thorn",
+      "name": "心魔棘刺",
+      "description": "侵蚀心神并降低控抗。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 12,
+      "cost_qixue": 0,
+      "cooldown": 2,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.28
+        },
+        {
+          "type": "debuff",
+          "buffId": "buff-kongzhi-kangxing-down",
+          "duration": 2,
+          "value": 0.2
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 72,
+      "sort_weight": 348,
+      "enabled": true
+    },
+    {
+      "id": "sk-xinmo-whisper",
+      "code": "sk_xinmo_whisper",
+      "name": "心魔低语",
+      "description": "低语惑心并有概率沉默。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 16,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.92
+        },
+        {
+          "type": "control",
+          "controlType": "silence",
+          "duration": 1,
+          "chance": 0.55
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 74,
+      "sort_weight": 349,
+      "enabled": true
+    },
+    {
+      "id": "sk-crystal-bash",
+      "code": "sk_crystal_bash",
+      "name": "晶脉重击",
+      "description": "晶化拳锋直击敌手。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 10,
+      "cost_qixue": 0,
+      "cooldown": 2,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "tu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.3
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 67,
+      "sort_weight": 350,
+      "enabled": true
+    },
+    {
+      "id": "sk-earth-shock",
+      "code": "sk_earth_shock",
+      "name": "地脉震荡",
+      "description": "震荡敌阵并削弱物防。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 18,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "tu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 0.9
+        },
+        {
+          "type": "debuff",
+          "buffId": "buff-wufang-down",
+          "duration": 2,
+          "value": 0.18
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 75,
+      "sort_weight": 351,
+      "enabled": true
+    },
+    {
+      "id": "sk-youming-slash",
+      "code": "sk_youming_slash",
+      "name": "幽冥斩",
+      "description": "阴寒刀芒重斩敌人。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 12,
+      "cost_qixue": 0,
+      "cooldown": 2,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.38
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 70,
+      "sort_weight": 352,
+      "enabled": true
+    },
+    {
+      "id": "sk-soul-chain",
+      "code": "sk_soul_chain",
+      "name": "缚魂锁",
+      "description": "锁链缠魂并定住目标。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 16,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1
+        },
+        {
+          "type": "control",
+          "controlType": "root",
+          "duration": 1,
+          "chance": 0.7
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 73,
+      "sort_weight": 353,
+      "enabled": true
+    },
+    {
+      "id": "sk-stone-wall",
+      "code": "sk_stone_wall",
+      "name": "岩壁护体",
+      "description": "筑起岩壁护盾并强化双防。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 18,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "self",
+      "target_count": 1,
+      "damage_type": "none",
+      "element": "tu",
+      "effects": [
+        {
+          "type": "shield",
+          "valueType": "scale",
+          "scaleAttr": "max_qixue",
+          "scaleRate": 0.25,
+          "duration": 2
+        },
+        {
+          "type": "buff",
+          "buffId": "buff-wufang-up",
+          "duration": 2,
+          "value": 0.2
+        },
+        {
+          "type": "buff",
+          "buffId": "buff-fafang-up",
+          "duration": 2,
+          "value": 0.2
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 66,
+      "sort_weight": 354,
+      "enabled": true
+    },
+    {
+      "id": "sk-xinmo-pierce",
+      "code": "sk_xinmo_pierce",
+      "name": "心魔穿魂",
+      "description": "连击式法术穿刺。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 18,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.85,
+          "hit_count": 2
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 78,
+      "sort_weight": 355,
+      "enabled": true
+    },
+    {
+      "id": "sk-xinmo-fear",
+      "code": "sk_xinmo_fear",
+      "name": "心魔震惧",
+      "description": "群体心神冲击并有概率恐惧。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 24,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.75
+        },
+        {
+          "type": "control",
+          "controlType": "fear",
+          "duration": 1,
+          "chance": 0.4
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 82,
+      "sort_weight": 356,
+      "enabled": true
+    },
+    {
+      "id": "sk-dark-heal",
+      "code": "sk_dark_heal",
+      "name": "黯蚀回生",
+      "description": "暗蚀之力回补自身并短暂增伤。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 22,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "self",
+      "target_count": 1,
+      "damage_type": "none",
+      "element": "an",
+      "effects": [
+        {
+          "type": "heal",
+          "valueType": "scale",
+          "scaleAttr": "max_qixue",
+          "scaleRate": 0.22
+        },
+        {
+          "type": "buff",
+          "buffId": "buff-zengshang-up",
+          "duration": 2,
+          "value": 0.15
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 71,
+      "sort_weight": 357,
+      "enabled": true
+    },
+    {
+      "id": "sk-earth-crush",
+      "code": "sk_earth_crush",
+      "name": "地核崩压",
+      "description": "大地重压撕裂单体并破甲。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 20,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "tu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.55
+        },
+        {
+          "type": "debuff",
+          "buffId": "buff-wufang-down",
+          "duration": 2,
+          "value": 0.25
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 80,
+      "sort_weight": 358,
+      "enabled": true
+    },
+    {
+      "id": "sk-crystal-rain",
+      "code": "sk_crystal_rain",
+      "name": "晶雨坠落",
+      "description": "晶簇连坠打击敌方全体。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 24,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "tu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.6,
+          "hit_count": 2
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 79,
+      "sort_weight": 359,
+      "enabled": true
+    },
+    {
+      "id": "sk-core-pulse",
+      "code": "sk_core_pulse",
+      "name": "地核脉冲",
+      "description": "脉冲轰击全场并汲取生命。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 24,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "tu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.88
+        },
+        {
+          "type": "lifesteal",
+          "value": 0.25
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 81,
+      "sort_weight": 360,
+      "enabled": true
     }
   ]
 }

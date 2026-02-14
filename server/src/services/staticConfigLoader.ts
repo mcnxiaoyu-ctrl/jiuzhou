@@ -199,6 +199,21 @@ export type MapDefConfig = {
   enabled?: boolean;
 };
 
+export type MonsterPhaseTriggerConfig = {
+  hp_percent?: number;
+  action?: string;
+  effects?: unknown[];
+  summon_id?: string;
+  summon_count?: number;
+};
+
+export type MonsterAIProfileConfig = {
+  behavior?: string;
+  skills?: string[];
+  skill_weights?: Record<string, number>;
+  phase_triggers?: MonsterPhaseTriggerConfig[];
+};
+
 export type MonsterDefConfig = {
   id: string;
   code?: string;
@@ -214,7 +229,7 @@ export type MonsterDefConfig = {
   attr_multiplier_min?: number;
   attr_multiplier_max?: number;
   display_stats?: unknown[];
-  ai_profile?: Record<string, unknown>;
+  ai_profile?: MonsterAIProfileConfig;
   drop_pool_id?: string;
   exp_reward?: number;
   silver_reward_min?: number;

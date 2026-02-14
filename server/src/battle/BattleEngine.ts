@@ -7,15 +7,69 @@ import type {
   BattleState, 
   BattleUnit, 
   BattleLogEntry,
-  RoundLog
+  RoundLog,
+  ActionLog,
+  AttrModifier,
+  MonsterAIPhaseTrigger,
+  SkillEffect,
+  TargetResult,
 } from './types.js';
 import { BATTLE_CONSTANTS } from './types.js';
 import { validateBattleState, validateSkillUse, validatePlayerAction } from './utils/validation.js';
-import { processRoundStartEffects, processRoundEndBuffs } from './modules/buff.js';
+import { addBuff, processRoundStartEffects, processRoundEndBuffs } from './modules/buff.js';
 import { executeSkill, getNormalAttack } from './modules/skill.js';
 import { makeAIDecision } from './modules/ai.js';
 import { isStunned } from './modules/control.js';
 import { triggerSetBonusEffects } from './modules/setBonus.js';
+
+const PHASE_PERCENT_BUFF_ATTR_SET = new Set(['wugong', 'fagong', 'wufang', 'fafang']);
+const PHASE_ATTR_ALIAS: Record<string, string> = {
+  'max-lingqi': 'max_lingqi',
+  'max-qixue': 'max_qixue',
+  'qixue-huifu': 'qixue_huifu',
+  'lingqi-huifu': 'lingqi_huifu',
+  'kongzhi-kangxing': 'kongzhi_kangxing',
+  'jin-kangxing': 'jin_kangxing',
+  'mu-kangxing': 'mu_kangxing',
+  'shui-kangxing': 'shui_kangxing',
+  'huo-kangxing': 'huo_kangxing',
+  'tu-kangxing': 'tu_kangxing',
+};
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function normalizePhaseAttrKey(raw: string): string {
+  const lowered = raw.trim().toLowerCase();
+  if (!lowered) return '';
+  const aliased = PHASE_ATTR_ALIAS[lowered] ?? lowered;
+  return aliased.replace(/-/g, '_');
+}
+
+function buildPhaseAttrModifiers(effect: SkillEffect): AttrModifier[] {
+  const buffId = typeof effect.buffId === 'string' ? effect.buffId.trim() : '';
+  if (!buffId) return [];
+  const matched = /^(buff|debuff)-([a-z0-9-]+)-(up|down)$/i.exec(buffId);
+  if (!matched) return [];
+
+  const attr = normalizePhaseAttrKey(matched[2]);
+  if (!attr) return [];
+
+  const baseValue = Math.abs(toFiniteNumber(effect.value, 0));
+  if (baseValue <= 0) return [];
+  const dirSign = matched[3].toLowerCase() === 'down' ? -1 : 1;
+  const typeSign = matched[1].toLowerCase() === 'debuff' ? -1 : 1;
+  const finalValue = baseValue * dirSign * typeSign;
+  const mode: AttrModifier['mode'] = PHASE_PERCENT_BUFF_ATTR_SET.has(attr) ? 'percent' : 'flat';
+
+  return [{ attr, value: finalValue, mode }];
+}
 
 export class BattleEngine {
   private state: BattleState;
@@ -102,6 +156,9 @@ export class BattleEngine {
     
     for (const unit of allUnits) {
       if (!unit.isAlive) continue;
+
+      // 每回合开始重置行动资格，确保召唤单位“下回合生效”
+      unit.canAct = true;
       
       // DOT/HOT结算
       const effectLogs = processRoundStartEffects(this.state, unit);
@@ -200,6 +257,11 @@ export class BattleEngine {
     const currentUnit = this.getCurrentUnit();
     if (!currentUnit) return;
     if (!allowPlayer && currentUnit.type === 'player') return;
+
+    if (currentUnit.type === 'monster' || currentUnit.type === 'summon') {
+      this.processPhaseTriggersBeforeAction(currentUnit);
+      if (this.checkBattleEnd()) return;
+    }
     
     // 检查是否被控制
     if (isStunned(currentUnit)) {
@@ -225,13 +287,186 @@ export class BattleEngine {
     // 推进行动
     this.advanceAction();
   }
+
+  /**
+   * 怪物行动前处理阶段触发
+   */
+  private processPhaseTriggersBeforeAction(unit: BattleUnit): void {
+    const aiProfile = unit.aiProfile;
+    if (!aiProfile || aiProfile.phaseTriggers.length === 0) return;
+    const maxQixue = Math.max(1, unit.currentAttrs.max_qixue);
+    const hpPercent = unit.qixue / maxQixue;
+    if (!unit.triggeredPhaseIds) {
+      unit.triggeredPhaseIds = [];
+    }
+    const triggeredSet = new Set(unit.triggeredPhaseIds);
+
+    for (const trigger of aiProfile.phaseTriggers) {
+      if (triggeredSet.has(trigger.id)) continue;
+      if (hpPercent > trigger.hpPercent) continue;
+
+      if (trigger.action === 'enrage') {
+        const buffsApplied = this.applyPhaseTriggerEffects(unit, trigger);
+        const targets: TargetResult[] = [{
+          targetId: unit.id,
+          targetName: unit.name,
+          hits: [],
+          buffsApplied,
+        }];
+        this.appendPhaseActionLog(
+          unit,
+          `proc-phase-enrage-${trigger.id}`,
+          '阶段触发·狂暴',
+          targets
+        );
+      } else if (trigger.action === 'summon') {
+        const summonedUnits = this.summonByTrigger(unit, trigger);
+        const targets: TargetResult[] = summonedUnits.length > 0
+          ? summonedUnits.map((summoned) => ({
+            targetId: summoned.id,
+            targetName: summoned.name,
+            hits: [],
+          }))
+          : [{
+            targetId: unit.id,
+            targetName: unit.name,
+            hits: [],
+            buffsApplied: ['召唤失败'],
+          }];
+        this.appendPhaseActionLog(
+          unit,
+          `proc-phase-summon-${trigger.id}`,
+          '阶段触发·召唤',
+          targets
+        );
+      }
+
+      triggeredSet.add(trigger.id);
+      unit.triggeredPhaseIds.push(trigger.id);
+    }
+  }
+
+  private applyPhaseTriggerEffects(unit: BattleUnit, trigger: MonsterAIPhaseTrigger): string[] {
+    const appliedBuffs: string[] = [];
+    for (const effect of trigger.effects) {
+      if (effect.type !== 'buff' && effect.type !== 'debuff') continue;
+      const buffId = typeof effect.buffId === 'string' ? effect.buffId.trim() : '';
+      if (!buffId) continue;
+      const attrModifiers = buildPhaseAttrModifiers(effect);
+      if (attrModifiers.length === 0) continue;
+
+      const stacks = Math.max(1, Math.floor(toFiniteNumber(effect.stacks, 1)));
+      const duration = Math.max(1, Math.floor(toFiniteNumber(effect.duration, 1)));
+      addBuff(unit, {
+        id: `phase-${buffId}-${Date.now()}`,
+        buffDefId: buffId,
+        name: buffId,
+        type: effect.type,
+        category: 'phase',
+        sourceUnitId: unit.id,
+        maxStacks: stacks,
+        attrModifiers,
+        tags: ['phase_trigger'],
+        dispellable: true,
+      }, duration, stacks);
+      appliedBuffs.push(buffId);
+    }
+    return appliedBuffs;
+  }
+
+  private summonByTrigger(summoner: BattleUnit, trigger: MonsterAIPhaseTrigger): BattleUnit[] {
+    const template = trigger.summonTemplate;
+    if (!template) return [];
+
+    const teamKey = this.resolveTeamKey(summoner);
+    const team = this.state.teams[teamKey];
+    const summonCount = Math.max(1, Math.floor(trigger.summonCount || 1));
+    const summonedUnits: BattleUnit[] = [];
+
+    for (let i = 0; i < summonCount; i++) {
+      const attrs = { ...template.baseAttrs };
+      const battleSkills = template.skills.map((skill) => ({
+        ...skill,
+        cost: { ...skill.cost },
+        effects: skill.effects.map((effect) => ({ ...effect })),
+      }));
+      const hasNormalAttack = battleSkills.some((skill) => skill.id === 'skill-normal-attack');
+      if (!hasNormalAttack) {
+        const normalAttack = getNormalAttack({
+          currentAttrs: attrs,
+        } as BattleUnit);
+        battleSkills.unshift(normalAttack);
+      }
+
+      const summonIndex = team.units.filter((unit) => unit.type === 'summon').length + 1;
+      const summonUnit: BattleUnit = {
+        id: `summon-${template.id}-${Date.now()}-${summonIndex}`,
+        name: template.name,
+        type: 'summon',
+        sourceId: template.id,
+        baseAttrs: { ...attrs },
+        currentAttrs: { ...attrs },
+        qixue: attrs.max_qixue,
+        lingqi: attrs.max_lingqi,
+        shields: [],
+        buffs: [],
+        skills: battleSkills,
+        skillCooldowns: {},
+        setBonusEffects: [],
+        aiProfile: template.aiProfile,
+        triggeredPhaseIds: [],
+        controlDiminishing: {},
+        isAlive: true,
+        canAct: false, // 召唤当回合不可行动，下回合自动恢复
+        isSummon: true,
+        summonerId: summoner.id,
+        stats: {
+          damageDealt: 0,
+          damageTaken: 0,
+          healingDone: 0,
+          healingReceived: 0,
+          killCount: 0,
+        },
+      };
+      team.units.push(summonUnit);
+      summonedUnits.push(summonUnit);
+    }
+
+    team.totalSpeed = team.units
+      .filter((unit) => unit.isAlive)
+      .reduce((sum, unit) => sum + unit.currentAttrs.sudu, 0);
+    return summonedUnits;
+  }
+
+  private resolveTeamKey(unit: BattleUnit): 'attacker' | 'defender' {
+    const isAttacker = this.state.teams.attacker.units.some((entry) => entry.id === unit.id);
+    return isAttacker ? 'attacker' : 'defender';
+  }
+
+  private appendPhaseActionLog(
+    actor: BattleUnit,
+    skillId: string,
+    skillName: string,
+    targets: TargetResult[]
+  ): void {
+    const log: ActionLog = {
+      type: 'action',
+      round: this.state.roundCount,
+      actorId: actor.id,
+      actorName: actor.name,
+      skillId,
+      skillName,
+      targets,
+    };
+    this.state.logs.push(log);
+  }
   
   /**
    * 获取当前行动单位
    */
   getCurrentUnit(): BattleUnit | null {
     const team = this.state.teams[this.state.currentTeam];
-    const aliveUnits = team.units.filter(u => u.isAlive);
+    const aliveUnits = team.units.filter(u => u.isAlive && u.canAct);
     
     if (this.state.currentUnitIndex >= aliveUnits.length) {
       return null;
@@ -251,7 +486,7 @@ export class BattleEngine {
     this.state.currentUnitIndex++;
     
     const team = this.state.teams[this.state.currentTeam];
-    const aliveUnits = team.units.filter(u => u.isAlive);
+    const aliveUnits = team.units.filter(u => u.isAlive && u.canAct);
     
     // 当前方所有单位行动完毕
     if (this.state.currentUnitIndex >= aliveUnits.length) {

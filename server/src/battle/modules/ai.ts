@@ -3,7 +3,7 @@
  */
 
 import type { BattleState, BattleUnit, BattleSkill } from '../types.js';
-import { rollChance, getRandomInt } from '../utils/random.js';
+import { getNextRandom, rollChance, getRandomInt } from '../utils/random.js';
 import { getAvailableSkills, getNormalAttack } from './skill.js';
 import { 
   getLowestHpTarget, 
@@ -12,8 +12,8 @@ import {
 } from './target.js';
 import { isStunned, isFeared, getTauntSource } from './control.js';
 
-// AI行为模式
-type AIBehavior = 'passive' | 'aggressive' | 'defensive' | 'support' | 'boss';
+// AI行为模式（运行时归一化）
+type RuntimeAIBehavior = 'passive' | 'aggressive' | 'defensive' | 'support' | 'boss';
 
 interface AIDecision {
   skill: BattleSkill;
@@ -43,12 +43,23 @@ export function makeAIDecision(
     const targetIds = selectTargets(state, unit, selectedSkill);
     return { skill: selectedSkill, targetIds };
   }
+
+  const availableSkills = getAvailableSkills(unit);
+  if (availableSkills.length === 0) {
+    return {
+      skill: getNormalAttack(unit),
+      targetIds: selectTargets(state, unit, getNormalAttack(unit)),
+    };
+  }
+
+  const weightedSkill = selectWeightedSkill(state, availableSkills, unit.aiProfile?.skillWeights ?? {});
+  if (weightedSkill) {
+    const targetIds = selectTargets(state, unit, weightedSkill);
+    return { skill: weightedSkill, targetIds };
+  }
   
   // 获取AI行为模式
   const behavior = getAIBehavior(unit);
-  
-  // 获取可用技能
-  const availableSkills = getAvailableSkills(unit);
   
   // 根据行为模式选择技能
   let selectedSkill: BattleSkill;
@@ -79,9 +90,43 @@ export function makeAIDecision(
 /**
  * 获取AI行为模式
  */
-function getAIBehavior(_unit: BattleUnit): AIBehavior {
-  // 可以从unit的扩展属性中读取，这里默认aggressive
+function getAIBehavior(_unit: BattleUnit): RuntimeAIBehavior {
+  const raw = _unit.aiProfile?.behavior;
+  if (raw === 'passive') return 'passive';
+  if (raw === 'defensive') return 'defensive';
+  if (raw === 'support') return 'support';
+  if (raw === 'boss') return 'boss';
+  // normal / elite / aggressive / 缺省都走输出行为
   return 'aggressive';
+}
+
+function toPositiveWeight(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n;
+}
+
+function selectWeightedSkill(
+  state: BattleState,
+  availableSkills: BattleSkill[],
+  skillWeights: Record<string, number>
+): BattleSkill | null {
+  const weighted = availableSkills
+    .map((skill) => ({ skill, weight: toPositiveWeight(skillWeights[skill.id]) }))
+    .filter((entry) => entry.weight > 0);
+  if (weighted.length === 0) return null;
+
+  const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+  if (totalWeight <= 0) return null;
+
+  let cursor = getNextRandom(state) * totalWeight;
+  for (const entry of weighted) {
+    cursor -= entry.weight;
+    if (cursor <= 0) {
+      return entry.skill;
+    }
+  }
+  return weighted[weighted.length - 1]?.skill ?? null;
 }
 
 /**
