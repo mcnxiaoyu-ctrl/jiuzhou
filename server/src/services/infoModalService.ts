@@ -299,6 +299,7 @@ const getDropsByPoolId = async (
   options: {
     isDungeonBattle?: boolean;
     monsterKind?: MonsterKind;
+    monsterRealm?: string | null;
   } = {},
 ): Promise<Array<{ name: string; quality: string; chance: string }>> => {
   const pool = resolveDropPoolById(dropPoolId);
@@ -367,6 +368,7 @@ const getDropsByPoolId = async (
       sourcePoolId: r.sourcePoolId,
       dropMultiplierOptions: multiplierOptions,
       qtyMultiplyByMonsterRealm: r.qty_multiply_by_monster_realm,
+      monsterRealm: options.monsterRealm ?? null,
     });
     const qtyMin = quantityRange.qtyMin;
     const qtyMax = quantityRange.qtyMax;
@@ -411,7 +413,7 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
     if (!monster) return null;
     const monsterKind = normalizeMonsterKind(monster.kind);
     const drops = monster.drop_pool_id
-      ? await getDropsByPoolId(monster.drop_pool_id, { isDungeonBattle: false, monsterKind })
+      ? await getDropsByPoolId(monster.drop_pool_id, { isDungeonBattle: false, monsterKind, monsterRealm: monster.realm })
       : [];
     const baseAttrs = asNumberRecord(monster.base_attrs);
     const stats = buildMonsterStats(baseAttrs, asStatList(monster.display_stats)) ?? [];

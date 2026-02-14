@@ -22,6 +22,7 @@ import {
   type DropEntrySourceType,
   type DropMultiplierContext,
 } from './dropRateMultiplier.js';
+import { getRealmRankOneBasedStrict } from './realmOrder.js';
 
 const dropQtyMultiplierEligibilityCache = new Map<string, boolean>();
 
@@ -60,12 +61,20 @@ export const shouldApplyDropQuantityMultiplier = (itemDefId: string): boolean =>
 export const applyMonsterRealmDropQtyMultiplier = (
   baseQuantity: number,
   multiplierRaw: number,
+  monsterRealmRaw?: string | null,
 ): number => {
   const multiplier = Number(multiplierRaw);
   const safeBase = Math.max(1, Math.floor(Number(baseQuantity) || 1));
   if (!Number.isFinite(multiplier) || multiplier <= 0) return safeBase;
   if (multiplier === 1) return safeBase;
-  return Math.max(1, Math.floor(safeBase * multiplier));
+  if (multiplier < 1) return Math.max(1, Math.floor(safeBase * multiplier));
+  // 规则：
+  // 1. 凡人（1阶）沿用原倍率（例如配置 2 => ×2）
+  // 2. 更高境界每升 1 阶，额外叠加一次 (multiplier - 1)
+  // 例如：炼己期（第 5 阶）且配置 2 => 1 + (2 - 1) * 5 = ×6
+  const realmRank = Math.max(1, getRealmRankOneBasedStrict(monsterRealmRaw));
+  const effectiveMultiplier = 1 + (multiplier - 1) * realmRank;
+  return Math.max(1, Math.floor(safeBase * effectiveMultiplier));
 };
 
 export const getAdjustedDropQuantityRange = (params: {
@@ -76,6 +85,7 @@ export const getAdjustedDropQuantityRange = (params: {
   sourcePoolId: string;
   dropMultiplierOptions?: DropMultiplierContext;
   qtyMultiplyByMonsterRealm?: number;
+  monsterRealm?: string | null;
 }): { qtyMin: number; qtyMax: number } => {
   const baseMin = Math.max(1, Math.floor(Number(params.qtyMin) || 1));
   const baseMax = Math.max(baseMin, Math.floor(Number(params.qtyMax) || baseMin));
@@ -91,6 +101,7 @@ export const getAdjustedDropQuantityRange = (params: {
       shouldApplyMultiplier,
     ),
     qtyMultiplyByMonsterRealm,
+    params.monsterRealm,
   );
   const adjustedMax = applyMonsterRealmDropQtyMultiplier(
     getAdjustedQuantity(
@@ -101,6 +112,7 @@ export const getAdjustedDropQuantityRange = (params: {
       shouldApplyMultiplier,
     ),
     qtyMultiplyByMonsterRealm,
+    params.monsterRealm,
   );
 
   return {

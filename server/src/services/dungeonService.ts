@@ -742,6 +742,7 @@ export const getDungeonPreview = async (
       sort_order: number;
     }>,
     monsterKind: string | null,
+    monsterRealm: string | null,
   ): Array<{
     item: { id: string; name: string; quality: string | null; icon: string | null };
     mode: 'prob' | 'weight';
@@ -765,6 +766,7 @@ export const getDungeonPreview = async (
           sourcePoolId: r.sourcePoolId,
           dropMultiplierOptions: options,
           qtyMultiplyByMonsterRealm: r.qty_multiply_by_monster_realm,
+          monsterRealm,
         });
         return {
           item: {
@@ -834,7 +836,9 @@ export const getDungeonPreview = async (
           const poolId = monster && typeof monster.drop_pool_id === 'string' ? monster.drop_pool_id : null;
           const monsterKind = monster?.kind ?? null;
           const previewRows = poolId ? dropPreviewByPoolId.get(poolId) ?? [] : [];
-          const dropPreview = previewRows.length > 0 ? buildMonsterDropPreview(previewRows, monsterKind) : [];
+          const dropPreview = previewRows.length > 0
+            ? buildMonsterDropPreview(previewRows, monsterKind, monster?.realm ?? null)
+            : [];
           waveMonsters.push({
             id: monsterId,
             name: monster?.name ?? monsterId,

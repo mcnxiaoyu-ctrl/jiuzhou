@@ -65,6 +65,7 @@ interface DropPool {
 type RollDropsOptions = {
   isDungeonBattle?: boolean;
   monsterKind?: MonsterKind;
+  monsterRealm?: string | null;
 };
 
 type DistributeBattleRewardsOptions = {
@@ -163,6 +164,7 @@ export const rollDrops = (
   const chanceMultiplier = 1 + cappedFuyuan * 0.0025;
   const isDungeonBattle = options.isDungeonBattle === true;
   const monsterKind = normalizeMonsterKind(options.monsterKind);
+  const monsterRealm = typeof options.monsterRealm === 'string' ? options.monsterRealm : null;
   
   if (dropPool.mode === 'prob') {
     // 概率模式：每个条目独立判定
@@ -182,6 +184,7 @@ export const rollDrops = (
         const quantity = applyMonsterRealmDropQtyMultiplier(
           adjustedQuantity,
           entry.qty_multiply_by_monster_realm,
+          monsterRealm,
         );
         results.push({
           itemDefId: entry.item_def_id,
@@ -217,6 +220,7 @@ export const rollDrops = (
           const quantity = applyMonsterRealmDropQtyMultiplier(
             adjustedQuantity,
             entry.qty_multiply_by_monster_realm,
+            monsterRealm,
           );
           results.push({
             itemDefId: entry.item_def_id,
@@ -246,7 +250,7 @@ export const calculateAllDrops = async (monsters: MonsterData[]): Promise<DropRe
     if (!dropPool) continue;
     
     const monsterKind = normalizeMonsterKind(monster.kind);
-    const drops = rollDrops(dropPool, 0, { monsterKind });
+    const drops = rollDrops(dropPool, 0, { monsterKind, monsterRealm: monster.realm });
     allDrops.push(...drops);
   }
   
@@ -382,6 +386,7 @@ export const distributeBattleRewards = async (
       const drops = rollDrops(dropPool, receiverFuyuan, {
         isDungeonBattle,
         monsterKind: normalizeMonsterKind(monster.kind),
+        monsterRealm: monster.realm,
       });
       for (const drop of drops) {
         const key = `${receiver.characterId}|${drop.itemDefId}|${drop.bindType}|${stableQualityWeightsKey(drop.qualityWeights)}`;
