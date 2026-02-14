@@ -49,7 +49,13 @@ CREATE TABLE IF NOT EXISTS characters (
 
   UNIQUE(user_id)
 );
+`;
 
+// 说明：
+// 1) 这里单独拆出注释 SQL，避免历史库缺少某些新列时，
+//    在 CREATE TABLE IF NOT EXISTS 之后立刻 COMMENT ON COLUMN 直接失败。
+// 2) 初始化流程会先补齐缺失列，再执行本段注释，保证升级路径可达。
+const characterTableCommentSQL = `
 COMMENT ON TABLE characters IS '玩家角色表（可计算战斗属性不入库）';
 COMMENT ON COLUMN characters.id IS '角色ID，自增主键';
 COMMENT ON COLUMN characters.user_id IS '关联用户ID';
@@ -203,6 +209,9 @@ export const initCharacterTable = async (): Promise<void> => {
 
     // 检查并补齐缺失字段
     await checkAndAddColumns();
+
+    // 字段补齐后再写注释，避免旧库缺字段时在注释阶段中断初始化。
+    await query(characterTableCommentSQL);
 
     // 一次性下线旧属性字段，避免启动重复迁移导致不可预期结果。
     await runDbMigrationOnce({
