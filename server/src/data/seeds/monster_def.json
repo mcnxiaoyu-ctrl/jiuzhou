@@ -1686,8 +1686,8 @@
       "enabled": true
     },
     {
-      "id": "monster-yanbing-rongchao-yao",
-      "code": "yanbing_rongchao_yao",
+      "id": "monster-yanshuang-rongchao-yao",
+      "code": "yanshuang_rongchao_yao",
       "name": "炎潮妖",
       "title": "灼浪掠食者",
       "realm": "炼炁化神·炼己期",
@@ -1747,15 +1747,15 @@
           "sk-cold-surge": 40
         }
       },
-      "drop_pool_id": "dp-lianji-nanhai-haijiao",
+      "drop_pool_id": "dp-monster-normal-yanshuang-rongchao-yao",
       "exp_reward": 248,
       "silver_reward_min": 108,
       "silver_reward_max": 162,
       "enabled": true
     },
     {
-      "id": "monster-yanbing-hanwu-guzu",
-      "code": "yanbing_hanwu_guzu",
+      "id": "monster-yanshuang-hanwu-guzu",
+      "code": "yanshuang_hanwu_guzu",
       "name": "寒雾骨卒",
       "title": "霜蚀巡夜",
       "realm": "炼炁化神·炼己期",
@@ -1815,15 +1815,15 @@
           "sk-ghost-curse": 38
         }
       },
-      "drop_pool_id": "dp-lianji-youming-guizu",
+      "drop_pool_id": "dp-monster-normal-yanshuang-hanwu-guzu",
       "exp_reward": 252,
       "silver_reward_min": 110,
       "silver_reward_max": 165,
       "enabled": true
     },
     {
-      "id": "monster-yanbing-jingjia-shou",
-      "code": "yanbing_jingjia_shou",
+      "id": "monster-yanshuang-jingjia-shou",
+      "code": "yanshuang_jingjia_shou",
       "name": "晶甲兽",
       "title": "裂谷重甲",
       "realm": "炼炁化神·炼己期",
@@ -1883,15 +1883,15 @@
           "sk-earth-shock": 34
         }
       },
-      "drop_pool_id": "dp-lianji-jingkuangshou",
+      "drop_pool_id": "dp-monster-normal-yanshuang-jingjia-shou",
       "exp_reward": 258,
       "silver_reward_min": 114,
       "silver_reward_max": 170,
       "enabled": true
     },
     {
-      "id": "monster-yanbing-mojing-huanying",
-      "code": "yanbing_mojing_huanying",
+      "id": "monster-yanshuang-mojing-huanying",
+      "code": "yanshuang_mojing_huanying",
       "name": "魔镜幻影",
       "title": "裂渊映像",
       "realm": "炼炁化神·炼己期",
@@ -1951,15 +1951,15 @@
           "sk-xinmo-whisper": 42
         }
       },
-      "drop_pool_id": "dp-lianji-xinmo-huanying",
+      "drop_pool_id": "dp-monster-normal-yanshuang-mojing-huanying",
       "exp_reward": 262,
       "silver_reward_min": 116,
       "silver_reward_max": 172,
       "enabled": true
     },
     {
-      "id": "monster-elite-yanbing-shuangsha-jiang",
-      "code": "elite_yanbing_shuangsha_jiang",
+      "id": "monster-elite-yanshuang-shuangsha-jiang",
+      "code": "elite_yanshuang_shuangsha_jiang",
       "name": "双煞将",
       "title": "精英",
       "realm": "炼炁化神·炼己期",
@@ -2021,15 +2021,15 @@
           "sk-ghost-curse": 22
         }
       },
-      "drop_pool_id": "dp-lianji-elite-youming-jiangjun",
+      "drop_pool_id": "dp-monster-elite-yanshuang-shuangsha-jiang",
       "exp_reward": 690,
       "silver_reward_min": 245,
       "silver_reward_max": 368,
       "enabled": true
     },
     {
-      "id": "monster-elite-yanbing-rongjing-jushou",
-      "code": "elite_yanbing_rongjing_jushou",
+      "id": "monster-elite-yanshuang-rongjing-jushou",
+      "code": "elite_yanshuang_rongjing_jushou",
       "name": "熔晶巨兽",
       "title": "精英",
       "realm": "炼炁化神·炼己期",
@@ -2091,15 +2091,15 @@
           "sk-stone-wall": 18
         }
       },
-      "drop_pool_id": "dp-lianji-elite-lingmai-jingshou",
+      "drop_pool_id": "dp-monster-elite-yanshuang-rongjing-jushou",
       "exp_reward": 720,
       "silver_reward_min": 258,
       "silver_reward_max": 382,
       "enabled": true
     },
     {
-      "id": "monster-boss-yanbing-liehe-juling",
-      "code": "boss_yanbing_liehe_juling",
+      "id": "monster-boss-yanshuang-liehe-juling",
+      "code": "boss_yanshuang_liehe_juling",
       "name": "裂核巨灵",
       "title": "首领",
       "realm": "炼炁化神·炼己期",
@@ -2186,20 +2186,20 @@
           {
             "hp_percent": 0.3,
             "action": "summon",
-            "summon_id": "monster-yanbing-jingjia-shou",
+            "summon_id": "monster-yanshuang-jingjia-shou",
             "summon_count": 1
           }
         ]
       },
-      "drop_pool_id": "dp-lianji-boss-kuangyuan-juling",
+      "drop_pool_id": "dp-monster-boss-yanshuang-liehe-juling",
       "exp_reward": 1680,
       "silver_reward_min": 560,
       "silver_reward_max": 860,
       "enabled": true
     },
     {
-      "id": "monster-boss-yanbing-xinyan-mozhu",
-      "code": "boss_yanbing_xinyan_mozhu",
+      "id": "monster-boss-yanshuang-xinyan-mozhu",
+      "code": "boss_yanshuang_xinyan_mozhu",
       "name": "心焰魔主",
       "title": "首领",
       "realm": "炼炁化神·炼己期",
@@ -2279,12 +2279,12 @@
           {
             "hp_percent": 0.35,
             "action": "summon",
-            "summon_id": "monster-yanbing-mojing-huanying",
+            "summon_id": "monster-yanshuang-mojing-huanying",
             "summon_count": 1
           }
         ]
       },
-      "drop_pool_id": "dp-lianji-boss-xinmo-huashen",
+      "drop_pool_id": "dp-monster-boss-yanshuang-xinyan-mozhu",
       "exp_reward": 1620,
       "silver_reward_min": 540,
       "silver_reward_max": 840,

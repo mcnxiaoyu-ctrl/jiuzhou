@@ -2920,6 +2920,937 @@
           "show_in_ui": true
         }
       ]
+    },
+    {
+      "id": "dp-monster-normal-yanshuang-rongchao-yao",
+      "name": "炎潮妖掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-nanhai-lingzhu",
+          "chance": 0.9,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lingmai-jingshi",
+          "chance": 0.6,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.72,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "enhance-003",
+          "chance": 0.55,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-wg-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-fg-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-wf-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-ff-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-hp-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-lq-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "scroll-004",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ]
+    },
+    {
+      "id": "dp-monster-normal-yanshuang-hanwu-guzu",
+      "name": "寒雾骨卒掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-xinmo-jinghua",
+          "chance": 0.95,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.77,
+          "qty_min": 2,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lingmo",
+          "chance": 0.6,
+          "qty_min": 1,
+          "qty_max": 3,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "enhance-003",
+          "chance": 0.5,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-wg-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-fg-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-wf-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-ff-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-hp-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-lq-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "scroll-004",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ]
+    },
+    {
+      "id": "dp-monster-normal-yanshuang-jingjia-shou",
+      "name": "晶甲兽掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-lingmai-jingshi",
+          "chance": 1,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-nanhai-lingzhu",
+          "chance": 0.55,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "enhance-003",
+          "chance": 0.4,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.68,
+          "qty_min": 3,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-wg-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-fg-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-wf-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-ff-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-hp-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-lq-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "scroll-004",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ]
+    },
+    {
+      "id": "dp-monster-normal-yanshuang-mojing-huanying",
+      "name": "魔镜幻影掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-xinmo-jinghua",
+          "chance": 0.75,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 1,
+          "qty_min": 2,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lingmo",
+          "chance": 0.75,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "enhance-003",
+          "chance": 0.35,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-wg-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-fg-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-wf-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-ff-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-hp-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-lq-3",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "scroll-004",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ]
+    },
+    {
+      "id": "dp-monster-elite-yanshuang-shuangsha-jiang",
+      "name": "双煞将掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-xinmo-jinghua",
+          "chance": 1,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-nanhai-lingzhu",
+          "chance": 1,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "enhance-004",
+          "chance": 0.75,
+          "qty_min": 1,
+          "qty_max": 3,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-tianxuan-head",
+          "chance": 0.05,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-qinglian-head",
+          "chance": 0.05,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-tianxuan-gloves",
+          "chance": 0.05,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-wg-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-fg-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-wf-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-ff-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-hp-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-lq-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-mz-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-sb-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-bj-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-zj-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-kb-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-zs-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "scroll-004",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ]
+    },
+    {
+      "id": "dp-monster-elite-yanshuang-rongjing-jushou",
+      "name": "熔晶巨兽掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-lingmai-jingshi",
+          "chance": 1,
+          "qty_min": 3,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-nanhai-lingzhu",
+          "chance": 0.95,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "enhance-004",
+          "chance": 0.8,
+          "qty_min": 1,
+          "qty_max": 3,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-chiyan-head",
+          "chance": 0.05,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanwu-head",
+          "chance": 0.05,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanwu-gloves",
+          "chance": 0.05,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-wg-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-fg-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-wf-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-ff-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-hp-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-lq-3",
+          "chance": 0.0175,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-mz-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-sb-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-bj-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-zj-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-kb-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-zs-3",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "scroll-004",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ]
+    },
+    {
+      "id": "dp-monster-boss-yanshuang-liehe-juling",
+      "name": "裂核巨灵掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-lingmai-jingshi",
+          "chance": 1,
+          "qty_min": 6,
+          "qty_max": 10,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-nanhai-lingzhu",
+          "chance": 1,
+          "qty_min": 4,
+          "qty_max": 7,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lianji-dan",
+          "chance": 0.65,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "enhance-004",
+          "chance": 0.95,
+          "qty_min": 2,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanwu-weapon",
+          "chance": 0.08,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-chiyan-weapon",
+          "chance": 0.08,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-tianxuan-artifact",
+          "chance": 0.06,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "box-005",
+          "chance": 0.8,
+          "qty_min": 1,
+          "qty_max": 3,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-wg-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-fg-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-wf-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-ff-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-hp-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-lq-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-mz-3",
+          "chance": 0.001667,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-sb-3",
+          "chance": 0.001667,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-bj-3",
+          "chance": 0.001667,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-zj-3",
+          "chance": 0.001667,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-kb-3",
+          "chance": 0.001667,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-zs-3",
+          "chance": 0.001665,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "scroll-004",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ]
+    },
+    {
+      "id": "dp-monster-boss-yanshuang-xinyan-mozhu",
+      "name": "心焰魔主掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-xinmo-jinghua",
+          "chance": 1,
+          "qty_min": 4,
+          "qty_max": 7,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lianji-dan",
+          "chance": 0.75,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 1,
+          "qty_min": 7,
+          "qty_max": 10,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-nanhai-lingzhu",
+          "chance": 1,
+          "qty_min": 4,
+          "qty_max": 7,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "enhance-004",
+          "chance": 0.9,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-chiyan-weapon",
+          "chance": 0.07,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-tianxuan-weapon",
+          "chance": 0.07,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-qinglian-artifact",
+          "chance": 0.06,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "box-005",
+          "chance": 0.78,
+          "qty_min": 1,
+          "qty_max": 3,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-wg-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-atk-fg-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-wf-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-def-ff-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-hp-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-sur-lq-3",
+          "chance": 0.025,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-mz-3",
+          "chance": 0.001667,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-sb-3",
+          "chance": 0.001667,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-bj-3",
+          "chance": 0.001667,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-zj-3",
+          "chance": 0.001667,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-kb-3",
+          "chance": 0.001667,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "gem-all-zs-3",
+          "chance": 0.001665,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "scroll-004",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ]
     }
   ]
 }

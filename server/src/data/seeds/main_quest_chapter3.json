@@ -24,7 +24,7 @@
       },
       "unlock_features": [
         "map-yanbing-rift",
-        "dungeon-lianqi-yanbing-lieyuan"
+        "dungeon-lianqi-yanshuang-lieyuan"
       ],
       "sort_weight": 800,
       "enabled": true
@@ -136,7 +136,7 @@
           "text": "击退炎潮妖 8 只",
           "target": 8,
           "params": {
-            "monster_id": "monster-yanbing-rongchao-yao"
+            "monster_id": "monster-yanshuang-rongchao-yao"
           }
         },
         {
@@ -145,7 +145,7 @@
           "text": "击退寒雾骨卒 6 只",
           "target": 6,
           "params": {
-            "monster_id": "monster-yanbing-hanwu-guzu"
+            "monster_id": "monster-yanshuang-hanwu-guzu"
           }
         }
       ],
@@ -234,8 +234,8 @@
           "text": "通关炎霜裂渊（普通）",
           "target": 1,
           "params": {
-            "dungeon_id": "dungeon-lianqi-yanbing-lieyuan",
-            "difficulty_id": "dd-lianqi-yanbing-n"
+            "dungeon_id": "dungeon-lianqi-yanshuang-lieyuan",
+            "difficulty_id": "dd-lianqi-yanshuang-n"
           }
         }
       ],
@@ -275,8 +275,8 @@
           "text": "通关炎霜裂渊（困难）",
           "target": 1,
           "params": {
-            "dungeon_id": "dungeon-lianqi-yanbing-lieyuan",
-            "difficulty_id": "dd-lianqi-yanbing-h"
+            "dungeon_id": "dungeon-lianqi-yanshuang-lieyuan",
+            "difficulty_id": "dd-lianqi-yanshuang-h"
           }
         },
         {
