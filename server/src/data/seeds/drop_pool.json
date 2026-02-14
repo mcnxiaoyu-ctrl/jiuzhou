@@ -1653,13 +1653,6 @@
           "show_in_ui": true
         },
         {
-          "item_def_id": "box-008",
-          "chance": 0.16,
-          "qty_min": 1,
-          "qty_max": 1,
-          "show_in_ui": true
-        },
-        {
           "item_def_id": "scroll-003",
           "chance": 0.01,
           "qty_min": 1,
@@ -1720,13 +1713,6 @@
           "chance": 0.06,
           "qty_min": 1,
           "qty_max": 1,
-          "show_in_ui": true
-        },
-        {
-          "item_def_id": "box-003",
-          "chance": 0.8,
-          "qty_min": 1,
-          "qty_max": 3,
           "show_in_ui": true
         },
         {
@@ -2157,10 +2143,17 @@
           "show_in_ui": true
         },
         {
-          "item_def_id": "mat-gongfa-canye",
-          "chance": 1,
-          "qty_min": 7,
-          "qty_max": 10,
+          "item_def_id": "book-lieyang-jian",
+          "chance": 0.06,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "book-hanbing-jue",
+          "chance": 0.06,
+          "qty_min": 1,
+          "qty_max": 1,
           "show_in_ui": true
         },
         {

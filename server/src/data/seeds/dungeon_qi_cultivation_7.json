@@ -252,12 +252,6 @@
                     "chance": 0.05
                   },
                   {
-                    "item_def_id": "box-003",
-                    "qty_min": 1,
-                    "qty_max": 2,
-                    "chance": 0.6
-                  },
-                  {
                     "item_def_id": "scroll-003",
                     "qty_min": 1,
                     "qty_max": 1,
