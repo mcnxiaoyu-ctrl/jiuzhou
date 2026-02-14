@@ -337,7 +337,7 @@ const getGemRecipeRows = async (
       cost_silver: recipe.cost_silver ?? 0,
       cost_spirit_stones: recipe.cost_spirit_stones ?? 0,
       cost_items: Array.isArray(recipe.cost_items) ? recipe.cost_items : [],
-      success_rate: recipe.success_rate ?? 100,
+      success_rate: recipe.success_rate ?? 1,
     } satisfies GemRecipeRow))
     .filter((entry) => entry.id.length > 0)
     .sort((left, right) => left.id.localeCompare(right.id));
