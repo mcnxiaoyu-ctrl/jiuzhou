@@ -26,7 +26,6 @@ import {
   getEnhanceSuccessRatePercent,
   getRefineFailResultLevel,
   getRefineSuccessRatePercent,
-  inferGemTypeFromEffects,
   isGemTypeAllowedInSlot,
   parseSocketEffectsFromItemEffectDefs,
   parseSocketedGems,
@@ -53,6 +52,10 @@ import {
 import type { GeneratedAffix } from './equipmentService.js';
 import { extractFlatAffixDeltas } from './shared/affixModifier.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
+import {
+  isGemItemDefinition,
+  resolveGemTypeFromItemDefinition,
+} from './shared/gemItemSemantics.js';
 
 // 背包位置类型
 export type InventoryLocation = 'bag' | 'warehouse' | 'equipped';
@@ -479,7 +482,6 @@ const getEnhanceItemStateTx = async (
     location: InventoryLocation | string;
     locked: boolean;
     strengthenLevel: number;
-    itemLevel: number;
   };
 }> => {
   const itemResult = await client.query(
@@ -528,7 +530,6 @@ const getEnhanceItemStateTx = async (
       location: row.location,
       locked: Boolean(row.locked),
       strengthenLevel: clampInt(Number(row.strengthen_level) || 0, 0, ENHANCE_MAX_LEVEL),
-      itemLevel: Math.max(0, Math.floor(Number(itemDef.level) || 0)),
     },
   };
 };
@@ -546,7 +547,6 @@ const getRefineItemStateTx = async (
     location: InventoryLocation | string;
     locked: boolean;
     refineLevel: number;
-    itemLevel: number;
   };
 }> => {
   const itemResult = await client.query(
@@ -595,7 +595,6 @@ const getRefineItemStateTx = async (
       location: row.location,
       locked: Boolean(row.locked),
       refineLevel: clampInt(Number(row.refine_level) || 0, 0, REFINE_MAX_LEVEL),
-      itemLevel: Math.max(0, Math.floor(Number(itemDef.level) || 0)),
     },
   };
 };
@@ -894,24 +893,7 @@ const loadGemItemForSocketTx = async (
 
   const row = getEnabledStaticItemDef(gemDefId);
   if (!row) return { success: false, message: '宝石不存在' };
-
-  const isGemSubCategory = (subCategoryRaw: unknown): boolean => {
-    const subCategory = String(subCategoryRaw || '').trim().toLowerCase();
-    if (!subCategory) return false;
-    if (subCategory === 'gem') return true;
-    return ['gem_attack', 'gem_defense', 'gem_survival', 'gem_all'].includes(subCategory);
-  };
-
-  const resolveGemTypeBySubCategory = (subCategoryRaw: unknown, effects: SocketEffect[]): string => {
-    const subCategory = String(subCategoryRaw || '').trim().toLowerCase();
-    if (subCategory === 'gem_attack') return 'attack';
-    if (subCategory === 'gem_defense') return 'defense';
-    if (subCategory === 'gem_survival') return 'survival';
-    if (subCategory === 'gem_all') return 'all';
-    return inferGemTypeFromEffects(effects);
-  };
-
-  if (row.category !== 'material' || !isGemSubCategory(row.sub_category)) {
+  if (!isGemItemDefinition(row)) {
     return { success: false, message: '该物品不是宝石' };
   }
   const effects = parseSocketEffectsFromItemEffectDefs(row.effect_defs);
@@ -925,7 +907,7 @@ const loadGemItemForSocketTx = async (
       itemDefId: String(row.id),
       name: String(row.name || row.id),
       icon: row.icon ? String(row.icon) : null,
-      gemType: resolveGemTypeBySubCategory(row.sub_category, effects),
+      gemType: resolveGemTypeFromItemDefinition(row),
       effects,
     },
   };
@@ -2059,7 +2041,7 @@ export const enhanceEquipment = async (
     }
 
     const targetLv = curLv + 1;
-    const costPlan = buildEnhanceCostPlan(item.itemLevel, targetLv);
+    const costPlan = buildEnhanceCostPlan(targetLv);
 
     const beforeDiffRes = await diffEquipmentAttrIfEquippedTx(client, characterId, itemInstanceId, item.location);
     if (!beforeDiffRes.success) {
@@ -2207,7 +2189,7 @@ export const refineEquipment = async (
     }
 
     const targetLv = curLv + 1;
-    const costPlan = buildRefineCostPlan(item.itemLevel, targetLv);
+    const costPlan = buildRefineCostPlan(targetLv);
 
     const beforeDiffRes = await diffEquipmentAttrIfEquippedTx(client, characterId, itemInstanceId, item.location);
     if (!beforeDiffRes.success) {
@@ -2760,7 +2742,6 @@ export const disassembleEquipment = async (
     const itemCategory = String(itemDef.category || '');
     const itemSubCategory = itemDef.sub_category ?? null;
     const itemEffectDefs = itemDef.effect_defs ?? null;
-    const itemLevel = Math.max(0, Math.floor(Number(itemDef.level) || 0));
     const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
     const resolvedQualityRank = item.instance_quality_rank ?? defQualityRank;
 
@@ -2800,7 +2781,6 @@ export const disassembleEquipment = async (
       subCategory: itemSubCategory,
       effectDefs: itemEffectDefs,
       qualityRankRaw: resolvedQualityRank,
-      itemLevelRaw: itemLevel,
       strengthenLevelRaw: item.strengthen_level,
       refineLevelRaw: item.refine_level,
       affixesRaw: item.affixes,
@@ -2989,7 +2969,6 @@ export const disassembleEquipmentBatch = async (
         subCategory: itemDef.sub_category ?? null,
         effectDefs: itemDef.effect_defs ?? null,
         qualityRankRaw: row.instance_quality_rank ?? resolveQualityRankFromName(itemDef.quality, 1),
-        itemLevelRaw: Math.max(0, Math.floor(Number(itemDef.level) || 0)),
         strengthenLevelRaw: row.strengthen_level,
         refineLevelRaw: row.refine_level,
         affixesRaw: row.affixes,

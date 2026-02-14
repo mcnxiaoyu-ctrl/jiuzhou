@@ -240,24 +240,22 @@ export interface GrowthCostPlan {
   spiritStoneCost: number;
 }
 
-export const buildEnhanceCostPlan = (itemLevel: number, targetLevel: number): GrowthCostPlan => {
-  const level = Math.max(0, clampInt(itemLevel, 0, 9999));
+export const buildEnhanceCostPlan = (targetLevel: number): GrowthCostPlan => {
   const target = clampInt(targetLevel, 1, ENHANCE_MAX_LEVEL);
   return {
     materialItemDefId: target <= 10 ? 'enhance-001' : 'enhance-002',
     materialQty: 1,
-    silverCost: Math.max(50, Math.floor((level + 5) * 20 * target)),
+    silverCost: Math.max(50, Math.floor(5 * 20 * target)),
     spiritStoneCost: Math.max(0, Math.floor(target / 5)),
   };
 };
 
-export const buildRefineCostPlan = (itemLevel: number, targetLevel: number): GrowthCostPlan => {
-  const level = Math.max(0, clampInt(itemLevel, 0, 9999));
+export const buildRefineCostPlan = (targetLevel: number): GrowthCostPlan => {
   const target = clampInt(targetLevel, 1, REFINE_MAX_LEVEL);
   return {
     materialItemDefId: 'enhance-002',
     materialQty: target >= 8 ? 2 : 1,
-    silverCost: Math.max(100, Math.floor((level + 8) * 35 * target)),
+    silverCost: Math.max(100, Math.floor(8 * 35 * target)),
     spiritStoneCost: Math.max(0, Math.floor((target + 1) / 3)),
   };
 };

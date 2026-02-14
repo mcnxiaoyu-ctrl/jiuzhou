@@ -166,12 +166,15 @@ const main = async () => {
   if (!enhTool.success) throw new Error(`create enhance tool failed: ${enhTool.message}`);
   const protectTool = await createItem(userId, characterId, 'enhance-005', 20, { location: 'bag' });
   if (!protectTool.success) throw new Error(`create protect tool failed: ${protectTool.message}`);
-  const gemAtk = await createItem(userId, characterId, 'gem-001', 1, { location: 'bag' });
-  if (!gemAtk.success || !gemAtk.itemIds?.[0]) throw new Error(`create gem-001 failed: ${gemAtk.message}`);
-  const gemDef = await createItem(userId, characterId, 'gem-002', 1, { location: 'bag' });
-  if (!gemDef.success || !gemDef.itemIds?.[0]) throw new Error(`create gem-002 failed: ${gemDef.message}`);
-  const gemHp = await createItem(userId, characterId, 'gem-003', 1, { location: 'bag' });
-  if (!gemHp.success || !gemHp.itemIds?.[0]) throw new Error(`create gem-003 failed: ${gemHp.message}`);
+  const gemAtkDefId = 'gem-atk-wg-1';
+  const gemDefDefId = 'gem-def-wf-1';
+  const gemHpDefId = 'gem-sur-hp-1';
+  const gemAtk = await createItem(userId, characterId, gemAtkDefId, 1, { location: 'bag' });
+  if (!gemAtk.success || !gemAtk.itemIds?.[0]) throw new Error(`create ${gemAtkDefId} failed: ${gemAtk.message}`);
+  const gemDef = await createItem(userId, characterId, gemDefDefId, 1, { location: 'bag' });
+  if (!gemDef.success || !gemDef.itemIds?.[0]) throw new Error(`create ${gemDefDefId} failed: ${gemDef.message}`);
+  const gemHp = await createItem(userId, characterId, gemHpDefId, 1, { location: 'bag' });
+  if (!gemHp.success || !gemHp.itemIds?.[0]) throw new Error(`create ${gemHpDefId} failed: ${gemHp.message}`);
 
   const enhanceToolItemId = Number(enhTool.itemIds?.[0]);
   const protectToolItemId = Number(protectTool.itemIds?.[0]);
@@ -320,7 +323,7 @@ const main = async () => {
   );
   must(Boolean(socketRes?.success), `socket gem failed: ${String(socketRes?.message ?? '')}`);
   must(pickNum(socketRes?.data?.slot, -1) === 0, 'socket slot mismatch');
-  must(String(socketRes?.data?.gem?.itemDefId || '') === 'gem-001', 'socket gem itemDefId mismatch');
+  must(String(socketRes?.data?.gem?.itemDefId || '') === gemAtkDefId, 'socket gem itemDefId mismatch');
 
   const replaceSocketRes = await postJson(
     `${base}/api/inventory/socket`,
@@ -353,7 +356,7 @@ const main = async () => {
 
   const charAfterSocket = await withRetry(async () => {
     const row = await getCharAttrs(characterId);
-    if (row.maxQixue < charBeforeSocket.maxQixue + 20) {
+    if (row.maxQixue < charBeforeSocket.maxQixue + 2) {
       throw new Error('max_qixue not updated yet');
     }
     return row;
@@ -369,7 +372,7 @@ const main = async () => {
 
   const charAfterReplace = await withRetry(async () => {
     const row = await getCharAttrs(characterId);
-    if (row.maxQixue > charAfterSocket.maxQixue - 20) {
+    if (row.maxQixue > charAfterSocket.maxQixue - 2) {
       throw new Error('max_qixue not updated after replace yet');
     }
     return row;
@@ -391,8 +394,8 @@ const main = async () => {
   const refineMatAfter = await findInBag(token, (x) => String(x?.item_def_id) === 'enhance-002');
   const enhanceToolAfter = await findInBag(token, (x) => Number(x?.id) === enhanceToolItemId);
   const protectToolAfter = await findInBag(token, (x) => Number(x?.id) === protectToolItemId);
-  const gemDefAfter = await findInBag(token, (x) => String(x?.item_def_id) === 'gem-002');
-  const gemHpAfter = await findInBag(token, (x) => String(x?.item_def_id) === 'gem-003');
+  const gemDefAfter = await findInBag(token, (x) => String(x?.item_def_id) === gemDefDefId);
+  const gemHpAfter = await findInBag(token, (x) => String(x?.item_def_id) === gemHpDefId);
   const after = {
     lv: Number(equipAfter?.strengthen_level ?? 0),
     refineLv: Number(equipAfter?.refine_level ?? 0),
@@ -402,8 +405,8 @@ const main = async () => {
     socketed: normalizeSocketedGems(equipAfter?.socketed_gems),
     enhanceToolLeft: Number(enhanceToolAfter?.qty ?? 0),
     protectToolLeft: Number(protectToolAfter?.qty ?? 0),
-    gem002Qty: Number(gemDefAfter?.qty ?? 0),
-    gem003Qty: Number(gemHpAfter?.qty ?? 0),
+    gemDefenseQty: Number(gemDefAfter?.qty ?? 0),
+    gemSurvivalQty: Number(gemHpAfter?.qty ?? 0),
   };
 
   await query(
@@ -613,8 +616,8 @@ const main = async () => {
   must(Boolean(summary.logs.some((x) => !x.success)), 'enhance should have at least one fail in random attempts');
   must(Boolean(summary.refineLogs.some((x) => x.success)), 'refine should have at least one success in random attempts');
   must(Boolean(summary.refineLogs.some((x) => !x.success)), 'refine should have at least one fail in random attempts');
-  must(summary.equippedAttrRefresh.maxQixueRaised >= 20, 'equipped socket should raise max_qixue by gem effect');
-  must(summary.equippedAttrRefresh.maxQixueReplaced >= 20, 'replace socket should refresh max_qixue by gem effect');
+  must(summary.equippedAttrRefresh.maxQixueRaised >= 2, 'equipped socket should raise max_qixue by gem effect');
+  must(summary.equippedAttrRefresh.maxQixueReplaced >= 2, 'replace socket should refresh max_qixue by gem effect');
   must(!summary.negativeCases.enhanceNoMaterial.success, 'enhanceNoMaterial should fail');
   must(!summary.negativeCases.refineNoMaterial.success, 'refineNoMaterial should fail');
   must(!summary.negativeCases.enhanceNoMoney.success, 'enhanceNoMoney should fail');

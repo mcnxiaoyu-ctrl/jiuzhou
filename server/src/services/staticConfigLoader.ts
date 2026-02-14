@@ -434,7 +434,7 @@ export type ItemDefConfig = {
   category: string;
   sub_category?: string;
   quality?: string;
-  level?: number;
+  gem_level?: number;
   stack_max?: number;
   bind_type?: string;
   tradeable?: boolean;

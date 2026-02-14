@@ -22,6 +22,7 @@ import {
   getCharacterComputedByCharacterId,
 } from './characterComputedService.js';
 import { getItemDefinitionById, getItemDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
+import { getGemLevel, isGemItemDefinition } from './shared/gemItemSemantics.js';
 
 // 物品定义接口
 export interface ItemDef {
@@ -457,11 +458,11 @@ export const useItem = async (
           const gemIds = getItemDefinitions()
             .filter((entry) => {
               if (entry.enabled === false) return false;
-              if (entry.category !== 'material') return false;
+              if (!isGemItemDefinition(entry)) return false;
               const subCategory = String(entry.sub_category || '');
               if (!subCategorySet.has(subCategory)) return false;
-              const level = Number(entry.level);
-              return Number.isFinite(level) && level >= minLevel && level <= maxLevel;
+              const gemLevel = getGemLevel(entry);
+              return gemLevel !== null && gemLevel >= minLevel && gemLevel <= maxLevel;
             })
             .map((entry) => String(entry.id || '').trim())
             .filter((id): id is string => id.length > 0);

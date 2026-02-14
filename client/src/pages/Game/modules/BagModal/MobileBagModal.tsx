@@ -381,7 +381,7 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
     if (!item.equip) return null;
     const curLv = Math.max(0, Math.min(15, item.equip.strengthenLevel));
     const targetLv = Math.min(15, curLv + 1);
-    const costPlan = buildEnhanceCostPlan(item.equip.itemLevel, targetLv);
+    const costPlan = buildEnhanceCostPlan(targetLv);
     const materialName = costPlan.materialItemDefId === 'enhance-001' ? '淬灵石' : '蕴灵石';
     const owned = materialCounts[costPlan.materialItemDefId] ?? 0;
     const previewBaseAttrs = buildGrowthPreviewAttrs({
@@ -405,7 +405,7 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
     if (!item.equip) return null;
     const curLv = Math.max(0, Math.min(10, item.equip.refineLevel));
     const targetLv = Math.min(10, curLv + 1);
-    const costPlan = buildRefineCostPlan(item.equip.itemLevel, targetLv);
+    const costPlan = buildRefineCostPlan(targetLv);
     const owned = materialCounts[costPlan.materialItemDefId] ?? 0;
     const materialName = costPlan.materialItemDefId === 'enhance-002' ? '蕴灵石' : costPlan.materialItemDefId;
     const previewBaseAttrs = buildGrowthPreviewAttrs({

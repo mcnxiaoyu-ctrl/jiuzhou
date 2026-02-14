@@ -432,7 +432,6 @@ export const distributeBattleRewards = async (
         category: string;
         subCategory: string | null;
         effectDefs: unknown;
-        level: number;
         qualityRank: number;
       }
     >();
@@ -519,7 +518,6 @@ export const distributeBattleRewards = async (
       category: string;
       subCategory: string | null;
       effectDefs: unknown;
-      level: number;
       qualityRank: number;
     }> => {
       const cached = itemMetaCache.get(itemDefId);
@@ -530,7 +528,6 @@ export const distributeBattleRewards = async (
         category: def?.category || 'misc',
         subCategory: def?.sub_category ?? null,
         effectDefs: def?.effect_defs ?? null,
-        level: Math.max(0, Math.floor(Number(def?.level) || 0)),
         qualityRank: resolveQualityRankFromName(def?.quality, 1),
       };
       itemMetaCache.set(itemDefId, meta);
@@ -574,7 +571,6 @@ export const distributeBattleRewards = async (
           category: sourceMeta.category,
           subCategory: sourceMeta.subCategory,
           effectDefs: sourceMeta.effectDefs,
-          level: sourceMeta.level,
           qualityRank: sourceMeta.qualityRank,
         },
         autoDisassembleSetting: receiverAutoDisassemble,

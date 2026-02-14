@@ -50,7 +50,6 @@ export interface GrantRewardItemWithAutoDisassembleInput {
     category: string;
     subCategory?: string | null;
     effectDefs?: unknown;
-    level?: number | null;
     qualityRank?: number | null;
   };
   autoDisassembleSetting: AutoDisassembleSetting;
@@ -221,7 +220,6 @@ export const grantRewardItemWithAutoDisassemble = async (
   const subCategory = input.itemMeta.subCategory ?? null;
   const itemName = String(input.itemMeta.itemName || '').trim();
   const effectDefs = input.itemMeta.effectDefs;
-  const itemLevel = Math.max(0, Math.floor(Number(input.itemMeta.level) || 0));
   const baseQualityRank = (() => {
     const n = Number(input.itemMeta.qualityRank);
     if (Number.isInteger(n) && n > 0) return n;
@@ -337,7 +335,6 @@ export const grantRewardItemWithAutoDisassemble = async (
       subCategory,
       effectDefs,
       qualityRankRaw: generatedQualityRank,
-      itemLevelRaw: itemLevel,
       strengthenLevelRaw: 0,
       refineLevelRaw: 0,
       affixesRaw: [],

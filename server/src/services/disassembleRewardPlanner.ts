@@ -6,7 +6,7 @@
  * - 保留特殊分解（装备、功法书），其余走默认银两公式
  *
  * 输入：
- * - 物品分类、子分类、效果定义、品质、等级、成长参数、分解数量
+ * - 物品分类、子分类、效果定义、品质、成长参数、分解数量
  *
  * 输出：
  * - rewards.silver：银两奖励
@@ -34,7 +34,6 @@ export type DisassembleRewardPlanInput = {
   subCategory: string | null;
   effectDefs: unknown;
   qualityRankRaw: unknown;
-  itemLevelRaw: unknown;
   strengthenLevelRaw?: unknown;
   refineLevelRaw?: unknown;
   affixesRaw?: unknown;
@@ -109,7 +108,6 @@ export const buildDisassembleRewardPlan = (
 
   const affixCount = resolveAffixCount(params.affixesRaw);
   const silverResult = calculateDefaultDisassembleSilver({
-    level: Number(params.itemLevelRaw) || 0,
     qualityRank,
     strengthenLevel: Number(params.strengthenLevelRaw) || 0,
     refineLevel: Number(params.refineLevelRaw) || 0,

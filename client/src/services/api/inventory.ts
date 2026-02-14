@@ -38,7 +38,7 @@ export interface ItemDefLite {
   use_limit_total?: number | null;
   socket_max?: number;
   gem_slot_types?: unknown;
-  level?: number | null;
+  gem_level?: number | null;
   set_id?: string | null;
   set_name?: string | null;
   set_bonuses?: unknown;

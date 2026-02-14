@@ -1637,7 +1637,6 @@ export const nextDungeonInstance = async (
             category: string;
             subCategory: string | null;
             effectDefs: unknown;
-            level: number;
             qualityRank: number;
           }
         >();
@@ -1701,7 +1700,6 @@ export const nextDungeonInstance = async (
           category: string;
           subCategory: string | null;
           effectDefs: unknown;
-          level: number;
           qualityRank: number;
         }> => {
           const cached = itemMetaCache.get(itemDefId);
@@ -1712,7 +1710,6 @@ export const nextDungeonInstance = async (
             category: typeof row?.category === 'string' && row.category.length > 0 ? row.category : 'misc',
             subCategory: typeof row?.sub_category === 'string' && row.sub_category.length > 0 ? row.sub_category : null,
             effectDefs: row?.effect_defs ?? null,
-            level: Math.max(0, Math.floor(Number(row?.level) || 0)),
             qualityRank: resolveQualityRankFromName(row?.quality, 1),
           };
           itemMetaCache.set(itemDefId, meta);
@@ -1800,7 +1797,6 @@ export const nextDungeonInstance = async (
                 category: itemMeta.category,
                 subCategory: itemMeta.subCategory,
                 effectDefs: itemMeta.effectDefs,
-                level: itemMeta.level,
                 qualityRank: itemMeta.qualityRank,
               },
               autoDisassembleSetting,

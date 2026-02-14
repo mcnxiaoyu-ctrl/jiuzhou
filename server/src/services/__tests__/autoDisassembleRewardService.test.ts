@@ -39,7 +39,7 @@ test('命中自动分解时应发放分解材料', async () => {
     characterId: 88,
     itemDefId: 'equip-weapon-001',
     qty: 1,
-    itemMeta: { itemName: '青锋剑', category: 'equipment', level: 1, qualityRank: 1 },
+    itemMeta: { itemName: '青锋剑', category: 'equipment', qualityRank: 1 },
     autoDisassembleSetting: {
       enabled: true,
       maxQualityRank: 2,
@@ -85,7 +85,7 @@ test('分解材料入包失败且背包满时应走邮件补发', async () => {
     characterId: 99,
     itemDefId: 'equip-armor-001',
     qty: 1,
-    itemMeta: { itemName: '护心甲', category: 'equipment', level: 1, qualityRank: 2 },
+    itemMeta: { itemName: '护心甲', category: 'equipment', qualityRank: 2 },
     autoDisassembleSetting: {
       enabled: true,
       maxQualityRank: 2,
@@ -124,7 +124,7 @@ test('未开启自动分解时应保持原奖励逻辑', async () => {
     itemDefId: 'equip-ring-001',
     qty: 2,
     bindType: 'bound',
-    itemMeta: { itemName: '玉戒', category: 'equipment', level: 1, qualityRank: 1 },
+    itemMeta: { itemName: '玉戒', category: 'equipment', qualityRank: 1 },
     autoDisassembleSetting: {
       enabled: false,
       maxQualityRank: 4,
@@ -164,7 +164,7 @@ test('品质超过阈值时应保留原装备', async () => {
     characterId: 66,
     itemDefId: 'equip-necklace-001',
     qty: 1,
-    itemMeta: { itemName: '龙纹项链', category: 'equipment', level: 1, qualityRank: 4 },
+    itemMeta: { itemName: '龙纹项链', category: 'equipment', qualityRank: 4 },
     autoDisassembleSetting: {
       enabled: true,
       maxQualityRank: 2,
@@ -202,7 +202,7 @@ test('原装备入包失败且背包满时应补发原装备邮件', async () =>
     itemDefId: 'equip-legs-001',
     qty: 1,
     bindType: 'bound',
-    itemMeta: { itemName: '玄铁护腿', category: 'equipment', level: 1, qualityRank: 1 },
+    itemMeta: { itemName: '玄铁护腿', category: 'equipment', qualityRank: 1 },
     autoDisassembleSetting: {
       enabled: true,
       maxQualityRank: 4,
@@ -250,7 +250,7 @@ test('非装备命中规则时应按默认公式转化银两', async () => {
     characterId: 108,
     itemDefId: 'mat-herb-001',
     qty: 1,
-    itemMeta: { itemName: '凝气草', category: 'material', level: 3, qualityRank: 2 },
+    itemMeta: { itemName: '凝气草', category: 'material', qualityRank: 2 },
     autoDisassembleSetting: {
       enabled: true,
       maxQualityRank: 3,
@@ -275,6 +275,6 @@ test('非装备命中规则时应按默认公式转化银两', async () => {
   assert.deepEqual(result.warnings, []);
   assert.deepEqual(result.grantedItems, []);
   assert.deepEqual(result.pendingMailItems, []);
-  assert.equal(result.gainedSilver, 10);
-  assert.deepEqual(silverCalls, [10]);
+  assert.equal(result.gainedSilver, 3);
+  assert.deepEqual(silverCalls, [3]);
 });

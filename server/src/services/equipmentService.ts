@@ -181,7 +181,6 @@ export interface EquipmentDef {
   name: string;
   category: string;
   sub_category: string;
-  level: number;
   equip_slot: string;
   equip_req_realm: string;
   base_attrs: Record<string, number>;
@@ -295,7 +294,6 @@ export const getEquipmentDef = async (itemDefId: string): Promise<EquipmentDef |
     name: String(row.name || row.id),
     category: String(row.category || 'equipment'),
     sub_category: String(row.sub_category || ''),
-    level: Number(row.level) || 1,
     equip_slot: String(row.equip_slot || ''),
     equip_req_realm: String(row.equip_req_realm || ''),
     base_attrs: baseAttrs,

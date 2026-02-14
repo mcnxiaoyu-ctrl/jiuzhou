@@ -88,7 +88,6 @@ export type BagItem = {
   name: string;
   category: Exclude<BagCategory, "all">;
   subCategory: string | null;
-  itemLevel: number;
   quality: BagQuality;
   tags: string[];
   icon: string;
@@ -99,6 +98,7 @@ export type BagItem = {
   locked: boolean;
   desc: string;
   effects: string[];
+  hasSocketEffect: boolean;
   actions: BagAction[];
   setInfo: SetInfo | null;
   equip: {
@@ -114,7 +114,6 @@ export type BagItem = {
     socketMax: number;
     gemSlotTypes: unknown;
     socketedGems: SocketedGemEntry[];
-    itemLevel: number;
     equipReqRealm: string | null;
   } | null;
 };
@@ -616,10 +615,8 @@ export interface GrowthCostPlan {
 }
 
 export const buildEnhanceCostPlan = (
-  itemLevel: number,
   targetLevel: number,
 ): GrowthCostPlan => {
-  const level = Math.max(0, Math.floor(Number(itemLevel) || 0));
   const target = Math.max(
     1,
     Math.min(15, Math.floor(Number(targetLevel) || 1)),
@@ -627,16 +624,14 @@ export const buildEnhanceCostPlan = (
   return {
     materialItemDefId: target <= 10 ? "enhance-001" : "enhance-002",
     materialQty: 1,
-    silverCost: Math.max(50, Math.floor((level + 5) * 20 * target)),
+    silverCost: Math.max(50, Math.floor(5 * 20 * target)),
     spiritStoneCost: Math.max(0, Math.floor(target / 5)),
   };
 };
 
 export const buildRefineCostPlan = (
-  itemLevel: number,
   targetLevel: number,
 ): GrowthCostPlan => {
-  const level = Math.max(0, Math.floor(Number(itemLevel) || 0));
   const target = Math.max(
     1,
     Math.min(10, Math.floor(Number(targetLevel) || 1)),
@@ -644,7 +639,7 @@ export const buildRefineCostPlan = (
   return {
     materialItemDefId: "enhance-002",
     materialQty: target >= 8 ? 2 : 1,
-    silverCost: Math.max(100, Math.floor((level + 8) * 35 * target)),
+    silverCost: Math.max(100, Math.floor(8 * 35 * target)),
     spiritStoneCost: Math.max(0, Math.floor((target + 1) / 3)),
   };
 };
@@ -791,31 +786,25 @@ export const isGemTypeAllowedInSlot = (
   );
 };
 
+const hasSocketBuffEffect = (effectDefsRaw: unknown): boolean => {
+  if (!Array.isArray(effectDefsRaw)) return false;
+  return effectDefsRaw.some((effect) => {
+    if (!effect || typeof effect !== "object") return false;
+    const row = effect as { trigger?: unknown; effect_type?: unknown };
+    return (
+      String(row.trigger || "").trim().toLowerCase() === "socket" &&
+      String(row.effect_type || "").trim().toLowerCase() === "buff"
+    );
+  });
+};
+
 export const collectGemCandidates = (items: BagItem[]): BagItem[] => {
   const out: BagItem[] = [];
   for (const it of items) {
     if (it.location !== "bag") continue;
     if (it.locked) continue;
     if (it.category !== "material") continue;
-
-    const subCategory = String(it.subCategory || "")
-      .trim()
-      .toLowerCase();
-    if (subCategory === "gem" || subCategory.startsWith("gem_")) {
-      out.push(it);
-      continue;
-    }
-
-    const effects = it.effects;
-    if (
-      !effects.some(
-        (line) =>
-          line.includes("socket") ||
-          line.includes("镶嵌") ||
-          line.includes("宝石"),
-      )
-    )
-      continue;
+    if (!it.hasSocketEffect) continue;
     out.push(it);
   }
   return out;
@@ -1288,6 +1277,7 @@ export const buildBagItem = (it: InventoryItemDto): BagItem | null => {
   const category = mapCategory(def.category, def.sub_category, def.effect_defs);
   const tags = normalizeDisplayTags(coerceStringArray(def.tags), category, quality);
   const isEquip = category === "equipment";
+  const hasSocketEffect = hasSocketBuffEffect(def.effect_defs);
 
   return {
     id: Number(it.id),
@@ -1295,7 +1285,6 @@ export const buildBagItem = (it: InventoryItemDto): BagItem | null => {
     name: def.name,
     category,
     subCategory: def.sub_category ?? null,
-    itemLevel: Math.max(0, Math.floor(Number(def.level) || 0)),
     quality,
     tags,
     icon: resolveIcon(def),
@@ -1306,6 +1295,7 @@ export const buildBagItem = (it: InventoryItemDto): BagItem | null => {
     locked: !!it.locked,
     desc: def.long_desc || def.description || "",
     effects: buildEffects(def),
+    hasSocketEffect,
     actions: mapActions(category, def.sub_category, def.effect_defs),
     setInfo: buildSetInfo(def),
     equip: isEquip
@@ -1322,7 +1312,6 @@ export const buildBagItem = (it: InventoryItemDto): BagItem | null => {
           socketMax: resolveSocketMax(def.socket_max, qualityRank[quality]),
           gemSlotTypes: def.gem_slot_types,
           socketedGems: parseSocketedGems(it.socketed_gems),
-          itemLevel: Math.max(0, Math.floor(Number(def.level) || 0)),
           equipReqRealm:
             typeof def.equip_req_realm === "string" ? def.equip_req_realm : null,
         }

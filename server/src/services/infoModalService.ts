@@ -16,6 +16,7 @@ import {
   type MonsterKind,
 } from './shared/dropRateMultiplier.js';
 import { getAdjustedDropQuantityRange } from './shared/dropQuantityMultiplier.js';
+import { getGemLevel, isGemItemDefinition } from './shared/gemItemSemantics.js';
 
 type InfoTargetType = 'npc' | 'monster' | 'item' | 'player';
 
@@ -63,8 +64,9 @@ type ItemRow = {
   id: string;
   name: string;
   category: string | null;
+  sub_category: string | null;
   quality: string | null;
-  level: number | null;
+  gem_level: number | null;
   icon: string | null;
   description: string | null;
   long_desc: string | null;
@@ -445,13 +447,15 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
 
   if (type === 'item') {
     const def = getItemDefinitionById(id);
+    const gemLevel = isGemItemDefinition(def) ? getGemLevel(def) : null;
     const item = def && def.enabled !== false
       ? ({
           id: def.id,
           name: def.name,
           category: def.category ?? null,
+          sub_category: def.sub_category ?? null,
           quality: def.quality ?? null,
-          level: Number.isFinite(Number(def.level)) ? Number(def.level) : null,
+          gem_level: gemLevel,
           icon: def.icon ?? null,
           description: def.description ?? null,
           long_desc: def.long_desc ?? null,
@@ -463,7 +467,8 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
     if (!item) return null;
 
     const desc = item.long_desc || item.description || null;
-    const realm = item.equip_req_realm || item.use_req_realm || (item.level !== null ? `等级${item.level}` : null);
+    const realm =
+      item.equip_req_realm || item.use_req_realm || (item.gem_level !== null ? `等级${item.gem_level}` : null);
     const baseStats = toStatsFromAttrs(item.base_attrs, '');
     const stats = baseStats;
 
