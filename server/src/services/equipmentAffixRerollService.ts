@@ -160,6 +160,23 @@ const normalizeGeneratedAffixApplyType = (value: unknown): GeneratedAffix['apply
   return null;
 };
 
+const normalizeGeneratedAffixAttrKey = (
+  attrKeyRaw: unknown,
+  applyType: GeneratedAffix['apply_type'],
+  fallbackKey: string,
+  params?: Record<string, string | number | boolean>
+): string | null => {
+  const normalizedAttrKey = typeof attrKeyRaw === 'string' ? attrKeyRaw.trim() : '';
+  if (normalizedAttrKey) return normalizedAttrKey;
+  if (applyType !== 'special') return null;
+
+  // 历史special词条可能未写入attr_key，优先回退到params.attr_key，再回退到词条key，避免洗炼时被解析丢弃。
+  const paramAttrKey = params && typeof params.attr_key === 'string' ? params.attr_key.trim() : '';
+  if (paramAttrKey) return paramAttrKey;
+  const normalizedFallbackKey = fallbackKey.trim();
+  return normalizedFallbackKey || null;
+};
+
 export const parseGeneratedAffixesForReroll = (raw: unknown): GeneratedAffix[] => {
   let arr: unknown = raw;
   if (typeof arr === 'string') {
@@ -180,8 +197,7 @@ export const parseGeneratedAffixesForReroll = (raw: unknown): GeneratedAffix[] =
 
     const key = typeof row.key === 'string' ? row.key.trim() : '';
     const name = typeof row.name === 'string' ? row.name.trim() : '';
-    const attrKey = typeof row.attr_key === 'string' ? row.attr_key.trim() : '';
-    if (!key || !name || !attrKey) continue;
+    if (!key || !name) continue;
 
     const tier = Math.max(1, clampInt(toNumber(row.tier, 1), 1, 99));
     const effectType = typeof row.effect_type === 'string' ? row.effect_type : undefined;
@@ -202,6 +218,8 @@ export const parseGeneratedAffixesForReroll = (raw: unknown): GeneratedAffix[] =
       }
     }
     const normalizedParams = Object.keys(params).length > 0 ? params : undefined;
+    const attrKey = normalizeGeneratedAffixAttrKey(row.attr_key, applyType, key, normalizedParams);
+    if (!attrKey) continue;
     const value = normalizeAffixValueByContext(
       {
         applyType,
@@ -310,10 +328,17 @@ const rollAffixValue = (rng: SeededRandom, affix: AffixDef, realmRank: number, a
   const rawScaledValue = Number.isFinite(attrFactor) && attrFactor !== 1
     ? value * attrFactor
     : value;
+  const affixAttrKey = normalizeGeneratedAffixAttrKey(
+    affix.attr_key,
+    affix.apply_type,
+    affix.key,
+    affix.params
+  );
+  if (!affixAttrKey) return null;
   const scaledValue = normalizeAffixValueByContext(
     {
       applyType: affix.apply_type,
-      attrKey: affix.attr_key,
+      attrKey: affixAttrKey,
       effectType: affix.effect_type,
       params: affix.params,
     },
@@ -323,7 +348,7 @@ const rollAffixValue = (rng: SeededRandom, affix: AffixDef, realmRank: number, a
   const result: GeneratedAffix = {
     key: affix.key,
     name: affix.name,
-    attr_key: affix.attr_key,
+    attr_key: affixAttrKey,
     apply_type: affix.apply_type,
     tier: Math.max(1, Math.floor(toNumber(selectedTier.tier, 1))),
     value: scaledValue,

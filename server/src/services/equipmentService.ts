@@ -146,6 +146,23 @@ const shouldKeepRatioPrecision = (affix: AffixDef): boolean => {
   return isRatioSpecialAffixValue(affix);
 };
 
+const normalizeGeneratedAffixAttrKey = (
+  attrKeyRaw: unknown,
+  applyType: GeneratedAffix['apply_type'],
+  fallbackKey: string,
+  params?: Record<string, string | number | boolean>
+): string | null => {
+  const normalizedAttrKey = typeof attrKeyRaw === 'string' ? attrKeyRaw.trim() : '';
+  if (normalizedAttrKey) return normalizedAttrKey;
+  if (applyType !== 'special') return null;
+
+  // 兼容历史special词条缺少attr_key的情况，保证生成入库结构稳定，避免后续洗炼解析误删词缀。
+  const paramAttrKey = params && typeof params.attr_key === 'string' ? params.attr_key.trim() : '';
+  if (paramAttrKey) return paramAttrKey;
+  const normalizedFallbackKey = fallbackKey.trim();
+  return normalizedFallbackKey || null;
+};
+
 const normalizeAffixValuePrecision = (affix: AffixDef, value: number): number => {
   if (!Number.isFinite(value)) return 0;
   if (shouldKeepRatioPrecision(affix)) return Number(value.toFixed(6));
@@ -588,12 +605,19 @@ const rollAffixValue = (
   const rawScaledValue = Number.isFinite(attrFactor) && attrFactor !== 1
     ? sampledValue * attrFactor
     : sampledValue;
+  const affixAttrKey = normalizeGeneratedAffixAttrKey(
+    affix.attr_key,
+    affix.apply_type,
+    affix.key,
+    affix.params
+  );
+  if (!affixAttrKey) return null;
   const scaledValue = normalizeAffixValuePrecision(affix, rawScaledValue);
 
   const out: GeneratedAffix = {
     key: affix.key,
     name: affix.name,
-    attr_key: affix.attr_key,
+    attr_key: affixAttrKey,
     apply_type: affix.apply_type,
     tier: selectedTier.tier,
     value: scaledValue,
