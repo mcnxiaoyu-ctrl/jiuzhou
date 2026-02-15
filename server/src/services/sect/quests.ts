@@ -570,14 +570,17 @@ export const submitSectQuest = async (
     const updatedProgress = Math.max(0, Math.min(quest.required, toNumber(updatedRes.rows[0]?.progress)));
     const updatedStatus = normalizeQuestStatus(updatedRes.rows[0]?.status);
 
-    await addLogTx(
-      client,
-      member.sectId,
-      'quest_submit',
-      characterId,
-      null,
-      `提交宗门任务物资：${quest.submitRequirement.itemName}×${consumeRes.consumed}（${updatedProgress}/${quest.required}）`
-    );
+    // 任务在本次提交后已完成时，只保留“领取奖励”日志，避免同一完成动作出现提交+领奖双记录。
+    if (updatedStatus !== 'completed') {
+      await addLogTx(
+        client,
+        member.sectId,
+        'quest_submit',
+        characterId,
+        null,
+        `提交宗门任务物资：${quest.submitRequirement.itemName}×${consumeRes.consumed}（${updatedProgress}/${quest.required}）`
+      );
+    }
 
     await client.query('COMMIT');
     return {
