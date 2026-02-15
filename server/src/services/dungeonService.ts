@@ -1727,7 +1727,7 @@ export const nextDungeonInstance = async (
 
           const settingRes = await client.query(
             `
-              SELECT id, auto_disassemble_enabled, auto_disassemble_max_quality_rank, auto_disassemble_rules
+              SELECT id, auto_disassemble_enabled, auto_disassemble_rules
               FROM characters
               WHERE id = ANY($1)
             `,
@@ -1736,7 +1736,6 @@ export const nextDungeonInstance = async (
           for (const row of settingRes.rows as Array<{
             id: unknown;
             auto_disassemble_enabled: boolean | null;
-            auto_disassemble_max_quality_rank: number | null;
             auto_disassemble_rules: unknown;
           }>) {
             const id = asNumber(row.id, 0);
@@ -1745,7 +1744,6 @@ export const nextDungeonInstance = async (
               id,
               normalizeAutoDisassembleSetting({
                 enabled: row.auto_disassemble_enabled,
-                maxQualityRank: row.auto_disassemble_max_quality_rank,
                 rules: row.auto_disassemble_rules,
               })
             );
@@ -1774,7 +1772,7 @@ export const nextDungeonInstance = async (
 
           const autoDisassembleSetting =
             autoDisassembleSettings.get(characterId) ||
-            normalizeAutoDisassembleSetting({ enabled: false, maxQualityRank: 1, rules: undefined });
+            normalizeAutoDisassembleSetting({ enabled: false, rules: undefined });
           const grantedItems: Array<{ item_def_id: string; qty: number; item_ids: number[] }> = [];
           let autoDisassembleSilverGained = 0;
           for (const rewardItem of rewardBundle.items) {

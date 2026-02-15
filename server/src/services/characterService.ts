@@ -18,7 +18,6 @@ export interface Character {
   avatar: string | null;
   auto_cast_skills: boolean;
   auto_disassemble_enabled: boolean;
-  auto_disassemble_max_quality_rank: number;
   auto_disassemble_rules: AutoDisassembleRuleSet[] | null;
   spirit_stones: number;
   silver: number;
@@ -273,26 +272,22 @@ export const updateCharacterAutoCastSkills = async (
 export const updateCharacterAutoDisassembleSettings = async (
   userId: number,
   enabled: boolean,
-  maxQualityRank?: number,
   rules?: unknown
 ): Promise<{ success: boolean; message: string }> => {
   try {
     const normalized = normalizeAutoDisassembleSetting({
       enabled,
-      maxQualityRank,
       rules,
     });
-    const parsedRank = maxQualityRank == null ? null : normalized.maxQualityRank;
     const parsedRulesJson = rules === undefined ? null : JSON.stringify(normalized.rules);
     const sql = `
       UPDATE characters
       SET auto_disassemble_enabled = $1,
-          auto_disassemble_max_quality_rank = GREATEST(1, LEAST(4, COALESCE($2, auto_disassemble_max_quality_rank, 1))),
-          auto_disassemble_rules = COALESCE($3::jsonb, auto_disassemble_rules, '[]'::jsonb),
+          auto_disassemble_rules = COALESCE($2::jsonb, auto_disassemble_rules, '[]'::jsonb),
           updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = $4
+      WHERE user_id = $3
     `;
-    const result = await query(sql, [normalized.enabled, parsedRank, parsedRulesJson, userId]);
+    const result = await query(sql, [normalized.enabled, parsedRulesJson, userId]);
 
     if (result.rowCount === 0) {
       return { success: false, message: '角色不存在' };

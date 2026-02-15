@@ -32,7 +32,6 @@ interface CharacterBaseRow {
   avatar: string | null;
   auto_cast_skills: boolean;
   auto_disassemble_enabled: boolean;
-  auto_disassemble_max_quality_rank: number;
   auto_disassemble_rules: unknown;
   spirit_stones: number;
   silver: number;
@@ -840,7 +839,6 @@ const selectBaseCharacterByUserId = async (userId: number): Promise<CharacterBas
         avatar,
         auto_cast_skills,
         auto_disassemble_enabled,
-        auto_disassemble_max_quality_rank,
         auto_disassemble_rules,
         spirit_stones,
         silver,
@@ -878,7 +876,6 @@ const selectBaseCharacterByCharacterId = async (characterId: number): Promise<Ch
         avatar,
         auto_cast_skills,
         auto_disassemble_enabled,
-        auto_disassemble_max_quality_rank,
         auto_disassemble_rules,
         spirit_stones,
         silver,
@@ -997,7 +994,6 @@ export const getCharacterComputedBatchByCharacterIds = async (
         avatar,
         auto_cast_skills,
         auto_disassemble_enabled,
-        auto_disassemble_max_quality_rank,
         auto_disassemble_rules,
         spirit_stones,
         silver,

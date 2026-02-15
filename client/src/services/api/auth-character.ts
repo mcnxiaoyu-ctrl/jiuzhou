@@ -25,7 +25,6 @@ export interface CharacterResponse {
       sub_realm: string | null;
       auto_cast_skills?: boolean;
       auto_disassemble_enabled?: boolean;
-      auto_disassemble_max_quality_rank?: number;
       auto_disassemble_rules?: AutoDisassembleRulesDto | null;
       spirit_stones: number;
       silver: number;
@@ -44,6 +43,7 @@ export interface AutoDisassembleRuleDto {
   excludedSubCategories?: string[];
   includeNameKeywords?: string[];
   excludeNameKeywords?: string[];
+  maxQualityRank?: number;
 }
 
 export type AutoDisassembleRulesDto = AutoDisassembleRuleDto[];
@@ -112,12 +112,10 @@ export const updateCharacterAutoCastSkills = (enabled: boolean): Promise<{ succe
 
 export const updateCharacterAutoDisassemble = (
   enabled: boolean,
-  maxQualityRank: number,
   rules?: AutoDisassembleRulesDto
 ): Promise<{ success: boolean; message: string }> => {
   return api.post('/character/updateAutoDisassemble', {
     enabled,
-    maxQualityRank,
     ...(rules ? { rules } : {}),
   });
 };

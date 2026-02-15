@@ -12,7 +12,6 @@ export interface CharacterAttributes {
   avatar: string | null;
   autoCastSkills: boolean;
   autoDisassembleEnabled: boolean;
-  autoDisassembleMaxQualityRank: number;
   spiritStones: number;
   silver: number;
   stamina: number;
@@ -69,11 +68,6 @@ export const dbToCharacterAttributes = (dbRow: Record<string, unknown>): Charact
   avatar: dbRow.avatar as string | null,
   autoCastSkills: dbRow.auto_cast_skills == null ? true : Boolean(dbRow.auto_cast_skills),
   autoDisassembleEnabled: dbRow.auto_disassemble_enabled == null ? false : Boolean(dbRow.auto_disassemble_enabled),
-  autoDisassembleMaxQualityRank: (() => {
-    const n = Number(dbRow.auto_disassemble_max_quality_rank);
-    if (!Number.isInteger(n)) return 1;
-    return Math.max(1, Math.min(4, n));
-  })(),
   spiritStones: Number(dbRow.spirit_stones) || 0,
   silver: Number(dbRow.silver) || 0,
   stamina: Number(dbRow.stamina) || 0,

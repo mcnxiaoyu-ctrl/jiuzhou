@@ -112,18 +112,11 @@ router.post('/updateAutoCastSkills', requireAuth, async (req: Request, res: Resp
 router.post('/updateAutoDisassemble', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const body = req.body as { enabled?: unknown; maxQualityRank?: unknown; rules?: unknown };
+    const body = req.body as { enabled?: unknown; rules?: unknown };
 
     const enabled = Boolean(body?.enabled);
-    const parsedRank =
-      body?.maxQualityRank === undefined || body?.maxQualityRank === null
-        ? undefined
-        : Number(body.maxQualityRank);
     const parsedRules = body?.rules;
 
-    if (parsedRank !== undefined && (!Number.isInteger(parsedRank) || parsedRank < 1 || parsedRank > 4)) {
-      return res.status(400).json({ success: false, message: 'maxQualityRank参数错误' });
-    }
     if (parsedRules !== undefined && !Array.isArray(parsedRules)) {
       return res.status(400).json({ success: false, message: 'rules参数错误，需为数组' });
     }
@@ -134,7 +127,7 @@ router.post('/updateAutoDisassemble', requireAuth, async (req: Request, res: Res
       return res.status(400).json({ success: false, message: 'rules参数错误，规则项需为对象' });
     }
 
-    const result = await updateCharacterAutoDisassembleSettings(userId, enabled, parsedRank, parsedRules);
+    const result = await updateCharacterAutoDisassembleSettings(userId, enabled, parsedRules);
 
     if (result.success) {
       try {

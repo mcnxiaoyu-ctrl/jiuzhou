@@ -59,7 +59,6 @@ export interface CharacterData {
   avatar: string | null;
   autoCastSkills: boolean;
   autoDisassembleEnabled: boolean;
-  autoDisassembleMaxQualityRank: number;
   spiritStones: number;
   silver: number;
   stamina: number;

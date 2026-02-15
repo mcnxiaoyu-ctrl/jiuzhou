@@ -42,7 +42,6 @@ test('命中自动分解时应发放分解材料', async () => {
     itemMeta: { itemName: '青锋剑', category: 'equipment', qualityRank: 1 },
     autoDisassembleSetting: {
       enabled: true,
-      maxQualityRank: 2,
       rules: [
         {
           categories: ['equipment'],
@@ -50,6 +49,7 @@ test('命中自动分解时应发放分解材料', async () => {
           excludedSubCategories: [],
           includeNameKeywords: [],
           excludeNameKeywords: [],
+          maxQualityRank: 2,
         },
       ],
     },
@@ -88,7 +88,6 @@ test('分解材料入包失败且背包满时应走邮件补发', async () => {
     itemMeta: { itemName: '护心甲', category: 'equipment', qualityRank: 2 },
     autoDisassembleSetting: {
       enabled: true,
-      maxQualityRank: 2,
       rules: [
         {
           categories: ['equipment'],
@@ -96,6 +95,7 @@ test('分解材料入包失败且背包满时应走邮件补发', async () => {
           excludedSubCategories: [],
           includeNameKeywords: [],
           excludeNameKeywords: [],
+          maxQualityRank: 2,
         },
       ],
     },
@@ -127,7 +127,6 @@ test('未开启自动分解时应保持原奖励逻辑', async () => {
     itemMeta: { itemName: '玉戒', category: 'equipment', qualityRank: 1 },
     autoDisassembleSetting: {
       enabled: false,
-      maxQualityRank: 4,
       rules: [
         {
           categories: ['equipment'],
@@ -135,6 +134,7 @@ test('未开启自动分解时应保持原奖励逻辑', async () => {
           excludedSubCategories: [],
           includeNameKeywords: [],
           excludeNameKeywords: [],
+          maxQualityRank: 4,
         },
       ],
     },
@@ -167,7 +167,6 @@ test('品质超过阈值时应保留原装备', async () => {
     itemMeta: { itemName: '龙纹项链', category: 'equipment', qualityRank: 4 },
     autoDisassembleSetting: {
       enabled: true,
-      maxQualityRank: 2,
       rules: [
         {
           categories: ['equipment'],
@@ -175,6 +174,7 @@ test('品质超过阈值时应保留原装备', async () => {
           excludedSubCategories: [],
           includeNameKeywords: [],
           excludeNameKeywords: [],
+          maxQualityRank: 2,
         },
       ],
     },
@@ -205,7 +205,6 @@ test('原装备入包失败且背包满时应补发原装备邮件', async () =>
     itemMeta: { itemName: '玄铁护腿', category: 'equipment', qualityRank: 1 },
     autoDisassembleSetting: {
       enabled: true,
-      maxQualityRank: 4,
       rules: [
         {
           categories: ['equipment'],
@@ -213,6 +212,7 @@ test('原装备入包失败且背包满时应补发原装备邮件', async () =>
           excludedSubCategories: [],
           includeNameKeywords: [],
           excludeNameKeywords: [],
+          maxQualityRank: 4,
         },
       ],
     },
@@ -253,7 +253,6 @@ test('非装备命中规则时应按默认公式转化银两', async () => {
     itemMeta: { itemName: '凝气草', category: 'material', qualityRank: 2 },
     autoDisassembleSetting: {
       enabled: true,
-      maxQualityRank: 3,
       rules: [
         {
           categories: ['material'],
@@ -261,6 +260,7 @@ test('非装备命中规则时应按默认公式转化银两', async () => {
           excludedSubCategories: [],
           includeNameKeywords: [],
           excludeNameKeywords: [],
+          maxQualityRank: 3,
         },
       ],
     },

@@ -30,6 +30,7 @@ interface AutoDisassembleRuleDraft {
   excludedSubCategories: string[];
   includeNameKeywordsText: string;
   excludeNameKeywordsText: string;
+  maxQualityRank: number;
 }
 
 interface AutoDisassembleRuleDraftContent {
@@ -38,6 +39,7 @@ interface AutoDisassembleRuleDraftContent {
   excludedSubCategories: string[];
   includeNameKeywordsText: string;
   excludeNameKeywordsText: string;
+  maxQualityRank: number;
 }
 
 const CDK_STORAGE_KEY = 'cdk_redeemed_v1';
@@ -49,6 +51,7 @@ const createDefaultAutoDisassembleRuleDraftContent = (): AutoDisassembleRuleDraf
     excludedSubCategories: [],
     includeNameKeywordsText: '',
     excludeNameKeywordsText: '',
+    maxQualityRank: 1,
   };
 };
 
@@ -64,6 +67,7 @@ const createAutoDisassembleRuleDraft = (
     excludedSubCategories: [...safeContent.excludedSubCategories],
     includeNameKeywordsText: safeContent.includeNameKeywordsText,
     excludeNameKeywordsText: safeContent.excludeNameKeywordsText,
+    maxQualityRank: safeContent.maxQualityRank,
   };
 };
 
@@ -118,6 +122,7 @@ const normalizeAutoDisassembleRuleDraftContent = (raw: unknown): AutoDisassemble
     excludedSubCategories: normalizeAutoDisassembleSubCategoryList(row.excludedSubCategories),
     includeNameKeywordsText: stringifyList(row.includeNameKeywords),
     excludeNameKeywordsText: stringifyList(row.excludeNameKeywords),
+    maxQualityRank: clampQualityRank(row.maxQualityRank),
   };
 };
 
@@ -147,6 +152,7 @@ const buildAutoDisassembleRulePayload = (rule: AutoDisassembleRuleDraft): AutoDi
     ...(excludedSubCategories.length > 0 ? { excludedSubCategories } : {}),
     ...(includeNameKeywords.length > 0 ? { includeNameKeywords } : {}),
     ...(excludeNameKeywords.length > 0 ? { excludeNameKeywords } : {}),
+    maxQualityRank: clampQualityRank(rule.maxQualityRank),
   };
 };
 
@@ -157,7 +163,6 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   const [autoBattle, setAutoBattle] = useState(false);
   const [fastBattle, setFastBattle] = useState(false);
   const [autoDisassembleEnabled, setAutoDisassembleEnabled] = useState(false);
-  const [autoDisassembleMaxQualityRank, setAutoDisassembleMaxQualityRank] = useState(1);
   const [autoDisassembleRules, setAutoDisassembleRules] = useState<AutoDisassembleRuleDraft[]>([
     createAutoDisassembleRuleDraft(1),
   ]);
@@ -211,7 +216,6 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
         if (!res.success || !res.data?.character || cancelled) return;
         const character = res.data.character;
         setAutoDisassembleEnabled(Boolean(character.auto_disassemble_enabled));
-        setAutoDisassembleMaxQualityRank(clampQualityRank(character.auto_disassemble_max_quality_rank));
 
         const rawRules = normalizeAutoDisassembleRuleDraftContentList(character.auto_disassemble_rules);
         setAutoDisassembleRules(rawRules.map((rule, index) => createAutoDisassembleRuleDraft(index + 1, rule)));
@@ -239,13 +243,12 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
 
   const saveAutoDisassemble = async (
     nextEnabled: boolean,
-    nextMaxQualityRank: number,
     nextRules: AutoDisassembleRulesDto,
     rollback: () => void,
   ) => {
     setAutoDisassembleSaving(true);
     try {
-      const res = await updateCharacterAutoDisassemble(nextEnabled, nextMaxQualityRank, nextRules);
+      const res = await updateCharacterAutoDisassemble(nextEnabled, nextRules);
       if (!res.success) throw new Error(res.message || '设置保存失败');
       message.success('自动分解设置已保存');
     } catch (error) {
@@ -261,25 +264,15 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
     if (autoDisassembleLoading || autoDisassembleSaving) return;
     const prevEnabled = autoDisassembleEnabled;
     setAutoDisassembleEnabled(next);
-    void saveAutoDisassemble(next, autoDisassembleMaxQualityRank, buildAutoDisassembleRulesPayload(), () =>
+    void saveAutoDisassemble(next, buildAutoDisassembleRulesPayload(), () =>
       setAutoDisassembleEnabled(prevEnabled)
-    );
-  };
-
-  const handleAutoDisassembleQualityChange = (next: number) => {
-    if (autoDisassembleLoading || autoDisassembleSaving) return;
-    const clamped = clampQualityRank(next);
-    const prevRank = autoDisassembleMaxQualityRank;
-    setAutoDisassembleMaxQualityRank(clamped);
-    void saveAutoDisassemble(autoDisassembleEnabled, clamped, buildAutoDisassembleRulesPayload(), () =>
-      setAutoDisassembleMaxQualityRank(prevRank)
     );
   };
 
   const handleSaveAdvancedRules = () => {
     if (autoDisassembleLoading || autoDisassembleSaving) return;
     const rules = buildAutoDisassembleRulesPayload();
-    void saveAutoDisassemble(autoDisassembleEnabled, autoDisassembleMaxQualityRank, rules, () => undefined);
+    void saveAutoDisassemble(autoDisassembleEnabled, rules, () => undefined);
   };
 
   const handleAddAutoDisassembleRule = () => {
@@ -379,24 +372,9 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
                   onChange={handleAutoDisassembleEnabledChange}
                 />
               </div>
-              <div className="setting-row">
-                <Typography.Text>自动分解最高品质</Typography.Text>
-                <Select
-                  style={{ minWidth: 180 }}
-                  value={autoDisassembleMaxQualityRank}
-                  disabled={autoDisassembleLoading || autoDisassembleSaving}
-                  options={[
-                    { label: '黄品', value: 1 },
-                    { label: '玄品', value: 2 },
-                    { label: '地品', value: 3 },
-                    { label: '天品', value: 4 },
-                  ]}
-                  onChange={handleAutoDisassembleQualityChange}
-                />
-              </div>
 
               <Typography.Text type="secondary" className="setting-rule-tip">
-                可新增多条规则。自动分解采用“或（OR）”判断：命中任意一条规则即会分解。
+                可新增多条规则。自动分解采用"或（OR）"判断：命中任意一条规则即会分解。
               </Typography.Text>
 
               {autoDisassembleRules.map((rule, index) => (
@@ -412,6 +390,26 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
                     >
                       删除规则
                     </Button>
+                  </div>
+
+                  <div className="setting-row setting-row-column">
+                    <Typography.Text>最高品质</Typography.Text>
+                    <Select
+                      value={rule.maxQualityRank}
+                      disabled={autoDisassembleLoading || autoDisassembleSaving}
+                      options={[
+                        { label: '黄品', value: 1 },
+                        { label: '玄品', value: 2 },
+                        { label: '地品', value: 3 },
+                        { label: '天品', value: 4 },
+                      ]}
+                      onChange={(next) =>
+                        handleUpdateAutoDisassembleRule(rule.id, {
+                          maxQualityRank: clampQualityRank(next),
+                        })
+                      }
+                      style={{ width: '100%' }}
+                    />
                   </div>
 
                   <div className="setting-row setting-row-column">

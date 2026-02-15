@@ -497,7 +497,7 @@ export const distributeBattleRewards = async (
     if (participantCharacterIds.length > 0) {
       const settingResult = await client.query(
         `
-          SELECT id, auto_disassemble_enabled, auto_disassemble_max_quality_rank, auto_disassemble_rules
+          SELECT id, auto_disassemble_enabled, auto_disassemble_rules
           FROM characters
           WHERE id = ANY($1)
         `,
@@ -506,14 +506,12 @@ export const distributeBattleRewards = async (
       for (const row of settingResult.rows as Array<{
         id: number;
         auto_disassemble_enabled: boolean | null;
-        auto_disassemble_max_quality_rank: number | null;
         auto_disassemble_rules: unknown;
       }>) {
         autoDisassembleSettings.set(
           Number(row.id),
           normalizeAutoDisassembleSetting({
             enabled: row.auto_disassemble_enabled,
-            maxQualityRank: row.auto_disassemble_max_quality_rank,
             rules: row.auto_disassemble_rules,
           })
         );
@@ -616,7 +614,7 @@ export const distributeBattleRewards = async (
 
       const receiverAutoDisassemble =
         autoDisassembleSettings.get(receiverCharacterId) ||
-        normalizeAutoDisassembleSetting({ enabled: false, maxQualityRank: 1, rules: undefined });
+        normalizeAutoDisassembleSetting({ enabled: false, rules: undefined });
 
       const grantResult = await grantRewardItemWithAutoDisassemble({
         characterId: receiverCharacterId,

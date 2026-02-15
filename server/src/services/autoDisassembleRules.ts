@@ -13,11 +13,12 @@ export interface AutoDisassembleRuleSet {
   excludedSubCategories: string[];
   includeNameKeywords: string[];
   excludeNameKeywords: string[];
+  /** 该规则允许自动分解的最高品质（1黄/2玄/3地/4天），品质超过此值则不命中 */
+  maxQualityRank: number;
 }
 
 export interface AutoDisassembleSetting {
   enabled: boolean;
-  maxQualityRank: number;
   rules: AutoDisassembleRuleSet[];
 }
 
@@ -53,6 +54,7 @@ const DEFAULT_AUTO_DISASSEMBLE_RULE_SET: AutoDisassembleRuleSet = {
   excludedSubCategories: [],
   includeNameKeywords: [],
   excludeNameKeywords: [],
+  maxQualityRank: 1,
 };
 
 const createDefaultAutoDisassembleRuleSet = (): AutoDisassembleRuleSet => {
@@ -62,6 +64,7 @@ const createDefaultAutoDisassembleRuleSet = (): AutoDisassembleRuleSet => {
     excludedSubCategories: [...DEFAULT_AUTO_DISASSEMBLE_RULE_SET.excludedSubCategories],
     includeNameKeywords: [...DEFAULT_AUTO_DISASSEMBLE_RULE_SET.includeNameKeywords],
     excludeNameKeywords: [...DEFAULT_AUTO_DISASSEMBLE_RULE_SET.excludeNameKeywords],
+    maxQualityRank: DEFAULT_AUTO_DISASSEMBLE_RULE_SET.maxQualityRank,
   };
 };
 
@@ -85,6 +88,7 @@ export const normalizeAutoDisassembleRuleSet = (raw: unknown): AutoDisassembleRu
     excludedSubCategories,
     includeNameKeywords,
     excludeNameKeywords,
+    maxQualityRank: clampQualityRank(record.maxQualityRank, 1),
   };
 };
 
@@ -106,10 +110,18 @@ export const normalizeAutoDisassembleSetting = (raw: {
   maxQualityRank?: unknown;
   rules?: unknown;
 }): AutoDisassembleSetting => {
+  const rules = normalizeAutoDisassembleRuleSetList(raw.rules);
+  // 兼容旧数据：如果 rules 中的规则没有自带 maxQualityRank（旧格式），
+  // 则用外层传入的全局 maxQualityRank 回填，保证升级平滑。
+  const globalMaxQualityRank = clampQualityRank(raw.maxQualityRank, 1);
+  for (const rule of rules) {
+    if (rule.maxQualityRank <= 0) {
+      rule.maxQualityRank = globalMaxQualityRank;
+    }
+  }
   return {
     enabled: Boolean(raw.enabled),
-    maxQualityRank: clampQualityRank(raw.maxQualityRank, 1),
-    rules: normalizeAutoDisassembleRuleSetList(raw.rules),
+    rules,
   };
 };
 
@@ -117,6 +129,12 @@ const matchesRuleSet = (ruleSet: AutoDisassembleRuleSet, meta: AutoDisassembleCa
   const category = String(meta.category || '').trim().toLowerCase();
   const subCategory = String(meta.subCategory || '').trim().toLowerCase();
   const itemName = String(meta.itemName || '').trim().toLowerCase();
+
+  // 品质判断：物品品质超过该规则的最高品质阈值则不命中
+  const qualityRank = Number(meta.qualityRank);
+  if (Number.isInteger(qualityRank) && qualityRank > 0 && qualityRank > ruleSet.maxQualityRank) {
+    return false;
+  }
 
   if (ruleSet.categories.length > 0 && !ruleSet.categories.includes(category)) {
     return false;
@@ -151,7 +169,6 @@ export const shouldAutoDisassembleBySetting = (
   if (!setting.enabled) return false;
   const qualityRank = Number(meta.qualityRank);
   if (!Number.isInteger(qualityRank) || qualityRank <= 0) return false;
-  if (qualityRank > setting.maxQualityRank) return false;
   // 多条规则采用 OR：命中任一规则即可自动分解。
   return setting.rules.some((ruleSet) => matchesRuleSet(ruleSet, meta));
 };
