@@ -1535,6 +1535,70 @@ export const removeItemFromInventory = async (
 };
 
 // ============================================
+// 锁定 / 解锁物品
+// ============================================
+export const setItemLocked = async (
+  characterId: number,
+  itemInstanceId: number,
+  locked: boolean
+): Promise<{ success: boolean; message: string; data?: { itemId: number; locked: boolean } }> => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    await lockCharacterInventoryMutexTx(client, characterId);
+
+    const itemResult = await client.query(
+      `
+        SELECT id, location
+        FROM item_instance
+        WHERE id = $1 AND owner_character_id = $2
+        FOR UPDATE
+      `,
+      [itemInstanceId, characterId]
+    );
+
+    if (itemResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '物品不存在' };
+    }
+
+    const row = itemResult.rows[0] as { id: number; location: string };
+    const location = String(row.location || '');
+    if (location === 'auction') {
+      await client.query('ROLLBACK');
+      return { success: false, message: '该物品当前位置不可锁定' };
+    }
+    if (!['bag', 'warehouse', 'equipped'].includes(location)) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '该物品当前位置不可锁定' };
+    }
+
+    await client.query(
+      `
+        UPDATE item_instance
+        SET locked = $1, updated_at = NOW()
+        WHERE id = $2 AND owner_character_id = $3
+      `,
+      [locked, itemInstanceId, characterId]
+    );
+
+    await client.query('COMMIT');
+    return {
+      success: true,
+      message: locked ? '已锁定' : '已解锁',
+      data: { itemId: itemInstanceId, locked },
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('设置物品锁定状态失败:', error);
+    return { success: false, message: '设置锁定状态失败' };
+  } finally {
+    client.release();
+  }
+};
+
+// ============================================
 // 移动物品（换位/移动到仓库）
 // ============================================
 export const moveItem = async (
@@ -2851,6 +2915,8 @@ export const disassembleEquipmentBatch = async (
   message: string;
   disassembledCount?: number;
   disassembledQtyTotal?: number;
+  skippedLockedCount?: number;
+  skippedLockedQtyTotal?: number;
   rewards?: DisassembleRewardsPayload;
 }> => {
   if (!Array.isArray(items) || items.length === 0) {
@@ -2908,6 +2974,8 @@ export const disassembleEquipmentBatch = async (
 
     const consumeOperations: Array<{ id: number; rowQty: number; consumeQty: number }> = [];
     let skippedEquippedCount = 0;
+    let skippedLockedCount = 0;
+    let skippedLockedQtyTotal = 0;
     let disassembledQtyTotal = 0;
     let totalSilver = 0;
     const rewardItemQtyByDefId = new Map<string, number>();
@@ -2932,18 +3000,6 @@ export const disassembleEquipmentBatch = async (
         await client.query('ROLLBACK');
         return { success: false, message: '包含不存在的物品' };
       }
-      if (row.locked) {
-        await client.query('ROLLBACK');
-        return { success: false, message: '包含已锁定的物品' };
-      }
-      if (row.location === 'equipped') {
-        skippedEquippedCount += 1;
-        continue;
-      }
-      if (row.location !== 'bag' && row.location !== 'warehouse') {
-        await client.query('ROLLBACK');
-        return { success: false, message: '包含不可分解位置的物品' };
-      }
 
       // item_instance.id 为 BIGSERIAL，pg 在部分配置下会返回 string。
       // 这里统一转为 number 再参与 Map<number, number> 查找，避免误报 items参数错误。
@@ -2962,6 +3018,19 @@ export const disassembleEquipmentBatch = async (
       if (rowQty < requestQty) {
         await client.query('ROLLBACK');
         return { success: false, message: '包含数量不足的物品' };
+      }
+      if (row.location === 'equipped') {
+        skippedEquippedCount += 1;
+        continue;
+      }
+      if (row.location !== 'bag' && row.location !== 'warehouse') {
+        await client.query('ROLLBACK');
+        return { success: false, message: '包含不可分解位置的物品' };
+      }
+      if (row.locked) {
+        skippedLockedCount += 1;
+        skippedLockedQtyTotal += requestQty;
+        continue;
       }
 
       const rewardPlan = buildDisassembleRewardPlan({
@@ -3028,12 +3097,17 @@ export const disassembleEquipmentBatch = async (
     }
 
     await client.query('COMMIT');
-    const msg = skippedEquippedCount > 0 ? `分解成功（已跳过已穿戴装备×${skippedEquippedCount}）` : '分解成功';
+    const skippedMessages: string[] = [];
+    if (skippedLockedCount > 0) skippedMessages.push(`已跳过已锁定×${skippedLockedCount}`);
+    if (skippedEquippedCount > 0) skippedMessages.push(`已跳过已穿戴装备×${skippedEquippedCount}`);
+    const msg = skippedMessages.length > 0 ? `分解成功（${skippedMessages.join('，')}）` : '分解成功';
     return {
       success: true,
       message: msg,
       disassembledCount: consumeOperations.length,
       disassembledQtyTotal,
+      skippedLockedCount,
+      skippedLockedQtyTotal,
       rewards: { silver: totalSilver, items: grantedItemRewards },
     };
   } catch (error) {
@@ -3053,6 +3127,8 @@ export const removeItemsBatch = async (
   message: string;
   removedCount?: number;
   removedQtyTotal?: number;
+  skippedLockedCount?: number;
+  skippedLockedQtyTotal?: number;
 }> => {
   if (!Array.isArray(itemInstanceIds) || itemInstanceIds.length === 0) {
     return { success: false, message: 'itemIds参数错误' };
@@ -3096,6 +3172,9 @@ export const removeItemsBatch = async (
       itemResult.rows.map((row) => String((row as { item_def_id?: unknown }).item_def_id || '').trim())
     );
 
+    const removableIds: number[] = [];
+    let skippedLockedCount = 0;
+    let skippedLockedQtyTotal = 0;
     let removedQtyTotal = 0;
     for (const row of itemResult.rows as Array<{
       id: number;
@@ -3109,10 +3188,6 @@ export const removeItemsBatch = async (
         await client.query('ROLLBACK');
         return { success: false, message: '包含不存在的物品' };
       }
-      if (row.locked) {
-        await client.query('ROLLBACK');
-        return { success: false, message: '包含已锁定的物品' };
-      }
       if (row.location === 'equipped') {
         await client.query('ROLLBACK');
         return { success: false, message: '包含穿戴中的物品' };
@@ -3125,16 +3200,44 @@ export const removeItemsBatch = async (
         await client.query('ROLLBACK');
         return { success: false, message: '包含不可丢弃的物品' };
       }
-      removedQtyTotal += Math.max(0, Number(row.qty) || 0);
+      const rowId = Number(row.id);
+      if (!Number.isInteger(rowId) || rowId <= 0) {
+        await client.query('ROLLBACK');
+        return { success: false, message: 'itemIds参数错误' };
+      }
+
+      const rowQty = Math.max(0, Number(row.qty) || 0);
+      if (row.locked) {
+        skippedLockedCount += 1;
+        skippedLockedQtyTotal += rowQty;
+        continue;
+      }
+
+      removedQtyTotal += rowQty;
+      removableIds.push(rowId);
+    }
+
+    if (removableIds.length === 0) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '没有可丢弃的物品' };
     }
 
     await client.query('DELETE FROM item_instance WHERE owner_character_id = $1 AND id = ANY($2)', [
       characterId,
-      uniqueIds,
+      removableIds,
     ]);
 
     await client.query('COMMIT');
-    return { success: true, message: '丢弃成功', removedCount: uniqueIds.length, removedQtyTotal };
+    const msg =
+      skippedLockedCount > 0 ? `丢弃成功（已跳过已锁定×${skippedLockedCount}）` : '丢弃成功';
+    return {
+      success: true,
+      message: msg,
+      removedCount: removableIds.length,
+      removedQtyTotal,
+      skippedLockedCount,
+      skippedLockedQtyTotal,
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('批量丢弃物品失败:', error);
@@ -3258,6 +3361,7 @@ export default {
   findEmptySlots,
   addItemToInventory,
   removeItemFromInventory,
+  setItemLocked,
   moveItem,
   equipItem,
   unequipItem,

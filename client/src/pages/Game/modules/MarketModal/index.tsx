@@ -36,6 +36,7 @@ type BagItem = {
   quality: ItemQuality;
   category: Exclude<MarketCategory, 'all'>;
   qty: number;
+  locked: boolean;
   desc: string;
   stackMax: number;
 };
@@ -459,6 +460,7 @@ const buildBagItem = (it: InventoryItemDto): BagItem | null => {
     quality,
     category,
     qty,
+    locked: Boolean(it.locked),
     desc,
     stackMax,
   };
@@ -810,6 +812,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const doList = useCallback(async () => {
     const item = selectedBagItem;
     if (!item) return;
+    if (item.locked) return;
     const p = parseMaybeNumber(listPrice);
     const q = parseMaybeNumber(listQty);
     if (!p || p <= 0) return;
@@ -1251,7 +1254,14 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     const priceNum = parseMaybeNumber(listPrice);
     const safeQty = qtyNum ? Math.floor(qtyNum) : null;
     const safePrice = priceNum ? Math.floor(priceNum) : null;
-    const canList = !!selectedBagItem && !!safeQty && safeQty > 0 && safeQty <= canListQty && !!safePrice && safePrice > 0;
+    const canList =
+      !!selectedBagItem &&
+      !selectedBagItem.locked &&
+      !!safeQty &&
+      safeQty > 0 &&
+      safeQty <= canListQty &&
+      !!safePrice &&
+      safePrice > 0;
 
     return (
       <div className="market-pane">
@@ -1273,6 +1283,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                   >
                     <img className="market-bag-icon" src={b.icon} alt={b.name} />
                     <div className="market-bag-count">{b.qty}</div>
+                    {b.locked ? <div className="market-bag-lock">锁</div> : null}
                     <div className="market-bag-name">{b.name}</div>
                   </div>
                 ))}
@@ -1290,10 +1301,14 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                           <Tag className={`market-tag market-tag-quality q-${selectedBagItem.quality}`}>{selectedBagItem.quality}</Tag>
                           <Tag className="market-tag">{categoryText[selectedBagItem.category]}</Tag>
                           <Tag className="market-tag">数量 {selectedBagItem.qty}</Tag>
+                          {selectedBagItem.locked ? <Tag color="red">已锁定</Tag> : null}
                         </div>
                       </div>
                     </div>
                     <div className="market-list-detail-desc">{selectedBagItem.desc}</div>
+                    {selectedBagItem.locked ? (
+                      <div className="market-list-locked-tip">物品已锁定，无法上架交易。</div>
+                    ) : null}
                     <div className="market-list-form">
                       <div className="market-list-row">
                         <div className="market-list-k">单价（灵石）</div>

@@ -318,6 +318,8 @@ export interface InventoryDisassembleBatchResponse {
   message: string;
   disassembledCount?: number;
   disassembledQtyTotal?: number;
+  skippedLockedCount?: number;
+  skippedLockedQtyTotal?: number;
   rewards?: InventoryDisassembleRewards;
 }
 
@@ -330,10 +332,28 @@ export interface InventoryRemoveBatchResponse {
   message: string;
   removedCount?: number;
   removedQtyTotal?: number;
+  skippedLockedCount?: number;
+  skippedLockedQtyTotal?: number;
 }
 
 export const removeInventoryItemsBatch = (itemIds: number[]): Promise<InventoryRemoveBatchResponse> => {
   return api.post('/inventory/remove/batch', { itemIds });
+};
+
+export interface InventorySetLockResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    itemId: number;
+    locked: boolean;
+  };
+}
+
+export const setInventoryItemLock = (body: {
+  itemId: number;
+  locked: boolean;
+}): Promise<InventorySetLockResponse> => {
+  return api.post('/inventory/lock', body);
 };
 
 export const sortInventory = (location: 'bag' | 'warehouse' = 'bag'): Promise<{ success: boolean; message: string }> => {

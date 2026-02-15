@@ -12,6 +12,7 @@ import {
   refineInventoryItem,
   rerollInventoryAffixes,
   removeInventoryItemsBatch,
+  setInventoryItemLock,
   socketInventoryGem,
   sortInventory,
   unequipInventoryItem,
@@ -431,6 +432,28 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       setLoading(false);
     }
   }, [activeItem, clampUseQty, refresh, useQty]);
+
+  const handleToggleItemLock = useCallback(async () => {
+    if (!activeItem) return;
+
+    setLoading(true);
+    try {
+      const nextLocked = !activeItem.locked;
+      const res = await setInventoryItemLock({
+        itemId: activeItem.id,
+        locked: nextLocked,
+      });
+      if (!res.success) throw new Error(res.message || (nextLocked ? '上锁失败' : '解锁失败'));
+
+      message.success(res.message || (nextLocked ? '已锁定' : '已解锁'));
+      await refresh();
+      window.dispatchEvent(new Event('inventory:changed'));
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      message.error(err.message || '设置锁定状态失败');
+      setLoading(false);
+    }
+  }, [activeItem, message, refresh]);
 
   const enhanceState = useMemo(() => {
     if (!activeItem?.equip || activeItem.category !== 'equipment') return null;
@@ -866,6 +889,11 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
               >
                 {it.stackMax > 1 ? <div className="bag-cell-count">{it.qty}</div> : null}
                 {it.location === 'equipped' ? <div className="bag-cell-equipped-badge">已穿戴</div> : null}
+                {it.locked ? (
+                  <div className={`bag-cell-locked-badge${it.location === 'equipped' ? ' is-with-equipped' : ''}`}>
+                    已锁
+                  </div>
+                ) : null}
                 <img className="bag-cell-icon" src={it.icon} alt={it.name} />
                 <div className="bag-cell-name">{it.name}</div>
               </div>
@@ -954,6 +982,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                     <div className="bag-detail-tags">
                       <Tag color="blue">{categoryLabels[activeItem.category]}</Tag>
                       <Tag color={qualityColor[activeItem.quality]}>{qualityLabelText[activeItem.quality]}</Tag>
+                      {activeItem.locked ? <Tag color="red">已锁定</Tag> : null}
                       {activeItem.tags.map((t) => (
                         <Tag key={t} color="default">
                           {t}
@@ -1122,6 +1151,13 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                             展示
                           </Button>
                         ) : null}
+                        <Button
+                          size="small"
+                          disabled={loading}
+                          onClick={() => void handleToggleItemLock()}
+                        >
+                          {activeItem.locked ? '解锁' : '上锁'}
+                        </Button>
                       </div>
                     </div>
                   </>

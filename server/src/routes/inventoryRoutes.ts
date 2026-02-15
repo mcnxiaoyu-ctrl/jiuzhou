@@ -1062,19 +1062,9 @@ router.post('/lock', async (req: Request, res: Response) => {
     if (typeof locked !== 'boolean') {
       return res.status(400).json({ success: false, message: 'locked参数错误' });
     }
-    
-    const result = await query(`
-      UPDATE item_instance 
-      SET locked = $1, updated_at = NOW()
-      WHERE id = $2 AND owner_character_id = $3
-      RETURNING id
-    `, [locked, parsedItemId, characterId]);
-    
-    if (result.rows.length === 0) {
-      return res.json({ success: false, message: '物品不存在' });
-    }
-    
-    res.json({ success: true, message: locked ? '已锁定' : '已解锁' });
+
+    const result = await inventoryService.setItemLocked(characterId, parsedItemId, locked);
+    return res.json(result);
   } catch (error) {
     return withRouteError(res, 'inventoryRoutes 路由异常', error);
   }

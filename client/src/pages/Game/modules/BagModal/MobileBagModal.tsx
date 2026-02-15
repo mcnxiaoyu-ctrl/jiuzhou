@@ -22,6 +22,7 @@ import {
   refineInventoryItem,
   rerollInventoryAffixes,
   removeInventoryItemsBatch,
+  setInventoryItemLock,
   sortInventory,
   unequipInventoryItem,
 } from '../../../../services/api';
@@ -285,6 +286,7 @@ interface SheetProps {
   onEquipToggle: () => void;
   onDisassemble: () => void;
   onEnhance: () => void;
+  onToggleLock: () => void;
 }
 
 const ItemSheet: React.FC<SheetProps> = ({
@@ -300,6 +302,7 @@ const ItemSheet: React.FC<SheetProps> = ({
   onEquipToggle,
   onDisassemble,
   onEnhance,
+  onToggleLock,
 }) => {
   const equipLines = useMemo(() => buildEquipmentLines(item), [item]);
   const hasDesc = Boolean(item.desc?.trim());
@@ -345,6 +348,7 @@ const ItemSheet: React.FC<SheetProps> = ({
               <span className={`mbag-sheet-tag mbag-sheet-tag--quality ${qualityClass[item.quality]}`}>
                 {qualityLabelText[item.quality]}
               </span>
+              {item.locked ? <span className="mbag-sheet-tag mbag-sheet-tag--locked">已锁定</span> : null}
               {item.tags.map((t) => (
                 <span key={t} className="mbag-sheet-tag mbag-sheet-tag--tag">{t}</span>
               ))}
@@ -499,6 +503,13 @@ const ItemSheet: React.FC<SheetProps> = ({
               分解
             </button>
           )}
+          <button
+            className="mbag-sheet-act-btn"
+            disabled={loading}
+            onClick={onToggleLock}
+          >
+            {item.locked ? '解锁' : '上锁'}
+          </button>
         </div>
       </div>
     </>
@@ -1232,6 +1243,28 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
     }
   }, [activeItem, clampUseQty, refresh, useQty]);
 
+  const handleToggleItemLock = useCallback(async () => {
+    if (!activeItem) return;
+    setLoading(true);
+    try {
+      const nextLocked = !activeItem.locked;
+      const res = await setInventoryItemLock({
+        itemId: activeItem.id,
+        locked: nextLocked,
+      });
+      if (!res.success) throw new Error(res.message || (nextLocked ? '上锁失败' : '解锁失败'));
+
+      message.success(res.message || (nextLocked ? '已锁定' : '已解锁'));
+      await refresh();
+      window.dispatchEvent(new Event('inventory:changed'));
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      message.error(err.message || '设置锁定状态失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [activeItem, message, refresh]);
+
   const handleToggleBatchQuality = useCallback((quality: BagQuality) => {
     setBatchQualities((prev) => {
       if (prev.includes(quality)) {
@@ -1338,6 +1371,11 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
             >
               {it.stackMax > 1 && <div className="mbag-cell-count">{it.qty}</div>}
               {it.location === 'equipped' && <div className="mbag-cell-badge">穿戴</div>}
+              {it.locked && (
+                <div className={`mbag-cell-lock-badge${it.location === 'equipped' ? ' is-with-equipped' : ''}`}>
+                  锁
+                </div>
+              )}
               <img className="mbag-cell-icon" src={it.icon} alt={it.name} />
               <div className="mbag-cell-name">{it.name}</div>
             </div>
@@ -1381,6 +1419,7 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
           onEquipToggle={() => void handleEquipToggle()}
           onDisassemble={() => { setSheetOpen(false); setDisassembleOpen(true); }}
           onEnhance={() => { setSheetOpen(false); setGrowthOpen(true); }}
+          onToggleLock={() => void handleToggleItemLock()}
         />
       )}
 
