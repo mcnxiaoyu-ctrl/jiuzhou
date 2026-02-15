@@ -106,6 +106,16 @@ const asStringArray = (raw: unknown): string[] => {
     .filter((entry): entry is string => entry.length > 0);
 };
 
+const resolveTechniqueCostMultiplierByQuality = (qualityRaw: unknown): number => {
+  return Math.max(1, Math.floor(resolveQualityRankFromName(qualityRaw, 1)));
+};
+
+const scaleTechniqueBaseCostByQuality = (baseCost: number, qualityMultiplier: number): number => {
+  const normalizedBaseCost = Math.max(0, Math.floor(Number(baseCost) || 0));
+  const normalizedMultiplier = Math.max(1, Math.floor(Number(qualityMultiplier) || 1));
+  return normalizedBaseCost * normalizedMultiplier;
+};
+
 const getTechniqueDefMap = () => {
   return new Map(
     getTechniqueDefinitions()
@@ -499,6 +509,7 @@ export const getTechniqueUpgradeCost = async (
       return { success: false, message: '功法不存在' };
     }
     const maxLayer = Number(techniqueDef.max_layer ?? 1);
+    const qualityMultiplier = resolveTechniqueCostMultiplierByQuality(techniqueDef.quality);
     
     if (currentLayer >= maxLayer) {
       return { success: false, message: '已达最高层数' };
@@ -523,8 +534,8 @@ export const getTechniqueUpgradeCost = async (
       data: {
         currentLayer,
         maxLayer,
-        spirit_stones: layer.costSpiritStones,
-        exp: layer.costExp,
+        spirit_stones: scaleTechniqueBaseCostByQuality(layer.costSpiritStones, qualityMultiplier),
+        exp: scaleTechniqueBaseCostByQuality(layer.costExp, qualityMultiplier),
         materials
       }
     };
@@ -567,6 +578,7 @@ export const upgradeTechnique = async (
     }
     const maxLayer = Number(techniqueDef.max_layer ?? 1);
     const techName = techniqueDef.name;
+    const qualityMultiplier = resolveTechniqueCostMultiplierByQuality(techniqueDef.quality);
     
     if (currentLayer >= maxLayer) {
       await client.query('ROLLBACK');
@@ -581,13 +593,13 @@ export const upgradeTechnique = async (
       return { success: false, message: '层级配置不存在' };
     }
 
-    const costStones = layer.costSpiritStones || 0;
-    const costExp = layer.costExp || 0;
+    const costStones = scaleTechniqueBaseCostByQuality(layer.costSpiritStones, qualityMultiplier);
+    const costExp = scaleTechniqueBaseCostByQuality(layer.costExp, qualityMultiplier);
     const costMaterials = layer.costMaterials;
     
     // 检查并扣除灵石和经验
     const charResult = await client.query(
-      'SELECT spirit_stones, exp, realm, sub_realm FROM characters WHERE id = $1 FOR UPDATE',
+      'SELECT spirit_stones, exp FROM characters WHERE id = $1 FOR UPDATE',
       [characterId]
     );
     if (charResult.rows.length === 0) {
@@ -596,14 +608,6 @@ export const upgradeTechnique = async (
     }
     
     const char = charResult.rows[0];
-    const requiredRealm = typeof layer.requiredRealm === 'string' ? layer.requiredRealm.trim() : '';
-    const currentRealm = char.realm;
-    const currentSubRealm = char.sub_realm;
-    if (!isRealmSufficient(currentRealm, requiredRealm, currentSubRealm)) {
-      await client.query('ROLLBACK');
-      return { success: false, message: `境界不足，需要达到${requiredRealm}` };
-    }
-
     if (char.spirit_stones < costStones) {
       await client.query('ROLLBACK');
       return { success: false, message: `灵石不足，需要${costStones}，当前${char.spirit_stones}` };

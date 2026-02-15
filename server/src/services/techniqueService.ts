@@ -93,6 +93,16 @@ const getItemMetaMap = async (itemIds: string[]): Promise<Map<string, { name: st
   return out;
 };
 
+const resolveTechniqueCostMultiplierByQuality = (qualityRaw: unknown): number => {
+  return Math.max(1, Math.floor(resolveQualityRankFromName(qualityRaw, 1)));
+};
+
+const scaleTechniqueBaseCostByQuality = (baseCost: number, qualityMultiplier: number): number => {
+  const normalizedBaseCost = Math.max(0, Math.floor(Number(baseCost) || 0));
+  const normalizedMultiplier = Math.max(1, Math.floor(Number(qualityMultiplier) || 1));
+  return normalizedBaseCost * normalizedMultiplier;
+};
+
 export const getEnabledTechniqueDefs = async (): Promise<TechniqueDefRow[]> => {
   const rows = getTechniqueDefinitions()
     .filter((entry) => entry.enabled !== false)
@@ -150,14 +160,16 @@ export const getTechniqueDefById = async (techniqueId: string): Promise<Techniqu
 };
 
 export const getTechniqueLayersByTechniqueId = async (techniqueId: string): Promise<TechniqueLayerRow[]> => {
+  const techniqueDef = getTechniqueDefinitions().find((entry) => entry.id === techniqueId && entry.enabled !== false) ?? null;
+  const qualityMultiplier = resolveTechniqueCostMultiplierByQuality(techniqueDef?.quality);
   const rows = getTechniqueLayerDefinitions()
     .filter((entry) => entry.enabled !== false)
     .filter((entry) => entry.technique_id === techniqueId)
     .map((entry) => ({
       technique_id: entry.technique_id,
       layer: Number(entry.layer),
-      cost_spirit_stones: Number(entry.cost_spirit_stones ?? 0),
-      cost_exp: Number(entry.cost_exp ?? 0),
+      cost_spirit_stones: scaleTechniqueBaseCostByQuality(Number(entry.cost_spirit_stones ?? 0), qualityMultiplier),
+      cost_exp: scaleTechniqueBaseCostByQuality(Number(entry.cost_exp ?? 0), qualityMultiplier),
       cost_materials: Array.isArray(entry.cost_materials) ? entry.cost_materials : [],
       passives: Array.isArray(entry.passives) ? entry.passives : [],
       unlock_skill_ids: Array.isArray(entry.unlock_skill_ids) ? entry.unlock_skill_ids : [],
