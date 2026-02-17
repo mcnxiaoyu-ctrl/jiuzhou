@@ -97,3 +97,41 @@ export const getRealmRankOneBasedStrict = (realmRaw: unknown, subRealmRaw?: unkn
   const index = REALM_ORDER.indexOf(normalized);
   return index >= 0 ? index + 1 : 1;
 };
+
+/**
+ * 装备需求境界归一化（兼容旧逻辑）
+ *
+ * 与 normalizeRealmStrict 的区别：
+ * - 额外兼容形如 `主阶段·子阶段·其他` 的文本，按前两段尝试匹配；
+ * - 无法识别时固定回退为“凡人”，用于装备相关的保守口径。
+ */
+export const normalizeRealmForEquipment = (realmRaw?: unknown): RealmName => {
+  const raw = toTrimmedString(realmRaw);
+  if (!raw) return '凡人';
+  if (isRealmName(raw)) return raw;
+
+  const mappedMajor = REALM_MAJOR_TO_FIRST[raw];
+  if (mappedMajor) return mappedMajor;
+
+  const mappedSub = REALM_SUB_TO_FULL[raw];
+  if (mappedSub) return mappedSub;
+
+  const split = raw.split('·');
+  if (split.length >= 2) {
+    const full = `${split[0]}·${split[1]}`;
+    if (isRealmName(full)) return full;
+    const subMapped = REALM_SUB_TO_FULL[split[1] ?? ''];
+    if (subMapped) return subMapped;
+  }
+
+  return '凡人';
+};
+
+/**
+ * 装备体系使用的 1-based 境界档位（最小为 1）。
+ */
+export const getRealmRankOneBasedForEquipment = (realmRaw?: unknown): number => {
+  const normalized = normalizeRealmForEquipment(realmRaw);
+  const index = REALM_ORDER.indexOf(normalized);
+  return index >= 0 ? index + 1 : 1;
+};

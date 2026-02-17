@@ -103,39 +103,13 @@ const scaleTechniqueBaseCostByQuality = (baseCost: number, qualityMultiplier: nu
   return normalizedBaseCost * normalizedMultiplier;
 };
 
-export const getEnabledTechniqueDefs = async (): Promise<TechniqueDefRow[]> => {
-  const rows = getTechniqueDefinitions()
-    .filter((entry) => entry.enabled !== false)
-    .map((entry) => ({
-      id: entry.id,
-      code: entry.code ?? null,
-      name: entry.name,
-      type: entry.type,
-      quality: entry.quality,
-      quality_rank: resolveQualityRankFromName(entry.quality, 1),
-      max_layer: Number(entry.max_layer ?? 1),
-      required_realm: entry.required_realm ?? '凡人',
-      attribute_type: entry.attribute_type ?? 'physical',
-      attribute_element: entry.attribute_element ?? 'none',
-      tags: Array.isArray(entry.tags) ? entry.tags : [],
-      description: entry.description ?? null,
-      long_desc: entry.long_desc ?? null,
-      icon: entry.icon ?? null,
-      obtain_type: entry.obtain_type ?? null,
-      obtain_hint: Array.isArray(entry.obtain_hint) ? entry.obtain_hint : [],
-      sort_weight: Number(entry.sort_weight ?? 0),
-      version: Number(entry.version ?? 1),
-      enabled: true,
-    } satisfies TechniqueDefRow))
-    .sort((left, right) => right.sort_weight - left.sort_weight || right.quality_rank - left.quality_rank || left.id.localeCompare(right.id));
-  return rows;
-};
+type TechniqueDefEntry = ReturnType<typeof getTechniqueDefinitions>[number];
 
-export const getTechniqueDefById = async (techniqueId: string): Promise<TechniqueDefRow | null> => {
-  const id = String(techniqueId || '').trim();
-  if (!id) return null;
-  const entry = getTechniqueDefinitions().find((row) => row.id === id && row.enabled !== false);
-  if (!entry) return null;
+/**
+ * 将静态功法定义映射为路由层返回结构。
+ * 统一映射可避免“列表接口”和“详情接口”字段漂移。
+ */
+const mapTechniqueDefRow = (entry: TechniqueDefEntry): TechniqueDefRow => {
   return {
     id: entry.id,
     code: entry.code ?? null,
@@ -157,6 +131,22 @@ export const getTechniqueDefById = async (techniqueId: string): Promise<Techniqu
     version: Number(entry.version ?? 1),
     enabled: true,
   };
+};
+
+export const getEnabledTechniqueDefs = async (): Promise<TechniqueDefRow[]> => {
+  const rows = getTechniqueDefinitions()
+    .filter((entry) => entry.enabled !== false)
+    .map((entry) => mapTechniqueDefRow(entry))
+    .sort((left, right) => right.sort_weight - left.sort_weight || right.quality_rank - left.quality_rank || left.id.localeCompare(right.id));
+  return rows;
+};
+
+export const getTechniqueDefById = async (techniqueId: string): Promise<TechniqueDefRow | null> => {
+  const id = String(techniqueId || '').trim();
+  if (!id) return null;
+  const entry = getTechniqueDefinitions().find((row) => row.id === id && row.enabled !== false);
+  if (!entry) return null;
+  return mapTechniqueDefRow(entry);
 };
 
 export const getTechniqueLayersByTechniqueId = async (techniqueId: string): Promise<TechniqueLayerRow[]> => {

@@ -3,15 +3,10 @@ import type { AffixDef, AffixPoolRules, GeneratedAffix, Quality } from './equipm
 import { QUALITY_BY_RANK, QUALITY_MULTIPLIER_BY_RANK, isQualityName } from './shared/itemQuality.js';
 import { getAffixPoolDefinitions } from './staticConfigLoader.js';
 import {
-  REALM_MAJOR_TO_FIRST,
-  REALM_ORDER,
-  REALM_SUB_TO_FULL,
-  isRealmName,
-  type RealmName,
+  getRealmRankOneBasedForEquipment,
 } from './shared/realmOrder.js';
 import {
-  buildGeneratedAffixModifiers,
-  normalizeAffixModifierDefs,
+  buildAffixValueAndModifiers,
   normalizeAffixValueByContext,
   normalizeGeneratedAffixModifiers,
   resolvePrimaryAffixAttrKey,
@@ -28,8 +23,6 @@ export interface RerollResult {
   message: string;
   affixes?: GeneratedAffix[];
 }
-
-type EquipRealm = RealmName;
 
 const toNumber = (value: unknown, fallback = 0): number => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -69,35 +62,8 @@ export const getQualityMultiplierForReroll = (qualityRankRaw: unknown): number =
   return QUALITY_MULTIPLIER_BY_RANK[rank] ?? 1;
 };
 
-const isEquipRealm = (value: string): value is EquipRealm => {
-  return isRealmName(value);
-};
-
-const normalizeEquipRealm = (realmRaw?: unknown): EquipRealm => {
-  const raw = typeof realmRaw === 'string' ? realmRaw.trim() : '';
-  if (!raw) return '凡人';
-  if (isEquipRealm(raw)) return raw;
-
-  const mappedMajor = REALM_MAJOR_TO_FIRST[raw];
-  if (mappedMajor) return mappedMajor;
-
-  const mappedSub = REALM_SUB_TO_FULL[raw];
-  if (mappedSub) return mappedSub;
-
-  const split = raw.split('·');
-  if (split.length >= 2) {
-    const full = `${split[0]}·${split[1]}`;
-    if (isEquipRealm(full)) return full;
-    const subMapped = REALM_SUB_TO_FULL[split[1] ?? ''];
-    if (subMapped) return subMapped;
-  }
-  return '凡人';
-};
-
 export const getEquipRealmRankForReroll = (realmRaw?: unknown): number => {
-  const normalized = normalizeEquipRealm(realmRaw);
-  const index = REALM_ORDER.indexOf(normalized);
-  return index >= 0 ? index + 1 : 1;
+  return getRealmRankOneBasedForEquipment(realmRaw);
 };
 
 const normalizeGeneratedAffixApplyType = (value: unknown): GeneratedAffix['apply_type'] | null => {
@@ -272,39 +238,17 @@ const rollAffixValue = (rng: SeededRandom, affix: AffixDef, realmRank: number, a
   const rawScaledValue = Number.isFinite(attrFactor) && attrFactor !== 1
     ? value * attrFactor
     : value;
-  const modifierDefs =
-    affix.apply_type === 'special'
-      ? []
-      : normalizeAffixModifierDefs(affix.modifiers, undefined);
-  const generatedModifiers =
-    affix.apply_type === 'special'
-      ? []
-      : buildGeneratedAffixModifiers({
-          applyType: affix.apply_type,
-          effectType: affix.effect_type,
-          params: affix.params,
-          modifierDefs,
-          baseValue: rawScaledValue,
-        });
-  const affixAttrKey = resolvePrimaryAffixAttrKey({
+  const resolvedAffixValue = buildAffixValueAndModifiers({
     applyType: affix.apply_type,
     keyRaw: affix.key,
-    attrKeyRaw: undefined,
-    modifiers: generatedModifiers,
+    effectType: affix.effect_type,
+    params: affix.params,
+    modifiersRaw: affix.modifiers,
+    rawScaledValue,
   });
-  if (!affixAttrKey) return null;
-  const scaledValue =
-    affix.apply_type === 'special'
-      ? normalizeAffixValueByContext(
-          {
-            applyType: affix.apply_type,
-            attrKey: affixAttrKey,
-            effectType: affix.effect_type,
-            params: affix.params,
-          },
-          rawScaledValue
-        )
-      : generatedModifiers[0]?.value ?? 0;
+  if (!resolvedAffixValue) return null;
+  const scaledValue = resolvedAffixValue.value;
+  const generatedModifiers = resolvedAffixValue.modifiers;
 
   const result: GeneratedAffix = {
     key: affix.key,

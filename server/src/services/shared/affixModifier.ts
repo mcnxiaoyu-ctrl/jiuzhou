@@ -155,6 +155,66 @@ export const buildGeneratedAffixModifiers = (params: {
   return out;
 };
 
+export interface BuildAffixValueResult {
+  value: number;
+  modifiers: GeneratedAffixModifier[];
+}
+
+/**
+ * 根据词条定义与基础值，统一计算“最终词条值 + modifiers”。
+ *
+ * 该函数用于装备生成与词条洗炼，避免两处实现发生数值漂移。
+ */
+export const buildAffixValueAndModifiers = (params: {
+  applyType: AffixApplyType;
+  keyRaw: unknown;
+  effectType?: AffixEffectType;
+  params?: AffixParams;
+  modifiersRaw: unknown;
+  rawScaledValue: number;
+}): BuildAffixValueResult | null => {
+  const modifierDefs =
+    params.applyType === 'special'
+      ? []
+      : normalizeAffixModifierDefs(params.modifiersRaw, undefined);
+  const generatedModifiers =
+    params.applyType === 'special'
+      ? []
+      : buildGeneratedAffixModifiers({
+          applyType: params.applyType,
+          effectType: params.effectType,
+          params: params.params,
+          modifierDefs,
+          baseValue: params.rawScaledValue,
+        });
+
+  const affixAttrKey = resolvePrimaryAffixAttrKey({
+    applyType: params.applyType,
+    keyRaw: params.keyRaw,
+    attrKeyRaw: undefined,
+    modifiers: generatedModifiers,
+  });
+  if (!affixAttrKey) return null;
+
+  const value =
+    params.applyType === 'special'
+      ? normalizeAffixValueByContext(
+          {
+            applyType: params.applyType,
+            attrKey: affixAttrKey,
+            effectType: params.effectType,
+            params: params.params,
+          },
+          params.rawScaledValue
+        )
+      : generatedModifiers[0]?.value ?? 0;
+
+  return {
+    value,
+    modifiers: generatedModifiers,
+  };
+};
+
 export const normalizeGeneratedAffixModifiers = (params: {
   applyType: AffixApplyType;
   effectType?: AffixEffectType;
