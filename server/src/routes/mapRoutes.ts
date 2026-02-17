@@ -1,10 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { withRouteError } from '../middleware/routeError.js';
-import { requireAuth, getOptionalUserId } from '../middleware/auth.js';
+import { requireCharacter, getOptionalUserId } from '../middleware/auth.js';
 import { getEnabledMaps, getMapDefById, getRoomInMap, getRoomsInMap, getWorldMap } from '../services/mapService.js';
 import { getAreaObjects, getRoomObjects, gatherRoomResource, pickupRoomItem } from '../services/roomObjectService.js';
-import { getCharacterIdByUserId } from '../services/shared/characterId.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
@@ -84,7 +83,7 @@ router.get('/:mapId/rooms/:roomId/objects', async (req: Request, res: Response) 
   }
 });
 
-router.post('/:mapId/rooms/:roomId/resources/:resourceId/gather', requireAuth, async (req: Request, res: Response) => {
+router.post('/:mapId/rooms/:roomId/resources/:resourceId/gather', requireCharacter, async (req: Request, res: Response) => {
   try {
     const mapIdParam = req.params.mapId;
     const roomIdParam = req.params.roomId;
@@ -93,17 +92,13 @@ router.post('/:mapId/rooms/:roomId/resources/:resourceId/gather', requireAuth, a
     const roomId = Array.isArray(roomIdParam) ? roomIdParam[0] : roomIdParam;
     const resourceId = Array.isArray(resourceIdParam) ? resourceIdParam[0] : resourceIdParam;
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const result = await gatherRoomResource({ mapId, roomId, resourceId, userId, characterId });
 
     const didGain = Boolean(result.success && result.data && typeof result.data.qty === 'number' && result.data.qty > 0);
     if (didGain) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {}
+      await safePushCharacterUpdate(userId);
     }
 
     return res.status(result.success ? 200 : 400).json(result);
@@ -112,7 +107,7 @@ router.post('/:mapId/rooms/:roomId/resources/:resourceId/gather', requireAuth, a
   }
 });
 
-router.post('/:mapId/rooms/:roomId/items/:itemDefId/pickup', requireAuth, async (req: Request, res: Response) => {
+router.post('/:mapId/rooms/:roomId/items/:itemDefId/pickup', requireCharacter, async (req: Request, res: Response) => {
   try {
     const mapIdParam = req.params.mapId;
     const roomIdParam = req.params.roomId;
@@ -121,17 +116,13 @@ router.post('/:mapId/rooms/:roomId/items/:itemDefId/pickup', requireAuth, async 
     const roomId = Array.isArray(roomIdParam) ? roomIdParam[0] : roomIdParam;
     const itemDefId = Array.isArray(itemDefIdParam) ? itemDefIdParam[0] : itemDefIdParam;
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const result = await pickupRoomItem({ mapId, roomId, itemDefId, userId, characterId });
 
     const didGain = Boolean(result.success && result.data && typeof result.data.qty === 'number' && result.data.qty > 0);
     if (didGain) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {}
+      await safePushCharacterUpdate(userId);
     }
 
     return res.status(result.success ? 200 : 400).json(result);

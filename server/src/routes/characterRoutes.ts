@@ -9,7 +9,7 @@ import {
   updateCharacterAutoDisassembleSettings,
   updateCharacterPosition,
 } from '../services/characterService.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
@@ -73,12 +73,7 @@ router.post('/updatePosition', requireAuth, async (req: Request, res: Response) 
     const result = await updateCharacterPosition(userId, currentMapId ?? '', currentRoomId ?? '');
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-        // 忽略
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     res.status(result.success ? 200 : 400).json(result);
@@ -95,12 +90,7 @@ router.post('/updateAutoCastSkills', requireAuth, async (req: Request, res: Resp
     const result = await updateCharacterAutoCastSkills(userId, enabled);
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-        // 忽略
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     res.status(result.success ? 200 : 400).json(result);
@@ -130,12 +120,7 @@ router.post('/updateAutoDisassemble', requireAuth, async (req: Request, res: Res
     const result = await updateCharacterAutoDisassembleSettings(userId, enabled, parsedRules);
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-        // 忽略
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     return res.status(result.success ? 200 : 400).json(result);

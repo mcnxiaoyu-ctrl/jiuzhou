@@ -3,7 +3,7 @@ import { Router, Request, Response } from 'express';
  * 九州修仙录 - 邮件路由
  */
 import { withRouteError } from '../middleware/routeError.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireCharacter } from '../middleware/auth.js';
 import {
   getMailList,
   readMail,
@@ -14,7 +14,6 @@ import {
   markAllRead,
   getUnreadCount
 } from '../services/mailService.js';
-import { getCharacterIdByUserId } from '../services/shared/characterId.js';
 
 const router = Router();
 
@@ -25,7 +24,7 @@ const parseMailId = (raw: unknown): number | null => {
   return n;
 };
 
-router.use(requireAuth);
+router.use(requireCharacter);
 
 // ============================================
 // 获取邮件列表
@@ -33,11 +32,7 @@ router.use(requireAuth);
 router.get('/list', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = Math.min(parseInt(req.query.pageSize as string) || 50, 100);
@@ -66,11 +61,7 @@ router.get('/list', async (req: Request, res: Response) => {
 router.get('/unread', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const result = await getUnreadCount(userId, characterId);
 
@@ -89,11 +80,7 @@ router.get('/unread', async (req: Request, res: Response) => {
 router.post('/read', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const parsedMailId = parseMailId((req.body as { mailId?: unknown })?.mailId);
     if (!parsedMailId) {
@@ -113,11 +100,7 @@ router.post('/read', async (req: Request, res: Response) => {
 router.post('/claim', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const parsedMailId = parseMailId((req.body as { mailId?: unknown })?.mailId);
     if (!parsedMailId) {
@@ -137,11 +120,7 @@ router.post('/claim', async (req: Request, res: Response) => {
 router.post('/claim-all', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const result = await claimAllAttachments(userId, characterId);
     return res.json(result);
@@ -156,11 +135,7 @@ router.post('/claim-all', async (req: Request, res: Response) => {
 router.post('/delete', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const parsedMailId = parseMailId((req.body as { mailId?: unknown })?.mailId);
     if (!parsedMailId) {
@@ -180,11 +155,7 @@ router.post('/delete', async (req: Request, res: Response) => {
 router.post('/delete-all', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const { onlyRead } = req.body;
     const result = await deleteAllMails(userId, characterId, !!onlyRead);
@@ -200,11 +171,7 @@ router.post('/delete-all', async (req: Request, res: Response) => {
 router.post('/read-all', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const result = await markAllRead(userId, characterId);
     return res.json(result);

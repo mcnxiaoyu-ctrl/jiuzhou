@@ -4,7 +4,7 @@ import { Router, NextFunction, Request, Response } from 'express';
  */
 import { requireAuth } from '../middleware/auth.js';
 import { avatarUpload, updateAvatar, deleteAvatar } from '../services/uploadService.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
@@ -56,13 +56,7 @@ router.post(
       const result = await updateAvatar(userId, file.filename);
 
       if (result.success) {
-        // 推送角色更新
-        try {
-          const gameServer = getGameServer();
-          await gameServer.pushCharacterUpdate(userId);
-        } catch {
-          // 游戏服务器可能未初始化，忽略
-        }
+        await safePushCharacterUpdate(userId);
       }
 
       res.json(result);
@@ -84,12 +78,7 @@ router.delete('/avatar', requireAuth, async (req: Request, res: Response) => {
     const result = await deleteAvatar(userId);
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-        // 忽略
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     res.json(result);

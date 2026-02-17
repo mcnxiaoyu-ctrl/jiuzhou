@@ -21,7 +21,7 @@ import {
   getCharacterTechniqueStatus
 } from '../services/characterTechniqueService.js';
 import { query } from '../config/database.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
@@ -140,14 +140,9 @@ router.post('/:characterId/technique/learn', async (req: AuthRequest, res: Respo
     const result = await learnTechnique(characterId, techniqueId, obtainedFrom, obtainedRefId);
 
     if (result.success) {
-      try {
-        const userId = req.userId!;
-        if (userId && Number.isFinite(userId)) {
-          const gameServer = getGameServer();
-          await gameServer.pushCharacterUpdate(userId);
-        }
-      } catch {
-        // 忽略
+      const userId = req.userId!;
+      if (userId && Number.isFinite(userId)) {
+        await safePushCharacterUpdate(userId);
       }
     }
 
@@ -201,12 +196,7 @@ router.post('/:characterId/technique/:techniqueId/upgrade', async (req: AuthRequ
     const result = await upgradeTechnique(characterId, techniqueId);
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-        // 忽略
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     res.json(result);
@@ -241,14 +231,9 @@ router.post('/:characterId/technique/equip', async (req: AuthRequest, res: Respo
     const result = await equipTechnique(characterId, techniqueId, slotType, slotIndex);
 
     if (result.success) {
-      try {
-        const userId = req.userId!;
-        if (userId && Number.isFinite(userId)) {
-          const gameServer = getGameServer();
-          await gameServer.pushCharacterUpdate(userId);
-        }
-      } catch {
-        // 忽略
+      const userId = req.userId!;
+      if (userId && Number.isFinite(userId)) {
+        await safePushCharacterUpdate(userId);
       }
     }
 
@@ -279,14 +264,9 @@ router.post('/:characterId/technique/unequip', async (req: AuthRequest, res: Res
     const result = await unequipTechnique(characterId, techniqueId);
 
     if (result.success) {
-      try {
-        const userId = req.userId!;
-        if (userId && Number.isFinite(userId)) {
-          const gameServer = getGameServer();
-          await gameServer.pushCharacterUpdate(userId);
-        }
-      } catch {
-        // 忽略
+      const userId = req.userId!;
+      if (userId && Number.isFinite(userId)) {
+        await safePushCharacterUpdate(userId);
       }
     }
 

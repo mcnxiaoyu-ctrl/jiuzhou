@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { withRouteError } from '../middleware/routeError.js';
 import { requireAuth } from '../middleware/auth.js';
 import { breakthroughToNextRealm, breakthroughToTargetRealm, getRealmOverview } from '../services/realmService.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
@@ -33,12 +33,7 @@ router.post('/breakthrough', async (req: Request, res: Response) => {
         : { success: false, message: '突破方向无效' };
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-        // 忽略
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     return res.status(result.success ? 200 : 400).json(result);

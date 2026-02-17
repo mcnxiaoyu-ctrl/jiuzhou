@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { withRouteError } from '../middleware/routeError.js';
-import { requireAuth } from '../middleware/auth.js';
-import { getCharacterIdByUserId } from '../services/shared/characterId.js';
+import { requireAuth, requireCharacter } from '../middleware/auth.js';
 import {
   buyMarketListing,
   cancelMarketListing,
@@ -24,9 +23,7 @@ const parseQueryNumber = (v: unknown): number | undefined => {
   return n;
 };
 
-router.use(requireAuth);
-
-router.get('/listings', async (req: Request, res: Response) => {
+router.get('/listings', requireAuth, async (req: Request, res: Response) => {
   try {
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
     const quality = typeof req.query.quality === 'string' ? req.query.quality : undefined;
@@ -55,11 +52,10 @@ router.get('/listings', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/my-listings', async (req: Request, res: Response) => {
+router.get('/my-listings', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     const page = parseQueryNumber(req.query.page);
@@ -73,11 +69,10 @@ router.get('/my-listings', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/records', async (req: Request, res: Response) => {
+router.get('/records', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const page = parseQueryNumber(req.query.page);
     const pageSize = parseQueryNumber(req.query.pageSize);
@@ -89,11 +84,10 @@ router.get('/records', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/list', async (req: Request, res: Response) => {
+router.post('/list', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const { itemInstanceId, qty, unitPriceSpiritStones } = req.body as {
       itemInstanceId?: unknown;
@@ -116,11 +110,10 @@ router.post('/list', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/cancel', async (req: Request, res: Response) => {
+router.post('/cancel', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const { listingId } = req.body as { listingId?: unknown };
     const result = await cancelMarketListing({ userId, characterId, listingId: Number(listingId) });
@@ -131,11 +124,10 @@ router.post('/cancel', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/buy', async (req: Request, res: Response) => {
+router.post('/buy', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const { listingId } = req.body as { listingId?: unknown };
     const result = await buyMarketListing({ buyerUserId: userId, buyerCharacterId: characterId, listingId: Number(listingId) });

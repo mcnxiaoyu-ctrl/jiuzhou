@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { withRouteError } from '../middleware/routeError.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireCharacter } from '../middleware/auth.js';
 import {
   getMainQuestProgress,
   startDialogue,
@@ -11,17 +11,15 @@ import {
   getSectionList,
   setMainQuestTracked
 } from '../services/mainQuestService.js';
-import { getCharacterIdByUserId } from '../services/shared/characterId.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
 // 获取主线进度
-router.get('/progress', requireAuth, async (req: Request, res: Response) => {
+router.get('/progress', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const data = await getMainQuestProgress(characterId);
     return res.json({ success: true, message: 'ok', data });
@@ -31,11 +29,10 @@ router.get('/progress', requireAuth, async (req: Request, res: Response) => {
 });
 
 // 获取章节列表
-router.get('/chapters', requireAuth, async (req: Request, res: Response) => {
+router.get('/chapters', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const data = await getChapterList(characterId);
     return res.json({ success: true, message: 'ok', data });
@@ -45,11 +42,10 @@ router.get('/chapters', requireAuth, async (req: Request, res: Response) => {
 });
 
 // 获取章节下的任务节列表
-router.get('/chapters/:chapterId/sections', requireAuth, async (req: Request, res: Response) => {
+router.get('/chapters/:chapterId/sections', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const chapterId = typeof req.params.chapterId === 'string' ? req.params.chapterId : '';
     const data = await getSectionList(characterId, chapterId);
@@ -60,11 +56,10 @@ router.get('/chapters/:chapterId/sections', requireAuth, async (req: Request, re
 });
 
 // 开始对话
-router.post('/dialogue/start', requireAuth, async (req: Request, res: Response) => {
+router.post('/dialogue/start', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const body = req.body as { dialogueId?: string };
     const dialogueId = typeof body?.dialogueId === 'string' ? body.dialogueId : undefined;
@@ -77,18 +72,14 @@ router.post('/dialogue/start', requireAuth, async (req: Request, res: Response) 
 });
 
 // 推进对话
-router.post('/dialogue/advance', requireAuth, async (req: Request, res: Response) => {
+router.post('/dialogue/advance', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const result = await advanceDialogue(userId, characterId);
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {}
+      await safePushCharacterUpdate(userId);
     }
     return res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
@@ -97,11 +88,10 @@ router.post('/dialogue/advance', requireAuth, async (req: Request, res: Response
 });
 
 // 选择对话选项
-router.post('/dialogue/choice', requireAuth, async (req: Request, res: Response) => {
+router.post('/dialogue/choice', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const body = req.body as { choiceId?: string };
     const choiceId = typeof body?.choiceId === 'string' ? body.choiceId : '';
@@ -112,10 +102,7 @@ router.post('/dialogue/choice', requireAuth, async (req: Request, res: Response)
 
     const result = await selectDialogueChoice(userId, characterId, choiceId);
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {}
+      await safePushCharacterUpdate(userId);
     }
     return res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
@@ -124,18 +111,14 @@ router.post('/dialogue/choice', requireAuth, async (req: Request, res: Response)
 });
 
 // 完成任务节并领取奖励
-router.post('/section/complete', requireAuth, async (req: Request, res: Response) => {
+router.post('/section/complete', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const result = await completeCurrentSection(userId, characterId);
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {}
+      await safePushCharacterUpdate(userId);
     }
     return res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
@@ -144,11 +127,10 @@ router.post('/section/complete', requireAuth, async (req: Request, res: Response
 });
 
 // 设置主线任务追踪状态
-router.post('/track', requireAuth, async (req: Request, res: Response) => {
+router.post('/track', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const body = req.body as { tracked?: boolean };
     const tracked = body?.tracked === true;

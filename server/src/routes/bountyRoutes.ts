@@ -1,18 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { withRouteError } from '../middleware/routeError.js';
-import { requireAuth } from '../middleware/auth.js';
-import { getCharacterIdByUserId } from '../services/taskService.js';
+import { requireAuth, requireCharacter } from '../middleware/auth.js';
 import { claimBounty, getBountyBoard, publishBounty, searchItemDefsForBounty, submitBountyMaterials } from '../services/bountyService.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
 
-router.get('/board', requireAuth, async (req: Request, res: Response) => {
+router.get('/board', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const pool = typeof req.query.pool === 'string' ? req.query.pool : 'daily';
     const resolvedPool = pool === 'all' || pool === 'player' || pool === 'daily' ? pool : 'daily';
@@ -24,31 +22,26 @@ router.get('/board', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-router.post('/claim', requireAuth, async (req: Request, res: Response) => {
+router.post('/claim', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const body = req.body as { bountyInstanceId?: unknown };
     const bountyInstanceId = Number(body?.bountyInstanceId);
     const result = await claimBounty(characterId, bountyInstanceId);
     if (!result.success) return res.status(400).json(result);
-    try {
-      const gameServer = getGameServer();
-      await gameServer.pushCharacterUpdate(userId);
-    } catch {}
+    await safePushCharacterUpdate(userId);
     return res.json(result);
   } catch (error) {
     return withRouteError(res, 'bountyRoutes 路由异常', error);
   }
 });
 
-router.post('/publish', requireAuth, async (req: Request, res: Response) => {
+router.post('/publish', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const body = req.body as {
       taskId?: unknown;
@@ -101,20 +94,16 @@ router.get('/items/search', requireAuth, async (req: Request, res: Response) => 
   }
 });
 
-router.post('/submit-materials', requireAuth, async (req: Request, res: Response) => {
+router.post('/submit-materials', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const body = req.body as { taskId?: unknown };
     const taskId = typeof body?.taskId === 'string' ? body.taskId : '';
     const result = await submitBountyMaterials(characterId, taskId);
     if (!result.success) return res.status(400).json(result);
-    try {
-      const gameServer = getGameServer();
-      await gameServer.pushCharacterUpdate(userId);
-    } catch {}
+    await safePushCharacterUpdate(userId);
     return res.json(result);
   } catch (error) {
     return withRouteError(res, 'bountyRoutes 路由异常', error);

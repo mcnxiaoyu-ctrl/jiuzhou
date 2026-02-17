@@ -8,7 +8,7 @@ import {
   claimBattlePassReward,
   completeBattlePassTask,
 } from '../services/battlePassService.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
@@ -76,10 +76,7 @@ router.post('/claim', requireAuth, async (req: Request, res: Response) => {
     if (!result.success) {
       return res.status(400).json(result);
     }
-    try {
-      const gameServer = getGameServer();
-      await gameServer.pushCharacterUpdate(userId);
-    } catch {}
+    await safePushCharacterUpdate(userId);
     return res.json(result);
   } catch (error) {
     return withRouteError(res, 'battlePassRoutes 路由异常', error);

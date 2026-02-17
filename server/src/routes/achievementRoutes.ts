@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { withRouteError } from '../middleware/routeError.js';
-import { requireAuth } from '../middleware/auth.js';
-import { getCharacterIdByUserId } from '../services/taskService.js';
+import { requireCharacter } from '../middleware/auth.js';
 import {
   claimAchievement,
   claimAchievementPointsReward,
@@ -10,16 +9,15 @@ import {
   getAchievementPointsRewards,
   type AchievementListStatusFilter,
 } from '../services/achievementService.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
 
-router.get('/list', requireAuth, async (req: Request, res: Response) => {
+router.get('/list', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
     const status = typeof req.query.status === 'string' ? (req.query.status as AchievementListStatusFilter) : undefined;
@@ -33,11 +31,10 @@ router.get('/list', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-router.get('/:achievementId', requireAuth, async (req: Request, res: Response) => {
+router.get('/:achievementId', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const achievementId = typeof req.params.achievementId === 'string' ? req.params.achievementId : '';
     const achievement = await getAchievementDetail(characterId, achievementId);
@@ -49,11 +46,10 @@ router.get('/:achievementId', requireAuth, async (req: Request, res: Response) =
   }
 });
 
-router.post('/claim', requireAuth, async (req: Request, res: Response) => {
+router.post('/claim', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const body = req.body as { achievementId?: unknown; achievement_id?: unknown };
     const achievementId =
@@ -66,10 +62,7 @@ router.post('/claim', requireAuth, async (req: Request, res: Response) => {
     const result = await claimAchievement(userId, characterId, achievementId);
     if (!result.success) return res.status(400).json(result);
 
-    try {
-      const gameServer = getGameServer();
-      await gameServer.pushCharacterUpdate(userId);
-    } catch {}
+    await safePushCharacterUpdate(userId);
 
     return res.json(result);
   } catch (error) {
@@ -77,11 +70,10 @@ router.post('/claim', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-router.get('/points/rewards', requireAuth, async (req: Request, res: Response) => {
+router.get('/points/rewards', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const data = await getAchievementPointsRewards(characterId);
     return res.json({ success: true, message: 'ok', data });
@@ -90,11 +82,10 @@ router.get('/points/rewards', requireAuth, async (req: Request, res: Response) =
   }
 });
 
-router.post('/points/claim', requireAuth, async (req: Request, res: Response) => {
+router.post('/points/claim', requireCharacter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const body = req.body as { threshold?: unknown; points_threshold?: unknown };
     const threshold =
@@ -111,10 +102,7 @@ router.post('/points/claim', requireAuth, async (req: Request, res: Response) =>
     const result = await claimAchievementPointsReward(userId, characterId, threshold);
     if (!result.success) return res.status(400).json(result);
 
-    try {
-      const gameServer = getGameServer();
-      await gameServer.pushCharacterUpdate(userId);
-    } catch {}
+    await safePushCharacterUpdate(userId);
 
     return res.json(result);
   } catch (error) {

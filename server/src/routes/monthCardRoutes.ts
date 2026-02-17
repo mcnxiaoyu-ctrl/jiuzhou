@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { withRouteError } from '../middleware/routeError.js';
 import { requireAuth } from '../middleware/auth.js';
 import { buyMonthCard, claimMonthCardReward, getMonthCardStatus, useMonthCardItem } from '../services/monthCardService.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
@@ -27,10 +27,7 @@ router.post('/buy', requireAuth, async (req: Request, res: Response) => {
     const monthCardId = typeof body?.monthCardId === 'string' ? body.monthCardId : defaultMonthCardId;
     const result = await buyMonthCard(userId, monthCardId);
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {}
+      await safePushCharacterUpdate(userId);
     }
     res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
@@ -51,10 +48,7 @@ router.post('/use-item', requireAuth, async (req: Request, res: Response) => {
           : undefined;
     const result = await useMonthCardItem(userId, monthCardId, { itemInstanceId });
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {}
+      await safePushCharacterUpdate(userId);
     }
     res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
@@ -69,10 +63,7 @@ router.post('/claim', requireAuth, async (req: Request, res: Response) => {
     const monthCardId = typeof body?.monthCardId === 'string' ? body.monthCardId : defaultMonthCardId;
     const result = await claimMonthCardReward(userId, monthCardId);
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {}
+      await safePushCharacterUpdate(userId);
     }
     res.status(result.success ? 200 : 400).json(result);
   } catch (error) {

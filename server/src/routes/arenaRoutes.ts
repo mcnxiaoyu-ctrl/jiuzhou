@@ -1,20 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { withRouteError } from '../middleware/routeError.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireCharacter } from '../middleware/auth.js';
 import { query } from '../config/database.js';
-import { getCharacterIdByUserId } from '../services/shared/characterId.js';
 import { canChallengeToday, getArenaOpponents, getArenaRecords, getArenaStatus } from '../services/arenaService.js';
 import { startPVPBattle } from '../services/battleService.js';
 
 const router = Router();
 
-router.use(requireAuth);
+router.use(requireCharacter);
 
 router.get('/status', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
     const result = await getArenaStatus(characterId);
     return res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
@@ -25,8 +23,7 @@ router.get('/status', async (req: Request, res: Response) => {
 router.get('/opponents', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
     const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
     const result = await getArenaOpponents(characterId, Number.isFinite(limit as number) ? (limit as number) : 10);
     return res.status(result.success ? 200 : 400).json(result);
@@ -38,8 +35,7 @@ router.get('/opponents', async (req: Request, res: Response) => {
 router.get('/records', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
     const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
     const result = await getArenaRecords(characterId, Number.isFinite(limit as number) ? (limit as number) : 50);
     return res.status(result.success ? 200 : 400).json(result);
@@ -51,8 +47,7 @@ router.get('/records', async (req: Request, res: Response) => {
 router.post('/challenge', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const opponentCharacterId = Number((req.body as { opponentCharacterId?: unknown })?.opponentCharacterId);
     if (!Number.isFinite(opponentCharacterId) || opponentCharacterId <= 0) {
@@ -94,8 +89,7 @@ router.post('/challenge', async (req: Request, res: Response) => {
 router.post('/match', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return res.status(404).json({ success: false, message: '角色不存在' });
+    const characterId = req.characterId!;
 
     const limitResult = await canChallengeToday(characterId);
     if (!limitResult.allowed) {

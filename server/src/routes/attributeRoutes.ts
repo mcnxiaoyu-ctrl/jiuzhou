@@ -5,7 +5,7 @@ import { Router, Request, Response } from 'express';
 import { withRouteError } from '../middleware/routeError.js';
 import { requireAuth } from '../middleware/auth.js';
 import { addAttributePoint, removeAttributePoint, batchAddPoints, resetAttributePoints } from '../services/attributeService.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 
 const router = Router();
 
@@ -23,13 +23,7 @@ router.post('/add', requireAuth, async (req: Request, res: Response) => {
     const result = await addAttributePoint(userId, attribute, amount);
 
     if (result.success) {
-      // 推送角色更新
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-        // 忽略
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     res.json(result);
@@ -52,13 +46,7 @@ router.post('/remove', requireAuth, async (req: Request, res: Response) => {
     const result = await removeAttributePoint(userId, attribute, amount);
 
     if (result.success) {
-      // 推送角色更新
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-        // 忽略
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     res.json(result);
@@ -76,12 +64,7 @@ router.post('/batch', requireAuth, async (req: Request, res: Response) => {
     const result = await batchAddPoints(userId, { jing, qi, shen });
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-        // 忽略
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     res.json(result);
@@ -97,12 +80,7 @@ router.post('/reset', requireAuth, async (req: Request, res: Response) => {
     const result = await resetAttributePoints(userId);
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-        // 忽略
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     res.json(result);

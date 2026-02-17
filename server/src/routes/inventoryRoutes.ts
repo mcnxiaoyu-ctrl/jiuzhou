@@ -3,17 +3,16 @@ import { withRouteError } from '../middleware/routeError.js';
 /**
  * 九州修仙录 - 背包路由
  */
-import { requireAuth } from '../middleware/auth.js';
+import { requireCharacter } from '../middleware/auth.js';
 import inventoryService, { InventoryLocation } from '../services/inventoryService.js';
 import itemService from '../services/itemService.js';
 import craftService from '../services/craftService.js';
 import gemSynthesisService from '../services/gemSynthesisService.js';
 import { query } from '../config/database.js';
-import { getGameServer } from '../game/GameServer.js';
+import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import {
   buildEquipmentDisplayBaseAttrs,
 } from '../services/equipmentGrowthRules.js';
-import { getCharacterIdByUserId } from '../services/shared/characterId.js';
 import { resolveQualityRankFromName } from '../services/shared/itemQuality.js';
 import { getCharacterComputedByCharacterId } from '../services/characterComputedService.js';
 import { getItemDefinitionById, getItemDefinitionsByIds, getItemSetDefinitions } from '../services/staticConfigLoader.js';
@@ -62,7 +61,7 @@ const parseNonNegativeIntArray = (value: unknown): number[] | null => {
 };
 
 
-router.use(requireAuth);
+router.use(requireCharacter);
 
 // ============================================
 // 获取背包信息
@@ -70,13 +69,8 @@ router.use(requireAuth);
 // ============================================
 router.get('/info', async (req: Request, res: Response) => {
   try {
-    const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
-    
+    const characterId = req.characterId!;
+
     const info = await inventoryService.getInventoryInfo(characterId);
     res.json({ success: true, data: info });
   } catch (error) {
@@ -90,12 +84,7 @@ router.get('/info', async (req: Request, res: Response) => {
 // ============================================
 router.get('/items', async (req: Request, res: Response) => {
   try {
-    const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
     
     const locationQuery = req.query.location;
     const location = locationQuery === undefined ? 'bag' : locationQuery;
@@ -258,11 +247,7 @@ router.post('/craft/execute', async (req: Request, res: Response) => {
 
     const result = await craftService.executeCraftRecipe(userId, { recipeId, ...(times !== undefined ? { times } : {}) });
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-      }
+      await safePushCharacterUpdate(userId);
     }
     return res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
@@ -276,11 +261,7 @@ router.post('/craft/execute', async (req: Request, res: Response) => {
 // ============================================
 router.get('/gem/recipes', async (req: Request, res: Response) => {
   try {
-    const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const result = await gemSynthesisService.getGemSynthesisRecipeList(characterId);
     return res.status(result.success ? 200 : 400).json(result);
@@ -297,10 +278,7 @@ router.get('/gem/recipes', async (req: Request, res: Response) => {
 router.post('/gem/synthesize', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const recipeId = typeof req.body?.recipeId === 'string' ? req.body.recipeId : '';
     if (!recipeId.trim()) {
@@ -318,11 +296,7 @@ router.post('/gem/synthesize', async (req: Request, res: Response) => {
     });
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     return res.status(result.success ? 200 : 400).json(result);
@@ -339,10 +313,7 @@ router.post('/gem/synthesize', async (req: Request, res: Response) => {
 router.post('/gem/synthesize/batch', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const gemType = typeof req.body?.gemType === 'string' ? req.body.gemType : '';
     if (!gemType.trim()) {
@@ -371,11 +342,7 @@ router.post('/gem/synthesize/batch', async (req: Request, res: Response) => {
     });
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     return res.status(result.success ? 200 : 400).json(result);
@@ -390,12 +357,7 @@ router.post('/gem/synthesize/batch', async (req: Request, res: Response) => {
 // ============================================
 router.post('/move', async (req: Request, res: Response) => {
   try {
-    const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
     
     const { itemId, targetLocation, targetSlot } = req.body;
     
@@ -437,11 +399,7 @@ router.post('/move', async (req: Request, res: Response) => {
 router.post('/use', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const { itemId, itemInstanceId, instanceId, qty } = req.body as {
       itemId?: unknown;
@@ -469,11 +427,7 @@ router.post('/use', async (req: Request, res: Response) => {
       return res.json(result);
     }
 
-    try {
-      const gameServer = getGameServer();
-      await gameServer.pushCharacterUpdate(userId);
-    } catch {
-    }
+    await safePushCharacterUpdate(userId);
 
     return res.json({ ...result, data: { character: result.character, lootResults: result.lootResults } });
   } catch (error) {
@@ -489,11 +443,7 @@ router.post('/use', async (req: Request, res: Response) => {
 router.post('/equip', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const { itemId } = req.body;
     if (itemId === undefined || itemId === null) {
@@ -512,11 +462,7 @@ router.post('/equip', async (req: Request, res: Response) => {
 
     const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
 
-    try {
-      const gameServer = getGameServer();
-      await gameServer.pushCharacterUpdate(userId);
-    } catch {
-    }
+    await safePushCharacterUpdate(userId);
 
     return res.json({ ...result, data: { character } });
   } catch (error) {
@@ -532,11 +478,7 @@ router.post('/equip', async (req: Request, res: Response) => {
 router.post('/unequip', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const { itemId, targetLocation } = req.body;
     if (itemId === undefined || itemId === null) {
@@ -561,11 +503,7 @@ router.post('/unequip', async (req: Request, res: Response) => {
 
     const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
 
-    try {
-      const gameServer = getGameServer();
-      await gameServer.pushCharacterUpdate(userId);
-    } catch {
-    }
+    await safePushCharacterUpdate(userId);
 
     return res.json({ ...result, data: { character } });
   } catch (error) {
@@ -581,11 +519,7 @@ router.post('/unequip', async (req: Request, res: Response) => {
 router.post('/enhance', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const {
       itemId,
@@ -610,11 +544,7 @@ router.post('/enhance', async (req: Request, res: Response) => {
     const result = await inventoryService.enhanceEquipment(characterId, userId, parsedItemId);
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     return res.json({
@@ -638,11 +568,7 @@ router.post('/enhance', async (req: Request, res: Response) => {
 router.post('/refine', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const { itemId, itemInstanceId, instanceId } = req.body as {
       itemId?: unknown;
@@ -663,11 +589,7 @@ router.post('/refine', async (req: Request, res: Response) => {
     const result = await inventoryService.refineEquipment(characterId, userId, parsedItemId);
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     return res.json({
@@ -691,11 +613,7 @@ router.post('/refine', async (req: Request, res: Response) => {
 router.post('/reroll-affixes', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const { itemId, lockIndexes } = req.body as {
       itemId?: unknown;
@@ -727,11 +645,7 @@ router.post('/reroll-affixes', async (req: Request, res: Response) => {
     );
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     return res.json({
@@ -752,11 +666,7 @@ router.post('/reroll-affixes', async (req: Request, res: Response) => {
 router.post('/socket', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const {
       itemId,
@@ -804,11 +714,7 @@ router.post('/socket', async (req: Request, res: Response) => {
     });
 
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-      }
+      await safePushCharacterUpdate(userId);
     }
 
     return res.json({
@@ -829,11 +735,7 @@ router.post('/socket', async (req: Request, res: Response) => {
 router.post('/disassemble', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const { itemId, qty } = req.body as { itemId?: unknown; qty?: unknown };
     if (itemId === undefined || itemId === null || qty === undefined || qty === null) {
@@ -852,11 +754,7 @@ router.post('/disassemble', async (req: Request, res: Response) => {
 
     const result = await inventoryService.disassembleEquipment(characterId, userId, parsedItemId, parsedQty);
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-      }
+      await safePushCharacterUpdate(userId);
     }
     return res.json(result);
   } catch (error) {
@@ -872,11 +770,7 @@ router.post('/disassemble', async (req: Request, res: Response) => {
 router.post('/disassemble/batch', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const { items } = req.body as { items?: unknown };
     if (!Array.isArray(items) || items.length === 0) {
@@ -898,11 +792,7 @@ router.post('/disassemble/batch', async (req: Request, res: Response) => {
 
     const result = await inventoryService.disassembleEquipmentBatch(characterId, userId, parsedItems);
     if (result.success) {
-      try {
-        const gameServer = getGameServer();
-        await gameServer.pushCharacterUpdate(userId);
-      } catch {
-      }
+      await safePushCharacterUpdate(userId);
     }
     return res.json(result);
   } catch (error) {
@@ -916,12 +806,7 @@ router.post('/disassemble/batch', async (req: Request, res: Response) => {
 // ============================================
 router.post('/remove', async (req: Request, res: Response) => {
   try {
-    const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
     
     const { itemId, qty } = req.body;
     
@@ -958,12 +843,7 @@ router.post('/remove', async (req: Request, res: Response) => {
 // ============================================
 router.post('/remove/batch', async (req: Request, res: Response) => {
   try {
-    const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
 
     const { itemIds } = req.body as { itemIds?: unknown };
     if (!Array.isArray(itemIds) || itemIds.length === 0) {
@@ -988,12 +868,7 @@ router.post('/remove/batch', async (req: Request, res: Response) => {
 // ============================================
 router.post('/sort', async (req: Request, res: Response) => {
   try {
-    const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
     
     const { location } = req.body;
     const resolvedLocation = location === undefined || location === null ? 'bag' : location;
@@ -1024,12 +899,7 @@ router.post('/expand', async (req: Request, res: Response) => {
 // ============================================
 router.post('/lock', async (req: Request, res: Response) => {
   try {
-    const userId = req.userId!;
-    const characterId = await getCharacterIdByUserId(userId);
-    
-    if (!characterId) {
-      return res.status(404).json({ success: false, message: '角色不存在' });
-    }
+    const characterId = req.characterId!;
     
     const { itemId, locked } = req.body;
     
