@@ -2,8 +2,6 @@ import { App, Button, Input, Modal, Pagination, Segmented, Select, Table, Tag, T
 import { SearchOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
-import { formatSignedNumber, formatSignedPercent } from '../../shared/formatAttr';
-import { PERCENT_ATTR_KEYS, coerceAffixes, formatScalar, limitLines, normalizeText } from '../../shared/itemMetaFormat';
 import {
   buyMarketListing,
   cancelMarketListing,
@@ -17,16 +15,20 @@ import {
 import type { InventoryItemDto, ItemDefLite, MarketListingDto, MarketTradeRecordDto } from '../../../../services/api';
 import { gameSocket, type CharacterData } from '../../../../services/gameSocket';
 import { useIsMobile } from '../../shared/responsive';
-import EquipmentAffixTooltipList from '../../shared/EquipmentAffixTooltipList';
 import { getItemQualityMeta, normalizeItemQualityName } from '../../shared/itemQuality';
 import InventoryItemCell from '../../shared/InventoryItemCell';
+import MarketItemTooltipContent, {
+  ITEM_TOOLTIP_CLASS_NAMES,
+  normalizeMarketTooltipCategory,
+  type MarketTooltipCategory,
+} from '../../shared/MarketItemTooltipContent';
 import './index.scss';
 
 type MarketPanel = 'market' | 'my' | 'list' | 'records';
 
 type ItemQuality = '黄' | '玄' | '地' | '天';
 
-type MarketCategory = 'all' | 'consumable' | 'material' | 'gem' | 'equipment' | 'skillbook' | 'other';
+type MarketCategory = 'all' | MarketTooltipCategory;
 
 type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
 
@@ -121,311 +123,6 @@ const resolveIcon = (icon: string | null | undefined): string => {
   return ITEM_ICON_BY_FILENAME[filename] ?? coin01;
 };
 
-const hasLatin = (value: string): boolean => /[A-Za-z]/.test(value);
-const RATING_SUFFIX = '_rating';
-
-const translateKey = (key: string): string | null => {
-  const k = key.trim();
-  const m: Record<string, string> = {
-    type: '类型',
-    value: '数值',
-    amount: '数量',
-    qty: '数量',
-    chance: '概率',
-    duration: '持续时间',
-    cooldown: '冷却',
-    seconds: '秒数',
-    percent: '百分比',
-    desc: '描述',
-    description: '描述',
-    name: '名称',
-
-    max_qixue: '气血上限',
-    max_lingqi: '灵气上限',
-    qixue: '气血',
-    lingqi: '灵气',
-
-    wugong: '物攻',
-    fagong: '法攻',
-    wufang: '物防',
-    fafang: '法防',
-    mingzhong: '命中',
-    shanbi: '闪避',
-    zhaojia: '招架',
-    baoji: '暴击',
-    baoshang: '暴伤',
-    kangbao: '抗暴',
-    zengshang: '增伤',
-    zhiliao: '治疗',
-    jianliao: '减疗',
-    xixue: '吸血',
-    lengque: '冷却',
-    sudu: '速度',
-    qixue_huifu: '气血恢复',
-    lingqi_huifu: '灵气恢复',
-    kongzhi_kangxing: '控制抗性',
-    jin_kangxing: '金抗性',
-    mu_kangxing: '木抗性',
-    shui_kangxing: '水抗性',
-    huo_kangxing: '火抗性',
-    tu_kangxing: '土抗性',
-    fuyuan: '福源',
-    shuxing_shuzhi: '属性数值',
-  };
-  if (m[k]) return m[k];
-  if (k.endsWith(RATING_SUFFIX)) {
-    const baseKey = k.slice(0, -RATING_SUFFIX.length).trim();
-    const baseLabel = m[baseKey];
-    if (baseLabel) return `${baseLabel}等级`;
-  }
-  return null;
-};
-
-const formatLines = (value: unknown, depth: number = 0): string[] => {
-  if (value === null || value === undefined) return [];
-  if (depth >= 3) {
-    const inline = formatScalar(value);
-    return [inline || '（内容较复杂）'];
-  }
-  const inline = formatScalar(value);
-  if (inline) return [inline];
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) return [];
-    const out: string[] = [];
-    for (let i = 0; i < value.length; i += 1) {
-      const item = value[i];
-      const itemInline = formatScalar(item);
-      if (itemInline) {
-        out.push(`${i + 1}. ${itemInline}`);
-        continue;
-      }
-      const nested = formatLines(item, depth + 1);
-      if (nested.length === 0) continue;
-      out.push(`${i + 1}.`);
-      out.push(...nested.map((x) => `  ${x}`));
-    }
-    return out;
-  }
-
-  if (typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    const entries = Object.entries(obj);
-    if (entries.length === 0) return [];
-    const out: string[] = [];
-    for (const [k, v] of entries) {
-      const kk = translateKey(k) ?? '';
-      if (!kk) continue;
-
-      if (typeof v === 'number' && Number.isFinite(v) && PERCENT_ATTR_KEYS.has(k)) {
-        out.push(`${kk}：${formatSignedPercent(v)}`);
-        continue;
-      }
-      if (typeof v === 'number' && Number.isFinite(v)) {
-        out.push(`${kk}：${formatSignedNumber(v)}`);
-        continue;
-      }
-
-      const vInline = formatScalar(v);
-      if (vInline) {
-        out.push(`${kk}：${vInline}`);
-        continue;
-      }
-      const nested = formatLines(v, depth + 1);
-      if (nested.length === 0) continue;
-      out.push(`${kk}：`);
-      out.push(...nested.map((x) => `  ${x}`));
-    }
-    return out;
-  }
-
-  return [];
-};
-
-const translateEquipSlot = (value?: string | null): string => {
-  const raw = (value ?? '').trim();
-  if (!raw) return '';
-  const m: Record<string, string> = {
-    weapon: '武器',
-    helmet: '头盔',
-    head: '头部',
-    armor: '衣服',
-    chest: '上衣',
-    pants: '裤子',
-    boots: '鞋子',
-    gloves: '护手',
-    belt: '腰带',
-    ring: '戒指',
-    amulet: '项链',
-    necklace: '项链',
-    bracelet: '手镯',
-    accessory: '饰品',
-    artifact: '法宝',
-  };
-  if (m[raw]) return m[raw];
-  return '';
-};
-
-const translateUseType = (value?: string | null): string => {
-  const raw = (value ?? '').trim();
-  if (!raw) return '';
-  const m: Record<string, string> = {
-    instant: '立即生效',
-    open: '可开启',
-    equip: '可装备',
-    passive: '被动',
-    none: '无',
-  };
-  if (m[raw]) return m[raw];
-  return '';
-};
-
-type TooltipTag = {
-  text: string;
-  qualityClassName?: string;
-};
-
-const MarketItemTooltipContent: React.FC<{ row: ListingItem }> = ({ row }) => {
-  const desc = useMemo(() => {
-    const longDesc = normalizeText(row.longDesc);
-    const shortDesc = normalizeText(row.description);
-    return longDesc || shortDesc;
-  }, [row.description, row.longDesc]);
-
-  const isEquip = row.category === 'equipment';
-
-  const infoTags = useMemo(() => {
-    const tags: TooltipTag[] = [];
-    const qualityMeta = getItemQualityMeta(row.quality);
-    if (qualityMeta) {
-      tags.push({
-        text: qualityMeta.label,
-        qualityClassName: qualityMeta.className,
-      });
-    }
-
-    tags.push({ text: categoryText[row.category] });
-    const equipSlot = translateEquipSlot(row.equipSlot);
-    if (equipSlot) tags.push({ text: `部位：${equipSlot}` });
-    const useType = translateUseType(row.useType);
-    if (useType) tags.push({ text: `类型：${useType}` });
-    const req = normalizeText(row.equipReqRealm);
-    if (req) tags.push({ text: `需求：${req}` });
-    return tags;
-  }, [row.category, row.equipReqRealm, row.equipSlot, row.quality, row.useType]);
-
-  const equipMetaLines = useMemo(() => {
-    if (!isEquip) return [];
-    const s = Math.max(0, Math.floor(Number(row.strengthenLevel) || 0));
-    const r = Math.max(0, Math.floor(Number(row.refineLevel) || 0));
-    return [`强化：${s > 0 ? `+${s}` : s}`, `精炼：${r > 0 ? `+${r}` : r}`];
-  }, [isEquip, row.refineLevel, row.strengthenLevel]);
-
-  const baseAttrLines = useMemo(() => {
-    if (!isEquip) return [];
-    const attrs = row.baseAttrs ?? {};
-    const entries = Object.entries(attrs).filter(([, v]) => typeof v === 'number' && Number.isFinite(v) && v !== 0);
-    entries.sort(([a], [b]) => a.localeCompare(b));
-    const lines = entries.map(([k, v]) => {
-      const label = translateKey(k) ?? (hasLatin(k) ? '' : k);
-      if (!label) return '';
-      const text = PERCENT_ATTR_KEYS.has(k) ? formatSignedPercent(v) : formatSignedNumber(v);
-      return `${label}：${text}`;
-    });
-    return limitLines(lines.filter(Boolean), 10);
-  }, [isEquip, row.baseAttrs]);
-
-  const affixes = useMemo(() => coerceAffixes(row.affixes), [row.affixes]);
-
-  const effectLines = useMemo(() => limitLines(formatLines(row.effectDefs), 10), [row.effectDefs]);
-
-  return (
-    <div className="market-tooltip">
-      <div className="market-tooltip-head">
-        <img className="market-tooltip-icon" src={row.icon} alt={row.name} />
-        <div className="market-tooltip-title">{row.name}</div>
-        {row.qty > 1 ? <div className="market-tooltip-count">x{row.qty}</div> : null}
-      </div>
-
-      {infoTags.length > 0 ? (
-        <div className="market-tooltip-tags">
-          {infoTags.map((tag, idx) => (
-            <span
-              key={`${idx}-${tag.text}`}
-              className={`market-tooltip-tag${tag.qualityClassName ? ` market-tooltip-tag--quality ${tag.qualityClassName}` : ''}`}
-            >
-              {tag.text}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      {!isEquip && desc ? <div className="market-tooltip-desc">{desc}</div> : null}
-
-      {equipMetaLines.length > 0 ? (
-        <div className="market-tooltip-section">
-          <div className="market-tooltip-section-title">装备信息</div>
-          <div className="market-tooltip-lines">
-            {equipMetaLines.map((x) => (
-              <div key={x} className="market-tooltip-line">
-                {x}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {isEquip ? (
-        <div className="market-tooltip-section">
-          <div className="market-tooltip-section-title">词条</div>
-          <div className="market-tooltip-lines">
-            <EquipmentAffixTooltipList
-              affixes={affixes}
-              identified={Boolean(row.identified)}
-              maxLines={10}
-              displayOptions={{
-                normalPrefix: '词条',
-                legendaryPrefix: '传奇词条',
-                keyTranslator: translateKey,
-                rejectLatinLabel: true,
-                percentKeys: PERCENT_ATTR_KEYS,
-                formatSignedNumber,
-                formatSignedPercent,
-              }}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {effectLines.length > 0 ? (
-        <div className="market-tooltip-section">
-          <div className="market-tooltip-section-title">效果</div>
-          <div className="market-tooltip-lines">
-            {effectLines.map((x, idx) => (
-              <div key={`${idx}-${x}`} className="market-tooltip-line">
-                {x}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {baseAttrLines.length > 0 ? (
-        <div className="market-tooltip-section">
-          <div className="market-tooltip-section-title">基础属性</div>
-          <div className="market-tooltip-lines">
-            {baseAttrLines.map((x, idx) => (
-              <div key={`${idx}-${x}`} className="market-tooltip-line">
-                {x}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
 const normalizeQuality = (value: unknown): ItemQuality => {
   return normalizeItemQualityName(value, '黄');
 };
@@ -435,17 +132,7 @@ const getQualityClassName = (value: unknown): string => {
 };
 
 const normalizeMarketCategory = (value: string | null | undefined): Exclude<MarketCategory, 'all'> => {
-  switch (value) {
-    case 'consumable':
-    case 'material':
-    case 'gem':
-    case 'equipment':
-    case 'skillbook':
-    case 'other':
-      return value;
-    default:
-      return 'other';
-  }
+  return normalizeMarketTooltipCategory(value);
 };
 
 const toNonNegativeIntegerOrUndefined = (value: string): number | undefined => {
@@ -596,14 +283,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [records, setRecords] = useState<TradeRecord[]>([]);
   const [recordsTotal, setRecordsTotal] = useState(0);
-  const marketItemTooltipClassNames = useMemo(
-    () =>
-      ({
-        root: 'market-tooltip-overlay game-tooltip-surface-root',
-        container: 'market-tooltip-overlay-container game-tooltip-surface-container',
-      }) as const,
-    [],
-  );
   const getMarketTooltipPopupContainer = useCallback(
     (triggerNode: HTMLElement): HTMLElement => {
       const modalRoot = triggerNode.closest('.market-modal');
@@ -1086,11 +765,11 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                   width: 220,
                   render: (_: string, row: ListingItem) => (
                     <Tooltip
-                      overlayClassName={marketItemTooltipClassNames.root}
-                      classNames={marketItemTooltipClassNames}
+                      overlayClassName={ITEM_TOOLTIP_CLASS_NAMES.root}
+                      classNames={ITEM_TOOLTIP_CLASS_NAMES}
                       placement="right"
                       mouseEnterDelay={0.15}
-                      title={<MarketItemTooltipContent row={row} />}
+                      title={<MarketItemTooltipContent item={row} />}
                       getPopupContainer={getMarketTooltipPopupContainer}
                     >
                       <div className={`market-item ${getQualityClassName(row.quality)}`}>
@@ -1226,11 +905,11 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                   key: 'name',
                   render: (_: string, row: ListingItem) => (
                     <Tooltip
-                      overlayClassName={marketItemTooltipClassNames.root}
-                      classNames={marketItemTooltipClassNames}
+                      overlayClassName={ITEM_TOOLTIP_CLASS_NAMES.root}
+                      classNames={ITEM_TOOLTIP_CLASS_NAMES}
                       placement="right"
                       mouseEnterDelay={0.15}
-                      title={<MarketItemTooltipContent row={row} />}
+                      title={<MarketItemTooltipContent item={row} />}
                       getPopupContainer={getMarketTooltipPopupContainer}
                     >
                       <div className={`market-item ${getQualityClassName(row.quality)}`}>

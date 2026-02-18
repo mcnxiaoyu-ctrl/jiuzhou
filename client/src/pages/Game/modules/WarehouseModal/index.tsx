@@ -3,11 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
 import { SERVER_BASE, getInventoryInfo, getInventoryItems, moveInventoryItem, type InventoryItemDto, type ItemDefLite } from '../../../../services/api';
 import { useIsMobile } from '../../shared/responsive';
-import EquipmentAffixTooltipList from '../../shared/EquipmentAffixTooltipList';
-import { formatSignedNumber, formatSignedPercent } from '../../shared/formatAttr';
-import { PERCENT_ATTR_KEYS, coerceAffixes, formatScalar, limitLines, normalizeText } from '../../shared/itemMetaFormat';
 import { getItemQualityMeta } from '../../shared/itemQuality';
 import InventoryItemCell from '../../shared/InventoryItemCell';
+import MarketItemTooltipContent, {
+  ITEM_TOOLTIP_CLASS_NAMES,
+  buildMarketTooltipCategoryLabel,
+  normalizeMarketTooltipCategory,
+  type MarketTooltipItemData,
+} from '../../shared/MarketItemTooltipContent';
 import './index.scss';
 
 type SlotSide = 'bag' | 'warehouse';
@@ -106,380 +109,28 @@ const clampSubIndex = (value: number): number => {
   return n;
 };
 
-const hasLatin = (value: string): boolean => /[A-Za-z]/.test(value);
-const RATING_SUFFIX = '_rating';
-
-const translateKey = (key: string): string | null => {
-  const k = key.trim();
-  const m: Record<string, string> = {
-    type: '类型',
-    value: '数值',
-    amount: '数量',
-    qty: '数量',
-    chance: '概率',
-    duration: '持续时间',
-    cooldown: '冷却',
-    seconds: '秒数',
-    percent: '百分比',
-    desc: '描述',
-    description: '描述',
-    name: '名称',
-
-    max_qixue: '气血上限',
-    max_lingqi: '灵气上限',
-    qixue: '气血',
-    lingqi: '灵气',
-
-    wugong: '物攻',
-    fagong: '法攻',
-    wufang: '物防',
-    fafang: '法防',
-    mingzhong: '命中',
-    shanbi: '闪避',
-    zhaojia: '招架',
-    baoji: '暴击',
-    baoshang: '暴伤',
-    kangbao: '抗暴',
-    zengshang: '增伤',
-    zhiliao: '治疗',
-    jianliao: '减疗',
-    xixue: '吸血',
-    lengque: '冷却',
-    sudu: '速度',
-    qixue_huifu: '气血恢复',
-    lingqi_huifu: '灵气恢复',
-    kongzhi_kangxing: '控制抗性',
-    jin_kangxing: '金抗性',
-    mu_kangxing: '木抗性',
-    shui_kangxing: '水抗性',
-    huo_kangxing: '火抗性',
-    tu_kangxing: '土抗性',
-    fuyuan: '福源',
-    shuxing_shuzhi: '属性数值',
-
-    attack: '攻击',
-    defense: '防御',
-    speed: '速度',
-    crit: '暴击',
-    crit_rate: '暴击率',
-    crit_damage: '暴击伤害',
-    dodge: '闪避',
-    hit: '命中',
-    hp: '气血',
-    mp: '灵气',
-  };
-  if (m[k]) return m[k];
-  if (k.endsWith(RATING_SUFFIX)) {
-    const baseKey = k.slice(0, -RATING_SUFFIX.length).trim();
-    const baseLabel = m[baseKey];
-    if (baseLabel) return `${baseLabel}等级`;
-  }
-  return null;
-};
-
-const EQUIP_ATTR_KEYS_BASE = [
-  'max_qixue',
-  'max_lingqi',
-  'wugong',
-  'fagong',
-  'wufang',
-  'fafang',
-  'mingzhong',
-  'shanbi',
-  'zhaojia',
-  'baoji',
-  'baoshang',
-  'kangbao',
-  'zengshang',
-  'zhiliao',
-  'jianliao',
-  'xixue',
-  'lengque',
-  'sudu',
-  'qixue_huifu',
-  'lingqi_huifu',
-  'kongzhi_kangxing',
-  'jin_kangxing',
-  'mu_kangxing',
-  'shui_kangxing',
-  'huo_kangxing',
-  'tu_kangxing',
-  'fuyuan',
-  'shuxing_shuzhi',
-] as const;
-
-const RATING_BASE_ATTR_KEYS = [
-  'shuxing_shuzhi',
-  'mingzhong',
-  'shanbi',
-  'zhaojia',
-  'baoji',
-  'baoshang',
-  'kangbao',
-  'zengshang',
-  'zhiliao',
-  'jianliao',
-  'xixue',
-  'lengque',
-  'kongzhi_kangxing',
-  'jin_kangxing',
-  'mu_kangxing',
-  'shui_kangxing',
-  'huo_kangxing',
-  'tu_kangxing',
-] as const;
-
-const EQUIP_ATTR_KEYS = new Set<string>([
-  ...EQUIP_ATTR_KEYS_BASE,
-  ...RATING_BASE_ATTR_KEYS.map((key) => `${key}${RATING_SUFFIX}`),
-]);
-
-const formatLines = (value: unknown, depth: number = 0): string[] => {
-  if (value === null || value === undefined) return [];
-  if (depth >= 3) {
-    const inline = formatScalar(value);
-    return [inline || '（内容较复杂）'];
-  }
-  const inline = formatScalar(value);
-  if (inline) return [inline];
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) return [];
-    const out: string[] = [];
-    for (let i = 0; i < value.length; i += 1) {
-      const item = value[i];
-      const itemInline = formatScalar(item);
-      if (itemInline) {
-        out.push(`${i + 1}. ${itemInline}`);
-        continue;
-      }
-      const nested = formatLines(item, depth + 1);
-      if (nested.length === 0) continue;
-      out.push(`${i + 1}.`);
-      out.push(...nested.map((x) => `  ${x}`));
-    }
-    return out;
-  }
-
-  if (typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    const entries = Object.entries(obj);
-    if (entries.length === 0) return [];
-    const out: string[] = [];
-    for (const [k, v] of entries) {
-      const kk = translateKey(k) ?? '';
-      if (!kk) continue;
-      if (EQUIP_ATTR_KEYS.has(k) && typeof v === 'number' && Number.isFinite(v)) {
-        const text = PERCENT_ATTR_KEYS.has(k) ? formatSignedPercent(v) : formatSignedNumber(v);
-        out.push(`${kk}：${text}`);
-        continue;
-      }
-      const vInline = formatScalar(v);
-      if (vInline) {
-        out.push(`${kk}：${vInline}`);
-        continue;
-      }
-      const nested = formatLines(v, depth + 1);
-      if (nested.length === 0) continue;
-      out.push(`${kk}：`);
-      out.push(...nested.map((x) => `  ${x}`));
-    }
-    return out;
-  }
-
-  return [];
-};
-
-const translateCategory = (value?: string | null): string => {
-  const raw = (value ?? '').trim();
-  if (!raw) return '';
-  const m: Record<string, string> = {
-    consumable: '消耗品',
-    material: '材料',
-    equipment: '装备',
-    skill: '技能',
-    quest: '任务',
-    misc: '杂物',
-    currency: '货币',
-  };
-  if (m[raw]) return m[raw];
-  if (hasLatin(raw)) return '';
-  return raw;
-};
-
-const translateUseType = (value?: string | null): string => {
-  const raw = (value ?? '').trim();
-  if (!raw) return '';
-  const m: Record<string, string> = {
-    use: '可使用',
-    open: '可开启',
-    equip: '可装备',
-    consume: '消耗',
-    none: '无',
-  };
-  if (m[raw]) return m[raw];
-  if (hasLatin(raw)) return '';
-  return raw;
-};
-
-const translateEquipSlot = (value?: string | null): string => {
-  const raw = (value ?? '').trim();
-  if (!raw) return '';
-  const m: Record<string, string> = {
-    weapon: '武器',
-    helmet: '头盔',
-    head: '头部',
-    armor: '衣服',
-    chest: '上衣',
-    pants: '裤子',
-    boots: '鞋子',
-    gloves: '护手',
-    belt: '腰带',
-    ring: '戒指',
-    amulet: '项链',
-    necklace: '项链',
-    bracelet: '手镯',
-  };
-  if (m[raw]) return m[raw];
-  if (hasLatin(raw)) return '';
-  return raw;
-};
-
-const WarehouseItemTooltip: React.FC<{ it: InventoryItemDto }> = ({ it }) => {
+const buildWarehouseTooltipItem = (it: InventoryItemDto): MarketTooltipItemData => {
   const def = it.def ?? null;
-  const icon = resolveIcon(def);
-  const title = def?.name || '未知物品';
-  const desc = normalizeText(def?.description);
-  const longDesc = normalizeText(def?.long_desc);
-
-  const qty = useMemo(() => Math.max(0, Number(it.qty || 0)), [it.qty]);
-  const isEquip = useMemo(() => {
-    const raw = String(def?.category ?? '').trim();
-    return raw === 'equipment' || raw === '装备';
-  }, [def?.category]);
-  const descText = useMemo(() => {
-    if (isEquip) return '';
-    return longDesc || desc;
-  }, [desc, isEquip, longDesc]);
-
-  const infoTags = useMemo(() => {
-    const tags: Array<{ text: string; qualityClassName?: string }> = [];
-    const qualityMeta = getItemQualityMeta(def?.quality ?? it.quality ?? null);
-    const category = translateCategory(def?.category);
-    const subCategory = translateCategory(def?.sub_category);
-    const equipSlot = translateEquipSlot(def?.equip_slot);
-    const useType = translateUseType(def?.use_type);
-    const stackMax = def?.stack_max;
-
-    if (qualityMeta) {
-      tags.push({
-        text: qualityMeta.label,
-        qualityClassName: qualityMeta.className,
-      });
-    }
-    if (category) tags.push({ text: subCategory ? `${category}/${subCategory}` : category });
-    if (equipSlot) tags.push({ text: `部位：${equipSlot}` });
-    if (useType) tags.push({ text: `类型：${useType}` });
-    if (typeof stackMax === 'number' && Number.isFinite(stackMax) && stackMax > 1) tags.push({ text: `堆叠：${stackMax}` });
-    return tags;
-  }, [def?.category, def?.equip_slot, def?.quality, def?.stack_max, def?.sub_category, def?.use_type, it.quality]);
-
-  const baseAttrLines = useMemo(() => limitLines(formatLines(def?.base_attrs), 10), [def?.base_attrs]);
-  const effectLines = useMemo(() => limitLines(formatLines(def?.effect_defs), 10), [def?.effect_defs]);
-  const equipMetaLines = useMemo(() => {
-    if (!isEquip) return [];
-    const s = Math.max(0, Math.floor(Number(it.strengthen_level) || 0));
-    const r = Math.max(0, Math.floor(Number(it.refine_level) || 0));
-    return [`强化：${s > 0 ? `+${s}` : s}`, `精炼：${r > 0 ? `+${r}` : r}`];
-  }, [isEquip, it.refine_level, it.strengthen_level]);
-
-  const affixes = useMemo(() => coerceAffixes(it.affixes), [it.affixes]);
-
-  return (
-    <div className="warehouse-tooltip">
-      <div className="warehouse-tooltip-head">
-        <img className="warehouse-tooltip-icon" src={icon} alt={title} />
-        <div className="warehouse-tooltip-title">{title}</div>
-        {qty > 1 ? <div className="warehouse-tooltip-count">x{qty}</div> : null}
-      </div>
-
-      {infoTags.length > 0 ? (
-        <div className="warehouse-tooltip-tags">
-          {infoTags.map((tag, idx) => (
-            <span
-              key={`${idx}-${tag.text}`}
-              className={`warehouse-tooltip-tag${tag.qualityClassName ? ` warehouse-tooltip-tag--quality ${tag.qualityClassName}` : ''}`}
-            >
-              {tag.text}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      {!isEquip && descText ? <div className="warehouse-tooltip-desc">{descText}</div> : null}
-
-      {equipMetaLines.length > 0 ? (
-        <div className="warehouse-tooltip-section">
-          <div className="warehouse-tooltip-section-title">装备信息</div>
-          <div className="warehouse-tooltip-lines">
-            {equipMetaLines.map((x) => (
-              <div key={x} className="warehouse-tooltip-line">
-                {x}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {isEquip ? (
-        <div className="warehouse-tooltip-section">
-          <div className="warehouse-tooltip-section-title">词条</div>
-          <div className="warehouse-tooltip-lines">
-            <EquipmentAffixTooltipList
-              affixes={affixes}
-              identified={Boolean(it.identified)}
-              maxLines={10}
-              displayOptions={{
-                normalPrefix: '词条',
-                legendaryPrefix: '传奇词条',
-                keyTranslator: translateKey,
-                rejectLatinLabel: true,
-                percentKeys: PERCENT_ATTR_KEYS,
-                formatSignedNumber,
-                formatSignedPercent,
-              }}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {effectLines.length > 0 ? (
-        <div className="warehouse-tooltip-section">
-          <div className="warehouse-tooltip-section-title">效果</div>
-          <div className="warehouse-tooltip-lines">
-            {effectLines.map((x, idx) => (
-              <div key={`${idx}-${x}`} className="warehouse-tooltip-line">
-                {x}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {baseAttrLines.length > 0 ? (
-        <div className="warehouse-tooltip-section">
-          <div className="warehouse-tooltip-section-title">基础属性</div>
-          <div className="warehouse-tooltip-lines">
-            {baseAttrLines.map((x, idx) => (
-              <div key={`${idx}-${x}`} className="warehouse-tooltip-line">
-                {x}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
+  const name = typeof def?.name === 'string' ? def.name.trim() : '';
+  return {
+    name: name || '未知物品',
+    icon: resolveIcon(def),
+    qty: Math.max(0, Number(it.qty || 0)),
+    quality: def?.quality ?? it.quality ?? null,
+    category: normalizeMarketTooltipCategory(def?.category),
+    categoryLabel: buildMarketTooltipCategoryLabel(def?.category, def?.sub_category),
+    description: def?.description ?? null,
+    longDesc: def?.long_desc ?? null,
+    effectDefs: def?.effect_defs ?? null,
+    baseAttrs: def?.base_attrs ?? null,
+    equipSlot: def?.equip_slot ?? null,
+    equipReqRealm: def?.equip_req_realm ?? def?.use_req_realm ?? null,
+    useType: def?.use_type ?? null,
+    strengthenLevel: it.strengthen_level,
+    refineLevel: it.refine_level,
+    identified: Boolean(it.identified),
+    affixes: it.affixes,
+  };
 };
 
 
@@ -520,6 +171,10 @@ const WarehouseModal: React.FC<WarehouseModalProps> = ({ open, onClose }) => {
     const slots = mobilePreview.side === 'bag' ? bagSlots : warehouseSlots;
     return slots[mobilePreview.index] ?? null;
   }, [bagSlots, mobilePreview, warehouseSlots]);
+  const mobilePreviewTooltipItem = useMemo(
+    () => (mobilePreviewItem ? buildWarehouseTooltipItem(mobilePreviewItem) : null),
+    [mobilePreviewItem],
+  );
   const mobilePreviewSide = mobilePreview?.side ?? null;
 
   const fetchAllInventoryItems = useCallback(async (location: 'bag' | 'warehouse'): Promise<InventoryItemDto[]> => {
@@ -656,6 +311,7 @@ const WarehouseModal: React.FC<WarehouseModalProps> = ({ open, onClose }) => {
     const name = it?.def?.name ?? '';
     const qty = Math.max(0, Number(it?.qty || 0));
     const icon = resolveIcon(it?.def ?? null);
+    const tooltipItem = it ? buildWarehouseTooltipItem(it) : null;
     const displayName = name || '未知物品';
     const displayQty = qty > 0 ? qty : 1;
     const qualityClassName = it ? getItemQualityMeta(it.quality ?? it.def?.quality ?? null)?.className ?? '' : '';
@@ -722,16 +378,13 @@ const WarehouseModal: React.FC<WarehouseModalProps> = ({ open, onClose }) => {
       />
     );
 
-    if (!it || isMobile) return node;
+    if (!tooltipItem || isMobile) return node;
 
     return (
       <Tooltip
-        overlayClassName="warehouse-item-tooltip game-tooltip-surface-root"
-        classNames={{
-          root: 'warehouse-item-tooltip game-tooltip-surface-root',
-          container: 'warehouse-item-tooltip-container game-tooltip-surface-container',
-        }}
-        title={<WarehouseItemTooltip it={it} />}
+        overlayClassName={ITEM_TOOLTIP_CLASS_NAMES.root}
+        classNames={ITEM_TOOLTIP_CLASS_NAMES}
+        title={<MarketItemTooltipContent item={tooltipItem} />}
         mouseEnterDelay={0.12}
         placement="right"
         getPopupContainer={(triggerNode) => {
@@ -848,16 +501,16 @@ const WarehouseModal: React.FC<WarehouseModalProps> = ({ open, onClose }) => {
           <Drawer
             title={mobilePreviewSide === 'bag' ? '背包物品' : '仓库物品'}
             placement="bottom"
-            open={Boolean(mobilePreviewItem)}
+            open={Boolean(mobilePreviewTooltipItem)}
             onClose={() => setMobilePreview(null)}
             height="56dvh"
             className="warehouse-mobile-preview-drawer"
             styles={{ body: { padding: '10px 12px 12px' } }}
           >
-            {mobilePreviewItem ? (
+            {mobilePreviewTooltipItem ? (
               <div className="warehouse-mobile-preview">
                 <div className="warehouse-mobile-preview-content">
-                  <WarehouseItemTooltip it={mobilePreviewItem} />
+                  <MarketItemTooltipContent item={mobilePreviewTooltipItem} />
                 </div>
                 <div className="warehouse-mobile-preview-actions">
                   <Button

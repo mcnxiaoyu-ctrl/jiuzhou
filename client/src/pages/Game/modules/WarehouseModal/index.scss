@@ -1,5 +1,4 @@
 @use '../../shared/tooltipSurfaceShared';
-@use '../../shared/itemQualityTag' as qualityTag;
 
 .warehouse-modal {
   .ant-modal-content {
@@ -216,150 +215,6 @@
   line-height: 18px;
 }
 
-.warehouse-item-tooltip,
-.warehouse-item-tooltip-container {
-  --game-tooltip-bg: var(--game-tooltip-surface-bg);
-  --game-tooltip-border: var(--game-tooltip-surface-border);
-  --game-tooltip-shadow: var(--game-tooltip-surface-shadow);
-  --game-tooltip-text: var(--game-tooltip-surface-text);
-  --game-tooltip-muted: var(--game-tooltip-surface-muted);
-  --game-tooltip-chip-bg: var(--game-tooltip-surface-chip-bg);
-  --game-tooltip-chip-border: var(--game-tooltip-surface-chip-border);
-  --game-tooltip-section-bg: var(--game-tooltip-surface-section-bg);
-  --game-tooltip-section-border: var(--game-tooltip-surface-section-border);
-  --game-tooltip-divider: var(--game-tooltip-surface-divider);
-  --game-tooltip-radius: 14px;
-  --game-tooltip-padding: 12px;
-  --game-tooltip-max-height: 560px;
-}
-
-@media screen and (min-width: 769px) {
-  .warehouse-tooltip .affix-tooltip-text {
-    white-space: nowrap;
-  }
-}
-
-.warehouse-tooltip {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.warehouse-tooltip-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.warehouse-tooltip-icon {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-  flex: 0 0 auto;
-}
-
-.warehouse-tooltip-title {
-  font-size: 14px;
-  font-weight: 900;
-  line-height: 20px;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.warehouse-tooltip-count {
-  flex: 0 0 auto;
-  height: 20px;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 900;
-  display: inline-flex;
-  align-items: center;
-  background: var(--game-tooltip-chip-bg);
-  border: 1px solid var(--game-tooltip-chip-border);
-}
-
-.warehouse-tooltip-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.warehouse-tooltip-tag {
-  height: 22px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 800;
-  display: inline-flex;
-  align-items: center;
-  background: var(--game-tooltip-chip-bg);
-  border: 1px solid var(--game-tooltip-chip-border);
-}
-
-.warehouse-tooltip-tag--quality {
-  @include qualityTag.quality-tag-chip(var(--game-tooltip-chip-bg));
-}
-
-.warehouse-tooltip-grid {
-  display: grid;
-  grid-template-columns: 78px 1fr;
-  gap: 6px 10px;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.warehouse-tooltip-label {
-  opacity: 0.8;
-}
-
-.warehouse-tooltip-value {
-  word-break: break-word;
-}
-
-.warehouse-tooltip-desc {
-  font-size: 12px;
-  line-height: 18px;
-  opacity: 0.92;
-  white-space: pre-wrap;
-}
-
-.warehouse-tooltip-desc.is-long {
-  opacity: 0.86;
-}
-
-.warehouse-tooltip-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.warehouse-tooltip-section-title {
-  font-size: 12px;
-  font-weight: 900;
-  opacity: 0.9;
-}
-
-.warehouse-tooltip-lines {
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--game-tooltip-section-bg);
-  border: 1px solid var(--game-tooltip-section-border);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.warehouse-tooltip-line {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 .warehouse-mobile-preview {
   display: flex;
   flex-direction: column;
@@ -565,15 +420,6 @@
     line-height: 16px;
   }
 
-  .warehouse-item-tooltip {
-    max-width: min(92vw, 360px);
-  }
-
-  .warehouse-item-tooltip .ant-tooltip-inner {
-    max-width: min(92vw, 360px);
-    max-height: min(56dvh, 420px);
-  }
-
   .warehouse-mobile-preview-drawer .ant-drawer-content {
     background: var(--panel-bg);
   }
@@ -600,25 +446,25 @@
     padding-right: 2px;
   }
 
-  .warehouse-mobile-preview .warehouse-tooltip {
+  .warehouse-mobile-preview .item-tooltip {
     gap: 8px;
   }
 
-  .warehouse-mobile-preview .warehouse-tooltip-title {
+  .warehouse-mobile-preview .item-tooltip-title {
     font-size: 13px;
   }
 
-  .warehouse-mobile-preview .warehouse-tooltip-tags {
+  .warehouse-mobile-preview .item-tooltip-tags {
     gap: 6px;
   }
 
-  .warehouse-mobile-preview .warehouse-tooltip-tag {
+  .warehouse-mobile-preview .item-tooltip-tag {
     height: 20px;
     padding: 0 8px;
     font-size: 11px;
   }
 
-  .warehouse-mobile-preview .warehouse-tooltip-desc {
+  .warehouse-mobile-preview .item-tooltip-desc {
     font-size: 11px;
     line-height: 16px;
   }
