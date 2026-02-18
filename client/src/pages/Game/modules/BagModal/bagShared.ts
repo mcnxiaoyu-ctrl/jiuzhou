@@ -52,6 +52,8 @@ export type EquipmentAffix = {
   params?: Record<string, string | number | boolean>;
   tier?: number;
   value?: number;
+  roll_ratio?: number;
+  roll_percent?: number;
   value_type?: "raw" | "rating" | string;
   rating_attr_key?: string;
   is_legendary?: boolean;
@@ -389,6 +391,8 @@ export const coerceAffixes = (value: unknown): EquipmentAffix[] => {
       apply_type: row.apply_type,
       tier: row.tier,
       value: row.value,
+      roll_ratio: row.roll_ratio,
+      roll_percent: row.roll_percent,
       value_type: row.value_type,
       rating_attr_key: row.rating_attr_key,
       is_legendary: row.is_legendary,
@@ -470,6 +474,88 @@ export const formatEquipmentAffixLine = (affix: EquipmentAffix): string => {
     formatSignedPercent,
   });
   return displayText ? displayText.fullText : "词条 T-：未知";
+};
+
+const clampPercent = (value: number): number => {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+};
+
+/**
+ * 读取词条 roll 百分比，兼容后端返回的 ratio(0~1) 与 percent(0~100) 两种格式。
+ */
+export const getAffixRollPercent = (affix: EquipmentAffix): number | null => {
+  if (typeof affix.roll_percent === "number" && Number.isFinite(affix.roll_percent)) {
+    return clampPercent(affix.roll_percent);
+  }
+  if (typeof affix.roll_ratio === "number" && Number.isFinite(affix.roll_ratio)) {
+    return clampPercent(affix.roll_ratio * 100);
+  }
+  return null;
+};
+
+export const formatAffixRollPercent = (rollPercent: number | null): string => {
+  if (rollPercent === null || !Number.isFinite(rollPercent)) return "--";
+  const normalized = clampPercent(rollPercent);
+  if (Math.abs(normalized - Math.round(normalized)) <= 1e-6) {
+    return `${Math.round(normalized)}%`;
+  }
+  return `${Number(normalized.toFixed(2))}%`;
+};
+
+/**
+ * 线性插值计算 RGB 颜色（用于分段渐变）。
+ */
+type Rgb = readonly [number, number, number];
+
+const lerpChannel = (start: number, end: number, progress: number): number => {
+  return Math.round(start + (end - start) * progress);
+};
+
+const mixRgb = (start: Rgb, end: Rgb, progress: number): Rgb => {
+  const t = Math.max(0, Math.min(1, progress));
+  return [
+    lerpChannel(start[0], end[0], t),
+    lerpChannel(start[1], end[1], t),
+    lerpChannel(start[2], end[2], t),
+  ] as const;
+};
+
+const rgbToCss = (rgb: Rgb): string => {
+  return `rgb(${rgb[0]} ${rgb[1]} ${rgb[2]})`;
+};
+
+type RollColorSegment = {
+  start: number;
+  end: number;
+  from: Rgb;
+  to: Rgb;
+};
+
+const ROLL_COLOR_SEGMENTS: ReadonlyArray<RollColorSegment> = [
+  { start: 0, end: 25, from: [56, 214, 124], to: [22, 163, 74] }, // 绿
+  { start: 25, end: 50, from: [96, 165, 250], to: [37, 99, 235] }, // 蓝
+  { start: 50, end: 75, from: [196, 181, 253], to: [126, 34, 206] }, // 紫
+  { start: 75, end: 100, from: [248, 113, 113], to: [153, 27, 27] }, // 红
+];
+
+/**
+ * ROLL 颜色分段规则（按你的要求）：
+ * 1) 0~25% 绿渐变
+ * 2) 25~50% 蓝渐变
+ * 3) 50~75% 紫渐变
+ * 4) 75~100% 红渐变（80% 与 100% 明显不同）
+ */
+export const getAffixRollColor = (rollPercent: number | null): string | null => {
+  if (rollPercent === null || !Number.isFinite(rollPercent)) return null;
+  const normalized = clampPercent(rollPercent);
+  const segment =
+    ROLL_COLOR_SEGMENTS.find((item) => normalized >= item.start && normalized <= item.end) ??
+    ROLL_COLOR_SEGMENTS[ROLL_COLOR_SEGMENTS.length - 1];
+  if (!segment) return null;
+  const span = Math.max(1, segment.end - segment.start);
+  const progress = (normalized - segment.start) / span;
+  return rgbToCss(mixRgb(segment.from, segment.to, progress));
 };
 
 const toFiniteNumber = (value: unknown): number | null => {

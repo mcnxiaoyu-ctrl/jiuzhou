@@ -1,0 +1,86 @@
+/**
+ * ROLL 视觉共享样式。
+ * 作用：统一桌面与移动端的 ROLL 百分比行结构与进度条外观，避免重复维护。
+ */
+
+@mixin roll-theme-vars() {
+  --roll-color-green-start: #38d67c;
+  --roll-color-green-end: #16a34a;
+  --roll-color-blue-start: #60a5fa;
+  --roll-color-blue-end: #2563eb;
+  --roll-color-purple-start: #c4b5fd;
+  --roll-color-purple-end: #7e22ce;
+  --roll-color-red-start: #f87171;
+  --roll-color-red-end: #991b1b;
+}
+
+@mixin roll-layout(
+  $main-selector,
+  $row-selector,
+  $label-selector,
+  $value-selector,
+  $track-selector,
+  $fill-selector,
+  $gap-size,
+  $value-min-width,
+  $track-height
+) {
+  #{$main-selector} {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: $gap-size;
+  }
+
+  #{$row-selector} {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  #{$label-selector} {
+    font-size: 10px;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+    font-weight: 700;
+  }
+
+  #{$value-selector} {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-color);
+    min-width: $value-min-width;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #{$track-selector} {
+    position: relative;
+    height: $track-height;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--roll-color-green-start) 24%, var(--panel-bg-soft)) 0%,
+      color-mix(in srgb, var(--roll-color-green-end) 24%, var(--panel-bg-soft)) 25%,
+      color-mix(in srgb, var(--roll-color-blue-start) 24%, var(--panel-bg-soft)) 25%,
+      color-mix(in srgb, var(--roll-color-blue-end) 24%, var(--panel-bg-soft)) 50%,
+      color-mix(in srgb, var(--roll-color-purple-start) 24%, var(--panel-bg-soft)) 50%,
+      color-mix(in srgb, var(--roll-color-purple-end) 24%, var(--panel-bg-soft)) 75%,
+      color-mix(in srgb, var(--roll-color-red-start) 24%, var(--panel-bg-soft)) 75%,
+      color-mix(in srgb, var(--roll-color-red-end) 24%, var(--panel-bg-soft)) 100%
+    );
+    overflow: hidden;
+  }
+
+  #{$fill-selector} {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    min-width: 2px;
+    border-radius: inherit;
+    transition: width 0.25s ease, background 0.25s ease;
+  }
+}

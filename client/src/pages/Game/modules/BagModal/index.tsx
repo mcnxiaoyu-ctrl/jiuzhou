@@ -33,7 +33,10 @@ import {
   categoryLabels,
   collectBatchDisassembleCandidates,
   collectGemCandidates,
+  formatAffixRollPercent,
   formatEquipmentAffixLine,
+  getAffixRollColor,
+  getAffixRollPercent,
   getEnhanceSuccessRatePercent,
   getEquipSlotLabel,
   getRefineSuccessRatePercent,
@@ -1595,6 +1598,8 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                 <div className="bag-reroll-affix-list">
                   {rerollState.affixes.map((affix, index) => {
                     const locked = rerollState.lockIndexSet.has(index);
+                    const rollPercent = getAffixRollPercent(affix);
+                    const rollColor = getAffixRollColor(rollPercent);
                     return (
                       <button
                         key={`${index}-${affix.key ?? 'affix'}`}
@@ -1604,7 +1609,27 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                         disabled={rerollSubmitting || !!activeItem?.locked}
                       >
                         <span className="bag-reroll-affix-index">#{index + 1}</span>
-                        <span className="bag-reroll-affix-text">{formatEquipmentAffixLine(affix)}</span>
+                        <span className="bag-reroll-affix-main">
+                          <span className="bag-reroll-affix-text">{formatEquipmentAffixLine(affix)}</span>
+                          <span className="bag-reroll-affix-roll">
+                            <span className="bag-reroll-affix-roll-label">ROLL</span>
+                            <span
+                              className="bag-reroll-affix-roll-value"
+                              style={rollColor ? { color: rollColor } : undefined}
+                            >
+                              {formatAffixRollPercent(rollPercent)}
+                            </span>
+                            <span className="bag-reroll-affix-roll-track" aria-hidden="true">
+                              <span
+                                className="bag-reroll-affix-roll-fill"
+                                style={{
+                                  width: `${rollPercent ?? 0}%`,
+                                  background: rollColor ?? "var(--border-color-soft)",
+                                }}
+                              />
+                            </span>
+                          </span>
+                        </span>
                         <span className="bag-reroll-affix-lock">{locked ? '已锁定' : '点击锁定'}</span>
                       </button>
                     );

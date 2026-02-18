@@ -46,6 +46,26 @@ const clampInt = (value: number, min: number, max: number): number => {
   return Math.max(min, Math.min(max, Math.floor(num)));
 };
 
+const clampNumber = (value: number, min: number, max: number): number => {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+};
+
+const resolveAffixRollRatio = (
+  sampledValue: number,
+  min: number,
+  max: number,
+): number => {
+  if (!Number.isFinite(sampledValue) || !Number.isFinite(min) || !Number.isFinite(max)) {
+    return 0;
+  }
+  const low = Math.min(min, max);
+  const high = Math.max(min, max);
+  const span = high - low;
+  if (span <= Number.EPSILON) return 1;
+  return clampNumber((sampledValue - low) / span, 0, 1);
+};
+
 const normalizeQualityByRank = (qualityRankRaw: unknown): Quality => {
   const rank = clampInt(toNumber(qualityRankRaw, 1), 1, 4);
   return QUALITY_BY_RANK[rank] ?? '黄';
@@ -160,6 +180,19 @@ export const parseGeneratedAffixesForReroll = (raw: unknown): GeneratedAffix[] =
     if (valueTypeRaw === 'raw' || valueTypeRaw === 'rating') {
       parsed.value_type = valueTypeRaw;
     }
+    const rollRatioRaw = toNumber(row.roll_ratio, NaN);
+    const rollPercentRaw = toNumber(row.roll_percent, NaN);
+    if (Number.isFinite(rollRatioRaw)) {
+      parsed.roll_ratio = clampNumber(rollRatioRaw, 0, 1);
+    }
+    if (Number.isFinite(rollPercentRaw)) {
+      parsed.roll_percent = clampNumber(rollPercentRaw, 0, 100);
+    }
+    if (parsed.roll_ratio === undefined && parsed.roll_percent !== undefined) {
+      parsed.roll_ratio = clampNumber(parsed.roll_percent / 100, 0, 1);
+    } else if (parsed.roll_percent === undefined && parsed.roll_ratio !== undefined) {
+      parsed.roll_percent = clampNumber(parsed.roll_ratio * 100, 0, 100);
+    }
     const ratingAttrKeyRaw = typeof row.rating_attr_key === 'string' ? row.rating_attr_key.trim() : '';
     if (ratingAttrKeyRaw) {
       parsed.rating_attr_key = ratingAttrKeyRaw;
@@ -184,17 +217,21 @@ export const parseGeneratedAffixesForReroll = (raw: unknown): GeneratedAffix[] =
   return out;
 };
 
-export const loadAffixPoolForRerollTx = async (
-  client: PoolClient,
-  poolId: string
-): Promise<RerollAffixPool | null> => {
-  void client;
+export const loadAffixPoolForReroll = (poolId: string): RerollAffixPool | null => {
   const row = getAffixPoolDefinitions().find((entry) => entry.enabled !== false && entry.id === poolId) ?? null;
   if (!row || !row.rules || !Array.isArray(row.affixes)) return null;
   return {
     rules: row.rules as AffixPoolRules,
     affixes: row.affixes as AffixDef[],
   };
+};
+
+export const loadAffixPoolForRerollTx = async (
+  client: PoolClient,
+  poolId: string
+): Promise<RerollAffixPool | null> => {
+  void client;
+  return loadAffixPoolForReroll(poolId);
 };
 
 class SeededRandom {
@@ -250,6 +287,8 @@ const rollAffixValue = (rng: SeededRandom, affix: AffixDef, realmRank: number, a
   const value = Number.isInteger(min) && Number.isInteger(max)
     ? rng.nextInt(min, max)
     : rng.nextRange(min, max);
+  const rollRatio = resolveAffixRollRatio(value, min, max);
+  const rollPercent = Number((rollRatio * 100).toFixed(2));
   const rawScaledValue = Number.isFinite(attrFactor) && attrFactor !== 1
     ? value * attrFactor
     : value;
@@ -271,6 +310,8 @@ const rollAffixValue = (rng: SeededRandom, affix: AffixDef, realmRank: number, a
     apply_type: affix.apply_type,
     tier: Math.max(1, Math.floor(toNumber(selectedTier.tier, 1))),
     value: scaledValue,
+    roll_ratio: rollRatio,
+    roll_percent: rollPercent,
     is_legendary: Boolean(affix.is_legendary),
     description: typeof selectedTier.description === 'string' ? selectedTier.description : undefined,
   };
@@ -343,6 +384,114 @@ const convertGeneratedAffixToRating = (affix: GeneratedAffix, realmRank: number)
     value_type: 'rating',
     rating_attr_key: primaryRatingAttrKey,
   };
+};
+
+const resolveComparableAffixValue = (params: {
+  affixDef: AffixDef;
+  sampledTierValue: number;
+  attrFactor: number;
+  realmRank: number;
+}): number | null => {
+  const rawScaledValue =
+    Number.isFinite(params.attrFactor) && params.attrFactor !== 1
+      ? params.sampledTierValue * params.attrFactor
+      : params.sampledTierValue;
+  const resolved = buildAffixValueAndModifiers({
+    applyType: params.affixDef.apply_type,
+    keyRaw: params.affixDef.key,
+    effectType: params.affixDef.effect_type,
+    params: params.affixDef.params,
+    modifiersRaw: params.affixDef.modifiers,
+    rawScaledValue,
+  });
+  if (!resolved) return null;
+
+  const synthetic: GeneratedAffix = {
+    key: params.affixDef.key,
+    name: params.affixDef.name,
+    apply_type: params.affixDef.apply_type,
+    tier: 1,
+    value: resolved.value,
+    modifiers: resolved.modifiers.length > 0 ? resolved.modifiers : undefined,
+  };
+  const converted = convertGeneratedAffixToRating(synthetic, params.realmRank);
+  const comparable = Number(converted.value);
+  return Number.isFinite(comparable) ? comparable : null;
+};
+
+/**
+ * 为词条补齐 roll 字段。
+ * 使用场景：
+ * 1) 新生成词条：已经带 roll 时仅做范围归一化；
+ * 2) 历史词条：如果缺失 roll，会根据词条定义的 tier 区间反推当前百分比。
+ */
+export const enrichAffixesWithRollMeta = (params: {
+  affixes: GeneratedAffix[];
+  affixDefs: AffixDef[];
+  realmRank: number;
+  attrFactor: number;
+}): GeneratedAffix[] => {
+  const byKey = new Map<string, AffixDef>();
+  for (const affixDef of params.affixDefs) {
+    const key = String(affixDef.key || '').trim();
+    if (!key || byKey.has(key)) continue;
+    byKey.set(key, affixDef);
+  }
+
+  return params.affixes.map((affix) => {
+    const rawPercent = toNumber(affix.roll_percent, NaN);
+    const rawRatio = toNumber(affix.roll_ratio, NaN);
+    if (Number.isFinite(rawPercent) || Number.isFinite(rawRatio)) {
+      const normalizedRatio = Number.isFinite(rawRatio)
+        ? clampNumber(rawRatio, 0, 1)
+        : clampNumber(rawPercent / 100, 0, 1);
+      const normalizedPercent = Number((normalizedRatio * 100).toFixed(2));
+      return {
+        ...affix,
+        roll_ratio: normalizedRatio,
+        roll_percent: normalizedPercent,
+      };
+    }
+
+    const key = String(affix.key || '').trim();
+    if (!key) return affix;
+    const affixDef = byKey.get(key);
+    if (!affixDef || !Array.isArray(affixDef.tiers) || affixDef.tiers.length <= 0) {
+      return affix;
+    }
+
+    const targetTier = clampInt(toNumber(affix.tier, 1), 1, 99);
+    const tierDef = affixDef.tiers.find((tier) => clampInt(toNumber(tier.tier, 1), 1, 99) === targetTier);
+    if (!tierDef) return affix;
+
+    const tierMin = toNumber(tierDef.min, NaN);
+    const tierMax = toNumber(tierDef.max, NaN);
+    if (!Number.isFinite(tierMin) || !Number.isFinite(tierMax)) return affix;
+
+    const minComparable = resolveComparableAffixValue({
+      affixDef,
+      sampledTierValue: tierMin,
+      attrFactor: params.attrFactor,
+      realmRank: params.realmRank,
+    });
+    const maxComparable = resolveComparableAffixValue({
+      affixDef,
+      sampledTierValue: tierMax,
+      attrFactor: params.attrFactor,
+      realmRank: params.realmRank,
+    });
+    if (minComparable === null || maxComparable === null) return affix;
+
+    const currentComparable = toNumber(affix.value, NaN);
+    if (!Number.isFinite(currentComparable)) return affix;
+
+    const rollRatio = resolveAffixRollRatio(currentComparable, minComparable, maxComparable);
+    return {
+      ...affix,
+      roll_ratio: rollRatio,
+      roll_percent: Number((rollRatio * 100).toFixed(2)),
+    };
+  });
 };
 
 const buildMutexGroups = (rules: AffixPoolRules): string[][] => {

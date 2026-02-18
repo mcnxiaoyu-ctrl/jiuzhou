@@ -70,6 +70,30 @@ const clampInt = (value: number, min: number, max: number): number => {
   return Math.max(min, Math.min(max, Math.floor(v)));
 };
 
+const clampNumber = (value: number, min: number, max: number): number => {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+};
+
+/**
+ * 根据词条采样值计算 roll 比例（0~1）。
+ * 当 min/max 相等时，视为固定词条，直接返回 1（100%）。
+ */
+const resolveAffixRollRatio = (
+  sampledValue: number,
+  min: number,
+  max: number,
+): number => {
+  if (!Number.isFinite(sampledValue) || !Number.isFinite(min) || !Number.isFinite(max)) {
+    return 0;
+  }
+  const low = Math.min(min, max);
+  const high = Math.max(min, max);
+  const span = high - low;
+  if (span <= Number.EPSILON) return 1;
+  return clampNumber((sampledValue - low) / span, 0, 1);
+};
+
 const getStrengthenMultiplier = (strengthenLevel: number): number => {
   const lv = clampInt(strengthenLevel, 0, 15);
   return 1 + lv * 0.03;
@@ -132,6 +156,10 @@ export interface GeneratedAffix {
   apply_type: AffixApplyType;
   tier: number;
   value: number;
+  /** 词条随机区间内的ROLL比例（0~1）。 */
+  roll_ratio?: number;
+  /** 词条随机区间内的ROLL百分比（0~100）。 */
+  roll_percent?: number;
   is_legendary?: boolean;
   description?: string;
   trigger?: 'on_turn_start' | 'on_skill' | 'on_hit' | 'on_crit' | 'on_be_hit' | 'on_heal';
@@ -489,6 +517,8 @@ const rollAffixValue = (
   const sampledValue = Number.isInteger(min) && Number.isInteger(max)
     ? rng.nextInt(min, max)
     : rng.nextRange(min, max);
+  const rollRatio = resolveAffixRollRatio(sampledValue, min, max);
+  const rollPercent = Number((rollRatio * 100).toFixed(2));
   const rawScaledValue = Number.isFinite(attrFactor) && attrFactor !== 1
     ? sampledValue * attrFactor
     : sampledValue;
@@ -510,6 +540,8 @@ const rollAffixValue = (
     apply_type: affix.apply_type,
     tier: selectedTier.tier,
     value: scaledValue,
+    roll_ratio: rollRatio,
+    roll_percent: rollPercent,
     is_legendary: affix.is_legendary,
     description: selectedTier.description
   };

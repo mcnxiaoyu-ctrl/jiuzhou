@@ -1,3 +1,5 @@
+@use './rerollRollShared' as rerollRoll;
+
 /* ═══════════════════════════════════════════════════
    MobileBagModal - 移动端背包界面样式
    全屏浮层，底部弹出式物品详情
@@ -5,6 +7,8 @@
 
 /* ── 遮罩 ── */
 .mbag-overlay {
+  @include rerollRoll.roll-theme-vars();
+
   position: fixed;
   inset: 0;
   z-index: 1000;
@@ -688,6 +692,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+@include rerollRoll.roll-layout(
+  '.mbag-sheet-reroll-lock-main',
+  '.mbag-sheet-reroll-lock-roll',
+  '.mbag-sheet-reroll-lock-roll-label',
+  '.mbag-sheet-reroll-lock-roll-value',
+  '.mbag-sheet-reroll-lock-roll-track',
+  '.mbag-sheet-reroll-lock-roll-fill',
+  4px,
+  38px,
+  5px
+);
 
 .mbag-sheet-reroll-lock-tag {
   color: var(--text-secondary);

@@ -16,6 +16,13 @@ import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import {
   buildEquipmentDisplayBaseAttrs,
 } from '../services/equipmentGrowthRules.js';
+import {
+  enrichAffixesWithRollMeta,
+  getEquipRealmRankForReroll,
+  getQualityMultiplierForReroll,
+  loadAffixPoolForReroll,
+  parseGeneratedAffixesForReroll,
+} from '../services/equipmentAffixRerollService.js';
 import { resolveQualityRankFromName } from '../services/shared/itemQuality.js';
 import { parsePositiveInt } from '../services/shared/httpParam.js';
 import { getCharacterComputedByCharacterId } from '../services/characterComputedService.js';
@@ -154,6 +161,7 @@ router.get('/items', async (req: Request, res: Response) => {
       }
       
       const defMap = staticDefMap;
+      const affixPoolCache = new Map<string, ReturnType<typeof loadAffixPoolForReroll>>();
       const itemsWithDef = result.items.map((item: any) => {
         const def = defMap.get(item.item_def_id) as any;
         if (!def) return { ...item, def: undefined };
@@ -171,21 +179,52 @@ router.get('/items', async (req: Request, res: Response) => {
 
         if (def.category !== 'equipment') return { ...item, def: baseDef };
 
+        const defQualityRank = resolveQualityRankFromName(def.quality, 1);
+        const resolvedQualityRank = Math.max(1, Math.floor(Number(item.quality_rank) || defQualityRank));
+
         const displayBaseAttrs = buildEquipmentDisplayBaseAttrs({
           baseAttrsRaw: def.base_attrs,
-          defQualityRankRaw: resolveQualityRankFromName(def.quality, 1),
-          resolvedQualityRankRaw: item.quality_rank,
+          defQualityRankRaw: defQualityRank,
+          resolvedQualityRankRaw: resolvedQualityRank,
           strengthenLevelRaw: item.strengthen_level,
           refineLevelRaw: item.refine_level,
           socketedGemsRaw: item.socketed_gems,
         });
+
+        let normalizedAffixes = parseGeneratedAffixesForReroll(item.affixes);
+        const affixPoolId = typeof def.affix_pool_id === 'string' ? def.affix_pool_id.trim() : '';
+        if (normalizedAffixes.length > 0 && affixPoolId) {
+          if (!affixPoolCache.has(affixPoolId)) {
+            affixPoolCache.set(affixPoolId, loadAffixPoolForReroll(affixPoolId));
+          }
+          const affixPool = affixPoolCache.get(affixPoolId);
+          if (affixPool) {
+            const realmRank = getEquipRealmRankForReroll(def.equip_req_realm);
+            const resolvedQualityMultiplier = getQualityMultiplierForReroll(resolvedQualityRank);
+            const defQualityMultiplier = getQualityMultiplierForReroll(defQualityRank);
+            const attrFactor =
+              Number.isFinite(defQualityMultiplier) && defQualityMultiplier > 0
+                ? resolvedQualityMultiplier / defQualityMultiplier
+                : 1;
+            normalizedAffixes = enrichAffixesWithRollMeta({
+              affixes: normalizedAffixes,
+              affixDefs: affixPool.affixes,
+              realmRank,
+              attrFactor,
+            });
+          }
+        }
         const mergedDef = {
           ...baseDef,
           base_attrs_raw: def.base_attrs,
           base_attrs: displayBaseAttrs,
         };
 
-        return { ...item, def: mergedDef };
+        return {
+          ...item,
+          affixes: normalizedAffixes.length > 0 ? normalizedAffixes : item.affixes,
+          def: mergedDef,
+        };
       });
       
       res.json({ 

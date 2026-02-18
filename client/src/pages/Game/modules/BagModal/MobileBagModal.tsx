@@ -42,7 +42,10 @@ import {
   categoryLabels,
   collectBatchDisassembleCandidates,
   collectGemCandidates,
+  formatAffixRollPercent,
   formatEquipmentAffixLine,
+  getAffixRollColor,
+  getAffixRollPercent,
   getEnhanceSuccessRatePercent,
   getRefineSuccessRatePercent,
   isDisassemblableBagItem,
@@ -1029,6 +1032,8 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
                 <div className="mbag-sheet-effect-list">
                   {rerollState.affixes.map((affix, index) => {
                     const locked = rerollState.lockIndexSet.has(index);
+                    const rollPercent = getAffixRollPercent(affix);
+                    const rollColor = getAffixRollColor(rollPercent);
                     return (
                       <button
                         key={`${index}-${affix.key ?? 'affix'}`}
@@ -1037,7 +1042,27 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
                         onClick={() => handleToggleRerollLock(index)}
                       >
                         <span className="mbag-sheet-reroll-lock-index">#{index + 1}</span>
-                        <span className="mbag-sheet-reroll-lock-text">{formatEquipmentAffixLine(affix)}</span>
+                        <span className="mbag-sheet-reroll-lock-main">
+                          <span className="mbag-sheet-reroll-lock-text">{formatEquipmentAffixLine(affix)}</span>
+                          <span className="mbag-sheet-reroll-lock-roll">
+                            <span className="mbag-sheet-reroll-lock-roll-label">ROLL</span>
+                            <span
+                              className="mbag-sheet-reroll-lock-roll-value"
+                              style={rollColor ? { color: rollColor } : undefined}
+                            >
+                              {formatAffixRollPercent(rollPercent)}
+                            </span>
+                            <span className="mbag-sheet-reroll-lock-roll-track" aria-hidden="true">
+                              <span
+                                className="mbag-sheet-reroll-lock-roll-fill"
+                                style={{
+                                  width: `${rollPercent ?? 0}%`,
+                                  background: rollColor ?? "var(--border-color-soft)",
+                                }}
+                              />
+                            </span>
+                          </span>
+                        </span>
                         <span className="mbag-sheet-reroll-lock-tag">{locked ? '已锁定' : '点击锁定'}</span>
                       </button>
                     );

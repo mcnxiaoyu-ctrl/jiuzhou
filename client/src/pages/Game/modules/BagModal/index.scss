@@ -1,3 +1,5 @@
+@use './rerollRollShared' as rerollRoll;
+
 .bag-modal {
   .ant-modal-content {
     padding: 0;
@@ -7,6 +9,8 @@
 }
 
 .bag-enhance-modal {
+  @include rerollRoll.roll-theme-vars();
+
   .ant-modal-content {
     background: var(--panel-bg);
     color: var(--text-color);
@@ -305,6 +309,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  @include rerollRoll.roll-layout(
+    '.bag-reroll-affix-main',
+    '.bag-reroll-affix-roll',
+    '.bag-reroll-affix-roll-label',
+    '.bag-reroll-affix-roll-value',
+    '.bag-reroll-affix-roll-track',
+    '.bag-reroll-affix-roll-fill',
+    5px,
+    44px,
+    6px
+  );
 
   .bag-reroll-affix-lock {
     font-size: 11px;

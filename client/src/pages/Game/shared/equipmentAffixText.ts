@@ -15,6 +15,8 @@ export type EquipmentAffixTextInput = {
   apply_type?: string;
   tier?: number;
   value?: number;
+  roll_ratio?: number;
+  roll_percent?: number;
   value_type?: 'raw' | 'rating' | string;
   rating_attr_key?: string;
   is_legendary?: boolean;

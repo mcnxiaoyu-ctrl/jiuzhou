@@ -111,6 +111,18 @@ export const coerceAffixes = (value: unknown): EquipmentAffixTextInput[] => {
           : typeof raw.value === 'string'
           ? Number(raw.value)
           : undefined;
+      const parsedRollRatio =
+        typeof raw.roll_ratio === 'number'
+          ? raw.roll_ratio
+          : typeof raw.roll_ratio === 'string'
+          ? Number(raw.roll_ratio)
+          : undefined;
+      const parsedRollPercent =
+        typeof raw.roll_percent === 'number'
+          ? raw.roll_percent
+          : typeof raw.roll_percent === 'string'
+          ? Number(raw.roll_percent)
+          : undefined;
 
       const modifiersRaw = Array.isArray(raw.modifiers) ? raw.modifiers : [];
       const modifierKeys = new Set<string>();
@@ -140,6 +152,12 @@ export const coerceAffixes = (value: unknown): EquipmentAffixTextInput[] => {
           typeof raw.apply_type === 'string' ? raw.apply_type : undefined,
         tier: Number.isFinite(tier ?? NaN) ? tier : undefined,
         value: Number.isFinite(parsedValue ?? NaN) ? parsedValue : undefined,
+        roll_ratio: Number.isFinite(parsedRollRatio ?? NaN)
+          ? Math.max(0, Math.min(1, parsedRollRatio ?? 0))
+          : undefined,
+        roll_percent: Number.isFinite(parsedRollPercent ?? NaN)
+          ? Math.max(0, Math.min(100, parsedRollPercent ?? 0))
+          : undefined,
         value_type:
           typeof raw.value_type === 'string' ? raw.value_type : undefined,
         rating_attr_key:

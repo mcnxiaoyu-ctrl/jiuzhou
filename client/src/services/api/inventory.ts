@@ -208,6 +208,10 @@ export interface InventoryRerolledAffixDto {
   apply_type: 'flat' | 'percent' | 'special';
   tier: number;
   value: number;
+  /** 词条区间 roll 比例，范围 0~1。 */
+  roll_ratio?: number;
+  /** 词条区间 roll 百分比，范围 0~100。 */
+  roll_percent?: number;
   is_legendary?: boolean;
   description?: string;
   trigger?: 'on_turn_start' | 'on_skill' | 'on_hit' | 'on_crit' | 'on_be_hit' | 'on_heal';
