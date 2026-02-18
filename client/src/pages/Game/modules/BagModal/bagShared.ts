@@ -492,6 +492,23 @@ const toRecord = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
+const normalizeCategoryToken = (value: unknown): string => {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+};
+
+const coerceEffectDefs = (value: unknown): Array<Record<string, unknown>> => {
+  if (Array.isArray(value)) {
+    return value.filter(
+      (entry): entry is Record<string, unknown> =>
+        Boolean(entry) && typeof entry === "object" && !Array.isArray(entry),
+    );
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return [value as Record<string, unknown>];
+  }
+  return [];
+};
+
 /* ───────── 装备成长计算 ───────── */
 
 export const getStrengthenMultiplier = (strengthenLevel: number): number => {
@@ -787,9 +804,7 @@ export const isGemTypeAllowedInSlot = (
 };
 
 const hasSocketBuffEffect = (effectDefsRaw: unknown): boolean => {
-  if (!Array.isArray(effectDefsRaw)) return false;
-  return effectDefsRaw.some((effect) => {
-    if (!effect || typeof effect !== "object") return false;
+  return coerceEffectDefs(effectDefsRaw).some((effect) => {
     const row = effect as { trigger?: unknown; effect_type?: unknown };
     return (
       String(row.trigger || "").trim().toLowerCase() === "socket" &&
@@ -951,17 +966,13 @@ export const buildEquipmentLines = (item: BagItem | null): string[] => {
 /* ───────── 效果 / 分类映射 ───────── */
 
 const hasLearnTechniqueEffect = (effectDefs: unknown): boolean => {
-  if (!Array.isArray(effectDefs)) return false;
-  return effectDefs.some((raw) => {
-    if (!raw || typeof raw !== "object") return false;
-    return (raw as { effect_type?: unknown }).effect_type === "learn_technique";
+  return coerceEffectDefs(effectDefs).some((raw) => {
+    return normalizeCategoryToken(raw.effect_type) === "learn_technique";
   });
 };
 
 export const isTechniqueBookSubCategory = (subCategoryValue: unknown): boolean => {
-  const subCategory =
-    typeof subCategoryValue === "string" ? subCategoryValue.trim() : "";
-  return subCategory === "technique_book";
+  return normalizeCategoryToken(subCategoryValue) === "technique_book";
 };
 
 const isTechniqueBookLike = (
@@ -1078,20 +1089,27 @@ const mapCategory = (
   subCategoryValue?: unknown,
   effectDefs?: unknown,
 ): Exclude<BagCategory, "all"> => {
-  const subCategory =
-    typeof subCategoryValue === "string" ? subCategoryValue.trim() : "";
-  if (value === "skillbook") return "skill";
+  const category = normalizeCategoryToken(value);
+  const subCategory = normalizeCategoryToken(subCategoryValue);
+  if (
+    category === "skillbook" ||
+    category === "skill" ||
+    category === "technique" ||
+    category === "technique_book"
+  ) {
+    return "skill";
+  }
   if (
     isTechniqueBookLike(subCategory, effectDefs) ||
     subCategory === "technique"
   ) {
     return "skill";
   }
-  if (value === "consumable") return "consumable";
-  if (value === "material") return "material";
-  if (value === "gem") return "gem";
-  if (value === "equipment") return "equipment";
-  if (value === "quest") return "quest";
+  if (category === "consumable") return "consumable";
+  if (category === "material") return "material";
+  if (category === "gem") return "gem";
+  if (category === "equipment") return "equipment";
+  if (category === "quest") return "quest";
   return "material";
 };
 
@@ -1249,8 +1267,7 @@ const buildSetInfo = (def: ItemDefLite): SetInfo | null => {
 
 const buildEffects = (def?: ItemDefLite): string[] => {
   const effects: string[] = [];
-  const raw = def?.effect_defs;
-  const effectDefs = Array.isArray(raw) ? raw : [];
+  const effectDefs = coerceEffectDefs(def?.effect_defs);
 
   for (const e of effectDefs) {
     if (!e || typeof e !== "object") continue;

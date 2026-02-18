@@ -12,6 +12,7 @@ import {
   loadAffixPoolForReroll,
   parseGeneratedAffixesForReroll,
 } from './equipmentAffixRerollService.js';
+import { normalizeMarketCategoryFilter, resolveMarketItemCategory } from './shared/marketItemCategory.js';
 
 export type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
 
@@ -92,7 +93,7 @@ const toListingDto = (
   const itemDef = getItemDefinitionById(itemDefId);
   if (!itemDef) return null;
 
-  const category = itemDef.category === null || itemDef.category === undefined ? null : String(itemDef.category);
+  const category = resolveMarketItemCategory(itemDef);
   const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
   const resolvedQualityRank =
     Number(row.instance_quality_rank) || resolveQualityRankFromName(row.instance_quality, defQualityRank);
@@ -184,7 +185,7 @@ export const getMarketListings = async (params: {
   const pageSize = clampInt(parsePositiveInt(params.pageSize) ?? 20, 1, 100);
   const offset = (page - 1) * pageSize;
 
-  const category = parseMaybeString(params.category);
+  const category = normalizeMarketCategoryFilter(params.category);
   const quality = parseMaybeString(params.quality);
   const q = parseMaybeString(params.query);
   const minPrice = parseNonNegativeInt(params.minPrice);
@@ -203,9 +204,12 @@ export const getMarketListings = async (params: {
   values.push(allItemDefIds);
   where.push(`ml.item_def_id = ANY($${values.length}::varchar[])`);
 
-  if (category && category !== 'all') {
+  if (category === null) {
+    return { success: true, message: 'ok', data: { listings: [], total: 0 } };
+  }
+  if (category !== 'all') {
     const categoryDefIds = allItemDefs
-      .filter((entry) => String(entry.category || '') === category)
+      .filter((entry) => resolveMarketItemCategory(entry) === category)
       .map((entry) => String(entry.id || '').trim())
       .filter((id) => id.length > 0);
     if (categoryDefIds.length === 0) {
