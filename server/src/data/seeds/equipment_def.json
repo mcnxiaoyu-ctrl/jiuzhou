@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "description": "装备定义种子数据 - 含养气期四套装备",
   "items": [
     {
@@ -65,11 +65,11 @@
       "equip_req_realm": "炼精化炁·通脉期",
       "base_attrs": {
         "wugong": 16,
-        "baoji": 0.01
+        "baoji_rating": 141
       },
       "implicit_attrs": {
         "wugong": 10,
-        "mingzhong": 0.01
+        "mingzhong_rating": 141
       },
       "affix_pool_id": "ap-weapon-rare",
       "tags": [
@@ -270,7 +270,7 @@
         "sudu": 1
       },
       "implicit_attrs": {
-        "shanbi": 0.005
+        "shanbi_rating": 60
       },
       "affix_pool_id": "ap-artifact-common",
       "set_id": "set-fanren",
@@ -295,7 +295,7 @@
         "sudu": 2
       },
       "implicit_attrs": {
-        "shanbi": 0.01
+        "shanbi_rating": 141
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "tags": [
@@ -319,11 +319,11 @@
       "equip_req_realm": "炼精化炁·养气期",
       "base_attrs": {
         "wugong": 8,
-        "baoji": 0.0056
+        "baoji_rating": 73
       },
       "implicit_attrs": {
         "wugong": 5,
-        "mingzhong": 0.005
+        "mingzhong_rating": 65
       },
       "affix_pool_id": "ap-weapon-uncommon",
       "set_id": "set-qingfeng",
@@ -351,7 +351,7 @@
       },
       "implicit_attrs": {
         "max_qixue": 30,
-        "baoji": 0.003
+        "baoji_rating": 39
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-qingfeng",
@@ -379,7 +379,7 @@
       },
       "implicit_attrs": {
         "max_qixue": 40,
-        "shanbi": 0.005
+        "shanbi_rating": 65
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-qingfeng",
@@ -406,8 +406,8 @@
         "wugong": 2
       },
       "implicit_attrs": {
-        "baoji": 0.004,
-        "mingzhong": 0.003
+        "baoji_rating": 52,
+        "mingzhong_rating": 39
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-qingfeng",
@@ -462,7 +462,7 @@
         "wugong": 3
       },
       "implicit_attrs": {
-        "baoshang": 0.01,
+        "baoshang_rating": 61,
         "lingqi_huifu": 1
       },
       "affix_pool_id": "ap-accessory-uncommon",
@@ -487,11 +487,11 @@
       "equip_req_realm": "炼精化炁·养气期",
       "base_attrs": {
         "wugong": 4,
-        "baoji": 0.0035
+        "baoji_rating": 46
       },
       "implicit_attrs": {
-        "baoshang": 0.008,
-        "mingzhong": 0.004
+        "baoshang_rating": 49,
+        "mingzhong_rating": 52
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-qingfeng",
@@ -518,8 +518,8 @@
         "sudu": 1
       },
       "implicit_attrs": {
-        "baoji": 0.006,
-        "shanbi": 0.006
+        "baoji_rating": 78,
+        "shanbi_rating": 78
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-qingfeng",
@@ -546,7 +546,7 @@
       "equip_req_realm": "炼精化炁·养气期",
       "base_attrs": {
         "wugong": 11,
-        "zhaojia": 0.0042
+        "zhaojia_rating": 55
       },
       "implicit_attrs": {
         "wugong": 8,
@@ -578,7 +578,7 @@
       },
       "implicit_attrs": {
         "max_qixue": 50,
-        "kangbao": 0.008
+        "kangbao_rating": 104
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-xuantie",
@@ -606,7 +606,7 @@
       },
       "implicit_attrs": {
         "max_qixue": 60,
-        "zhaojia": 0.008
+        "zhaojia_rating": 104
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-xuantie",
@@ -634,7 +634,7 @@
       },
       "implicit_attrs": {
         "wugong": 4,
-        "zhaojia": 0.005
+        "zhaojia_rating": 65
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-xuantie",
@@ -662,7 +662,7 @@
       },
       "implicit_attrs": {
         "max_qixue": 40,
-        "kangbao": 0.006
+        "kangbao_rating": 78
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-xuantie",
@@ -689,7 +689,7 @@
         "wufang": 3
       },
       "implicit_attrs": {
-        "kangbao": 0.01,
+        "kangbao_rating": 131,
         "qixue_huifu": 2
       },
       "affix_pool_id": "ap-accessory-uncommon",
@@ -718,7 +718,7 @@
       },
       "implicit_attrs": {
         "wugong": 4,
-        "zengshang": 0.008
+        "zengshang_rating": 104
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-xuantie",
@@ -746,7 +746,7 @@
       },
       "implicit_attrs": {
         "max_qixue": 40,
-        "kangbao": 0.008
+        "kangbao_rating": 104
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-xuantie",
@@ -773,7 +773,7 @@
       "equip_req_realm": "炼精化炁·养气期",
       "base_attrs": {
         "fagong": 10,
-        "baoji": 0.0042
+        "baoji_rating": 55
       },
       "implicit_attrs": {
         "fagong": 6,
@@ -805,7 +805,7 @@
       },
       "implicit_attrs": {
         "max_lingqi": 25,
-        "lengque": 0.008
+        "lengque_rating": 104
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-zixiao",
@@ -861,7 +861,7 @@
       },
       "implicit_attrs": {
         "fagong": 3,
-        "lengque": 0.006
+        "lengque_rating": 78
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-zixiao",
@@ -889,7 +889,7 @@
       },
       "implicit_attrs": {
         "max_lingqi": 20,
-        "shanbi": 0.006
+        "shanbi_rating": 78
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-zixiao",
@@ -916,7 +916,7 @@
         "fagong": 4
       },
       "implicit_attrs": {
-        "baoshang": 0.01,
+        "baoshang_rating": 61,
         "lingqi_huifu": 2
       },
       "affix_pool_id": "ap-accessory-uncommon",
@@ -941,11 +941,11 @@
       "equip_req_realm": "炼精化炁·养气期",
       "base_attrs": {
         "fagong": 4,
-        "baoji": 0.0035
+        "baoji_rating": 46
       },
       "implicit_attrs": {
         "fagong": 4,
-        "zengshang": 0.008
+        "zengshang_rating": 104
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-zixiao",
@@ -969,11 +969,11 @@
       "equip_req_realm": "炼精化炁·养气期",
       "base_attrs": {
         "fagong": 6,
-        "baoji": 0.0042
+        "baoji_rating": 55
       },
       "implicit_attrs": {
-        "baoshang": 0.012,
-        "lengque": 0.01
+        "baoshang_rating": 73,
+        "lengque_rating": 131
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-zixiao",
@@ -1000,7 +1000,7 @@
       "equip_req_realm": "炼精化炁·养气期",
       "base_attrs": {
         "fagong": 8,
-        "zhiliao": 0.007
+        "zhiliao_rating": 91
       },
       "implicit_attrs": {
         "fagong": 5,
@@ -1032,7 +1032,7 @@
       },
       "implicit_attrs": {
         "max_lingqi": 30,
-        "zhiliao": 0.006
+        "zhiliao_rating": 78
       },
       "affix_pool_id": "ap-armor-uncommon",
       "set_id": "set-biluo",
@@ -1087,7 +1087,7 @@
         "fagong": 2
       },
       "implicit_attrs": {
-        "zhiliao": 0.008,
+        "zhiliao_rating": 104,
         "lingqi_huifu": 1
       },
       "affix_pool_id": "ap-armor-uncommon",
@@ -1140,7 +1140,7 @@
       "equip_req_realm": "炼精化炁·养气期",
       "base_attrs": {
         "max_lingqi": 21,
-        "zhiliao": 0.0056
+        "zhiliao_rating": 73
       },
       "implicit_attrs": {
         "lingqi_huifu": 3,
@@ -1171,8 +1171,8 @@
         "max_lingqi": 11
       },
       "implicit_attrs": {
-        "zhiliao": 0.01,
-        "xixue": 0.005
+        "zhiliao_rating": 131,
+        "xixue_rating": 65
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-biluo",
@@ -1196,7 +1196,7 @@
       "equip_req_realm": "炼精化炁·养气期",
       "base_attrs": {
         "fagong": 4,
-        "zhiliao": 0.0084
+        "zhiliao_rating": 110
       },
       "implicit_attrs": {
         "max_lingqi": 25,
@@ -1227,11 +1227,11 @@
       "equip_req_realm": "炼精化炁·通脉期",
       "base_attrs": {
         "wugong": 15,
-        "mingzhong": 0.009
+        "mingzhong_rating": 127
       },
       "implicit_attrs": {
         "wugong": 10,
-        "baoji": 0.006
+        "baoji_rating": 84
       },
       "affix_pool_id": "ap-weapon-uncommon",
       "tags": [
@@ -1258,7 +1258,7 @@
       },
       "implicit_attrs": {
         "max_qixue": 60,
-        "shanbi": 0.008
+        "shanbi_rating": 113
       },
       "affix_pool_id": "ap-armor-uncommon",
       "tags": [
@@ -1285,7 +1285,7 @@
       },
       "implicit_attrs": {
         "max_qixue": 130,
-        "kongzhi_kangxing": 0.016
+        "kongzhi_kangxing_rating": 242
       },
       "affix_pool_id": "ap-armor-rare",
       "tags": [
@@ -1312,7 +1312,7 @@
       },
       "implicit_attrs": {
         "lingqi_huifu": 2,
-        "baoji": 0.0045
+        "baoji_rating": 63
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "tags": [
@@ -1338,8 +1338,8 @@
         "max_lingqi": 15
       },
       "implicit_attrs": {
-        "mingzhong": 0.007,
-        "baoshang": 0.012
+        "mingzhong_rating": 98,
+        "baoshang_rating": 79
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "tags": [
@@ -1366,7 +1366,7 @@
       },
       "implicit_attrs": {
         "max_lingqi": 30,
-        "shanbi": 0.011
+        "shanbi_rating": 166
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "tags": [
@@ -1389,11 +1389,11 @@
       "equip_req_realm": "炼精化炁·凝炁期",
       "base_attrs": {
         "wugong": 17,
-        "mingzhong": 0.0095
+        "mingzhong_rating": 143
       },
       "implicit_attrs": {
         "wugong": 9,
-        "baoji": 0.0062
+        "baoji_rating": 93
       },
       "affix_pool_id": "ap-weapon-rare",
       "tags": [
@@ -1420,7 +1420,7 @@
       },
       "implicit_attrs": {
         "max_qixue": 85,
-        "shanbi": 0.009
+        "shanbi_rating": 136
       },
       "affix_pool_id": "ap-armor-rare",
       "tags": [
@@ -1446,8 +1446,8 @@
         "wufang": 4
       },
       "implicit_attrs": {
-        "baoji": 0.0062,
-        "mingzhong": 0.005
+        "baoji_rating": 93,
+        "mingzhong_rating": 75
       },
       "affix_pool_id": "ap-armor-rare",
       "tags": [
@@ -1501,7 +1501,7 @@
       },
       "implicit_attrs": {
         "lingqi_huifu": 2,
-        "baoshang": 0.009
+        "baoshang_rating": 63
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "tags": [
@@ -1527,8 +1527,8 @@
         "max_lingqi": 17
       },
       "implicit_attrs": {
-        "mingzhong": 0.0075,
-        "baoji": 0.0052
+        "mingzhong_rating": 113,
+        "baoji_rating": 78
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "tags": [
@@ -1554,11 +1554,11 @@
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
         "wugong": 16,
-        "baoji": 0.012
+        "baoji_rating": 194
       },
       "implicit_attrs": {
         "wugong": 8,
-        "mingzhong": 0.009
+        "mingzhong_rating": 145
       },
       "affix_pool_id": "ap-weapon-rare",
       "set_id": "set-chiyan",
@@ -1583,7 +1583,7 @@
       "base_attrs": {
         "max_qixue": 120,
         "wufang": 10,
-        "baoji": 0.006
+        "baoji_rating": 96
       },
       "implicit_attrs": {
         "max_qixue": 90
@@ -1611,7 +1611,7 @@
       "base_attrs": {
         "max_qixue": 180,
         "wufang": 14,
-        "zengshang": 0.008
+        "zengshang_rating": 129
       },
       "implicit_attrs": {
         "wufang": 12
@@ -1638,10 +1638,10 @@
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
         "wugong": 10,
-        "baoji": 0.008
+        "baoji_rating": 129
       },
       "implicit_attrs": {
-        "baoji": 0.007
+        "baoji_rating": 113
       },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-chiyan",
@@ -1666,7 +1666,7 @@
       "base_attrs": {
         "max_qixue": 150,
         "wufang": 12,
-        "shanbi": 0.008
+        "shanbi_rating": 129
       },
       "implicit_attrs": {
         "max_qixue": 100
@@ -1693,10 +1693,10 @@
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
         "wugong": 8,
-        "baoshang": 0.016
+        "baoshang_rating": 120
       },
       "implicit_attrs": {
-        "baoshang": 0.008
+        "baoshang_rating": 60
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-chiyan",
@@ -1719,11 +1719,11 @@
       "equip_slot": "accessory",
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
-        "baoji": 0.012,
-        "baoshang": 0.012
+        "baoji_rating": 194,
+        "baoshang_rating": 90
       },
       "implicit_attrs": {
-        "baoji": 0.006
+        "baoji_rating": 96
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-chiyan",
@@ -1746,11 +1746,11 @@
       "equip_slot": "artifact",
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
-        "zengshang": 0.016,
-        "huo_kangxing": 0.014
+        "zengshang_rating": 259,
+        "huo_kangxing_rating": 226
       },
       "implicit_attrs": {
-        "zengshang": 0.009
+        "zengshang_rating": 145
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-chiyan",
@@ -1806,7 +1806,7 @@
       "base_attrs": {
         "max_qixue": 220,
         "wufang": 16,
-        "kangbao": 0.012
+        "kangbao_rating": 194
       },
       "implicit_attrs": {
         "max_qixue": 120
@@ -1861,10 +1861,10 @@
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
         "wufang": 14,
-        "zhaojia": 0.012
+        "zhaojia_rating": 194
       },
       "implicit_attrs": {
-        "zhaojia": 0.008
+        "zhaojia_rating": 129
       },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-xuanwu",
@@ -1915,10 +1915,10 @@
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
         "max_qixue": 180,
-        "kangbao": 0.014
+        "kangbao_rating": 226
       },
       "implicit_attrs": {
-        "kangbao": 0.008
+        "kangbao_rating": 129
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-xuanwu",
@@ -1968,11 +1968,11 @@
       "equip_slot": "artifact",
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
-        "kongzhi_kangxing": 0.018,
-        "zhaojia": 0.016
+        "kongzhi_kangxing_rating": 291,
+        "zhaojia_rating": 259
       },
       "implicit_attrs": {
-        "kongzhi_kangxing": 0.012
+        "kongzhi_kangxing_rating": 194
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-xuanwu",
@@ -1999,11 +1999,11 @@
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
         "fagong": 18,
-        "baoji": 0.009
+        "baoji_rating": 145
       },
       "implicit_attrs": {
         "fagong": 9,
-        "mingzhong": 0.009
+        "mingzhong_rating": 145
       },
       "affix_pool_id": "ap-weapon-rare",
       "set_id": "set-tianxuan",
@@ -2028,7 +2028,7 @@
       "base_attrs": {
         "max_lingqi": 100,
         "fafang": 12,
-        "baoji": 0.007
+        "baoji_rating": 113
       },
       "implicit_attrs": {
         "max_lingqi": 80
@@ -2056,7 +2056,7 @@
       "base_attrs": {
         "max_lingqi": 130,
         "fafang": 16,
-        "lengque": 0.012
+        "lengque_rating": 194
       },
       "implicit_attrs": {
         "fafang": 10
@@ -2083,10 +2083,10 @@
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
         "fagong": 10,
-        "baoji": 0.008
+        "baoji_rating": 129
       },
       "implicit_attrs": {
-        "baoji": 0.007
+        "baoji_rating": 113
       },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-tianxuan",
@@ -2164,11 +2164,11 @@
       "equip_slot": "accessory",
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
-        "baoji": 0.013,
-        "lengque": 0.012
+        "baoji_rating": 210,
+        "lengque_rating": 194
       },
       "implicit_attrs": {
-        "lengque": 0.008
+        "lengque_rating": 129
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-tianxuan",
@@ -2191,7 +2191,7 @@
       "equip_slot": "artifact",
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
-        "zengshang": 0.018,
+        "zengshang_rating": 291,
         "lingqi_huifu": 12
       },
       "implicit_attrs": {
@@ -2221,11 +2221,11 @@
       "equip_slot": "weapon",
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
-        "zhiliao": 0.022,
+        "zhiliao_rating": 357,
         "fagong": 10
       },
       "implicit_attrs": {
-        "zhiliao": 0.012
+        "zhiliao_rating": 194
       },
       "affix_pool_id": "ap-weapon-rare",
       "set_id": "set-qinglian",
@@ -2277,7 +2277,7 @@
       "base_attrs": {
         "max_qixue": 260,
         "fafang": 18,
-        "zhiliao": 0.012
+        "zhiliao_rating": 194
       },
       "implicit_attrs": {
         "fafang": 12
@@ -2303,7 +2303,7 @@
       "equip_slot": "gloves",
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
-        "zhiliao": 0.016,
+        "zhiliao_rating": 259,
         "qixue_huifu": 12
       },
       "implicit_attrs": {
@@ -2358,10 +2358,10 @@
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
         "max_lingqi": 100,
-        "zhiliao": 0.014
+        "zhiliao_rating": 226
       },
       "implicit_attrs": {
-        "zhiliao": 0.009
+        "zhiliao_rating": 145
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-qinglian",
@@ -2385,10 +2385,10 @@
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
         "qixue_huifu": 16,
-        "xixue": 0.01
+        "xixue_rating": 161
       },
       "implicit_attrs": {
-        "xixue": 0.006
+        "xixue_rating": 96
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-qinglian",
@@ -2411,11 +2411,11 @@
       "equip_slot": "artifact",
       "equip_req_realm": "炼炁化神·炼己期",
       "base_attrs": {
-        "zhiliao": 0.022,
-        "kongzhi_kangxing": 0.012
+        "zhiliao_rating": 357,
+        "kongzhi_kangxing_rating": 194
       },
       "implicit_attrs": {
-        "kongzhi_kangxing": 0.009
+        "kongzhi_kangxing_rating": 145
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-qinglian",
@@ -2442,11 +2442,11 @@
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
         "wugong": 20,
-        "baoji": 0.014
+        "baoji_rating": 240
       },
       "implicit_attrs": {
         "wugong": 10,
-        "mingzhong": 0.01
+        "mingzhong_rating": 171
       },
       "affix_pool_id": "ap-weapon-rare",
       "set_id": "set-pojun",
@@ -2470,7 +2470,7 @@
       "base_attrs": {
         "max_qixue": 160,
         "wufang": 12,
-        "baoji": 0.008
+        "baoji_rating": 137
       },
       "implicit_attrs": {
         "max_qixue": 110
@@ -2497,7 +2497,7 @@
       "base_attrs": {
         "max_qixue": 240,
         "wufang": 16,
-        "zengshang": 0.01
+        "zengshang_rating": 171
       },
       "implicit_attrs": {
         "wufang": 12
@@ -2523,10 +2523,10 @@
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
         "wugong": 14,
-        "baoji": 0.01
+        "baoji_rating": 171
       },
       "implicit_attrs": {
-        "baoji": 0.008
+        "baoji_rating": 137
       },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-pojun",
@@ -2550,7 +2550,7 @@
       "base_attrs": {
         "max_qixue": 190,
         "wufang": 14,
-        "shanbi": 0.01
+        "shanbi_rating": 171
       },
       "implicit_attrs": {
         "max_qixue": 120
@@ -2576,10 +2576,10 @@
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
         "wugong": 11,
-        "baoshang": 0.018
+        "baoshang_rating": 144
       },
       "implicit_attrs": {
-        "baoshang": 0.01
+        "baoshang_rating": 80
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-pojun",
@@ -2601,11 +2601,11 @@
       "equip_slot": "accessory",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
-        "baoji": 0.014,
-        "baoshang": 0.014
+        "baoji_rating": 240,
+        "baoshang_rating": 112
       },
       "implicit_attrs": {
-        "baoji": 0.008
+        "baoji_rating": 137
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-pojun",
@@ -2627,11 +2627,11 @@
       "equip_slot": "artifact",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
-        "zengshang": 0.02,
-        "huo_kangxing": 0.016
+        "zengshang_rating": 344,
+        "huo_kangxing_rating": 275
       },
       "implicit_attrs": {
-        "zengshang": 0.01
+        "zengshang_rating": 171
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-pojun",
@@ -2657,11 +2657,11 @@
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
         "fagong": 22,
-        "baoji": 0.012
+        "baoji_rating": 206
       },
       "implicit_attrs": {
         "fagong": 11,
-        "mingzhong": 0.01
+        "mingzhong_rating": 171
       },
       "affix_pool_id": "ap-weapon-rare",
       "set_id": "set-cangyue",
@@ -2685,7 +2685,7 @@
       "base_attrs": {
         "max_lingqi": 200,
         "fafang": 14,
-        "baoji": 0.008
+        "baoji_rating": 137
       },
       "implicit_attrs": {
         "max_lingqi": 100
@@ -2712,7 +2712,7 @@
       "base_attrs": {
         "max_lingqi": 150,
         "fafang": 18,
-        "lengque": 0.014
+        "lengque_rating": 240
       },
       "implicit_attrs": {
         "fafang": 12
@@ -2738,10 +2738,10 @@
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
         "fagong": 12,
-        "baoji": 0.01
+        "baoji_rating": 171
       },
       "implicit_attrs": {
-        "baoji": 0.008
+        "baoji_rating": 137
       },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-cangyue",
@@ -2816,11 +2816,11 @@
       "equip_slot": "accessory",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
-        "baoji": 0.014,
-        "lengque": 0.014
+        "baoji_rating": 240,
+        "lengque_rating": 240
       },
       "implicit_attrs": {
-        "lengque": 0.01
+        "lengque_rating": 171
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-cangyue",
@@ -2842,7 +2842,7 @@
       "equip_slot": "artifact",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
-        "zengshang": 0.02,
+        "zengshang_rating": 344,
         "lingqi_huifu": 18
       },
       "implicit_attrs": {
@@ -2900,7 +2900,7 @@
       "base_attrs": {
         "max_qixue": 390,
         "wufang": 20,
-        "kangbao": 0.013
+        "kangbao_rating": 236
       },
       "implicit_attrs": {
         "max_qixue": 160
@@ -2953,10 +2953,10 @@
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
         "wufang": 17,
-        "zhaojia": 0.023
+        "zhaojia_rating": 420
       },
       "implicit_attrs": {
-        "zhaojia": 0.01
+        "zhaojia_rating": 181
       },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-guiyuan",
@@ -3005,10 +3005,10 @@
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
         "max_qixue": 220,
-        "kangbao": 0.016
+        "kangbao_rating": 291
       },
       "implicit_attrs": {
-        "kangbao": 0.01
+        "kangbao_rating": 181
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-guiyuan",
@@ -3056,11 +3056,11 @@
       "equip_slot": "artifact",
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
-        "kongzhi_kangxing": 0.034,
-        "zhaojia": 0.018
+        "kongzhi_kangxing_rating": 624,
+        "zhaojia_rating": 328
       },
       "implicit_attrs": {
-        "kongzhi_kangxing": 0.014
+        "kongzhi_kangxing_rating": 254
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-guiyuan",
@@ -3086,11 +3086,11 @@
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
         "fagong": 24,
-        "lengque": 0.004
+        "lengque_rating": 72
       },
       "implicit_attrs": {
         "fagong": 12,
-        "baoji": 0.004
+        "baoji_rating": 72
       },
       "affix_pool_id": "ap-weapon-rare",
       "set_id": "set-xuanguang",
@@ -3115,11 +3115,11 @@
       "base_attrs": {
         "max_lingqi": 360,
         "fagong": 16,
-        "kongzhi_kangxing": 0.012
+        "kongzhi_kangxing_rating": 218
       },
       "implicit_attrs": {
         "max_lingqi": 120,
-        "zhaojia": 0.006
+        "zhaojia_rating": 109
       },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-xuanguang",
@@ -3171,7 +3171,7 @@
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
         "fagong": 16,
-        "lengque": 0.018
+        "lengque_rating": 328
       },
       "implicit_attrs": {
         "fagong": 8
@@ -3226,11 +3226,11 @@
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
         "fagong": 14,
-        "kongzhi_kangxing": 0.012
+        "kongzhi_kangxing_rating": 218
       },
       "implicit_attrs": {
         "fagong": 9,
-        "baoji": 0.004
+        "baoji_rating": 72
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-xuanguang",
@@ -3254,11 +3254,11 @@
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
         "fagong": 18,
-        "zengshang": 0.018
+        "zengshang_rating": 328
       },
       "implicit_attrs": {
         "fagong": 10,
-        "lengque": 0.01
+        "lengque_rating": 181
       },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-xuanguang",
@@ -3281,11 +3281,11 @@
       "equip_slot": "artifact",
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
-        "kongzhi_kangxing": 0.04,
-        "lengque": 0.02
+        "kongzhi_kangxing_rating": 737,
+        "lengque_rating": 365
       },
       "implicit_attrs": {
-        "kongzhi_kangxing": 0.012
+        "kongzhi_kangxing_rating": 218
       },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-xuanguang",

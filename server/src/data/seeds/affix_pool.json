@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "description": "词条池种子数据 - 完整版（覆盖所有角色属性）",
   "pools": [
     {
@@ -98,26 +98,26 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 48,
+              "max": 96,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.024,
+              "min": 226,
+              "max": 340,
               "realm_rank_min": 3
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoji"
+              "attr_key": "baoji_rating"
             }
           ]
         },
@@ -130,20 +130,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 48,
+              "max": 96,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "mingzhong"
+              "attr_key": "mingzhong_rating"
             }
           ]
         },
@@ -156,20 +156,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 45,
+              "max": 90,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 97,
+              "max": 196,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoshang"
+              "attr_key": "baoshang_rating"
             }
           ]
         },
@@ -351,44 +351,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.028,
+              "min": 226,
+              "max": 398,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.028,
-              "max": 0.04,
+              "min": 427,
+              "max": 613,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.04,
-              "max": 0.052,
+              "min": 654,
+              "max": 856,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.052,
-              "max": 0.064,
+              "min": 910,
+              "max": 1127,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0598,
-              "max": 0.0736,
+              "min": 1113,
+              "max": 1380,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoji"
+              "attr_key": "baoji_rating"
             }
           ]
         },
@@ -401,44 +401,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 97,
+              "max": 196,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.032,
-              "max": 0.056,
+              "min": 211,
+              "max": 370,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.056,
-              "max": 0.08,
+              "min": 397,
+              "max": 570,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.08,
-              "max": 0.104,
+              "min": 608,
+              "max": 795,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.104,
-              "max": 0.128,
+              "min": 845,
+              "max": 1045,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1196,
-              "max": 0.1472,
+              "min": 1032,
+              "max": 1278,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoshang"
+              "attr_key": "baoshang_rating"
             }
           ]
         },
@@ -451,44 +451,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.028,
+              "min": 226,
+              "max": 398,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 365,
+              "max": 613,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.032,
-              "max": 0.052,
+              "min": 521,
+              "max": 856,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 696,
+              "max": 1127,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.046,
-              "max": 0.0736,
+              "min": 850,
+              "max": 1380,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "mingzhong"
+              "attr_key": "mingzhong_rating"
             }
           ]
         },
@@ -501,44 +501,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 226,
+              "max": 456,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.024,
-              "max": 0.048,
+              "min": 365,
+              "max": 739,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.032,
-              "max": 0.064,
+              "min": 521,
+              "max": 1060,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.04,
-              "max": 0.08,
+              "min": 696,
+              "max": 1421,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.046,
-              "max": 0.092,
+              "min": 850,
+              "max": 1742,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zengshang"
+              "attr_key": "zengshang_rating"
             }
           ]
         },
@@ -551,44 +551,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 52,
+              "max": 104,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 113,
+              "max": 226,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.012,
-              "max": 0.024,
+              "min": 181,
+              "max": 365,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 259,
+              "max": 521,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.02,
-              "max": 0.04,
+              "min": 344,
+              "max": 696,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.023,
-              "max": 0.046,
+              "min": 420,
+              "max": 850,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "xixue"
+              "attr_key": "xixue_rating"
             }
           ]
         },
@@ -601,44 +601,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.028,
+              "min": 226,
+              "max": 398,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 365,
+              "max": 613,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.032,
-              "max": 0.052,
+              "min": 521,
+              "max": 856,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 696,
+              "max": 1127,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.046,
-              "max": 0.0736,
+              "min": 850,
+              "max": 1380,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shuxing_shuzhi"
+              "attr_key": "shuxing_shuzhi_rating"
             }
           ]
         },
@@ -979,38 +979,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.02,
-              "max": 0.032,
+              "min": 283,
+              "max": 456,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.032,
-              "max": 0.048,
+              "min": 489,
+              "max": 739,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.044,
-              "max": 0.064,
+              "min": 721,
+              "max": 1060,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.056,
-              "max": 0.08,
+              "min": 982,
+              "max": 1421,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0644,
-              "max": 0.092,
+              "min": 1201,
+              "max": 1742,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoji"
+              "attr_key": "baoji_rating"
             }
           ]
         },
@@ -1023,38 +1023,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 264,
+              "max": 424,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.064,
-              "max": 0.096,
+              "min": 455,
+              "max": 686,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.088,
-              "max": 0.128,
+              "min": 670,
+              "max": 983,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.112,
-              "max": 0.16,
+              "min": 911,
+              "max": 1315,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1288,
-              "max": 0.184,
+              "min": 1114,
+              "max": 1610,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoshang"
+              "attr_key": "baoshang_rating"
             }
           ]
         },
@@ -1067,38 +1067,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.028,
+              "min": 226,
+              "max": 398,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.028,
-              "max": 0.04,
+              "min": 427,
+              "max": 613,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.04,
-              "max": 0.052,
+              "min": 654,
+              "max": 856,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.052,
-              "max": 0.064,
+              "min": 910,
+              "max": 1127,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0598,
-              "max": 0.0736,
+              "min": 1113,
+              "max": 1380,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "mingzhong"
+              "attr_key": "mingzhong_rating"
             }
           ]
         },
@@ -1111,38 +1111,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 226,
+              "max": 456,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.032,
-              "max": 0.056,
+              "min": 489,
+              "max": 866,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.048,
-              "max": 0.08,
+              "min": 789,
+              "max": 1337,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.064,
-              "max": 0.104,
+              "min": 1127,
+              "max": 1871,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0736,
-              "max": 0.1196,
+              "min": 1380,
+              "max": 2299,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zengshang"
+              "attr_key": "zengshang_rating"
             }
           ]
         },
@@ -1155,38 +1155,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.012,
-              "max": 0.02,
+              "min": 169,
+              "max": 283,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.02,
-              "max": 0.032,
+              "min": 304,
+              "max": 489,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.028,
-              "max": 0.044,
+              "min": 455,
+              "max": 721,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.036,
-              "max": 0.056,
+              "min": 625,
+              "max": 982,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0414,
-              "max": 0.0644,
+              "min": 763,
+              "max": 1201,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "xixue"
+              "attr_key": "xixue_rating"
             }
           ]
         },
@@ -1199,38 +1199,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.02,
-              "max": 0.032,
+              "min": 283,
+              "max": 456,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.032,
-              "max": 0.048,
+              "min": 489,
+              "max": 739,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.044,
-              "max": 0.064,
+              "min": 721,
+              "max": 1060,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.056,
-              "max": 0.08,
+              "min": 982,
+              "max": 1421,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0644,
-              "max": 0.092,
+              "min": 1201,
+              "max": 1742,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shuxing_shuzhi"
+              "attr_key": "shuxing_shuzhi_rating"
             }
           ]
         },
@@ -1561,20 +1561,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.0024,
-              "max": 0.0048,
+              "min": 29,
+              "max": 58,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.0048,
-              "max": 0.0096,
+              "min": 63,
+              "max": 125,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shanbi"
+              "attr_key": "shanbi_rating"
             }
           ]
         },
@@ -1587,20 +1587,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.0024,
-              "max": 0.0048,
+              "min": 29,
+              "max": 58,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.0048,
-              "max": 0.0096,
+              "min": 63,
+              "max": 125,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zhaojia"
+              "attr_key": "zhaojia_rating"
             }
           ]
         },
@@ -1613,20 +1613,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 48,
+              "max": 96,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "kangbao"
+              "attr_key": "kangbao_rating"
             }
           ]
         },
@@ -1665,20 +1665,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 96,
+              "max": 194,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 210,
+              "max": 423,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "jin_kangxing"
+              "attr_key": "jin_kangxing_rating"
             }
           ]
         },
@@ -1691,20 +1691,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 96,
+              "max": 194,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 210,
+              "max": 423,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "mu_kangxing"
+              "attr_key": "mu_kangxing_rating"
             }
           ]
         },
@@ -1717,20 +1717,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 96,
+              "max": 194,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 210,
+              "max": 423,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shui_kangxing"
+              "attr_key": "shui_kangxing_rating"
             }
           ]
         },
@@ -1743,20 +1743,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 96,
+              "max": 194,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 210,
+              "max": 423,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "huo_kangxing"
+              "attr_key": "huo_kangxing_rating"
             }
           ]
         },
@@ -1769,20 +1769,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 96,
+              "max": 194,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 210,
+              "max": 423,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "tu_kangxing"
+              "attr_key": "tu_kangxing_rating"
             }
           ]
         },
@@ -1795,20 +1795,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 48,
+              "max": 96,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "kongzhi_kangxing"
+              "attr_key": "kongzhi_kangxing_rating"
             }
           ]
         },
@@ -1821,14 +1821,14 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 48,
+              "max": 96,
               "realm_rank_min": 1
             }
           ],
           "modifiers": [
             {
-              "attr_key": "jianliao"
+              "attr_key": "jianliao_rating"
             }
           ]
         }
@@ -2068,44 +2068,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.0064,
-              "max": 0.012,
+              "min": 84,
+              "max": 157,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.012,
-              "max": 0.02,
+              "min": 169,
+              "max": 283,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.02,
-              "max": 0.032,
+              "min": 304,
+              "max": 489,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.028,
-              "max": 0.044,
+              "min": 455,
+              "max": 721,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.036,
-              "max": 0.056,
+              "min": 625,
+              "max": 982,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0414,
-              "max": 0.0644,
+              "min": 763,
+              "max": 1201,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shanbi"
+              "attr_key": "shanbi_rating"
             }
           ]
         },
@@ -2118,44 +2118,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.0064,
-              "max": 0.012,
+              "min": 84,
+              "max": 157,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.012,
-              "max": 0.02,
+              "min": 169,
+              "max": 283,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.02,
-              "max": 0.032,
+              "min": 304,
+              "max": 489,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.028,
-              "max": 0.044,
+              "min": 455,
+              "max": 721,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.036,
-              "max": 0.056,
+              "min": 625,
+              "max": 982,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0414,
-              "max": 0.0644,
+              "min": 763,
+              "max": 1201,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zhaojia"
+              "attr_key": "zhaojia_rating"
             }
           ]
         },
@@ -2168,44 +2168,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.012,
-              "max": 0.024,
+              "min": 157,
+              "max": 316,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 340,
+              "max": 572,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 613,
+              "max": 994,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.056,
-              "max": 0.088,
+              "min": 924,
+              "max": 1477,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.072,
-              "max": 0.112,
+              "min": 1273,
+              "max": 2024,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0828,
-              "max": 0.1288,
+              "min": 1560,
+              "max": 2489,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "kangbao"
+              "attr_key": "kangbao_rating"
             }
           ]
         },
@@ -2318,44 +2318,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.02,
-              "max": 0.04,
+              "min": 263,
+              "max": 531,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 572,
+              "max": 927,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.06,
-              "max": 0.088,
+              "min": 930,
+              "max": 1384,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.08,
-              "max": 0.112,
+              "min": 1337,
+              "max": 1904,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.1,
-              "max": 0.136,
+              "min": 1795,
+              "max": 2491,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.115,
-              "max": 0.1564,
+              "min": 2205,
+              "max": 3070,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "jin_kangxing"
+              "attr_key": "jin_kangxing_rating"
             }
           ]
         },
@@ -2368,44 +2368,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.02,
-              "max": 0.04,
+              "min": 263,
+              "max": 531,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 572,
+              "max": 927,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.06,
-              "max": 0.088,
+              "min": 930,
+              "max": 1384,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.08,
-              "max": 0.112,
+              "min": 1337,
+              "max": 1904,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.1,
-              "max": 0.136,
+              "min": 1795,
+              "max": 2491,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.115,
-              "max": 0.1564,
+              "min": 2205,
+              "max": 3070,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "mu_kangxing"
+              "attr_key": "mu_kangxing_rating"
             }
           ]
         },
@@ -2418,44 +2418,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.02,
-              "max": 0.04,
+              "min": 263,
+              "max": 531,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 572,
+              "max": 927,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.06,
-              "max": 0.088,
+              "min": 930,
+              "max": 1384,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.08,
-              "max": 0.112,
+              "min": 1337,
+              "max": 1904,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.1,
-              "max": 0.136,
+              "min": 1795,
+              "max": 2491,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.115,
-              "max": 0.1564,
+              "min": 2205,
+              "max": 3070,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shui_kangxing"
+              "attr_key": "shui_kangxing_rating"
             }
           ]
         },
@@ -2468,44 +2468,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.02,
-              "max": 0.04,
+              "min": 263,
+              "max": 531,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 572,
+              "max": 927,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.06,
-              "max": 0.088,
+              "min": 930,
+              "max": 1384,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.08,
-              "max": 0.112,
+              "min": 1337,
+              "max": 1904,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.1,
-              "max": 0.136,
+              "min": 1795,
+              "max": 2491,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.115,
-              "max": 0.1564,
+              "min": 2205,
+              "max": 3070,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "huo_kangxing"
+              "attr_key": "huo_kangxing_rating"
             }
           ]
         },
@@ -2518,44 +2518,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.02,
-              "max": 0.04,
+              "min": 263,
+              "max": 531,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 572,
+              "max": 927,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.06,
-              "max": 0.088,
+              "min": 930,
+              "max": 1384,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.08,
-              "max": 0.112,
+              "min": 1337,
+              "max": 1904,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.1,
-              "max": 0.136,
+              "min": 1795,
+              "max": 2491,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.115,
-              "max": 0.1564,
+              "min": 2205,
+              "max": 3070,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "tu_kangxing"
+              "attr_key": "tu_kangxing_rating"
             }
           ]
         },
@@ -2568,44 +2568,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.012,
-              "max": 0.024,
+              "min": 157,
+              "max": 316,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 340,
+              "max": 572,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.036,
-              "max": 0.056,
+              "min": 551,
+              "max": 866,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.048,
-              "max": 0.072,
+              "min": 789,
+              "max": 1198,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.06,
-              "max": 0.088,
+              "min": 1054,
+              "max": 1570,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.069,
-              "max": 0.1012,
+              "min": 1290,
+              "max": 1926,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "kongzhi_kangxing"
+              "attr_key": "kongzhi_kangxing_rating"
             }
           ]
         },
@@ -2618,44 +2618,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.028,
+              "min": 226,
+              "max": 398,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 365,
+              "max": 613,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.032,
-              "max": 0.052,
+              "min": 521,
+              "max": 856,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 696,
+              "max": 1127,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.046,
-              "max": 0.0736,
+              "min": 850,
+              "max": 1380,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "jianliao"
+              "attr_key": "jianliao_rating"
             }
           ]
         },
@@ -2668,44 +2668,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.028,
+              "min": 226,
+              "max": 398,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 365,
+              "max": 613,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.032,
-              "max": 0.052,
+              "min": 521,
+              "max": 856,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 696,
+              "max": 1127,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.046,
-              "max": 0.0736,
+              "min": 850,
+              "max": 1380,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zhiliao"
+              "attr_key": "zhiliao_rating"
             }
           ]
         },
@@ -3129,38 +3129,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.028,
+              "min": 226,
+              "max": 398,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.028,
-              "max": 0.044,
+              "min": 427,
+              "max": 676,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.04,
-              "max": 0.06,
+              "min": 654,
+              "max": 992,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.052,
-              "max": 0.076,
+              "min": 910,
+              "max": 1347,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0598,
-              "max": 0.0874,
+              "min": 1113,
+              "max": 1651,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shanbi"
+              "attr_key": "shanbi_rating"
             }
           ]
         },
@@ -3173,38 +3173,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.028,
+              "min": 226,
+              "max": 398,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.028,
-              "max": 0.044,
+              "min": 427,
+              "max": 676,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.04,
-              "max": 0.06,
+              "min": 654,
+              "max": 992,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.052,
-              "max": 0.076,
+              "min": 910,
+              "max": 1347,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0598,
-              "max": 0.0874,
+              "min": 1113,
+              "max": 1651,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zhaojia"
+              "attr_key": "zhaojia_rating"
             }
           ]
         },
@@ -3217,38 +3217,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.032,
-              "max": 0.056,
+              "min": 456,
+              "max": 808,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.056,
-              "max": 0.088,
+              "min": 866,
+              "max": 1384,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.08,
-              "max": 0.12,
+              "min": 1337,
+              "max": 2049,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.104,
-              "max": 0.152,
+              "min": 1871,
+              "max": 2809,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1196,
-              "max": 0.1748,
+              "min": 2299,
+              "max": 3468,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "kangbao"
+              "attr_key": "kangbao_rating"
             }
           ]
         },
@@ -3349,38 +3349,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.048,
-              "max": 0.08,
+              "min": 689,
+              "max": 1169,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.08,
-              "max": 0.12,
+              "min": 1253,
+              "max": 1921,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.112,
-              "max": 0.16,
+              "min": 1904,
+              "max": 2795,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.144,
-              "max": 0.2,
+              "min": 2649,
+              "max": 3802,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1656,
-              "max": 0.23,
+              "min": 3267,
+              "max": 4717,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "jin_kangxing"
+              "attr_key": "jin_kangxing_rating"
             }
           ]
         },
@@ -3393,38 +3393,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.048,
-              "max": 0.08,
+              "min": 689,
+              "max": 1169,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.08,
-              "max": 0.12,
+              "min": 1253,
+              "max": 1921,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.112,
-              "max": 0.16,
+              "min": 1904,
+              "max": 2795,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.144,
-              "max": 0.2,
+              "min": 2649,
+              "max": 3802,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1656,
-              "max": 0.23,
+              "min": 3267,
+              "max": 4717,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "mu_kangxing"
+              "attr_key": "mu_kangxing_rating"
             }
           ]
         },
@@ -3437,38 +3437,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.048,
-              "max": 0.08,
+              "min": 689,
+              "max": 1169,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.08,
-              "max": 0.12,
+              "min": 1253,
+              "max": 1921,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.112,
-              "max": 0.16,
+              "min": 1904,
+              "max": 2795,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.144,
-              "max": 0.2,
+              "min": 2649,
+              "max": 3802,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1656,
-              "max": 0.23,
+              "min": 3267,
+              "max": 4717,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shui_kangxing"
+              "attr_key": "shui_kangxing_rating"
             }
           ]
         },
@@ -3481,38 +3481,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.048,
-              "max": 0.08,
+              "min": 689,
+              "max": 1169,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.08,
-              "max": 0.12,
+              "min": 1253,
+              "max": 1921,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.112,
-              "max": 0.16,
+              "min": 1904,
+              "max": 2795,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.144,
-              "max": 0.2,
+              "min": 2649,
+              "max": 3802,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1656,
-              "max": 0.23,
+              "min": 3267,
+              "max": 4717,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "huo_kangxing"
+              "attr_key": "huo_kangxing_rating"
             }
           ]
         },
@@ -3525,38 +3525,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.048,
-              "max": 0.08,
+              "min": 689,
+              "max": 1169,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.08,
-              "max": 0.12,
+              "min": 1253,
+              "max": 1921,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.112,
-              "max": 0.16,
+              "min": 1904,
+              "max": 2795,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.144,
-              "max": 0.2,
+              "min": 2649,
+              "max": 3802,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1656,
-              "max": 0.23,
+              "min": 3267,
+              "max": 4717,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "tu_kangxing"
+              "attr_key": "tu_kangxing_rating"
             }
           ]
         },
@@ -3569,38 +3569,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.032,
-              "max": 0.056,
+              "min": 456,
+              "max": 808,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.056,
-              "max": 0.088,
+              "min": 866,
+              "max": 1384,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.08,
-              "max": 0.12,
+              "min": 1337,
+              "max": 2049,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.104,
-              "max": 0.152,
+              "min": 1871,
+              "max": 2809,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1196,
-              "max": 0.1748,
+              "min": 2299,
+              "max": 3468,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "kongzhi_kangxing"
+              "attr_key": "kongzhi_kangxing_rating"
             }
           ]
         },
@@ -3613,38 +3613,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.02,
-              "max": 0.036,
+              "min": 283,
+              "max": 514,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.036,
-              "max": 0.056,
+              "min": 551,
+              "max": 866,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.052,
-              "max": 0.076,
+              "min": 856,
+              "max": 1267,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.068,
-              "max": 0.096,
+              "min": 1200,
+              "max": 1720,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0782,
-              "max": 0.1104,
+              "min": 1470,
+              "max": 2111,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "jianliao"
+              "attr_key": "jianliao_rating"
             }
           ]
         },
@@ -3657,38 +3657,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.02,
-              "max": 0.036,
+              "min": 283,
+              "max": 514,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.036,
-              "max": 0.056,
+              "min": 551,
+              "max": 866,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.052,
-              "max": 0.076,
+              "min": 856,
+              "max": 1267,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.068,
-              "max": 0.096,
+              "min": 1200,
+              "max": 1720,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0782,
-              "max": 0.1104,
+              "min": 1470,
+              "max": 2111,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zhiliao"
+              "attr_key": "zhiliao_rating"
             }
           ]
         },
@@ -3895,20 +3895,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.0024,
-              "max": 0.0048,
+              "min": 29,
+              "max": 58,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.0048,
-              "max": 0.0096,
+              "min": 63,
+              "max": 125,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoji"
+              "attr_key": "baoji_rating"
             }
           ]
         },
@@ -3921,20 +3921,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 22,
+              "max": 45,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 49,
+              "max": 97,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoshang"
+              "attr_key": "baoshang_rating"
             }
           ]
         },
@@ -3947,20 +3947,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.0024,
-              "max": 0.0048,
+              "min": 29,
+              "max": 58,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.0048,
-              "max": 0.0096,
+              "min": 63,
+              "max": 125,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "mingzhong"
+              "attr_key": "mingzhong_rating"
             }
           ]
         },
@@ -3973,20 +3973,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.0016,
-              "max": 0.0032,
+              "min": 19,
+              "max": 38,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.0032,
-              "max": 0.0064,
+              "min": 42,
+              "max": 84,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shanbi"
+              "attr_key": "shanbi_rating"
             }
           ]
         },
@@ -4085,20 +4085,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 48,
+              "max": 96,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "lengque"
+              "attr_key": "lengque_rating"
             }
           ]
         },
@@ -4111,14 +4111,14 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 48,
+              "max": 96,
               "realm_rank_min": 1
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zengshang"
+              "attr_key": "zengshang_rating"
             }
           ]
         }
@@ -4345,44 +4345,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.0064,
-              "max": 0.0128,
+              "min": 84,
+              "max": 168,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0128,
-              "max": 0.0224,
+              "min": 181,
+              "max": 318,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0224,
-              "max": 0.036,
+              "min": 340,
+              "max": 551,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.032,
-              "max": 0.0496,
+              "min": 521,
+              "max": 816,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.0416,
-              "max": 0.0632,
+              "min": 724,
+              "max": 1112,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.04784,
-              "max": 0.07268,
+              "min": 885,
+              "max": 1362,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoji"
+              "attr_key": "baoji_rating"
             }
           ]
         },
@@ -4395,44 +4395,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.012,
-              "max": 0.024,
+              "min": 73,
+              "max": 146,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.024,
-              "max": 0.044,
+              "min": 158,
+              "max": 290,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.044,
-              "max": 0.068,
+              "min": 311,
+              "max": 483,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.064,
-              "max": 0.092,
+              "min": 485,
+              "max": 701,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.084,
-              "max": 0.116,
+              "min": 679,
+              "max": 945,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0966,
-              "max": 0.1334,
+              "min": 830,
+              "max": 1155,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoshang"
+              "attr_key": "baoshang_rating"
             }
           ]
         },
@@ -4445,44 +4445,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.0064,
-              "max": 0.0128,
+              "min": 84,
+              "max": 168,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0128,
-              "max": 0.0224,
+              "min": 181,
+              "max": 318,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0192,
-              "max": 0.032,
+              "min": 291,
+              "max": 489,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0256,
-              "max": 0.0416,
+              "min": 416,
+              "max": 681,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.032,
-              "max": 0.0512,
+              "min": 554,
+              "max": 896,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0368,
-              "max": 0.05888,
+              "min": 677,
+              "max": 1095,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "mingzhong"
+              "attr_key": "mingzhong_rating"
             }
           ]
         },
@@ -4495,44 +4495,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.0048,
-              "max": 0.0096,
+              "min": 63,
+              "max": 125,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0096,
-              "max": 0.0176,
+              "min": 135,
+              "max": 249,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0144,
-              "max": 0.0256,
+              "min": 218,
+              "max": 390,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0192,
-              "max": 0.0336,
+              "min": 311,
+              "max": 548,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.024,
-              "max": 0.0416,
+              "min": 414,
+              "max": 724,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0276,
-              "max": 0.04784,
+              "min": 505,
+              "max": 885,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shanbi"
+              "attr_key": "shanbi_rating"
             }
           ]
         },
@@ -4545,44 +4545,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.0048,
-              "max": 0.0096,
+              "min": 63,
+              "max": 125,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0096,
-              "max": 0.0176,
+              "min": 135,
+              "max": 249,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0144,
-              "max": 0.0256,
+              "min": 218,
+              "max": 390,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0192,
-              "max": 0.0336,
+              "min": 311,
+              "max": 548,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.024,
-              "max": 0.0416,
+              "min": 414,
+              "max": 724,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0276,
-              "max": 0.04784,
+              "min": 505,
+              "max": 885,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zhaojia"
+              "attr_key": "zhaojia_rating"
             }
           ]
         },
@@ -4595,44 +4595,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 226,
+              "max": 456,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.024,
-              "max": 0.048,
+              "min": 365,
+              "max": 739,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.032,
-              "max": 0.064,
+              "min": 521,
+              "max": 1060,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.04,
-              "max": 0.08,
+              "min": 696,
+              "max": 1421,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.046,
-              "max": 0.092,
+              "min": 850,
+              "max": 1742,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "kangbao"
+              "attr_key": "kangbao_rating"
             }
           ]
         },
@@ -4845,44 +4845,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.012,
-              "max": 0.024,
+              "min": 157,
+              "max": 316,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 340,
+              "max": 572,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.036,
-              "max": 0.056,
+              "min": 551,
+              "max": 866,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.048,
-              "max": 0.072,
+              "min": 789,
+              "max": 1198,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.06,
-              "max": 0.088,
+              "min": 1054,
+              "max": 1570,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.069,
-              "max": 0.1012,
+              "min": 1290,
+              "max": 1926,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "lengque"
+              "attr_key": "lengque_rating"
             }
           ]
         },
@@ -4895,44 +4895,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 226,
+              "max": 456,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.024,
-              "max": 0.048,
+              "min": 365,
+              "max": 739,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.032,
-              "max": 0.064,
+              "min": 521,
+              "max": 1060,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.04,
-              "max": 0.08,
+              "min": 696,
+              "max": 1421,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.046,
-              "max": 0.092,
+              "min": 850,
+              "max": 1742,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zengshang"
+              "attr_key": "zengshang_rating"
             }
           ]
         },
@@ -4945,44 +4945,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 52,
+              "max": 104,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 113,
+              "max": 226,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.012,
-              "max": 0.024,
+              "min": 181,
+              "max": 365,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 259,
+              "max": 521,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.02,
-              "max": 0.04,
+              "min": 344,
+              "max": 696,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.023,
-              "max": 0.046,
+              "min": 420,
+              "max": 850,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "xixue"
+              "attr_key": "xixue_rating"
             }
           ]
         },
@@ -4995,44 +4995,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.028,
+              "min": 226,
+              "max": 398,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 365,
+              "max": 613,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.032,
-              "max": 0.052,
+              "min": 521,
+              "max": 856,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 696,
+              "max": 1127,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.046,
-              "max": 0.0736,
+              "min": 850,
+              "max": 1380,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zhiliao"
+              "attr_key": "zhiliao_rating"
             }
           ]
         },
@@ -5045,44 +5045,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.028,
+              "min": 226,
+              "max": 398,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 365,
+              "max": 613,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.032,
-              "max": 0.052,
+              "min": 521,
+              "max": 856,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 696,
+              "max": 1127,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.046,
-              "max": 0.0736,
+              "min": 850,
+              "max": 1380,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shuxing_shuzhi"
+              "attr_key": "shuxing_shuzhi_rating"
             }
           ]
         },
@@ -5290,20 +5290,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.0032,
-              "max": 0.0064,
+              "min": 38,
+              "max": 77,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.0064,
-              "max": 0.012,
+              "min": 84,
+              "max": 157,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoji"
+              "attr_key": "baoji_rating"
             }
           ]
         },
@@ -5316,20 +5316,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.0064,
-              "max": 0.012,
+              "min": 36,
+              "max": 67,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.012,
-              "max": 0.0224,
+              "min": 73,
+              "max": 137,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoshang"
+              "attr_key": "baoshang_rating"
             }
           ]
         },
@@ -5342,20 +5342,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.0064,
-              "max": 0.012,
+              "min": 77,
+              "max": 145,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.012,
-              "max": 0.0224,
+              "min": 157,
+              "max": 295,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "lengque"
+              "attr_key": "lengque_rating"
             }
           ]
         },
@@ -5420,20 +5420,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.0024,
-              "max": 0.0048,
+              "min": 29,
+              "max": 58,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.0048,
-              "max": 0.0096,
+              "min": 63,
+              "max": 125,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shanbi"
+              "attr_key": "shanbi_rating"
             }
           ]
         },
@@ -5446,20 +5446,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 48,
+              "max": 96,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zengshang"
+              "attr_key": "zengshang_rating"
             }
           ]
         },
@@ -5472,20 +5472,20 @@
           "tiers": [
             {
               "tier": 1,
-              "min": 0.004,
-              "max": 0.008,
+              "min": 48,
+              "max": 96,
               "realm_rank_min": 1
             },
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.016,
+              "min": 104,
+              "max": 210,
               "realm_rank_min": 2
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shuxing_shuzhi"
+              "attr_key": "shuxing_shuzhi_rating"
             }
           ]
         }
@@ -5756,44 +5756,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.0096,
-              "max": 0.0176,
+              "min": 125,
+              "max": 231,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0176,
-              "max": 0.0304,
+              "min": 249,
+              "max": 433,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0304,
-              "max": 0.048,
+              "min": 464,
+              "max": 739,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0432,
-              "max": 0.0656,
+              "min": 708,
+              "max": 1088,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.056,
-              "max": 0.0832,
+              "min": 982,
+              "max": 1480,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0644,
-              "max": 0.09568,
+              "min": 1201,
+              "max": 1815,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoji"
+              "attr_key": "baoji_rating"
             }
           ]
         },
@@ -5806,44 +5806,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.0176,
-              "max": 0.032,
+              "min": 107,
+              "max": 196,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.032,
-              "max": 0.056,
+              "min": 211,
+              "max": 370,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.056,
-              "max": 0.088,
+              "min": 397,
+              "max": 628,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.08,
-              "max": 0.12,
+              "min": 608,
+              "max": 920,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.104,
-              "max": 0.152,
+              "min": 845,
+              "max": 1247,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1196,
-              "max": 0.1748,
+              "min": 1032,
+              "max": 1526,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "baoshang"
+              "attr_key": "baoshang_rating"
             }
           ]
         },
@@ -5856,44 +5856,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.0176,
-              "max": 0.032,
+              "min": 231,
+              "max": 423,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.032,
-              "max": 0.056,
+              "min": 456,
+              "max": 808,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.056,
-              "max": 0.08,
+              "min": 866,
+              "max": 1253,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.08,
-              "max": 0.104,
+              "min": 1337,
+              "max": 1761,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.104,
-              "max": 0.128,
+              "min": 1871,
+              "max": 2334,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.1196,
-              "max": 0.1472,
+              "min": 2299,
+              "max": 2874,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "lengque"
+              "attr_key": "lengque_rating"
             }
           ]
         },
@@ -6006,44 +6006,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.0144,
+              "min": 104,
+              "max": 189,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0144,
-              "max": 0.0256,
+              "min": 203,
+              "max": 363,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0208,
-              "max": 0.0368,
+              "min": 316,
+              "max": 563,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0272,
-              "max": 0.048,
+              "min": 442,
+              "max": 789,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.0336,
-              "max": 0.0592,
+              "min": 582,
+              "max": 1040,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.03864,
-              "max": 0.06808,
+              "min": 711,
+              "max": 1273,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shanbi"
+              "attr_key": "shanbi_rating"
             }
           ]
         },
@@ -6056,44 +6056,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.008,
-              "max": 0.0144,
+              "min": 104,
+              "max": 189,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0144,
-              "max": 0.0256,
+              "min": 203,
+              "max": 363,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0208,
-              "max": 0.0368,
+              "min": 316,
+              "max": 563,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0272,
-              "max": 0.048,
+              "min": 442,
+              "max": 789,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.0336,
-              "max": 0.0592,
+              "min": 582,
+              "max": 1040,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.03864,
-              "max": 0.06808,
+              "min": 711,
+              "max": 1273,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "mingzhong"
+              "attr_key": "mingzhong_rating"
             }
           ]
         },
@@ -6106,44 +6106,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.012,
-              "max": 0.0224,
+              "min": 157,
+              "max": 295,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0224,
-              "max": 0.04,
+              "min": 318,
+              "max": 572,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 613,
+              "max": 994,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0576,
-              "max": 0.088,
+              "min": 951,
+              "max": 1477,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.0752,
-              "max": 0.112,
+              "min": 1332,
+              "max": 2024,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.08648,
-              "max": 0.1288,
+              "min": 1632,
+              "max": 2489,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zengshang"
+              "attr_key": "zengshang_rating"
             }
           ]
         },
@@ -6156,44 +6156,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.012,
-              "max": 0.0224,
+              "min": 157,
+              "max": 295,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0224,
-              "max": 0.04,
+              "min": 318,
+              "max": 572,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0328,
-              "max": 0.0576,
+              "min": 501,
+              "max": 891,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0432,
-              "max": 0.0752,
+              "min": 708,
+              "max": 1253,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.0536,
-              "max": 0.0928,
+              "min": 939,
+              "max": 1660,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.06164,
-              "max": 0.10672,
+              "min": 1148,
+              "max": 2037,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "shuxing_shuzhi"
+              "attr_key": "shuxing_shuzhi_rating"
             }
           ]
         },
@@ -6206,44 +6206,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.0064,
-              "max": 0.012,
+              "min": 84,
+              "max": 157,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.012,
-              "max": 0.0224,
+              "min": 169,
+              "max": 318,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0176,
-              "max": 0.0328,
+              "min": 267,
+              "max": 501,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0232,
-              "max": 0.0432,
+              "min": 376,
+              "max": 708,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.0288,
-              "max": 0.0536,
+              "min": 498,
+              "max": 939,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.03312,
-              "max": 0.06164,
+              "min": 608,
+              "max": 1148,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "xixue"
+              "attr_key": "xixue_rating"
             }
           ]
         },
@@ -6256,44 +6256,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.012,
-              "max": 0.0224,
+              "min": 157,
+              "max": 295,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0224,
-              "max": 0.04,
+              "min": 318,
+              "max": 572,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0328,
-              "max": 0.0576,
+              "min": 501,
+              "max": 891,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0432,
-              "max": 0.0752,
+              "min": 708,
+              "max": 1253,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.0536,
-              "max": 0.0928,
+              "min": 939,
+              "max": 1660,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.06164,
-              "max": 0.10672,
+              "min": 1148,
+              "max": 2037,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "zhiliao"
+              "attr_key": "zhiliao_rating"
             }
           ]
         },
@@ -6306,44 +6306,44 @@
           "tiers": [
             {
               "tier": 2,
-              "min": 0.012,
-              "max": 0.0224,
+              "min": 157,
+              "max": 295,
               "realm_rank_min": 2
             },
             {
               "tier": 3,
-              "min": 0.0224,
-              "max": 0.04,
+              "min": 318,
+              "max": 572,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.0328,
-              "max": 0.0576,
+              "min": 501,
+              "max": 891,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.0432,
-              "max": 0.0752,
+              "min": 708,
+              "max": 1253,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.0536,
-              "max": 0.0928,
+              "min": 939,
+              "max": 1660,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.06164,
-              "max": 0.10672,
+              "min": 1148,
+              "max": 2037,
               "realm_rank_min": 7
             }
           ],
           "modifiers": [
             {
-              "attr_key": "kongzhi_kangxing"
+              "attr_key": "kongzhi_kangxing_rating"
             }
           ]
         },

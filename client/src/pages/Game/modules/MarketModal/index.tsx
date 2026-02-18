@@ -120,6 +120,7 @@ const resolveIcon = (icon: string | null | undefined): string => {
 };
 
 const hasLatin = (value: string): boolean => /[A-Za-z]/.test(value);
+const RATING_SUFFIX = '_rating';
 
 const translateKey = (key: string): string | null => {
   const k = key.trim();
@@ -170,6 +171,11 @@ const translateKey = (key: string): string | null => {
     shuxing_shuzhi: '属性数值',
   };
   if (m[k]) return m[k];
+  if (k.endsWith(RATING_SUFFIX)) {
+    const baseKey = k.slice(0, -RATING_SUFFIX.length).trim();
+    const baseLabel = m[baseKey];
+    if (baseLabel) return `${baseLabel}等级`;
+  }
   return null;
 };
 

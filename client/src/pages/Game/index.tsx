@@ -125,7 +125,32 @@ const EQUIP_QUALITY_TEXT: Record<string, string> = {
   黄: '黄品',
 };
 
-const attrLabel: Record<string, string> = {
+const RATING_SUFFIX = '_rating';
+
+const RATING_BASE_ATTR_KEYS = [
+  'shuxing_shuzhi',
+  'mingzhong',
+  'shanbi',
+  'zhaojia',
+  'baoji',
+  'baoshang',
+  'kangbao',
+  'zengshang',
+  'zhiliao',
+  'jianliao',
+  'xixue',
+  'lengque',
+  'kongzhi_kangxing',
+  'jin_kangxing',
+  'mu_kangxing',
+  'shui_kangxing',
+  'huo_kangxing',
+  'tu_kangxing',
+] as const;
+
+const RATING_BASE_ATTR_KEY_SET = new Set<string>(RATING_BASE_ATTR_KEYS);
+
+const attrLabelBase: Record<string, string> = {
   max_qixue: '气血上限',
   max_lingqi: '灵气上限',
   wugong: '物攻',
@@ -156,37 +181,53 @@ const attrLabel: Record<string, string> = {
   shuxing_shuzhi: '属性数值',
 };
 
+const ratingAttrLabelEntries = RATING_BASE_ATTR_KEYS.map((key) => {
+  const baseLabel = attrLabelBase[key] ?? key;
+  return [`${key}${RATING_SUFFIX}`, `${baseLabel}等级`] as const;
+});
+
+const attrLabel: Record<string, string> = {
+  ...attrLabelBase,
+  ...Object.fromEntries(ratingAttrLabelEntries),
+};
+
+const attrOrderBase = [
+  'max_qixue',
+  'max_lingqi',
+  'wugong',
+  'fagong',
+  'wufang',
+  'fafang',
+  'mingzhong',
+  'shanbi',
+  'zhaojia',
+  'baoji',
+  'baoshang',
+  'kangbao',
+  'zengshang',
+  'zhiliao',
+  'jianliao',
+  'xixue',
+  'lengque',
+  'sudu',
+  'qixue_huifu',
+  'lingqi_huifu',
+  'kongzhi_kangxing',
+  'jin_kangxing',
+  'mu_kangxing',
+  'shui_kangxing',
+  'huo_kangxing',
+  'tu_kangxing',
+  'fuyuan',
+  'shuxing_shuzhi',
+] as const;
+
+const attrOrderKeys = attrOrderBase.flatMap((key) =>
+  RATING_BASE_ATTR_KEY_SET.has(key) ? [key, `${key}${RATING_SUFFIX}`] : [key],
+);
+
 const attrOrder: Record<string, number> = Object.fromEntries(
-  [
-    'max_qixue',
-    'max_lingqi',
-    'wugong',
-    'fagong',
-    'wufang',
-    'fafang',
-    'mingzhong',
-    'shanbi',
-    'zhaojia',
-    'baoji',
-    'baoshang',
-    'kangbao',
-    'zengshang',
-    'zhiliao',
-    'jianliao',
-    'xixue',
-    'lengque',
-    'sudu',
-    'qixue_huifu',
-    'lingqi_huifu',
-    'kongzhi_kangxing',
-    'jin_kangxing',
-    'mu_kangxing',
-    'shui_kangxing',
-    'huo_kangxing',
-    'tu_kangxing',
-    'fuyuan',
-    'shuxing_shuzhi',
-  ].map((k, idx) => [k, idx]),
+  attrOrderKeys.map((k, idx) => [k, idx]),
 );
 
 const percentAttrKeys = new Set<string>([

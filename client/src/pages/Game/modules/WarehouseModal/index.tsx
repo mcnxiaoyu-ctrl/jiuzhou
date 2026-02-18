@@ -105,6 +105,7 @@ const clampSubIndex = (value: number): number => {
 };
 
 const hasLatin = (value: string): boolean => /[A-Za-z]/.test(value);
+const RATING_SUFFIX = '_rating';
 
 const translateKey = (key: string): string | null => {
   const k = key.trim();
@@ -166,10 +167,15 @@ const translateKey = (key: string): string | null => {
     mp: '灵气',
   };
   if (m[k]) return m[k];
+  if (k.endsWith(RATING_SUFFIX)) {
+    const baseKey = k.slice(0, -RATING_SUFFIX.length).trim();
+    const baseLabel = m[baseKey];
+    if (baseLabel) return `${baseLabel}等级`;
+  }
   return null;
 };
 
-const EQUIP_ATTR_KEYS = new Set<string>([
+const EQUIP_ATTR_KEYS_BASE = [
   'max_qixue',
   'max_lingqi',
   'wugong',
@@ -198,6 +204,32 @@ const EQUIP_ATTR_KEYS = new Set<string>([
   'tu_kangxing',
   'fuyuan',
   'shuxing_shuzhi',
+] as const;
+
+const RATING_BASE_ATTR_KEYS = [
+  'shuxing_shuzhi',
+  'mingzhong',
+  'shanbi',
+  'zhaojia',
+  'baoji',
+  'baoshang',
+  'kangbao',
+  'zengshang',
+  'zhiliao',
+  'jianliao',
+  'xixue',
+  'lengque',
+  'kongzhi_kangxing',
+  'jin_kangxing',
+  'mu_kangxing',
+  'shui_kangxing',
+  'huo_kangxing',
+  'tu_kangxing',
+] as const;
+
+const EQUIP_ATTR_KEYS = new Set<string>([
+  ...EQUIP_ATTR_KEYS_BASE,
+  ...RATING_BASE_ATTR_KEYS.map((key) => `${key}${RATING_SUFFIX}`),
 ]);
 
 const formatLines = (value: unknown, depth: number = 0): string[] => {

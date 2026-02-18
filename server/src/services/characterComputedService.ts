@@ -631,6 +631,12 @@ const loadEquippedAttrBonuses = async (characterId: number, effectiveLevel: numb
       socketedGemsRaw: row.socketed_gems,
     });
     for (const [key, value] of Object.entries(displayBaseAttrs)) {
+      const ratingBaseAttrKey = resolveRatingBaseAttrKey(key);
+      if (ratingBaseAttrKey && Object.prototype.hasOwnProperty.call(stats, ratingBaseAttrKey)) {
+        const mappedKey = ratingBaseAttrKey as CharacterAttrKey;
+        ratingTotals[mappedKey] = (ratingTotals[mappedKey] || 0) + value;
+        continue;
+      }
       applyAttrDelta(stats, key, value);
     }
 
