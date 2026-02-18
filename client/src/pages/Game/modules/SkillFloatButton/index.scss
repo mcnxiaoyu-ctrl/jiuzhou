@@ -9,38 +9,148 @@
   --game-tooltip-muted: var(--game-tooltip-surface-muted);
   --game-tooltip-divider: var(--game-tooltip-surface-divider);
   --game-tooltip-radius: 14px;
-  --game-tooltip-padding: 12px;
+  --game-tooltip-padding: 0px;
   --game-tooltip-max-height: min(62vh, 560px);
+  --game-tooltip-min-width: 200px;
+  --game-tooltip-max-width: min(320px, calc(100vw - 24px));
 }
 
 .skill-fab-tooltip-content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
+  padding: 12px 14px;
 }
 
 .skill-fab-tooltip-title {
   font-size: 14px;
   font-weight: 900;
   color: var(--game-tooltip-text);
-  margin-bottom: 2px;
+  margin-bottom: 8px;
+  line-height: 1.3;
 }
 
-.skill-fab-tooltip-line {
+.skill-fab-tooltip-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skill-fab-tooltip-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
+}
+
+.skill-fab-tooltip-label {
+  flex: 0 0 28px;
   color: var(--game-tooltip-muted);
+  font-size: 11px;
+  padding-top: 2px;
+  opacity: 0.72;
+}
+
+.skill-fab-tooltip-value {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: var(--game-tooltip-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.skill-fab-tooltip-muted {
+  font-weight: 400;
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+.skill-fab-tooltip-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  background: var(--game-tooltip-surface-chip-bg);
+  border: 1px solid var(--game-tooltip-surface-chip-border);
+  color: var(--game-tooltip-text);
+  white-space: nowrap;
+}
+
+.skill-fab-tooltip-chip.is-lingqi {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.28);
+  color: #6366f1;
+}
+
+body.theme-dark .skill-fab-tooltip-chip.is-lingqi {
+  background: rgba(139, 92, 246, 0.18);
+  border-color: rgba(139, 92, 246, 0.36);
+  color: #a78bfa;
+}
+
+.skill-fab-tooltip-chip.is-qixue {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #dc2626;
+}
+
+body.theme-dark .skill-fab-tooltip-chip.is-qixue {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.36);
+  color: #f87171;
+}
+
+.skill-fab-tooltip-chip.is-element {
+  background: rgba(234, 179, 8, 0.1);
+  border-color: rgba(234, 179, 8, 0.3);
+  color: #b45309;
+}
+
+body.theme-dark .skill-fab-tooltip-chip.is-element {
+  background: rgba(251, 191, 36, 0.14);
+  border-color: rgba(251, 191, 36, 0.32);
+  color: #fbbf24;
+}
+
+.skill-fab-tooltip-effects {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--game-tooltip-divider);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.skill-fab-tooltip-effect-line {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--game-tooltip-text);
   white-space: pre-wrap;
+
+  &::before {
+    content: '▸ ';
+    opacity: 0.45;
+    font-size: 10px;
+  }
 }
 
 .skill-fab-tooltip-desc {
-  margin-top: 4px;
+  margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid var(--game-tooltip-divider);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.5;
   color: var(--game-tooltip-muted);
   white-space: pre-wrap;
+  font-style: italic;
+  opacity: 0.8;
 }
 
 .skill-fab {

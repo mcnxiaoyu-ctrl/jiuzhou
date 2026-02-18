@@ -704,23 +704,50 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
             damageType: s.damageType,
             element: s.element,
           });
+          const hasCost = s.costLingqi > 0 || s.costQixue > 0;
+          const hasCooldown = s.cooldownTurns > 0;
+          const elementLabel = formatElement(s.element);
+          const hasElement = elementLabel !== '无';
+          const targetLabel = formatTargetType(s.targetType) + (s.targetCount > 1 ? `×${s.targetCount}` : '');
           const tooltipTitle = (
             <div className="skill-fab-tooltip-content">
               <div className="skill-fab-tooltip-title">{s.name}</div>
-              <div className="skill-fab-tooltip-line">消耗：灵气 {s.costLingqi} / 气血 {s.costQixue}</div>
-              <div className="skill-fab-tooltip-line">冷却：{s.cooldownTurns}（实际 {actualCd}）</div>
-              <div className="skill-fab-tooltip-line">
-                类型：{formatDamageType(s.damageType)} · 目标：{formatTargetType(s.targetType)}
-                {s.targetCount > 1 ? `（${s.targetCount}）` : ''}
+              <div className="skill-fab-tooltip-meta">
+                {hasCost && (
+                  <div className="skill-fab-tooltip-row">
+                    <span className="skill-fab-tooltip-label">消耗</span>
+                    <span className="skill-fab-tooltip-value">
+                      {s.costLingqi > 0 && <span className="skill-fab-tooltip-chip is-lingqi">灵气 {s.costLingqi}</span>}
+                      {s.costQixue > 0 && <span className="skill-fab-tooltip-chip is-qixue">气血 {s.costQixue}</span>}
+                    </span>
+                  </div>
+                )}
+                {hasCooldown && (
+                  <div className="skill-fab-tooltip-row">
+                    <span className="skill-fab-tooltip-label">冷却</span>
+                    <span className="skill-fab-tooltip-value">
+                      {actualCd}回合{actualCd !== s.cooldownTurns ? <span className="skill-fab-tooltip-muted">（基础 {s.cooldownTurns}）</span> : null}
+                    </span>
+                  </div>
+                )}
+                <div className="skill-fab-tooltip-row">
+                  <span className="skill-fab-tooltip-label">类型</span>
+                  <span className="skill-fab-tooltip-value">
+                    <span className="skill-fab-tooltip-chip">{formatDamageType(s.damageType)}</span>
+                    <span className="skill-fab-tooltip-chip">{targetLabel}</span>
+                    {hasElement && <span className="skill-fab-tooltip-chip is-element">{elementLabel}</span>}
+                  </span>
+                </div>
               </div>
-              <div className="skill-fab-tooltip-line">五行：{formatElement(s.element)}</div>
-              {effectLines.length > 0
-                ? effectLines.map((line, idx) => (
-                    <div key={`${s.id}-effect-${idx}`} className="skill-fab-tooltip-line">
+              {effectLines.length > 0 && (
+                <div className="skill-fab-tooltip-effects">
+                  {effectLines.map((line, idx) => (
+                    <div key={`${s.id}-effect-${idx}`} className="skill-fab-tooltip-effect-line">
                       {line}
                     </div>
-                  ))
-                : <div className="skill-fab-tooltip-line">无效果</div>}
+                  ))}
+                </div>
+              )}
               {s.description ? <div className="skill-fab-tooltip-desc">{s.description}</div> : null}
             </div>
           );
