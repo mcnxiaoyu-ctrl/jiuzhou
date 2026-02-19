@@ -458,6 +458,7 @@ const parseTitleEffects = (effectsRaw: unknown): Record<string, number> => {
 const applyTechniquePassiveAttrs = (
   stats: CharacterComputedStats,
   passives: Record<string, number>,
+  pctModifiers: Record<string, number>,
 ): void => {
   for (const [key, value] of Object.entries(passives)) {
     if (!Number.isFinite(value) || value === 0) continue;
@@ -470,7 +471,7 @@ const applyTechniquePassiveAttrs = (
       continue;
     }
     if (TECHNIQUE_PASSIVE_PERCENT_MULTIPLY_KEYS.has(key)) {
-      stats[statKey] = Math.max(0, Math.floor(base * (1 + value)));
+      pctModifiers[statKey] = (pctModifiers[statKey] || 0) + value;
       continue;
     }
     stats[statKey] = Math.max(0, Math.round(base + value));
@@ -545,6 +546,7 @@ const loadTechniquePassives = async (characterId: number): Promise<Record<string
 const applyRealmRewardsToStats = async (
   base: CharacterBaseRow,
   stats: CharacterComputedStats,
+  pctModifiers: Record<string, number>,
 ): Promise<void> => {
   const cfg = await loadRealmBreakthroughConfig();
   const realmText = composeRealmText(base.realm, base.sub_realm);
@@ -568,12 +570,12 @@ const applyRealmRewardsToStats = async (
     const pct = toRecord(entry.rewards?.pct) as BreakthroughPctRewards;
     const addPercent = toRecord(entry.rewards?.addPercent) as BreakthroughAddPercentRewards;
 
-    if (Number.isFinite(pct.max_qixue)) stats.max_qixue = applyPct(stats.max_qixue, Number(pct.max_qixue));
-    if (Number.isFinite(pct.max_lingqi)) stats.max_lingqi = applyPct(stats.max_lingqi, Number(pct.max_lingqi));
-    if (Number.isFinite(pct.wugong)) stats.wugong = applyPct(stats.wugong, Number(pct.wugong));
-    if (Number.isFinite(pct.fagong)) stats.fagong = applyPct(stats.fagong, Number(pct.fagong));
-    if (Number.isFinite(pct.wufang)) stats.wufang = applyPct(stats.wufang, Number(pct.wufang));
-    if (Number.isFinite(pct.fafang)) stats.fafang = applyPct(stats.fafang, Number(pct.fafang));
+    if (Number.isFinite(pct.max_qixue)) pctModifiers.max_qixue = (pctModifiers.max_qixue || 0) + Number(pct.max_qixue);
+    if (Number.isFinite(pct.max_lingqi)) pctModifiers.max_lingqi = (pctModifiers.max_lingqi || 0) + Number(pct.max_lingqi);
+    if (Number.isFinite(pct.wugong)) pctModifiers.wugong = (pctModifiers.wugong || 0) + Number(pct.wugong);
+    if (Number.isFinite(pct.fagong)) pctModifiers.fagong = (pctModifiers.fagong || 0) + Number(pct.fagong);
+    if (Number.isFinite(pct.wufang)) pctModifiers.wufang = (pctModifiers.wufang || 0) + Number(pct.wufang);
+    if (Number.isFinite(pct.fafang)) pctModifiers.fafang = (pctModifiers.fafang || 0) + Number(pct.fafang);
 
     if (Number.isFinite(addPercent.kongzhi_kangxing)) {
       stats.kongzhi_kangxing = Math.max(0, roundRatio(stats.kongzhi_kangxing + Number(addPercent.kongzhi_kangxing)));
@@ -733,6 +735,7 @@ const loadEquippedTitleEffects = async (characterId: number): Promise<Record<str
 
 const computeStaticAttrs = async (base: CharacterBaseRow): Promise<CharacterComputedStats> => {
   const stats = emptyStats();
+  const pctModifiers: Record<string, number> = {};
 
   // 精气神基础成长
   stats.max_qixue += base.jing * 5;
@@ -747,7 +750,7 @@ const computeStaticAttrs = async (base: CharacterBaseRow): Promise<CharacterComp
   stats.mingzhong = roundRatio(DEFAULT_ATTRS.mingzhong + base.shen * 0.002);
   stats.baoji = roundRatio(DEFAULT_ATTRS.baoji + base.shen * 0.001);
 
-  await applyRealmRewardsToStats(base, stats);
+  await applyRealmRewardsToStats(base, stats, pctModifiers);
   const effectiveLevel = getEffectiveLevelByRealm(base.realm, base.sub_realm);
 
   const [equipBonus, titleEffects, techniquePassives] = await Promise.all([
@@ -762,7 +765,15 @@ const computeStaticAttrs = async (base: CharacterBaseRow): Promise<CharacterComp
   for (const [key, value] of Object.entries(titleEffects)) {
     applyAttrDelta(stats, key, value);
   }
-  applyTechniquePassiveAttrs(stats, techniquePassives);
+  applyTechniquePassiveAttrs(stats, techniquePassives, pctModifiers);
+
+  for (const [key, pct] of Object.entries(pctModifiers)) {
+    if (pct === 0) continue;
+    const statKey = key as keyof CharacterComputedStats;
+    if (statKey in stats) {
+      stats[statKey] = Math.max(0, Math.floor(stats[statKey] * (1 + pct)));
+    }
+  }
 
   return normalizeStats(stats);
 };
