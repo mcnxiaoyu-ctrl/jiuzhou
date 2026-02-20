@@ -14,12 +14,12 @@ import { buildEquipmentAffixDisplayText } from "../../shared/equipmentAffixText"
 import { formatAffixRollPercent, getAffixRollColor, getAffixRollPercent } from "../../shared/equipmentAffixRoll";
 import { formatSignedNumber, formatSignedPercent, formatPercent } from "../../shared/formatAttr";
 import { coerceAffixes as coerceItemMetaAffixes } from "../../shared/itemMetaFormat";
-import { BAG_CATEGORY_LABELS } from "../../shared/itemTaxonomy";
-import type { BagCategory as SharedBagCategory } from "../../shared/itemTaxonomy";
+import { ITEM_CATEGORY_LABELS } from "../../shared/itemTaxonomy";
+import type { GameItemCategory as SharedGameItemCategory } from "../../shared/itemTaxonomy";
 
 /* ───────── 类型 ───────── */
 
-export type BagCategory = SharedBagCategory;
+export type BagCategory = SharedGameItemCategory;
 export type BagQuality = "黄" | "玄" | "地" | "天";
 export type BagSort =
   | "default"
@@ -122,7 +122,7 @@ export type BagItem = {
 
 /* ───────── 常量 ───────── */
 
-export const categoryLabels: Record<BagCategory, string> = BAG_CATEGORY_LABELS;
+export const categoryLabels: Record<string, string> = ITEM_CATEGORY_LABELS;
 
 export const qualityLabels: BagQuality[] = ["黄", "玄", "地", "天"];
 

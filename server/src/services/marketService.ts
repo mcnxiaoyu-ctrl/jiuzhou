@@ -148,7 +148,7 @@ const toListingDto = (
       row.instance_quality === null || row.instance_quality === undefined
         ? (itemDef.quality === null || itemDef.quality === undefined ? null : String(itemDef.quality))
         : String(row.instance_quality),
-    category,
+    category: category || null,
     subCategory: itemDef.sub_category === null || itemDef.sub_category === undefined ? null : String(itemDef.sub_category),
     description: itemDef.description === null || itemDef.description === undefined ? null : String(itemDef.description),
     longDesc: itemDef.long_desc === null || itemDef.long_desc === undefined ? null : String(itemDef.long_desc),

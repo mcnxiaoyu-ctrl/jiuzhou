@@ -64,6 +64,7 @@ import type { BagAction, BagCategory, BagItem, BagQuality, BagSort, BatchMode } 
 import { buildAutoDisassembleSubCategoryOptionsByCategory } from '../../shared/autoDisassembleFilters';
 import { formatPercent, formatSignedNumber, formatSignedPercent } from '../../shared/formatAttr';
 import { getItemQualityMeta } from '../../shared/itemQuality';
+import { useGameItemTaxonomy } from '../../shared/useGameItemTaxonomy';
 import InventoryItemCell from '../../shared/InventoryItemCell';
 import { EquipmentDetailAttrList } from './EquipmentDetailAttrList';
 import { SetBonusDisplay } from './SetBonusDisplay';
@@ -1153,6 +1154,7 @@ interface MobileBagModalProps {
 
 const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
   const { message } = App.useApp();
+  useGameItemTaxonomy(open);
 
   /* 状态 */
   const [category, setCategory] = useState<BagCategory>('all');

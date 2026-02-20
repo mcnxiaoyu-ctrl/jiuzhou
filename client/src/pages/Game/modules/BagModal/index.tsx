@@ -58,6 +58,7 @@ import CraftModal from './CraftModal';
 import GemSynthesisModal from './GemSynthesisModal';
 import { formatPercent, formatSignedNumber, formatSignedPercent } from '../../shared/formatAttr';
 import { buildAutoDisassembleSubCategoryOptionsByCategory } from '../../shared/autoDisassembleFilters';
+import { useGameItemTaxonomy } from '../../shared/useGameItemTaxonomy';
 import { useIsMobile } from '../../shared/responsive';
 import { getItemQualityMeta } from '../../shared/itemQuality';
 import InventoryItemCell from '../../shared/InventoryItemCell';
@@ -72,6 +73,7 @@ interface BagModalProps {
 
 const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
   const { message } = App.useApp();
+  useGameItemTaxonomy(open);
   const [category, setCategory] = useState<BagCategory>('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<BagSort>('default');

@@ -13,6 +13,7 @@ import {
   normalizeAutoDisassembleCategoryList,
   normalizeAutoDisassembleSubCategoryList,
 } from '../../shared/autoDisassembleFilters';
+import { useGameItemTaxonomy } from '../../shared/useGameItemTaxonomy';
 import { useIsMobile } from '../../shared/responsive';
 import './index.scss';
 
@@ -158,6 +159,7 @@ const buildAutoDisassembleRulePayload = (rule: AutoDisassembleRuleDraft): AutoDi
 
 const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   const { message } = App.useApp();
+  useGameItemTaxonomy(open);
   const [activeKey, setActiveKey] = useState<SettingKey>('base');
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => getStoredThemeMode());
   const [autoDisassembleEnabled, setAutoDisassembleEnabled] = useState(false);

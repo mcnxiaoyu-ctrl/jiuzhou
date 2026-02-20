@@ -11,6 +11,7 @@ import MarketItemTooltipContent, {
   normalizeMarketTooltipCategory,
   type MarketTooltipItemData,
 } from '../../shared/MarketItemTooltipContent';
+import { useGameItemTaxonomy } from '../../shared/useGameItemTaxonomy';
 import './index.scss';
 
 type SlotSide = 'bag' | 'warehouse';
@@ -141,6 +142,7 @@ interface WarehouseModalProps {
 
 const WarehouseModal: React.FC<WarehouseModalProps> = ({ open, onClose }) => {
   const { message } = App.useApp();
+  useGameItemTaxonomy(open);
   const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
   const [mobileSide, setMobileSide] = useState<SlotSide>('warehouse');

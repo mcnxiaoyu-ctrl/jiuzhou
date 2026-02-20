@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { withRouteError } from '../middleware/routeError.js';
 import { getInfoTargetDetail } from '../services/infoTargetService.js';
+import { buildGameItemTaxonomy } from '../services/itemTaxonomyService.js';
 import { getSingleParam } from '../services/shared/httpParam.js';
 
 const router = Router();
@@ -8,6 +9,15 @@ const router = Router();
 const isAllowedType = (value: string): value is 'npc' | 'monster' | 'item' | 'player' => {
   return value === 'npc' || value === 'monster' || value === 'item' || value === 'player';
 };
+
+router.get('/item-taxonomy', (_req: Request, res: Response) => {
+  try {
+    const taxonomy = buildGameItemTaxonomy();
+    res.json({ success: true, data: { taxonomy } });
+  } catch (error) {
+    return withRouteError(res, 'infoRoutes 路由异常', error);
+  }
+});
 
 router.get('/:type/:id', async (req: Request, res: Response) => {
   try {

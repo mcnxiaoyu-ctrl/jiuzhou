@@ -6,7 +6,6 @@
  * - 提供统一匹配函数，供战斗掉落、秘境结算等自动分解入口复用
  */
 import { clampQualityRank } from './equipmentDisassembleRules.js';
-import { normalizeMarketCategoryFilter, resolveMarketItemCategory } from './shared/marketItemCategory.js';
 
 export interface AutoDisassembleRuleSet {
   categories: string[];
@@ -32,15 +31,7 @@ export interface AutoDisassembleCandidateMeta {
 }
 
 const normalizeCategoryToken = (raw: unknown): string => {
-  const value = String(raw ?? '').trim().toLowerCase();
-  if (!value) return '';
-  if (value === 'skillbook' || value === 'technique' || value === 'technique_book') return 'skill';
-  const normalizedByMarket = normalizeMarketCategoryFilter(value);
-  if (normalizedByMarket && normalizedByMarket !== 'all') {
-    if (normalizedByMarket === 'skillbook') return 'skill';
-    return normalizedByMarket;
-  }
-  return value;
+  return String(raw ?? '').trim().toLowerCase();
 };
 
 const normalizeCategoryList = (raw: unknown, maxSize: number = 100): string[] => {
@@ -56,12 +47,6 @@ const normalizeCategoryList = (raw: unknown, maxSize: number = 100): string[] =>
     if (out.length >= maxSize) break;
   }
   return out;
-};
-
-const toEffectDefsArray = (raw: unknown): unknown[] | undefined => {
-  if (Array.isArray(raw)) return raw;
-  if (raw && typeof raw === 'object') return [raw];
-  return undefined;
 };
 
 const normalizeStringList = (raw: unknown, maxSize: number = 100): string[] => {
@@ -158,17 +143,6 @@ const matchesRuleSet = (ruleSet: AutoDisassembleRuleSet, meta: AutoDisassembleCa
   const candidateCategorySet = new Set<string>();
   if (normalizedCategory) candidateCategorySet.add(normalizedCategory);
   if (rawCategory) candidateCategorySet.add(rawCategory);
-
-  const resolvedMarketCategory = resolveMarketItemCategory({
-    category: rawCategory,
-    sub_category: subCategory || undefined,
-    effect_defs: toEffectDefsArray(meta.effectDefs),
-  });
-  // 历史功法书常见为 category=consumable + sub_category=technique_book，
-  // 规则层统一按 skill 匹配，兼容老数据中的 skillbook 值。
-  if (resolvedMarketCategory === 'skillbook') {
-    candidateCategorySet.add('skill');
-  }
 
   const ruleCategories = ruleSet.categories.map((value) => normalizeCategoryToken(value)).filter((value) => value.length > 0);
 

@@ -17,10 +17,10 @@ import { gameSocket, type CharacterData } from '../../../../services/gameSocket'
 import { useIsMobile } from '../../shared/responsive';
 import { getItemQualityMeta, normalizeItemQualityName } from '../../shared/itemQuality';
 import InventoryItemCell from '../../shared/InventoryItemCell';
+import { ITEM_CATEGORY_ALL_OPTION, ITEM_CATEGORY_LABELS, ITEM_CATEGORY_OPTIONS } from '../../shared/itemTaxonomy';
+import { useGameItemTaxonomy } from '../../shared/useGameItemTaxonomy';
 import MarketItemTooltipContent, {
   ITEM_TOOLTIP_CLASS_NAMES,
-  normalizeMarketTooltipCategory,
-  type MarketTooltipCategory,
 } from '../../shared/MarketItemTooltipContent';
 import {
   buildBagItem,
@@ -39,7 +39,7 @@ type MarketPanel = 'market' | 'my' | 'list' | 'records';
 
 type ItemQuality = '黄' | '玄' | '地' | '天';
 
-type MarketCategory = 'all' | MarketTooltipCategory;
+type MarketCategory = string;
 
 type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
 type MarketTooltipPlacement = 'rightTop' | 'right' | 'rightBottom';
@@ -194,7 +194,7 @@ type ListingItem = {
   name: string;
   icon: string;
   quality: ItemQuality;
-  category: Exclude<MarketCategory, 'all'>;
+  category: string;
   subCategory: string | null;
   description: string | null;
   longDesc: string | null;
@@ -227,16 +227,6 @@ type TradeRecord = {
   unitPrice: number;
   counterparty: string;
   time: number;
-};
-
-const categoryText: Record<MarketCategory, string> = {
-  all: '全部',
-  consumable: '丹药',
-  material: '材料',
-  gem: '宝石',
-  equipment: '装备',
-  skillbook: '功法',
-  other: '其他',
 };
 
 const ITEM_ICON_GLOB = import.meta.glob('../../../../assets/images/**/*.{png,jpg,jpeg,webp,gif}', {
@@ -273,8 +263,10 @@ const getQualityClassName = (value: unknown): string => {
   return getItemQualityMeta(value)?.className ?? '';
 };
 
-const normalizeMarketCategory = (value: string | null | undefined): Exclude<MarketCategory, 'all'> => {
-  return normalizeMarketTooltipCategory(value);
+const normalizeMarketCategory = (value: string | null | undefined): string => {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized || normalized === 'all') return 'other';
+  return normalized;
 };
 
 const toNonNegativeIntegerOrUndefined = (value: string): number | undefined => {
@@ -345,6 +337,7 @@ interface MarketModalProps {
 
 const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '我' }) => {
   const { message } = App.useApp();
+  useGameItemTaxonomy(open);
   const messageRef = useRef(message);
   useEffect(() => {
     messageRef.current = message;
@@ -590,18 +583,10 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     () => menuItems.map((it) => ({ value: it.key, label: it.shortLabel })),
     [menuItems],
   );
-  const categoryOptions = useMemo(
-    () => [
-      { value: 'all', label: '全部分类' },
-      { value: 'consumable', label: '丹药' },
-      { value: 'material', label: '材料' },
-      { value: 'gem', label: '宝石' },
-      { value: 'equipment', label: '装备' },
-      { value: 'skillbook', label: '功法书' },
-      { value: 'other', label: '其他' },
-    ],
-    [],
-  );
+  const categoryOptions = [ITEM_CATEGORY_ALL_OPTION, ...ITEM_CATEGORY_OPTIONS].map((option) => ({
+    value: option.value as MarketCategory,
+    label: option.label,
+  }));
   const sortOptions = useMemo(
     () => [
       { value: 'timeDesc', label: '最新上架' },
@@ -832,7 +817,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                       <div className="market-item-name">{row.name}</div>
                       <div className="market-item-tags">
                         <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.quality)}`}>{row.quality}</Tag>
-                        <Tag className="market-tag">{categoryText[row.category]}</Tag>
+                        <Tag className="market-tag">{ITEM_CATEGORY_LABELS[row.category] ?? row.category}</Tag>
                         {row.seller === playerName ? <Tag className="market-tag market-tag-mine">我的上架</Tag> : null}
                       </div>
                     </div>
@@ -900,7 +885,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                           <div className="market-item-name">{row.name}</div>
                           <div className="market-item-tags">
                             <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.quality)}`}>{row.quality}</Tag>
-                            <Tag className="market-tag">{categoryText[row.category]}</Tag>
+                            <Tag className="market-tag">{ITEM_CATEGORY_LABELS[row.category] ?? row.category}</Tag>
                             {row.seller === playerName ? <Tag className="market-tag market-tag-mine">我的上架</Tag> : null}
                           </div>
                         </div>
@@ -978,7 +963,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                       <div className="market-item-name">{row.name}</div>
                       <div className="market-item-tags">
                         <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.quality)}`}>{row.quality}</Tag>
-                        <Tag className="market-tag">{categoryText[row.category]}</Tag>
+                        <Tag className="market-tag">{ITEM_CATEGORY_LABELS[row.category] ?? row.category}</Tag>
                       </div>
                     </div>
                     <div className="market-mobile-price">
@@ -1041,7 +1026,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                           <div className="market-item-name">{row.name}</div>
                           <div className="market-item-tags">
                             <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.quality)}`}>{row.quality}</Tag>
-                            <Tag className="market-tag">{categoryText[row.category]}</Tag>
+                            <Tag className="market-tag">{ITEM_CATEGORY_LABELS[row.category] ?? row.category}</Tag>
                           </div>
                         </div>
                       </div>

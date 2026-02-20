@@ -3,6 +3,7 @@ import EquipmentAffixTooltipList from './EquipmentAffixTooltipList';
 import { formatSignedNumber, formatSignedPercent } from './formatAttr';
 import { PERCENT_ATTR_KEYS, coerceAffixes, formatScalar, limitLines, normalizeText } from './itemMetaFormat';
 import { getItemQualityMeta } from './itemQuality';
+import { getItemTaxonomyLabel } from './itemTaxonomy';
 import './itemTooltip.scss';
 
 /**
@@ -24,20 +25,11 @@ import './itemTooltip.scss';
  * - 分类/部位/用途字段若为英文且无法映射，会自动隐藏，避免 Tooltip 出现技术字段噪声。
  */
 
-export type MarketTooltipCategory = 'consumable' | 'material' | 'gem' | 'equipment' | 'skillbook' | 'other';
+export type MarketTooltipCategory = string;
 
 type TooltipTag = {
   text: string;
   qualityClassName?: string;
-};
-
-const CATEGORY_TEXT: Record<MarketTooltipCategory, string> = {
-  consumable: '丹药',
-  material: '材料',
-  gem: '宝石',
-  equipment: '装备',
-  skillbook: '功法',
-  other: '其他',
 };
 
 const hasLatin = (value: string): boolean => /[A-Za-z]/.test(value);
@@ -217,13 +209,13 @@ const translateUseType = (value?: string | null): string => {
 const translateCategory = (value?: string | null): string => {
   const raw = (value ?? '').trim();
   if (!raw) return '';
+  const taxonomyLabel = getItemTaxonomyLabel(raw);
+  if (taxonomyLabel && taxonomyLabel !== raw) return taxonomyLabel;
   const m: Record<string, string> = {
     consumable: '丹药',
     material: '材料',
     gem: '宝石',
     equipment: '装备',
-    skillbook: '功法',
-    skill: '功法',
     other: '其他',
     quest: '任务',
     misc: '杂物',
@@ -235,13 +227,9 @@ const translateCategory = (value?: string | null): string => {
 };
 
 export const normalizeMarketTooltipCategory = (value: unknown): MarketTooltipCategory => {
-  const raw = typeof value === 'string' ? value.trim() : '';
-  if (raw === 'consumable' || raw === '丹药') return 'consumable';
-  if (raw === 'material' || raw === '材料') return 'material';
-  if (raw === 'gem' || raw === '宝石') return 'gem';
-  if (raw === 'equipment' || raw === '装备') return 'equipment';
-  if (raw === 'skillbook' || raw === '功法' || raw === 'skill' || raw === '功法书') return 'skillbook';
-  return 'other';
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (!normalized || normalized === 'all') return 'other';
+  return normalized;
 };
 
 export const buildMarketTooltipCategoryLabel = (category?: string | null, subCategory?: string | null): string => {
@@ -296,7 +284,7 @@ const MarketItemTooltipContent: React.FC<{ item: MarketTooltipItemData }> = ({ i
       });
     }
 
-    const categoryText = normalizeText(item.categoryLabel) || CATEGORY_TEXT[item.category];
+    const categoryText = normalizeText(item.categoryLabel) || getItemTaxonomyLabel(item.category);
     tags.push({ text: categoryText });
 
     const equipSlot = translateEquipSlot(item.equipSlot);

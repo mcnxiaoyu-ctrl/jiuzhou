@@ -9,6 +9,7 @@ export * from './api/world';
 export * from './api/bounty';
 export * from './api/inventory';
 export * from './api/market-mail';
+export * from './api/info-config';
 export * from './api/technique';
 export * from './api/combat-realm';
 export * from './api/gemSynthesis';

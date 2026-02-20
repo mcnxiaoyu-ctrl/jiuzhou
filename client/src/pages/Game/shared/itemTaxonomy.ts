@@ -1,24 +1,23 @@
+import type { GameItemTaxonomyDto } from '../../../services/api';
+
 /**
- * 物品分类/子类公用字典
+ * 全局物品分类字典（前端单一消费入口）
  *
  * 作用：
- * - 统一背包、自动分解等模块对“主分类/子类”枚举与中文文案的单一来源，避免各模块独自维护导致口径漂移。
- * - 提供稳定可复用的 options 与按分类分组的子类白名单，减少重复映射逻辑。
+ * - 维护“当前生效”的统一 taxonomy 快照，默认值来自本地基线，运行时由后端权威接口覆盖。
+ * - 为背包、自动分解、坊市、仓库 Tooltip 提供同一份一级分类/子分类字典。
  *
  * 输入/输出：
- * - 输入：无（纯静态配置模块）。
- * - 输出：
- *   1) `BagCategory`、`BagPrimaryCategory` 类型；
- *   2) 主分类文案、主分类 options；
- *   3) 子类 options、子类按主分类白名单。
+ * - 输入：`applyGameItemTaxonomy` 接收后端下发 taxonomy DTO。
+ * - 输出：可被全局复用的 `ITEM_CATEGORY_*`、`ITEM_SUB_CATEGORY_*` 与统一 label/归一函数。
  *
  * 数据流/状态流：
- * - 业务模块仅消费本模块导出的常量与类型，不在模块外改写；
- * - 自动分解与背包筛选都复用同一字典，实现“改一处、全链路同步”。
+ * - 初始使用本地基线常量；
+ * - 收到后端 taxonomy 后原地更新（保持引用稳定，避免各模块重复构建字典）。
  *
  * 关键边界条件与坑点：
- * 1) `all` 仅用于界面筛选态，不应进入自动分解规则持久化数据。
- * 2) `technique_book` 与 `technique` 必须保持在 `skill` 主分类白名单中，避免功法相关筛选失效。
+ * 1) `all` 仅用于 UI 过滤态，业务规则应使用真实一级分类（`ITEM_CATEGORY_OPTIONS`）。
+ * 2) 分类值以后端真实一级分类为准，前端不做别名映射与语义转换。
  */
 
 export interface LabeledOption {
@@ -26,42 +25,31 @@ export interface LabeledOption {
   value: string;
 }
 
-export type BagCategory =
-  | 'all'
-  | 'consumable'
-  | 'material'
-  | 'gem'
-  | 'equipment'
-  | 'skill'
-  | 'quest';
+export type GameItemPrimaryCategory = string;
+export type GameItemCategory = 'all' | GameItemPrimaryCategory;
 
-export type BagPrimaryCategory = Exclude<BagCategory, 'all'>;
+const ITEM_CATEGORY_ALL_OPTION_BASE: LabeledOption = { value: 'all', label: '全部' };
 
-export const BAG_CATEGORY_LABELS: Record<BagCategory, string> = {
-  all: '全部',
+const ITEM_CATEGORY_OPTIONS_BASE: LabeledOption[] = [
+  { value: 'consumable', label: '丹药' },
+  { value: 'material', label: '材料' },
+  { value: 'gem', label: '宝石' },
+  { value: 'equipment', label: '装备' },
+  { value: 'quest', label: '任务' },
+  { value: 'other', label: '其他' },
+];
+
+const ITEM_CATEGORY_LABELS_BASE: Record<string, string> = {
+  all: ITEM_CATEGORY_ALL_OPTION_BASE.label,
   consumable: '丹药',
   material: '材料',
   gem: '宝石',
   equipment: '装备',
-  skill: '功法',
   quest: '任务',
+  other: '其他',
 };
 
-const BAG_CATEGORY_OPTION_ORDER: BagPrimaryCategory[] = [
-  'equipment',
-  'consumable',
-  'material',
-  'gem',
-  'skill',
-  'quest',
-];
-
-export const BAG_CATEGORY_OPTIONS: LabeledOption[] = BAG_CATEGORY_OPTION_ORDER.map((value) => ({
-  value,
-  label: BAG_CATEGORY_LABELS[value],
-}));
-
-export const BAG_SUB_CATEGORY_OPTIONS: LabeledOption[] = [
+const SUB_CATEGORY_OPTIONS_BASE: LabeledOption[] = [
   { label: '剑', value: 'sword' },
   { label: '刀', value: 'blade' },
   { label: '法杖', value: 'staff' },
@@ -109,8 +97,12 @@ export const BAG_SUB_CATEGORY_OPTIONS: LabeledOption[] = [
   { label: '木材', value: 'wood' },
 ];
 
-export const BAG_SUB_CATEGORY_VALUES_BY_CATEGORY: Record<BagCategory, string[]> = {
-  all: BAG_SUB_CATEGORY_OPTIONS.map((option) => option.value),
+const SUB_CATEGORY_LABELS_BASE: Record<string, string> = Object.fromEntries(
+  SUB_CATEGORY_OPTIONS_BASE.map((option) => [option.value, option.label]),
+);
+
+const SUB_CATEGORY_VALUES_BY_CATEGORY_BASE: Record<string, string[]> = {
+  all: SUB_CATEGORY_OPTIONS_BASE.map((option) => option.value),
   consumable: ['pill', 'box', 'function', 'enhance', 'scroll', 'month_card', 'battle_pass', 'token'],
   material: [
     'herb',
@@ -148,6 +140,161 @@ export const BAG_SUB_CATEGORY_VALUES_BY_CATEGORY: Record<BagCategory, string[]> 
     'armor',
     'token',
   ],
-  skill: ['technique', 'technique_book'],
   quest: ['key', 'collect'],
+  other: [],
+};
+
+export const ITEM_CATEGORY_ALL_OPTION: LabeledOption = { ...ITEM_CATEGORY_ALL_OPTION_BASE };
+export const ITEM_CATEGORY_OPTIONS: LabeledOption[] = [...ITEM_CATEGORY_OPTIONS_BASE];
+export const ITEM_CATEGORY_LABELS: Record<string, string> = { ...ITEM_CATEGORY_LABELS_BASE };
+
+export const ITEM_SUB_CATEGORY_OPTIONS: LabeledOption[] = [...SUB_CATEGORY_OPTIONS_BASE];
+export const ITEM_SUB_CATEGORY_LABELS: Record<string, string> = { ...SUB_CATEGORY_LABELS_BASE };
+export const ITEM_SUB_CATEGORY_VALUES_BY_CATEGORY: Record<string, string[]> = Object.fromEntries(
+  Object.entries(SUB_CATEGORY_VALUES_BY_CATEGORY_BASE).map(([key, values]) => [key, [...values]])
+);
+
+const replaceArrayInPlace = <T>(target: T[], source: T[]): void => {
+  target.splice(0, target.length, ...source);
+};
+
+const replaceRecordInPlace = (target: Record<string, string>, source: Record<string, string>): void => {
+  for (const key of Object.keys(target)) {
+    if (source[key] !== undefined) continue;
+    delete target[key];
+  }
+  for (const [key, value] of Object.entries(source)) {
+    target[key] = value;
+  }
+};
+
+const replaceStringArrayRecordInPlace = (target: Record<string, string[]>, source: Record<string, string[]>): void => {
+  for (const key of Object.keys(target)) {
+    if (source[key] !== undefined) continue;
+    delete target[key];
+  }
+  for (const [key, values] of Object.entries(source)) {
+    target[key] = [...values];
+  }
+};
+
+const normalizeToken = (raw: unknown): string => String(raw ?? '').trim().toLowerCase();
+
+const normalizeOptions = (raw: unknown): LabeledOption[] => {
+  if (!Array.isArray(raw)) return [];
+  const out: LabeledOption[] = [];
+  const seen = new Set<string>();
+  for (const row of raw) {
+    const value = normalizeToken((row as { value?: unknown })?.value);
+    const label = String((row as { label?: unknown })?.label ?? '').trim();
+    if (!value || !label || seen.has(value)) continue;
+    seen.add(value);
+    out.push({ value, label });
+  }
+  return out;
+};
+
+const normalizeOption = (raw: unknown): LabeledOption | null => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const value = normalizeToken((raw as { value?: unknown }).value);
+  const label = String((raw as { label?: unknown }).label ?? '').trim();
+  if (!value || !label) return null;
+  return { value, label };
+};
+
+const normalizeStringMap = (raw: unknown): Record<string, string> => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const normalizedKey = normalizeToken(key);
+    const normalizedValue = String(value ?? '').trim();
+    if (!normalizedKey || !normalizedValue) continue;
+    out[normalizedKey] = normalizedValue;
+  }
+  return out;
+};
+
+const normalizeStringArrayMap = (raw: unknown): Record<string, string[]> => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const normalizedKey = normalizeToken(key);
+    if (!normalizedKey || !Array.isArray(value)) continue;
+    const seen = new Set<string>();
+    const values: string[] = [];
+    for (const row of value) {
+      const normalizedValue = normalizeToken(row);
+      if (!normalizedValue || seen.has(normalizedValue)) continue;
+      seen.add(normalizedValue);
+      values.push(normalizedValue);
+    }
+    out[normalizedKey] = values;
+  }
+  return out;
+};
+
+export const applyGameItemTaxonomy = (taxonomy: GameItemTaxonomyDto): void => {
+  const allOption = normalizeOption(taxonomy?.categories?.all);
+  const categoryOptions = normalizeOptions(taxonomy?.categories?.options);
+  const categoryLabels = normalizeStringMap(taxonomy?.categories?.labels);
+
+  const subCategoryOptions = normalizeOptions(taxonomy?.subCategories?.options);
+  const subCategoryLabels = normalizeStringMap(taxonomy?.subCategories?.labels);
+  const byCategory = normalizeStringArrayMap(taxonomy?.subCategories?.byCategory);
+
+  if (allOption && allOption.value === 'all') {
+    ITEM_CATEGORY_ALL_OPTION.label = allOption.label;
+    ITEM_CATEGORY_ALL_OPTION.value = allOption.value;
+  }
+
+  if (categoryOptions.length > 0) {
+    replaceArrayInPlace(ITEM_CATEGORY_OPTIONS, categoryOptions);
+  }
+
+  const nextCategoryLabels: Record<string, string> = {
+    ...ITEM_CATEGORY_LABELS_BASE,
+    ...categoryLabels,
+    all: categoryLabels.all ?? ITEM_CATEGORY_ALL_OPTION.label,
+  };
+  for (const option of ITEM_CATEGORY_OPTIONS) {
+    if (!nextCategoryLabels[option.value]) {
+      nextCategoryLabels[option.value] = option.label;
+    }
+  }
+  replaceRecordInPlace(ITEM_CATEGORY_LABELS, nextCategoryLabels);
+
+  if (subCategoryOptions.length > 0) {
+    replaceArrayInPlace(ITEM_SUB_CATEGORY_OPTIONS, subCategoryOptions);
+  }
+
+  const nextSubCategoryLabels: Record<string, string> = {
+    ...SUB_CATEGORY_LABELS_BASE,
+    ...subCategoryLabels,
+  };
+  for (const option of ITEM_SUB_CATEGORY_OPTIONS) {
+    if (!nextSubCategoryLabels[option.value]) {
+      nextSubCategoryLabels[option.value] = option.label;
+    }
+  }
+  replaceRecordInPlace(ITEM_SUB_CATEGORY_LABELS, nextSubCategoryLabels);
+
+  const nextByCategory: Record<string, string[]> = {
+    ...SUB_CATEGORY_VALUES_BY_CATEGORY_BASE,
+    ...byCategory,
+  };
+  if (!nextByCategory.all || nextByCategory.all.length === 0) {
+    nextByCategory.all = ITEM_SUB_CATEGORY_OPTIONS.map((option) => option.value);
+  }
+  for (const option of ITEM_CATEGORY_OPTIONS) {
+    if (!nextByCategory[option.value]) {
+      nextByCategory[option.value] = [];
+    }
+  }
+  replaceStringArrayRecordInPlace(ITEM_SUB_CATEGORY_VALUES_BY_CATEGORY, nextByCategory);
+};
+
+export const getItemTaxonomyLabel = (value: unknown): string => {
+  const key = normalizeToken(value);
+  if (!key) return '';
+  return ITEM_SUB_CATEGORY_LABELS[key] || ITEM_CATEGORY_LABELS[key] || key;
 };
