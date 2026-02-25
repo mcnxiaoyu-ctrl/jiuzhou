@@ -1,30 +1,33 @@
 /**
- * IdleBattleExecutor — 挂机战斗执行循环
+ * IdleBattleExecutor — 挂机战斗执行循环（批量写入版）
  *
  * 作用：
  *   驱动离线挂机战斗的核心执行逻辑，包括：
- *   - executeSingleBatch：执行单场战斗，结算奖励，写入 DB
+ *   - executeSingleBatch：执行单场战斗（纯计算 + 奖励分发，不直接写 DB）
+ *   - flushBuffer：将内存缓冲区批量写入 DB（减少 DB 操作次数）
  *   - startExecutionLoop：启动 setInterval 驱动的执行循环，检查终止条件
  *   - stopExecutionLoop：手动停止指定会话的执行循环
  *   - recoverActiveIdleSessions：服务启动时恢复所有活跃会话
  *
  * 输入/输出：
- *   - executeSingleBatch(session, batchIndex) → SingleBatchResult
+ *   - executeSingleBatch(session, batchIndex, userId) → SingleBatchResult
+ *   - flushBuffer(sessionId, buffer) → Promise<void>
  *   - startExecutionLoop(session, userId) → void（异步驱动）
  *   - stopExecutionLoop(sessionId) → void
  *   - recoverActiveIdleSessions() → Promise<void>
  *
- * 数据流：
- *   startExecutionLoop → setInterval → executeSingleBatch → BattleEngine.autoExecute()
- *   → quickDistributeRewards → updateSessionSummary → emitToUser
- *   终止条件满足 → completeIdleSession → releaseIdleLock
+ * 数据流（批量写入）：
+ *   startExecutionLoop → setInterval → executeSingleBatch（纯计算）
+ *   → 结果追加到 BatchBuffer → 达到 FLUSH_BATCH_SIZE 或 FLUSH_INTERVAL_MS
+ *   → flushBuffer → 批量 INSERT idle_battle_batches + UPDATE stamina + updateSessionSummary
+ *   → emitToUser（每场仍实时推送）
+ *   终止条件满足 → 强制 flushBuffer → completeIdleSession → releaseIdleLock
  *
  * 关键边界条件：
- *   1. 每场战斗完成后检查终止条件（时长超限、Stamina 耗尽、status = 'stopping'）
- *      顺序：先执行战斗，再检查终止，保证至少执行一场
- *   2. 背包满时 bagFullFlag = true，跳过物品掉落但继续执行（经验/银两仍发放）
+ *   1. 终止时必须强制 flush 剩余缓冲区，防止数据丢失
+ *   2. flush 失败不中断循环，记录日志后继续（下次 flush 会重试累积数据）
  *   3. 战败时 expGained/silverGained/itemsGained 均为零（由 quickDistributeRewards 保证）
- *   4. 执行循环使用 Map 管理，防止同一会话重复启动
+ *   4. 同一 sessionId 不会重复启动（activeLoops Map 保护）
  */
 
 import { randomUUID } from 'crypto';
@@ -53,17 +56,38 @@ import {
 /** 每场战斗之间的间隔（ms）*/
 const BATTLE_INTERVAL_MS = 100;
 
+/**
+ * 缓冲区积累多少场后触发 flush（场数阈值）
+ * 1000 会话 × 10场/flush = 每次 flush 约 1000 次 DB 批量写入，而非 10000 次单条写入
+ */
+const FLUSH_BATCH_SIZE = 10;
+
+/**
+ * 距上次 flush 超过此时间后强制 flush（时间阈值，ms）
+ * 防止低频会话长时间不 flush 导致数据延迟
+ */
+const FLUSH_INTERVAL_MS = 5_000;
+
 // ============================================
-// 内部状态：执行循环 Map（sessionId → intervalHandle）
+// 内部状态
 // ============================================
 
+/** 执行循环 Map（sessionId → intervalHandle）*/
 const activeLoops = new Map<string, ReturnType<typeof setInterval>>();
+
+/**
+ * 活跃缓冲区 Map（sessionId → { characterId, buffer }）
+ *
+ * 提升到模块级，使 flushAllBuffers 可以在进程退出时遍历所有会话缓冲区。
+ * startExecutionLoop 写入，stopExecutionLoop / 终止时删除。
+ */
+const activeBuffers = new Map<string, { characterId: number; buffer: BatchBuffer }>();
 
 // ============================================
 // 类型定义
 // ============================================
 
-/** 单场战斗执行结果 */
+/** 单场战斗执行结果（纯计算结果，不含 DB 写入） */
 export interface SingleBatchResult {
   result: 'attacker_win' | 'defender_win' | 'draw';
   expGained: number;
@@ -74,6 +98,60 @@ export interface SingleBatchResult {
   battleLog: BattleLogEntry[];
   monsterIds: string[];
   bagFullFlag: boolean;
+}
+
+/**
+ * 内存缓冲区：积累多场战斗结果，批量写入 DB
+ *
+ * 字段说明：
+ *   - batches：待写入 idle_battle_batches 的行数据
+ *   - staminaDelta：待扣减的 stamina 总量（原子累加，flush 时一次性写入）
+ *   - summaryDelta：待更新 idle_sessions 的汇总增量
+ *   - lastFlushAt：上次 flush 时间戳，用于时间阈值判断
+ */
+interface BatchBuffer {
+  batches: Array<{
+    id: string;
+    sessionId: string;
+    batchIndex: number;
+    result: SingleBatchResult['result'];
+    roundCount: number;
+    randomSeed: number;
+    expGained: number;
+    silverGained: number;
+    itemsGained: RewardItemEntry[];
+    battleLog: BattleLogEntry[];
+    monsterIds: string[];
+  }>;
+  staminaDelta: number;
+  summaryDelta: {
+    totalBattlesDelta: number;
+    winDelta: number;
+    loseDelta: number;
+    expDelta: number;
+    silverDelta: number;
+    newItems: RewardItemEntry[];
+    bagFullFlag: boolean;
+  };
+  lastFlushAt: number;
+}
+
+/** 创建空缓冲区 */
+function createBuffer(): BatchBuffer {
+  return {
+    batches: [],
+    staminaDelta: 0,
+    summaryDelta: {
+      totalBattlesDelta: 0,
+      winDelta: 0,
+      loseDelta: 0,
+      expDelta: 0,
+      silverDelta: 0,
+      newItems: [],
+      bagFullFlag: false,
+    },
+    lastFlushAt: Date.now(),
+  };
 }
 
 // ============================================
@@ -94,11 +172,9 @@ function snapshotToCharacterData(
   return {
     user_id: userId,
     id: snapshot.characterId,
-    // nickname 在挂机战斗中不展示，使用 characterId 字符串占位
     nickname: String(snapshot.characterId),
     realm: snapshot.realm,
     attribute_element: (a as { element?: string }).element ?? 'none',
-    // 战斗开始时满血满灵气（复用在线战斗的 withBattleStartResources 语义）
     qixue: a.max_qixue ?? 0,
     max_qixue: a.max_qixue ?? 0,
     lingqi: a.max_lingqi != null && a.max_lingqi > 0
@@ -135,8 +211,6 @@ function snapshotToCharacterData(
 
 /**
  * 将 BattleSkill[] 转换为 SkillData[]（BattleFactory 所需格式）
- *
- * BattleSkill 与 SkillData 字段基本对应，此处做字段名映射。
  */
 function battleSkillsToSkillData(
   skills: IdleSessionRow['sessionSnapshot']['skills'],
@@ -157,21 +231,23 @@ function battleSkillsToSkillData(
 }
 
 // ============================================
-// executeSingleBatch：执行单场战斗
+// executeSingleBatch：执行单场战斗（纯计算，不写 DB）
 // ============================================
 
 /**
- * 执行单场挂机战斗并持久化结果
+ * 执行单场挂机战斗，返回结果（不直接写 DB）
  *
  * 步骤：
  *   1. 从 session.sessionSnapshot 构建 CharacterData
  *   2. 从 mapService 获取房间怪物列表
  *   3. 解析怪物数据（resolveMonsterDataForBattle）
  *   4. createPVEBattle → BattleEngine.autoExecute()
- *   5. 胜利时调用 quickDistributeRewards 结算奖励
- *   6. 扣减 Stamina（UPDATE stamina - 1，最低为 0）
- *   7. 写入 idle_battle_batches
- *   8. 调用 updateSessionSummary 累加汇总
+ *   5. 胜利时调用 quickDistributeRewards 结算奖励（纯内存计算）
+ *
+ * 不做的事：
+ *   - 不写 idle_battle_batches（由 flushBuffer 批量写入）
+ *   - 不扣减 stamina（由 flushBuffer 批量扣减）
+ *   - 不更新 idle_sessions 汇总（由 flushBuffer 批量更新）
  *
  * 失败场景：
  *   - 房间不存在或无怪物 → 返回 draw，无奖励
@@ -183,11 +259,9 @@ export async function executeSingleBatch(
   batchIndex: number,
   userId: number,
 ): Promise<SingleBatchResult> {
-  // 1. 获取房间怪物列表
   const room = await getRoomInMap(session.mapId, session.roomId);
   const monsterIds: string[] = (room?.monsters ?? []).map((m) => m.monster_def_id);
 
-  // 房间无怪物时跳过（draw，无奖励）
   if (monsterIds.length === 0) {
     return {
       result: 'draw',
@@ -202,7 +276,6 @@ export async function executeSingleBatch(
     };
   }
 
-  // 2. 解析怪物数据
   const monsterResult = resolveMonsterDataForBattle(monsterIds);
   if (!monsterResult.success) {
     return {
@@ -218,7 +291,6 @@ export async function executeSingleBatch(
     };
   }
 
-  // 3. 构建战斗状态并执行
   const characterData = snapshotToCharacterData(session.sessionSnapshot, userId);
   const skillData = battleSkillsToSkillData(session.sessionSnapshot.skills);
   const battleId = randomUUID();
@@ -240,7 +312,6 @@ export async function executeSingleBatch(
   const roundCount = finalState.roundCount;
   const battleLog = finalState.logs as BattleLogEntry[];
 
-  // 4. 胜利时结算奖励
   let expGained = 0;
   let silverGained = 0;
   let itemsGained: RewardItemEntry[] = [];
@@ -254,71 +325,20 @@ export async function executeSingleBatch(
       realm: session.sessionSnapshot.realm,
     };
 
-    const distributeResult = await quickDistributeRewards(
-      monsterIds,
-      [participant],
-      true,
-    );
+    const distributeResult = await quickDistributeRewards(monsterIds, [participant], true);
 
     if (distributeResult.success) {
       expGained = distributeResult.rewards.exp;
       silverGained = distributeResult.rewards.silver;
-
-      // 将 DistributeResult.rewards.items 转换为 RewardItemEntry[]
       itemsGained = distributeResult.rewards.items.map((item) => ({
         itemDefId: item.itemDefId,
         itemName: item.itemName,
         quantity: item.quantity,
       }));
-
-      // 背包满时 quickDistributeRewards 仍会返回 success，
-      // 通过检查 perPlayerRewards 中 items 为空但 distributeResult.rewards.items 非空来判断
-      // 实际上 grantRewardItemWithAutoDisassemble 背包满时会走邮件补发，不设 bagFullFlag
-      // 此处保留 bagFullFlag 字段供未来扩展
     } else {
-      // 分发失败（如背包满且邮件也失败）：记录 bagFullFlag，但不中断循环
       bagFullFlag = true;
     }
   }
-
-  // 5. 扣减 Stamina（原子操作，最低为 0）
-  await query(
-    `UPDATE characters SET stamina = GREATEST(stamina - 1, 0), updated_at = NOW() WHERE id = $1`,
-    [session.characterId],
-  );
-
-  // 6. 写入 idle_battle_batches
-  const batchId = randomUUID();
-  await query(
-    `INSERT INTO idle_battle_batches (
-      id, session_id, batch_index, result, round_count, random_seed,
-      exp_gained, silver_gained, items_gained, battle_log, monster_ids, executed_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())`,
-    [
-      batchId,
-      session.id,
-      batchIndex,
-      battleResult,
-      roundCount,
-      randomSeed,
-      expGained,
-      silverGained,
-      JSON.stringify(itemsGained),
-      JSON.stringify(battleLog),
-      JSON.stringify(monsterIds),
-    ],
-  );
-
-  // 7. 累加更新会话汇总
-  await updateSessionSummary(session.id, {
-    totalBattlesDelta: 1,
-    winDelta: battleResult === 'attacker_win' ? 1 : 0,
-    loseDelta: battleResult === 'defender_win' ? 1 : 0,
-    expDelta: expGained,
-    silverDelta: silverGained,
-    newItems: itemsGained,
-    bagFullFlag: bagFullFlag || undefined,
-  });
 
   return {
     result: battleResult,
@@ -334,45 +354,190 @@ export async function executeSingleBatch(
 }
 
 // ============================================
+// flushBuffer：批量写入 DB
+// ============================================
+
+/**
+ * 将内存缓冲区中的战斗结果批量写入 DB
+ *
+ * 执行顺序（保证原子性语义）：
+ *   1. 批量 INSERT idle_battle_batches（单条 SQL，VALUES 多行）
+ *   2. UPDATE characters SET stamina -= staminaDelta（原子操作）
+ *   3. updateSessionSummary（累加汇总）
+ *
+ * 关键边界：
+ *   - 缓冲区为空时直接返回，不发起任何 DB 请求
+ *   - flush 完成后重置缓冲区内容（保留 lastFlushAt 更新）
+ *   - 三步操作不在同一事务中（性能优先），极端崩溃场景下可能有轻微数据不一致
+ *     （可接受：挂机战斗结果允许最终一致）
+ */
+async function flushBuffer(
+  characterId: number,
+  sessionId: string,
+  buffer: BatchBuffer,
+): Promise<void> {
+  if (buffer.batches.length === 0) return;
+
+  const batchesToFlush = buffer.batches.splice(0);
+  const staminaDelta = buffer.staminaDelta;
+  buffer.staminaDelta = 0;
+
+  const summaryDelta = { ...buffer.summaryDelta };
+  buffer.summaryDelta = {
+    totalBattlesDelta: 0,
+    winDelta: 0,
+    loseDelta: 0,
+    expDelta: 0,
+    silverDelta: 0,
+    newItems: [],
+    bagFullFlag: false,
+  };
+  buffer.lastFlushAt = Date.now();
+
+  // 1. 批量 INSERT idle_battle_batches
+  // 构造多行 VALUES：($1,$2,...),($11,$12,...) 每行 11 个参数
+  const COLS_PER_ROW = 11;
+  const values: (string | number)[] = [];
+  const placeholders = batchesToFlush.map((b, i) => {
+    const base = i * COLS_PER_ROW;
+    values.push(
+      b.id,
+      b.sessionId,
+      b.batchIndex,
+      b.result,
+      b.roundCount,
+      b.randomSeed,
+      b.expGained,
+      b.silverGained,
+      JSON.stringify(b.itemsGained),
+      JSON.stringify(b.battleLog),
+      JSON.stringify(b.monsterIds),
+    );
+    return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8},$${base + 9},$${base + 10},$${base + 11},NOW())`;
+  });
+
+  await query(
+    `INSERT INTO idle_battle_batches (
+      id, session_id, batch_index, result, round_count, random_seed,
+      exp_gained, silver_gained, items_gained, battle_log, monster_ids, executed_at
+    ) VALUES ${placeholders.join(',')}`,
+    values,
+  );
+
+  // 2. 批量扣减 stamina
+  if (staminaDelta > 0) {
+    await query(
+      `UPDATE characters SET stamina = GREATEST(stamina - $2, 0), updated_at = NOW() WHERE id = $1`,
+      [characterId, staminaDelta],
+    );
+  }
+
+  // 3. 更新会话汇总
+  await updateSessionSummary(sessionId, summaryDelta);
+}
+
+/**
+ * 将单场战斗结果追加到缓冲区
+ *
+ * 复用点：仅在 startExecutionLoop 内部调用，集中管理缓冲区写入逻辑。
+ */
+function appendToBuffer(
+  buffer: BatchBuffer,
+  batchResult: SingleBatchResult,
+  sessionId: string,
+  batchIndex: number,
+): void {
+  buffer.batches.push({
+    id: randomUUID(),
+    sessionId,
+    batchIndex,
+    result: batchResult.result,
+    roundCount: batchResult.roundCount,
+    randomSeed: batchResult.randomSeed,
+    expGained: batchResult.expGained,
+    silverGained: batchResult.silverGained,
+    itemsGained: batchResult.itemsGained,
+    battleLog: batchResult.battleLog,
+    monsterIds: batchResult.monsterIds,
+  });
+
+  // 每场战斗扣 1 点 stamina
+  buffer.staminaDelta += 1;
+
+  // 累加汇总增量
+  buffer.summaryDelta.totalBattlesDelta += 1;
+  if (batchResult.result === 'attacker_win') buffer.summaryDelta.winDelta += 1;
+  if (batchResult.result === 'defender_win') buffer.summaryDelta.loseDelta += 1;
+  buffer.summaryDelta.expDelta += batchResult.expGained;
+  buffer.summaryDelta.silverDelta += batchResult.silverGained;
+
+  // 合并物品（同 itemDefId 累加数量）
+  for (const item of batchResult.itemsGained) {
+    const existing = buffer.summaryDelta.newItems.find((i) => i.itemDefId === item.itemDefId);
+    if (existing) {
+      existing.quantity += item.quantity;
+    } else {
+      buffer.summaryDelta.newItems.push({ ...item });
+    }
+  }
+
+  if (batchResult.bagFullFlag) {
+    buffer.summaryDelta.bagFullFlag = true;
+  }
+}
+
+/**
+ * 判断缓冲区是否需要 flush
+ *
+ * 触发条件（满足任一）：
+ *   - 积累场数 >= FLUSH_BATCH_SIZE
+ *   - 距上次 flush 超过 FLUSH_INTERVAL_MS
+ */
+function shouldFlush(buffer: BatchBuffer): boolean {
+  return (
+    buffer.batches.length >= FLUSH_BATCH_SIZE ||
+    Date.now() - buffer.lastFlushAt >= FLUSH_INTERVAL_MS
+  );
+}
+
+// ============================================
 // startExecutionLoop：执行循环控制
 // ============================================
 
 /**
- * 启动挂机执行循环
+ * 启动挂机执行循环（批量写入版）
  *
- * 使用 setInterval 驱动，每场战斗完成后立即检查终止条件：
- *   a. 时长超限：Date.now() - session.startedAt >= session.maxDurationMs
- *   b. Stamina 耗尽：applyStaminaRecoveryByCharacterId 返回 stamina <= 0
- *   c. status = 'stopping'：重新查询 DB 检查
- *
- * 终止时：
- *   - 调用 completeIdleSession（completed 或 interrupted）
- *   - 调用 releaseIdleLock 释放 Redis 互斥锁
- *   - 通过 emitToUser 推送最终状态
+ * 每次 interval：
+ *   1. 执行单场战斗（纯计算）
+ *   2. 追加结果到 BatchBuffer
+ *   3. 实时推送本场摘要给客户端（不等 flush）
+ *   4. 检查终止条件
+ *   5. 若满足 flush 条件（场数/时间阈值）或即将终止，触发 flushBuffer
  *
  * 关键边界：
+ *   - 终止时强制 flush 剩余缓冲区，防止最后几场数据丢失
+ *   - flush 失败记录日志，不中断循环（下次 flush 会重试）
  *   - 同一 sessionId 不会重复启动（activeLoops Map 保护）
- *   - 执行循环内部异常不会中断循环，记录日志后继续下一场
  */
 export function startExecutionLoop(session: IdleSessionRow, userId: number): void {
-  // 防止重复启动
   if (activeLoops.has(session.id)) return;
 
   let batchIndex = session.totalBattles + 1;
   let running = false;
+  const buffer = createBuffer();
+  activeBuffers.set(session.id, { characterId: session.characterId, buffer });
 
   const handle = setInterval(() => {
-    // 防止上一场未完成时重入
     if (running) return;
     running = true;
 
     void (async () => {
       try {
-        // 执行单场战斗
         const batchResult = await executeSingleBatch(session, batchIndex, userId);
+        appendToBuffer(buffer, batchResult, session.id, batchIndex);
         batchIndex++;
 
-        // 推送本场收益摘要给客户端
+        // 实时推送本场摘要（不等 flush，保证客户端体验）
         try {
           getGameServer().emitToUser(userId, 'idle:update', {
             sessionId: session.id,
@@ -389,9 +554,20 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
 
         // 检查终止条件
         const shouldStop = await checkTerminationConditions(session, userId);
+
+        // 满足 flush 条件或即将终止时批量写入
+        if (shouldFlush(buffer) || shouldStop.terminate) {
+          try {
+            await flushBuffer(session.characterId, session.id, buffer);
+          } catch (flushErr) {
+            console.error(`[IdleBattleExecutor] 会话 ${session.id} flush 失败:`, flushErr);
+          }
+        }
+
         if (shouldStop.terminate) {
           clearInterval(handle);
           activeLoops.delete(session.id);
+          activeBuffers.delete(session.id);
           await completeIdleSession(session.id, shouldStop.status);
           await releaseIdleLock(session.characterId);
 
@@ -406,7 +582,6 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
         }
       } catch (err) {
         console.error(`[IdleBattleExecutor] 会话 ${session.id} 第 ${batchIndex} 场战斗异常:`, err);
-        // 异常不中断循环，继续下一场
       } finally {
         running = false;
       }
@@ -418,12 +593,16 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
 
 /**
  * 手动停止指定会话的执行循环（仅清理内存，DB 状态由 stopIdleSession 负责）
+ *
+ * 注意：此函数不 flush 缓冲区。调用方（stopIdleSession）应确保在停止前
+ * 已通过 status = 'stopping' 触发循环内部的终止 flush。
  */
 export function stopExecutionLoop(sessionId: string): void {
   const handle = activeLoops.get(sessionId);
   if (handle) {
     clearInterval(handle);
     activeLoops.delete(sessionId);
+    activeBuffers.delete(sessionId);
   }
 }
 
@@ -447,29 +626,58 @@ async function checkTerminationConditions(
   session: IdleSessionRow,
   _userId: number,
 ): Promise<TerminationCheckResult> {
-  // 1. 检查 DB 中的 status（用户可能已调用 stopIdleSession）
   const currentSession = await getActiveIdleSession(session.characterId);
   if (!currentSession) {
-    // 会话已不存在或已结束
     return { terminate: true, status: 'completed', reason: 'session_not_found' };
   }
   if (currentSession.status === 'stopping') {
     return { terminate: true, status: 'interrupted', reason: 'user_stopped' };
   }
 
-  // 2. 时长超限
   const elapsedMs = Date.now() - session.startedAt.getTime();
   if (elapsedMs >= session.maxDurationMs) {
     return { terminate: true, status: 'completed', reason: 'duration_exceeded' };
   }
 
-  // 3. Stamina 耗尽
   const staminaState = await applyStaminaRecoveryByCharacterId(session.characterId);
   if (!staminaState || staminaState.stamina <= 0) {
     return { terminate: true, status: 'completed', reason: 'stamina_exhausted' };
   }
 
   return { terminate: false };
+}
+
+// ============================================
+// flushAllBuffers：进程退出时批量刷写所有缓冲区
+// ============================================
+
+/**
+ * 将所有活跃会话的内存缓冲区批量写入 DB
+ *
+ * 作用：在进程收到 SIGTERM/SIGINT 时调用，防止缓冲区中未 flush 的战斗数据丢失。
+ * 调用方：startupPipeline.ts 的 gracefulShutdown，在 pool.end() 之前执行。
+ *
+ * 关键边界：
+ *   - 并发 flush 所有会话（Promise.allSettled），单个失败不影响其他
+ *   - flush 完成后不清理 activeBuffers（进程即将退出，无需维护状态）
+ */
+export async function flushAllBuffers(): Promise<void> {
+  const entries = Array.from(activeBuffers.entries());
+  if (entries.length === 0) return;
+
+  console.log(`[IdleBattleExecutor] 正在刷写 ${entries.length} 个会话的缓冲区...`);
+
+  const results = await Promise.allSettled(
+    entries.map(([sessionId, { characterId, buffer }]) =>
+      flushBuffer(characterId, sessionId, buffer),
+    ),
+  );
+
+  const failed = results.filter((r) => r.status === 'rejected');
+  if (failed.length > 0) {
+    console.error(`[IdleBattleExecutor] ${failed.length} 个会话 flush 失败`);
+  }
+  console.log(`[IdleBattleExecutor] 缓冲区刷写完成（成功 ${results.length - failed.length}/${results.length}）`);
 }
 
 // ============================================
@@ -511,7 +719,6 @@ export async function recoverActiveIdleSessions(): Promise<void> {
         continue;
       }
 
-      // 重建 IdleSessionRow（复用 idleSessionService 的映射逻辑）
       const session: IdleSessionRow = {
         id: sessionId,
         characterId,

@@ -5,7 +5,7 @@ import { initTables } from '../models/initTables.js';
 import { initGameTimeService } from '../services/gameTimeService.js';
 import { recoverBattlesFromRedis } from '../domains/battle/index.js';
 import { cleanupUndefinedItemDataOnStartup } from '../services/itemDataCleanupService.js';
-import { recoverActiveIdleSessions } from '../services/idle/idleBattleExecutor.js';
+import { recoverActiveIdleSessions, flushAllBuffers } from '../services/idle/idleBattleExecutor.js';
 
 export interface StartServerOptions {
   httpServer: HttpServer;
@@ -68,6 +68,8 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
     } catch (error) {
       console.error('关闭 Redis 连接失败:', error);
     }
+
+    await flushAllBuffers();
 
     try {
       await pool.end();
