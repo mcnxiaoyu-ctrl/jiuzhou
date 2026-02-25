@@ -18,10 +18,14 @@ import { BATTLE_CONSTANTS } from './types.js';
 import { validateBattleState, validateSkillUse, validatePlayerAction } from './utils/validation.js';
 import { addBuff, processRoundStartEffects, processRoundEndBuffs } from './modules/buff.js';
 import { executeSkill, getNormalAttack } from './modules/skill.js';
-import { makeAIDecision } from './modules/ai.js';
+import { makeAIDecision, selectTargets } from './modules/ai.js';
 import { isStunned } from './modules/control.js';
 import { triggerSetBonusEffects } from './modules/setBonus.js';
 
+import type { BattleSkill } from './types.js';
+
+/** 自定义玩家技能选择回调（用于挂机战斗注入 AutoSkillPolicy） */
+export type PlayerSkillSelector = (unit: BattleUnit) => BattleSkill;
 const PHASE_PERCENT_BUFF_ATTR_SET = new Set(['wugong', 'fagong', 'wufang', 'fafang']);
 const PHASE_ATTR_ALIAS: Record<string, string> = {
   'max-lingqi': 'max_lingqi',
@@ -255,7 +259,7 @@ export class BattleEngine {
   /**
    * AI行动（自动执行当前AI单位的行动）
    */
-  aiAction(allowPlayer: boolean = false): void {
+  aiAction(allowPlayer: boolean = false, playerSkillSelector?: PlayerSkillSelector): void {
     const currentUnit = this.getCurrentUnit();
     if (!currentUnit) return;
     if (!allowPlayer && currentUnit.type === 'player') return;
@@ -264,7 +268,7 @@ export class BattleEngine {
       this.processPhaseTriggersBeforeAction(currentUnit);
       if (this.checkBattleEnd()) return;
     }
-    
+
     // 检查是否被控制
     if (isStunned(currentUnit)) {
       this.state.logs.push({
@@ -279,13 +283,22 @@ export class BattleEngine {
       this.advanceAction();
       return;
     }
-    
+
+    // 玩家单位且有自定义选择器时，使用选择器选技能 + selectTargets 选目标
+    if (currentUnit.type === 'player' && playerSkillSelector) {
+      const skill = playerSkillSelector(currentUnit);
+      const targetIds = selectTargets(this.state, currentUnit, skill);
+      executeSkill(this.state, currentUnit, skill, targetIds);
+      this.advanceAction();
+      return;
+    }
+
     // AI决策
     const decision = makeAIDecision(this.state, currentUnit);
-    
+
     // 执行技能
     executeSkill(this.state, currentUnit, decision.skill, decision.targetIds);
-    
+
     // 推进行动
     this.advanceAction();
   }
@@ -632,19 +645,19 @@ export class BattleEngine {
   /**
    * 自动执行战斗（用于PVE快速结算）
    */
-  autoExecute(): void {
+  autoExecute(playerSkillSelector?: PlayerSkillSelector): void {
     while (this.state.phase !== 'finished') {
       const currentUnit = this.getCurrentUnit();
-      
+
       if (!currentUnit) {
         // 没有当前单位，推进
         this.advanceAction();
         continue;
       }
-      
+
       if (currentUnit.type === 'player') {
         // 玩家单位也用AI控制（自动战斗）
-        this.aiAction(true);
+        this.aiAction(true, playerSkillSelector);
       } else {
         this.aiAction();
       }

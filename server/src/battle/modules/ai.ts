@@ -154,7 +154,7 @@ function pickRandomSkill(state: BattleState, skills: BattleSkill[], unit: Battle
 /**
  * 目标选择入口
  */
-function selectTargets(
+export function selectTargets(
   state: BattleState,
   unit: BattleUnit,
   skill: BattleSkill

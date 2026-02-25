@@ -33,7 +33,7 @@
 import { randomUUID } from 'crypto';
 import { query } from '../../config/database.js';
 import { createPVEBattle, type CharacterData, type SkillData } from '../../battle/battleFactory.js';
-import { BattleEngine } from '../../battle/battleEngine.js';
+import { BattleEngine, type PlayerSkillSelector } from '../../battle/battleEngine.js';
 import { quickDistributeRewards, type BattleParticipant } from '../battleDropService.js';
 import { applyStaminaRecoveryByCharacterId } from '../staminaService.js';
 import { getGameServer } from '../../game/gameServer.js';
@@ -41,6 +41,7 @@ import { getRoomInMap } from '../mapService.js';
 import { resolveMonsterDataForBattle } from '../battle/index.js';
 import { getCharacterUserId } from '../sect/db.js';
 import type { IdleSessionRow, RewardItemEntry } from './types.js';
+import { selectSkillByPolicy } from './selectSkillByPolicy.js';
 import type { BattleLogEntry } from '../../battle/types.js';
 import {
   completeIdleSession,
@@ -304,7 +305,14 @@ export async function executeSingleBatch(
   );
 
   const engine = new BattleEngine(state);
-  engine.autoExecute();
+
+  // 注入 AutoSkillPolicy：有策略时按策略选技能，否则走默认 AI
+  const policy = session.sessionSnapshot.autoSkillPolicy;
+  const playerSelector: PlayerSkillSelector | undefined =
+    policy && policy.slots.length > 0
+      ? (unit) => selectSkillByPolicy(unit, policy)
+      : undefined;
+  engine.autoExecute(playerSelector);
 
   const finalState = engine.getState();
   const battleResult = finalState.result ?? 'draw';

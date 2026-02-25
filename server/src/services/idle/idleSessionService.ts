@@ -190,6 +190,7 @@ export async function startIdleSession(params: StartIdleSessionParams): Promise<
       baseAttrs: snapshotData.baseAttrs,
       skills: snapshotData.skills,
       setBonusEffects: snapshotData.setBonusEffects,
+      autoSkillPolicy: config.autoSkillPolicy,
     };
 
     // 5. 写入 idle_sessions

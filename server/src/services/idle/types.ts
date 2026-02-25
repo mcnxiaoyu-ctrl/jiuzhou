@@ -79,6 +79,8 @@ export interface SessionSnapshot {
   baseAttrs: import('../../battle/types.js').BattleAttrs;
   skills: import('../../battle/types.js').BattleSkill[];
   setBonusEffects: import('../../battle/types.js').BattleSetBonusEffect[];
+  /** 挂机技能策略快照（开始挂机时写入，旧会话可能缺失） */
+  autoSkillPolicy?: AutoSkillPolicy;
 }
 
 // ============================================
