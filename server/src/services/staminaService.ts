@@ -1,5 +1,26 @@
+/**
+ * 体力恢复服务
+ *
+ * 作用：
+ *   管理角色体力的恢复计算与持久化。每次读取体力时根据 stamina_recover_at
+ *   时间戳惰性计算已恢复量，并写回 DB。
+ *
+ * 输入：characterId / userId / PoolClient（事务）
+ * 输出：StaminaRecoveryState（当前体力、恢复量、是否变更）
+ *
+ * 数据流：
+ *   读取：Redis 缓存（staminaCacheService）→ 命中则直接返回
+ *         → 未命中则查 DB → 计算恢复 → 写 DB → 回填缓存
+ *   事务内（applyStaminaRecoveryTx）：始终走 DB（需行锁），提交后由调用方同步缓存
+ *
+ * 关键边界条件：
+ *   1. Redis 不可用时自动降级到纯 DB 路径，不影响核心功能
+ *   2. 事务内操作不走缓存（需要 FOR UPDATE 行锁保证一致性）
+ */
+
 import type { PoolClient } from 'pg';
 import { query } from '../config/database.js';
+import { getCachedStamina, setCachedStamina, toRecoveryState } from './staminaCacheService.js';
 
 const toPositiveInt = (value: string | undefined, fallback: number): number => {
   const n = Number(value);
@@ -39,6 +60,9 @@ export type StaminaRecoveryState = {
 
 type QueryRunner = (text: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>;
 
+/**
+ * 从 DB 行数据计算恢复并写回（内部核心逻辑，不走缓存）
+ */
 const applyRecoveryFromRow = async (
   runQuery: QueryRunner,
   row: Record<string, unknown>,
@@ -81,16 +105,24 @@ const applyRecoveryFromRow = async (
     }
   }
 
-  return {
+  const state: StaminaRecoveryState = {
     characterId,
     stamina: nextStamina,
     recovered,
     changed,
     staminaRecoverAt: new Date(nextRecoverAtMs),
   };
+
+  // 回填缓存（DB 写入后同步）
+  await setCachedStamina(characterId, nextStamina, new Date(nextRecoverAtMs));
+
+  return state;
 };
 
-const applyRecoveryByCharacterIdWithRunner = async (
+/**
+ * 从 DB 查询并计算恢复（内部函数，不走缓存）
+ */
+const applyRecoveryByCharacterIdFromDB = async (
   runQuery: QueryRunner,
   characterId: number,
   lockRow: boolean,
@@ -105,19 +137,51 @@ const applyRecoveryByCharacterIdWithRunner = async (
   return applyRecoveryFromRow(runQuery, row);
 };
 
+/**
+ * 按角色 ID 获取体力状态（含恢复计算）
+ *
+ * 优先从 Redis 缓存读取，未命中则走 DB 并回填缓存
+ */
 export const applyStaminaRecoveryByCharacterId = async (characterId: number): Promise<StaminaRecoveryState | null> => {
-  return applyRecoveryByCharacterIdWithRunner((text, params) => query(text, params), characterId, false);
+  if (!Number.isFinite(characterId) || characterId <= 0) return null;
+
+  // 优先走缓存
+  const cached = await getCachedStamina(characterId);
+  if (cached) return toRecoveryState(cached);
+
+  // 缓存未命中，走 DB（applyRecoveryFromRow 内部会回填缓存）
+  return applyRecoveryByCharacterIdFromDB((text, params) => query(text, params), characterId, false);
 };
 
+/**
+ * 按用户 ID 获取体力状态（含恢复计算）
+ *
+ * 需先查 characterId，再走缓存路径
+ */
 export const applyStaminaRecoveryByUserId = async (userId: number): Promise<StaminaRecoveryState | null> => {
   if (!Number.isFinite(userId) || userId <= 0) return null;
   const rowRes = await query('SELECT id, stamina, stamina_recover_at FROM characters WHERE user_id = $1 LIMIT 1', [userId]);
   const row = rowRes.rows[0];
   if (!row) return null;
+
+  const characterId = toNonNegativeInt(row.id, 0);
+  if (characterId <= 0) return null;
+
+  // 尝试缓存
+  const cached = await getCachedStamina(characterId);
+  if (cached) return toRecoveryState(cached);
+
+  // 缓存未命中，用已查到的 row 直接计算（避免重复查库）
   return applyRecoveryFromRow((text, params) => query(text, params), row);
 };
 
+/**
+ * 事务内获取体力状态（带行锁，不走缓存）
+ *
+ * 事务需要 FOR UPDATE 行锁保证一致性，不适合走缓存。
+ * 调用方在事务提交后应自行调用 setCachedStamina 同步缓存。
+ */
 export const applyStaminaRecoveryTx = async (client: PoolClient, characterId: number): Promise<StaminaRecoveryState | null> => {
   const runQuery: QueryRunner = (text, params) => client.query(text, params);
-  return applyRecoveryByCharacterIdWithRunner(runQuery, characterId, true);
+  return applyRecoveryByCharacterIdFromDB(runQuery, characterId, true);
 };

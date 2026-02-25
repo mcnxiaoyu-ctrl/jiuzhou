@@ -31,6 +31,7 @@ import { randomUUID } from 'crypto';
 import { query, pool } from '../../config/database.js';
 import { redis } from '../../config/redis.js';
 import { applyStaminaRecoveryTx } from '../staminaService.js';
+import { setCachedStamina } from '../staminaCacheService.js';
 import { buildCharacterBattleSnapshot } from '../battle/index.js';
 import type {
   IdleConfigDto,
@@ -187,6 +188,9 @@ export async function startIdleSession(params: StartIdleSessionParams): Promise<
     // 4. 构建角色快照（在事务外调用，避免长事务；快照基于当前计算属性）
     await client.query('COMMIT');
     client.release();
+
+    // 事务提交后同步体力缓存，保证挂机执行循环能从缓存读到准确值
+    await setCachedStamina(characterId, staminaState.stamina, staminaState.staminaRecoverAt);
 
     const snapshotData = await buildCharacterBattleSnapshot(characterId);
     if (!snapshotData) {

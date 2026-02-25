@@ -16,10 +16,11 @@
  *   - stopExecutionLoop(sessionId) → void
  *   - recoverActiveIdleSessions() → Promise<void>
  *
- * 数据流（批量写入）：
- *   startExecutionLoop → setInterval → executeSingleBatch（纯计算）
- *   → 结果追加到 BatchBuffer → 达到 FLUSH_BATCH_SIZE 或 FLUSH_INTERVAL_MS
- *   → flushBuffer → 批量 INSERT idle_battle_batches + UPDATE stamina + updateSessionSummary
+ * 数据流（批量写入 + 实时缓存扣减）：
+ *   startExecutionLoop → 预热体力缓存 → setTimeout → executeSingleBatch（纯计算）
+ *   → appendToBuffer → decrCachedStamina（Redis 实时扣减）+ 内存累加
+ *   → 达到 FLUSH_BATCH_SIZE 或 FLUSH_INTERVAL_MS
+ *   → flushBuffer → 批量 INSERT idle_battle_batches + UPDATE stamina + setCachedStamina（校准）
  *   → emitToUser（每场仍实时推送）
  *   终止条件满足 → 强制 flushBuffer → completeIdleSession → releaseIdleLock
  *
@@ -37,6 +38,7 @@ import { BattleEngine, type PlayerSkillSelector } from '../../battle/battleEngin
 import { quickDistributeRewards, type BattleParticipant } from '../battleDropService.js';
 import { BATTLE_TICK_MS, BATTLE_START_COOLDOWN_MS } from '../battle/index.js';
 import { applyStaminaRecoveryByCharacterId } from '../staminaService.js';
+import { decrCachedStamina, getCachedStamina, setCachedStamina, clearAllStaminaCache } from '../staminaCacheService.js';
 import { getGameServer } from '../../game/gameServer.js';
 import { getRoomInMap } from '../mapService.js';
 import { resolveMonsterDataForBattle } from '../battle/index.js';
@@ -448,6 +450,20 @@ async function flushBuffer(
       `UPDATE characters SET stamina = GREATEST(stamina - $2, 0), updated_at = NOW() WHERE id = $1`,
       [characterId, staminaDelta],
     );
+
+    // flush 后用 DB 实际值校准 Redis 缓存（纠正可能的漂移）
+    const calibrateRes = await query(
+      'SELECT stamina, stamina_recover_at FROM characters WHERE id = $1 LIMIT 1',
+      [characterId],
+    );
+    const calibrateRow = calibrateRes.rows[0];
+    if (calibrateRow) {
+      const dbStamina = Number(calibrateRow.stamina) || 0;
+      const dbRecoverAt = calibrateRow.stamina_recover_at instanceof Date
+        ? calibrateRow.stamina_recover_at
+        : new Date(calibrateRow.stamina_recover_at as string);
+      await setCachedStamina(characterId, dbStamina, dbRecoverAt);
+    }
   }
 
   // 3. 更新会话汇总
@@ -455,16 +471,19 @@ async function flushBuffer(
 }
 
 /**
- * 将单场战斗结果追加到缓冲区
+ * 将单场战斗结果追加到缓冲区，并实时扣减 Redis 体力缓存
  *
  * 复用点：仅在 startExecutionLoop 内部调用，集中管理缓冲区写入逻辑。
+ * 实时扣减：每场战斗后立即 DECR Redis 中的体力值，保证其他系统读到准确值。
+ * DB 写入仍由 flushBuffer 批量完成。
  */
-function appendToBuffer(
+async function appendToBuffer(
   buffer: BatchBuffer,
   batchResult: SingleBatchResult,
   sessionId: string,
   batchIndex: number,
-): void {
+  characterId: number,
+): Promise<void> {
   buffer.batches.push({
     id: randomUUID(),
     sessionId,
@@ -481,6 +500,9 @@ function appendToBuffer(
 
   // 每场战斗扣 1 点 stamina
   buffer.staminaDelta += 1;
+
+  // 实时扣减 Redis 体力缓存（不等 flush，保证其他系统读到准确值）
+  await decrCachedStamina(characterId, 1);
 
   // 累加汇总增量
   buffer.summaryDelta.totalBattlesDelta += 1;
@@ -546,13 +568,16 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
   const buffer = createBuffer();
   activeBuffers.set(session.id, { characterId: session.characterId, buffer });
 
+  // 启动时预热体力缓存：从 DB 加载当前体力并写入 Redis，保证后续 decrCachedStamina 有值可扣
+  void applyStaminaRecoveryByCharacterId(session.characterId);
+
   /** 递归调度下一场战斗，delayMs 为距下一场的等待时间 */
   function scheduleNext(delayMs: number): void {
     const handle = setTimeout(() => {
       void (async () => {
         try {
           const batchResult = await executeSingleBatch(session, batchIndex, userId);
-          appendToBuffer(buffer, batchResult, session.id, batchIndex);
+          await appendToBuffer(buffer, batchResult, session.id, batchIndex, session.characterId);
           batchIndex++;
 
           // 实时推送本场摘要（不等 flush，保证客户端体验）
@@ -646,7 +671,7 @@ type TerminationCheckResult =
  * 按优先级顺序检查：
  *   1. status = 'stopping'（用户主动停止）→ interrupted
  *   2. 时长超限 → completed
- *   3. Stamina 耗尽 → completed
+ *   3. Stamina 耗尽 → completed（优先从 Redis 缓存读取，fallback 到 DB）
  */
 async function checkTerminationConditions(
   session: IdleSessionRow,
@@ -665,6 +690,16 @@ async function checkTerminationConditions(
     return { terminate: true, status: 'completed', reason: 'duration_exceeded' };
   }
 
+  // 优先从缓存读取体力（已包含实时扣减后的值）
+  const cached = await getCachedStamina(session.characterId);
+  if (cached) {
+    if (cached.stamina <= 0) {
+      return { terminate: true, status: 'completed', reason: 'stamina_exhausted' };
+    }
+    return { terminate: false };
+  }
+
+  // 缓存未命中，fallback 到 DB
   const staminaState = await applyStaminaRecoveryByCharacterId(session.characterId);
   if (!staminaState || staminaState.stamina <= 0) {
     return { terminate: true, status: 'completed', reason: 'stamina_exhausted' };
@@ -721,6 +756,9 @@ export async function flushAllBuffers(): Promise<void> {
  *   - 'stopping' 状态的会话恢复后会在第一次终止检查时立即结束
  */
 export async function recoverActiveIdleSessions(): Promise<void> {
+  // 服务重启时清除所有残留体力缓存，防止脏数据（Redis 中可能残留上次进程的扣减值）
+  await clearAllStaminaCache();
+
   const res = await query(
     `SELECT * FROM idle_sessions WHERE status IN ('active', 'stopping')`,
     [],
