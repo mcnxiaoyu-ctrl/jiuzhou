@@ -25,8 +25,8 @@
  *      已处理 markIdleSessionViewed，无需在此重复调用
  */
 
-import React from 'react';
-import { Alert, Tabs, Badge } from 'antd';
+import React, { useCallback } from 'react';
+import { Alert, Tabs } from 'antd';
 import { useIdleBattle, type UseIdleBattleReturn } from './hooks/useIdleBattle';
 import IdleConfigPanel from './components/IdleConfigPanel';
 import IdleStatusIndicator from './components/IdleStatusIndicator';
@@ -74,7 +74,13 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle, stamina 
   } = idle;
 
   const isStopping = activeSession?.status === 'stopping';
-  const unviewedCount = history.filter((s) => s.viewedAt === null).length;
+
+  // 切换到"挂机历史"标签时自动加载历史列表
+  const handleTabChange = useCallback((key: string) => {
+    if (key === 'history') {
+      void loadHistory();
+    }
+  }, [loadHistory]);
 
   return (
     <div className="idle-battle-panel">
@@ -92,6 +98,7 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle, stamina 
       <Tabs
         defaultActiveKey="config"
         className="idle-battle-tabs"
+        onChange={handleTabChange}
         items={[
           {
             key: 'config',
@@ -112,11 +119,7 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle, stamina 
           },
           {
             key: 'history',
-            label: (
-              <Badge count={unviewedCount} size="small" offset={[6, -2]}>
-                挂机历史
-              </Badge>
-            ),
+            label: '挂机历史',
             children: (
               <IdleHistoryList
                 history={history}

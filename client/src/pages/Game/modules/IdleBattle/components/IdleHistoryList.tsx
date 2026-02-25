@@ -18,12 +18,12 @@
  *
  * 关键边界条件：
  *   1. history 为空时展示空状态，不报错
- *   2. viewedAt === null 的记录显示"未查看"角标，提示用户有新结果
+ *   2. 无
  */
 
 import React from 'react';
 import { Button, Empty, Spin, Tag } from 'antd';
-import { ReloadOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { ReloadOutlined } from '@ant-design/icons';
 import type { IdleSessionDto } from '../types';
 import './IdleHistoryList.scss';
 
@@ -123,7 +123,7 @@ const IdleHistoryList: React.FC<IdleHistoryListProps> = ({
             {history.map((session) => (
               <div
                 key={session.id}
-                className={`idle-history-item${session.viewedAt === null ? ' is-unviewed' : ''}`}
+                className="idle-history-item"
                 role="button"
                 tabIndex={0}
                 onClick={() => onSelectSession(session.id)}
@@ -134,12 +134,6 @@ const IdleHistoryList: React.FC<IdleHistoryListProps> = ({
                   }
                 }}
               >
-                {/* 未查看角标 */}
-                {session.viewedAt === null && (
-                  <span className="idle-history-unviewed-badge" title="有新结果未查看">
-                    <EyeInvisibleOutlined />
-                  </span>
-                )}
 
                 {/* 第一行：状态 + 时间 */}
                 <div className="idle-history-item-row">
