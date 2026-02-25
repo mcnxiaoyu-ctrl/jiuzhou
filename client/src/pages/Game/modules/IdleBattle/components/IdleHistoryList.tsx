@@ -123,7 +123,7 @@ const IdleHistoryList: React.FC<IdleHistoryListProps> = ({
             {history.map((session) => (
               <div
                 key={session.id}
-                className="idle-history-item"
+                className={`idle-history-item${session.viewedAt === null ? ' is-unviewed' : ''}`}
                 role="button"
                 tabIndex={0}
                 onClick={() => onSelectSession(session.id)}
