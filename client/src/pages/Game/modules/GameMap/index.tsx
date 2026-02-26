@@ -53,7 +53,7 @@ const GameMap: React.FC<GameMapProps> = ({ currentMapId, currentRoomId, trackedR
 
   const [mapName, setMapName] = useState<string>('');
   const [rooms, setRooms] = useState<RoomNode[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const setNodeRef = (id: string) => (el: HTMLDivElement | null) => {
     nodeRefs.current[id] = el;
