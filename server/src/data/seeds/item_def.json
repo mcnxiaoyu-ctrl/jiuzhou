@@ -2277,7 +2277,7 @@
       "bind_type": "none",
       "tradeable": true,
       "icon": "/assets/items/Props-baodai-2.png",
-      "description": "打开后可随机获得1个3~5级宝石。",
+      "description": "打开后可随机获得1个3~4级宝石。",
       "long_desc": "用于养神阶段强化构筑，产出范围高于结胎宝石袋。",
       "tags": [
         "宝箱",
