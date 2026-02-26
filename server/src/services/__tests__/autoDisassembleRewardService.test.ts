@@ -275,8 +275,8 @@ test('非装备命中规则时应按默认公式转化银两', async () => {
   assert.deepEqual(result.warnings, []);
   assert.deepEqual(result.grantedItems, []);
   assert.deepEqual(result.pendingMailItems, []);
-  assert.equal(result.gainedSilver, 3);
-  assert.deepEqual(silverCalls, [3]);
+  assert.equal(result.gainedSilver, 18);
+  assert.deepEqual(silverCalls, [18]);
 });
 
 test('功法书规则应命中consumable+technique_book物品并转化为功法残页', async () => {
