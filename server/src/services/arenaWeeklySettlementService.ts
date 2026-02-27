@@ -2,6 +2,8 @@ import { pool, query } from '../config/database.js';
 import { invalidateCharacterComputedCache } from './characterComputedService.js';
 import { getPvpWeeklyTitleIdByRank } from './achievement/pvpWeeklyTitleConfig.js';
 import { clearExpiredEquippedPvpWeeklyTitlesTx, grantExpiringTitleTx } from './achievement/titleOwnership.js';
+import { sendSystemMail } from './mailService.js';
+import { getTitleDefinitions } from './staticConfigLoader.js';
 
 /**
  * 竞技场周结算服务（每周一 00:00，Asia/Shanghai）
@@ -45,8 +47,16 @@ interface WeekBoundary {
 interface SettleSingleWeekResult {
   settled: boolean;
   weekStartLocalDate: string;
+  weekEndLocalDate: string;
   topCharacterIds: number[];
+  awards: WeeklyAwardInfo[];
   expiredEquippedCharacterIds: number[];
+}
+
+interface WeeklyAwardInfo {
+  rank: number;
+  characterId: number;
+  titleId: string;
 }
 
 const toLocalDateString = (value: unknown, fieldName: string): string => {
@@ -67,6 +77,90 @@ const addDaysToLocalDate = (localDate: string, days: number): string => {
   }
   base.setUTCDate(base.getUTCDate() + days);
   return base.toISOString().slice(0, 10);
+};
+
+const rankLabelMap: Record<number, string> = {
+  1: '冠军',
+  2: '亚军',
+  3: '季军',
+};
+
+/**
+ * 发送周结算称号邮件通知。
+ *
+ * 作用：
+ * 1. 在周结算事务提交后通知获奖玩家称号已发放；
+ * 2. 复用统一邮件服务，避免在结算逻辑里重复拼接 SQL。
+ *
+ * 输入：
+ * - weekStartLocalDate/weekEndLocalDate：结算窗口（上海时区日期）；
+ * - awards：本周获奖信息（名次/角色ID/称号ID）。
+ *
+ * 输出：
+ * - 无返回值；发送失败仅记录日志，不回滚已完成的周结算。
+ *
+ * 数据流：
+ * - settlePendingWeeks -> sendWeeklyTitleAwardMails。
+ *
+ * 关键边界条件与坑点：
+ * 1. 邮件发送在事务提交后执行，避免“邮件成功但结算回滚”的状态不一致。
+ * 2. 角色可能在结算后被删除，发送前必须再次读取角色与用户归属并逐条校验。
+ */
+const sendWeeklyTitleAwardMails = async (
+  weekStartLocalDate: string,
+  weekEndLocalDate: string,
+  awards: WeeklyAwardInfo[],
+): Promise<void> => {
+  if (awards.length === 0) return;
+
+  const characterIds = awards.map((item) => item.characterId);
+  const characterRes = await query(
+    `
+      SELECT id, user_id
+      FROM characters
+      WHERE id = ANY($1::int[])
+    `,
+    [characterIds],
+  );
+
+  const userIdByCharacterId = new Map<number, number>();
+  for (const row of characterRes.rows as Array<Record<string, unknown>>) {
+    const characterId = Number(row.id);
+    const userId = Number(row.user_id);
+    if (!Number.isFinite(characterId) || characterId <= 0) continue;
+    if (!Number.isFinite(userId) || userId <= 0) continue;
+    userIdByCharacterId.set(Math.floor(characterId), Math.floor(userId));
+  }
+
+  const titleNameById = new Map(
+    getTitleDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.id, String(entry.name || '').trim() || entry.id]),
+  );
+
+  const periodEndLocalDate = addDaysToLocalDate(weekEndLocalDate, -1);
+  const expireAtText = `${weekEndLocalDate} 00:00`;
+
+  for (const award of awards) {
+    const userId = userIdByCharacterId.get(award.characterId);
+    if (!userId) continue;
+
+    const rankLabel = rankLabelMap[award.rank] ?? `第${award.rank}名`;
+    const titleName = titleNameById.get(award.titleId) ?? award.titleId;
+
+    const mailTitle = `竞技场周结算奖励：${rankLabel}`;
+    const mailContent =
+      `你在竞技场周结算（${weekStartLocalDate} 至 ${periodEndLocalDate}）中获得${rankLabel}，` +
+      `奖励称号「${titleName}」已发放。` +
+      `该称号有效期至 ${expireAtText}（Asia/Shanghai），请前往成就-称号面板查看并手动装备。`;
+
+    const mailRes = await sendSystemMail(userId, award.characterId, mailTitle, mailContent, undefined, 30);
+    if (!mailRes.success) {
+      console.warn(
+        `[PVP周结算] 奖励邮件发送失败，characterId=${award.characterId}, rank=${award.rank}, message=${mailRes.message}`,
+      );
+    }
+  }
 };
 
 const getWeekBoundary = async (): Promise<WeekBoundary> => {
@@ -194,13 +288,16 @@ const settleSingleWeek = async (weekStartLocalDate: string): Promise<SettleSingl
       return {
         settled: false,
         weekStartLocalDate,
+        weekEndLocalDate,
         topCharacterIds: [],
+        awards: [],
         expiredEquippedCharacterIds: [],
       };
     }
 
     const expiredEquippedCharacterIds = await clearExpiredEquippedPvpWeeklyTitlesTx(client);
     const topCharacterIds = await loadTopThreeCharacterIdsForWeekTx(weekStartLocalDate, weekEndLocalDate, client);
+    const awards: WeeklyAwardInfo[] = [];
 
     if (topCharacterIds.length > 0) {
       const expireAt = await getExpireAtByWeekEndTx(weekEndLocalDate, client);
@@ -209,7 +306,9 @@ const settleSingleWeek = async (weekStartLocalDate: string): Promise<SettleSingl
         if (!titleId) {
           throw new Error(`PVP周称号配置缺失，rank=${rank}`);
         }
-        await grantExpiringTitleTx(client, topCharacterIds[rank - 1]!, titleId, expireAt);
+        const characterId = topCharacterIds[rank - 1]!;
+        await grantExpiringTitleTx(client, characterId, titleId, expireAt);
+        awards.push({ rank, characterId, titleId });
       }
     }
 
@@ -257,7 +356,9 @@ const settleSingleWeek = async (weekStartLocalDate: string): Promise<SettleSingl
     return {
       settled: true,
       weekStartLocalDate,
+      weekEndLocalDate,
       topCharacterIds,
+      awards,
       expiredEquippedCharacterIds,
     };
   } catch (error) {
@@ -284,6 +385,11 @@ const settlePendingWeeks = async (): Promise<void> => {
     if (!result.settled) continue;
 
     idsNeedInvalidate.push(...result.expiredEquippedCharacterIds);
+    try {
+      await sendWeeklyTitleAwardMails(result.weekStartLocalDate, result.weekEndLocalDate, result.awards);
+    } catch (error) {
+      console.warn(`[PVP周结算] 奖励邮件发送异常，weekStart=${result.weekStartLocalDate}`, error);
+    }
 
     console.log(
       `[PVP周结算] ${result.weekStartLocalDate} 完成，前三角色：${result.topCharacterIds.join(', ') || '无'}`,
