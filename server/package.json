@@ -10,7 +10,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:seed": "tsx src/services/seedService.ts"
+    "db:seed": "tsx src/services/seedService.ts",
+    "asset:generate-set-sprites": "tsx src/scripts/generateEquipmentSetSprites.ts"
   },
   "keywords": [
     "game",
@@ -45,6 +46,7 @@
     "@types/node": "^25.1.0",
     "@types/pg": "^8.16.0",
     "nodemon": "^3.1.11",
+    "sharp": "^0.34.5",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
