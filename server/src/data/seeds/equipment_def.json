@@ -3310,11 +3310,21 @@
       "icon": "/assets/items/lin_ri_shen_dao.png",
       "equip_slot": "weapon",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "wugong": 26, "wufang": 27 },
-      "implicit_attrs": { "wugong": 12, "wufang": 13 },
+      "base_attrs": {
+        "wugong": 26,
+        "wufang": 27
+      },
+      "implicit_attrs": {
+        "wugong": 12,
+        "wufang": 13
+      },
       "affix_pool_id": "ap-weapon-rare",
       "set_id": "set-ningshen",
-      "tags": ["武器", "凝神套装", "养神期"]
+      "tags": [
+        "武器",
+        "凝神套装",
+        "养神期"
+      ]
     },
     {
       "id": "set-ningshen-head",
@@ -3327,11 +3337,21 @@
       "icon": "/assets/items/icon_Hat_1_16.png",
       "equip_slot": "head",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "max_qixue": 480, "wufang": 24, "kangbao_rating": 290 },
-      "implicit_attrs": { "max_qixue": 200 },
+      "base_attrs": {
+        "max_qixue": 480,
+        "wufang": 24,
+        "kangbao_rating": 290
+      },
+      "implicit_attrs": {
+        "max_qixue": 200
+      },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-ningshen",
-      "tags": ["头部", "凝神套装", "养神期"]
+      "tags": [
+        "头部",
+        "凝神套装",
+        "养神期"
+      ]
     },
     {
       "id": "set-ningshen-clothes",
@@ -3344,11 +3364,21 @@
       "icon": "/assets/items/icon_clothes_1_16.png",
       "equip_slot": "clothes",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "max_qixue": 650, "wufang": 28, "fafang": 22 },
-      "implicit_attrs": { "max_qixue": 240 },
+      "base_attrs": {
+        "max_qixue": 650,
+        "wufang": 28,
+        "fafang": 22
+      },
+      "implicit_attrs": {
+        "max_qixue": 240
+      },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-ningshen",
-      "tags": ["衣服", "凝神套装", "养神期"]
+      "tags": [
+        "衣服",
+        "凝神套装",
+        "养神期"
+      ]
     },
     {
       "id": "set-ningshen-gloves",
@@ -3361,11 +3391,20 @@
       "icon": "/assets/items/icon_shoulder armour_1_16.png",
       "equip_slot": "gloves",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "wufang": 22, "zhaojia_rating": 520 },
-      "implicit_attrs": { "zhaojia_rating": 220 },
+      "base_attrs": {
+        "wufang": 22,
+        "zhaojia_rating": 520
+      },
+      "implicit_attrs": {
+        "zhaojia_rating": 220
+      },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-ningshen",
-      "tags": ["手部", "凝神套装", "养神期"]
+      "tags": [
+        "手部",
+        "凝神套装",
+        "养神期"
+      ]
     },
     {
       "id": "set-ningshen-pants",
@@ -3378,11 +3417,20 @@
       "icon": "/assets/items/icon_pants_1_16.png",
       "equip_slot": "pants",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "max_qixue": 380, "fafang": 22 },
-      "implicit_attrs": { "fafang": 15 },
+      "base_attrs": {
+        "max_qixue": 380,
+        "fafang": 22
+      },
+      "implicit_attrs": {
+        "fafang": 15
+      },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-ningshen",
-      "tags": ["腿部", "凝神套装", "养神期"]
+      "tags": [
+        "腿部",
+        "凝神套装",
+        "养神期"
+      ]
     },
     {
       "id": "set-ningshen-necklace",
@@ -3395,11 +3443,20 @@
       "icon": "/assets/items/icon_Jade pendants_1_16.png",
       "equip_slot": "necklace",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "max_qixue": 280, "kangbao_rating": 360 },
-      "implicit_attrs": { "kangbao_rating": 220 },
+      "base_attrs": {
+        "max_qixue": 280,
+        "kangbao_rating": 360
+      },
+      "implicit_attrs": {
+        "kangbao_rating": 220
+      },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-ningshen",
-      "tags": ["项链", "凝神套装", "养神期"]
+      "tags": [
+        "项链",
+        "凝神套装",
+        "养神期"
+      ]
     },
     {
       "id": "set-ningshen-accessory",
@@ -3412,11 +3469,20 @@
       "icon": "/assets/items/icon_jiezhi_10010.png",
       "equip_slot": "accessory",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "wufang": 26, "fafang": 18 },
-      "implicit_attrs": { "wufang": 13 },
+      "base_attrs": {
+        "wufang": 26,
+        "fafang": 18
+      },
+      "implicit_attrs": {
+        "wufang": 13
+      },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-ningshen",
-      "tags": ["饰品", "凝神套装", "养神期"]
+      "tags": [
+        "饰品",
+        "凝神套装",
+        "养神期"
+      ]
     },
     {
       "id": "set-ningshen-artifact",
@@ -3429,11 +3495,20 @@
       "icon": "/assets/items/guan_tian_jing.png",
       "equip_slot": "artifact",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "kongzhi_kangxing_rating": 770, "zhaojia_rating": 400 },
-      "implicit_attrs": { "kongzhi_kangxing_rating": 310 },
+      "base_attrs": {
+        "kongzhi_kangxing_rating": 770,
+        "zhaojia_rating": 400
+      },
+      "implicit_attrs": {
+        "kongzhi_kangxing_rating": 310
+      },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-ningshen",
-      "tags": ["法宝", "凝神套装", "养神期"]
+      "tags": [
+        "法宝",
+        "凝神套装",
+        "养神期"
+      ]
     },
     {
       "_comment": "========== 炼神返虚·养神期套装2：虚影套装（法攻/爆发） =========="
@@ -3449,11 +3524,22 @@
       "icon": "/assets/items/shu_tian_xian_zhang.png",
       "equip_slot": "weapon",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "fagong": 30, "lengque_rating": 90 },
-      "implicit_attrs": { "fagong": 15, "baoji_rating": 90 },
+      "base_attrs": {
+        "fagong": 30,
+        "lengque_rating": 90
+      },
+      "implicit_attrs": {
+        "fagong": 15,
+        "baoji_rating": 90
+      },
       "affix_pool_id": "ap-weapon-rare",
       "set_id": "set-xuying",
-      "tags": ["武器", "虚影套装", "法攻", "养神期"]
+      "tags": [
+        "武器",
+        "虚影套装",
+        "法攻",
+        "养神期"
+      ]
     },
     {
       "id": "set-xuying-head",
@@ -3466,11 +3552,23 @@
       "icon": "/assets/items/icon_Hat_1_16.png",
       "equip_slot": "head",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "max_lingqi": 440, "fagong": 20, "kongzhi_kangxing_rating": 268 },
-      "implicit_attrs": { "max_lingqi": 150, "zhaojia_rating": 135 },
+      "base_attrs": {
+        "max_lingqi": 440,
+        "fagong": 20,
+        "kongzhi_kangxing_rating": 268
+      },
+      "implicit_attrs": {
+        "max_lingqi": 150,
+        "zhaojia_rating": 135
+      },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-xuying",
-      "tags": ["头部", "虚影套装", "法攻", "养神期"]
+      "tags": [
+        "头部",
+        "虚影套装",
+        "法攻",
+        "养神期"
+      ]
     },
     {
       "id": "set-xuying-clothes",
@@ -3483,11 +3581,22 @@
       "icon": "/assets/items/icon_clothes_1_16.png",
       "equip_slot": "clothes",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "max_lingqi": 640, "fagong": 24, "fafang": 22 },
-      "implicit_attrs": { "max_lingqi": 190 },
+      "base_attrs": {
+        "max_lingqi": 640,
+        "fagong": 24,
+        "fafang": 22
+      },
+      "implicit_attrs": {
+        "max_lingqi": 190
+      },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-xuying",
-      "tags": ["衣服", "虚影套装", "法攻", "养神期"]
+      "tags": [
+        "衣服",
+        "虚影套装",
+        "法攻",
+        "养神期"
+      ]
     },
     {
       "id": "set-xuying-gloves",
@@ -3500,11 +3609,21 @@
       "icon": "/assets/items/icon_shoulder armour_1_16.png",
       "equip_slot": "gloves",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "fagong": 20, "lengque_rating": 400 },
-      "implicit_attrs": { "fagong": 10 },
+      "base_attrs": {
+        "fagong": 20,
+        "lengque_rating": 400
+      },
+      "implicit_attrs": {
+        "fagong": 10
+      },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-xuying",
-      "tags": ["手部", "虚影套装", "法攻", "养神期"]
+      "tags": [
+        "手部",
+        "虚影套装",
+        "法攻",
+        "养神期"
+      ]
     },
     {
       "id": "set-xuying-pants",
@@ -3517,11 +3636,22 @@
       "icon": "/assets/items/icon_pants_1_16.png",
       "equip_slot": "pants",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "max_qixue": 320, "fafang": 24, "fagong": 12 },
-      "implicit_attrs": { "fafang": 12 },
+      "base_attrs": {
+        "max_qixue": 320,
+        "fafang": 24,
+        "fagong": 12
+      },
+      "implicit_attrs": {
+        "fafang": 12
+      },
       "affix_pool_id": "ap-armor-rare",
       "set_id": "set-xuying",
-      "tags": ["腿部", "虚影套装", "法攻", "养神期"]
+      "tags": [
+        "腿部",
+        "虚影套装",
+        "法攻",
+        "养神期"
+      ]
     },
     {
       "id": "set-xuying-necklace",
@@ -3534,11 +3664,22 @@
       "icon": "/assets/items/icon_Jade pendants_1_16.png",
       "equip_slot": "necklace",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "fagong": 18, "kongzhi_kangxing_rating": 268 },
-      "implicit_attrs": { "fagong": 11, "baoji_rating": 90 },
+      "base_attrs": {
+        "fagong": 18,
+        "kongzhi_kangxing_rating": 268
+      },
+      "implicit_attrs": {
+        "fagong": 11,
+        "baoji_rating": 90
+      },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-xuying",
-      "tags": ["项链", "虚影套装", "法攻", "养神期"]
+      "tags": [
+        "项链",
+        "虚影套装",
+        "法攻",
+        "养神期"
+      ]
     },
     {
       "id": "set-xuying-accessory",
@@ -3551,11 +3692,22 @@
       "icon": "/assets/items/icon_jiezhi_10010.png",
       "equip_slot": "accessory",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "fagong": 22, "zengshang_rating": 400 },
-      "implicit_attrs": { "fagong": 12, "lengque_rating": 220 },
+      "base_attrs": {
+        "fagong": 22,
+        "zengshang_rating": 400
+      },
+      "implicit_attrs": {
+        "fagong": 12,
+        "lengque_rating": 220
+      },
       "affix_pool_id": "ap-accessory-uncommon",
       "set_id": "set-xuying",
-      "tags": ["饰品", "虚影套装", "法攻", "养神期"]
+      "tags": [
+        "饰品",
+        "虚影套装",
+        "法攻",
+        "养神期"
+      ]
     },
     {
       "id": "set-xuying-artifact",
@@ -3568,11 +3720,21 @@
       "icon": "/assets/items/guan_tian_jing.png",
       "equip_slot": "artifact",
       "equip_req_realm": "炼神返虚·养神期",
-      "base_attrs": { "kongzhi_kangxing_rating": 900, "lengque_rating": 450 },
-      "implicit_attrs": { "kongzhi_kangxing_rating": 268 },
+      "base_attrs": {
+        "kongzhi_kangxing_rating": 900,
+        "lengque_rating": 450
+      },
+      "implicit_attrs": {
+        "kongzhi_kangxing_rating": 268
+      },
       "affix_pool_id": "ap-artifact-uncommon",
       "set_id": "set-xuying",
-      "tags": ["法宝", "虚影套装", "法攻", "养神期"]
+      "tags": [
+        "法宝",
+        "虚影套装",
+        "法攻",
+        "养神期"
+      ]
     }
   ]
 }
