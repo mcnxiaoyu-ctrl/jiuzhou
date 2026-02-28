@@ -59,4 +59,5 @@ coverage/
 *.bak
 *.tmp
 *.temp
-local_cache.worktrees/
+local_cache/
+.worktrees/
