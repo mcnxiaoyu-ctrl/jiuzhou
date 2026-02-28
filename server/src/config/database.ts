@@ -199,10 +199,6 @@ const nextSavepointName = (state: ClientTransactionState): string => {
   return `sp_auto_client_${state.clientId}_${state.savepointCounter}`;
 };
 
-const safeRollbackRootTransaction = async (client: PoolClient): Promise<void> => {
-  await client.query('ROLLBACK');
-};
-
 const safeReleaseClient = (client: PoolClient): void => {
   try {
     client.release();
@@ -487,18 +483,30 @@ export const withTransaction = async <T>(
 
   if (parentContext) {
     await parentContext.client.query('BEGIN');
-    const result = await callback(parentContext.client);
-    await parentContext.client.query('COMMIT');
-    return result;
+    try {
+      const result = await callback(parentContext.client);
+      await parentContext.client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await parentContext.client.query('ROLLBACK');
+      throw error;
+    }
   }
 
   const client = await pool.connect();
   const rootContext: TransactionContext = { client };
 
-  await client.query('BEGIN');
-  const result = await transactionContextStorage.run(rootContext, async () => callback(client));
-  await client.query('COMMIT');
-  return result;
+  try {
+    await client.query('BEGIN');
+    const result = await transactionContextStorage.run(rootContext, async () => callback(client));
+    await client.query('COMMIT');
+    client.release();
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    client.release();
+    throw error;
+  }
 };
 
 /**
