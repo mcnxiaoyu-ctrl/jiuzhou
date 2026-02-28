@@ -240,6 +240,12 @@ const decoratePoolClient = (client: PoolClient): PoolClient => {
         });
       }
 
+      // 嵌套事务：创建 SAVEPOINT
+      console.log('创建 SAVEPOINT', {
+        clientId: state.clientId,
+        depth: state.depth,
+        savepointStack: state.savepointStack
+      });
       const savepointName = nextSavepointName(state);
       return executeRawQueryAsPromise(rawQuery, `SAVEPOINT ${savepointName}`).then(() => {
         state.savepointStack.push(savepointName);
@@ -483,15 +489,32 @@ export const withTransaction = async <T>(
 ): Promise<T> => {
   const parentContext = getActiveTransactionContext();
 
+  // 验证父上下文的客户端是否处于有效状态
   if (parentContext) {
-    await parentContext.client.query('BEGIN');
-    try {
-      const result = await callback(parentContext.client);
-      await parentContext.client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await parentContext.client.query('ROLLBACK');
-      throw error;
+    const decoratedClient = parentContext.client as DecoratedPoolClient;
+    const state = decoratedClient.__txState;
+
+    // 如果客户端已被释放或状态异常，忽略这个僵尸上下文，创建新的根事务
+    if (state?.released || !state || state.depth <= 0) {
+      console.warn('检测到无效的事务上下文，创建新的根事务', {
+        clientId: state?.clientId,
+        released: state?.released,
+        depth: state?.depth,
+      });
+      // 清除僵尸上下文
+      transactionContextStorage.enterWith(null);
+      // 继续执行，会走到下面的根事务创建逻辑
+    } else {
+      // 父上下文有效，执行嵌套事务
+      await parentContext.client.query('BEGIN');
+      try {
+        const result = await callback(parentContext.client);
+        await parentContext.client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await parentContext.client.query('ROLLBACK');
+        throw error;
+      }
     }
   }
 
