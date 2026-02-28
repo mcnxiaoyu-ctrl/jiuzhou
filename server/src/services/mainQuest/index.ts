@@ -945,190 +945,185 @@ export const updateSectionProgress = async (
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return { success: false, message: '角色不存在', updated: false, completed: false };
 
-  try {
-    return await withTransaction(async (client) => {
-  const progressRes = await client.query(
-        `SELECT current_section_id, section_status, objectives_progress
-         FROM character_main_quest_progress
-         WHERE character_id = $1 FOR UPDATE`,
-        [cid],
-      );
-      if (!progressRes.rows?.[0]) {
-        await client.query('ROLLBACK');
-        return { success: false, message: '主线进度不存在', updated: false, completed: false };
-      }
-  
-      const progress = progressRes.rows[0] as {
-        current_section_id?: unknown;
-        section_status?: unknown;
-        objectives_progress?: unknown;
-      };
-      if (asString(progress.section_status) !== 'objectives') {
-        await client.query('ROLLBACK');
-        return { success: true, message: '当前不在目标阶段', updated: false, completed: false };
-      }
-  
-      const sectionId = asString(progress.current_section_id);
-      if (!sectionId) {
-        await client.query('ROLLBACK');
-        return { success: false, message: '任务节不存在', updated: false, completed: false };
-      }
-  
-      const section = getEnabledMainQuestSectionById(sectionId);
-      if (!section) {
-        await client.query('ROLLBACK');
-        return { success: false, message: '任务节不存在', updated: false, completed: false };
-      }
-  
-      const objectives = asArray<{ id?: unknown; type?: unknown; target?: unknown; params?: unknown }>(section.objectives);
-      const progressData = asObject(progress.objectives_progress);
-      let updated = false;
-  
-      for (const obj of objectives) {
-        const objId = asString(obj.id);
-        const objType = asString(obj.type);
-        const target = asNumber(obj.target, 1);
-        const params = asObject(obj.params);
-        const currentDone = asNumber(progressData[objId], 0);
-        if (!objId) continue;
-        if (currentDone >= target) continue;
-  
-        let matched = false;
-        let delta = 0;
-  
-        if (event.type === 'talk_npc') {
-          if (objType === 'talk_npc' && asString(params.npc_id) === event.npcId) {
-            matched = true;
-            delta = 1;
-          }
+  return await withTransaction(async (client) => {
+const progressRes = await client.query(
+      `SELECT current_section_id, section_status, objectives_progress
+       FROM character_main_quest_progress
+       WHERE character_id = $1 FOR UPDATE`,
+      [cid],
+    );
+    if (!progressRes.rows?.[0]) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '主线进度不存在', updated: false, completed: false };
+    }
+
+    const progress = progressRes.rows[0] as {
+      current_section_id?: unknown;
+      section_status?: unknown;
+      objectives_progress?: unknown;
+    };
+    if (asString(progress.section_status) !== 'objectives') {
+      await client.query('ROLLBACK');
+      return { success: true, message: '当前不在目标阶段', updated: false, completed: false };
+    }
+
+    const sectionId = asString(progress.current_section_id);
+    if (!sectionId) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '任务节不存在', updated: false, completed: false };
+    }
+
+    const section = getEnabledMainQuestSectionById(sectionId);
+    if (!section) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '任务节不存在', updated: false, completed: false };
+    }
+
+    const objectives = asArray<{ id?: unknown; type?: unknown; target?: unknown; params?: unknown }>(section.objectives);
+    const progressData = asObject(progress.objectives_progress);
+    let updated = false;
+
+    for (const obj of objectives) {
+      const objId = asString(obj.id);
+      const objType = asString(obj.type);
+      const target = asNumber(obj.target, 1);
+      const params = asObject(obj.params);
+      const currentDone = asNumber(progressData[objId], 0);
+      if (!objId) continue;
+      if (currentDone >= target) continue;
+
+      let matched = false;
+      let delta = 0;
+
+      if (event.type === 'talk_npc') {
+        if (objType === 'talk_npc' && asString(params.npc_id) === event.npcId) {
+          matched = true;
+          delta = 1;
         }
-  
-        if (event.type === 'kill_monster') {
-          if (objType === 'kill_monster' && asString(params.monster_id) === event.monsterId) {
+      }
+
+      if (event.type === 'kill_monster') {
+        if (objType === 'kill_monster' && asString(params.monster_id) === event.monsterId) {
+          matched = true;
+          delta = Math.max(1, Math.floor(event.count));
+        }
+      }
+
+      if (event.type === 'gather_resource') {
+        if (objType === 'gather_resource' && asString(params.resource_id) === event.resourceId) {
+          matched = true;
+          delta = Math.max(1, Math.floor(event.count));
+        }
+      }
+
+      if (event.type === 'collect') {
+        if (objType === 'collect' && asString(params.item_id) === event.itemId) {
+          matched = true;
+          delta = Math.max(1, Math.floor(event.count));
+        }
+      }
+
+      if (event.type === 'dungeon_clear') {
+        if (objType === 'dungeon_clear') {
+          const dungeonId = asString(params.dungeon_id);
+          const difficultyId = asString(params.difficulty_id);
+          const dungeonMatch = !dungeonId || dungeonId === event.dungeonId;
+          const difficultyMatch = !difficultyId || difficultyId === asString(event.difficultyId);
+          if (dungeonMatch && difficultyMatch) {
             matched = true;
             delta = Math.max(1, Math.floor(event.count));
           }
         }
-  
-        if (event.type === 'gather_resource') {
-          if (objType === 'gather_resource' && asString(params.resource_id) === event.resourceId) {
+      }
+
+      if (event.type === 'craft_item') {
+        if (objType === 'craft_item') {
+          const recipeId = asString(params.recipe_id);
+          const recipeType = asString(params.recipe_type);
+          const craftKind = asString(params.craft_kind);
+          const itemId = asString(params.item_id);
+
+          const recipeMatch = !recipeId || recipeId === asString(event.recipeId);
+          const recipeTypeMatch = !recipeType || recipeType === asString(event.recipeType);
+          const craftKindMatch = !craftKind || craftKind === asString(event.craftKind);
+          const itemMatch = !itemId || itemId === asString(event.itemId);
+          if (recipeMatch && recipeTypeMatch && craftKindMatch && itemMatch) {
             matched = true;
             delta = Math.max(1, Math.floor(event.count));
           }
         }
-  
-        if (event.type === 'collect') {
-          if (objType === 'collect' && asString(params.item_id) === event.itemId) {
-            matched = true;
-            delta = Math.max(1, Math.floor(event.count));
-          }
+      }
+
+      if (event.type === 'reach') {
+        if (objType === 'reach' && asString(params.room_id) === event.roomId) {
+          matched = true;
+          delta = 1;
         }
-  
-        if (event.type === 'dungeon_clear') {
-          if (objType === 'dungeon_clear') {
-            const dungeonId = asString(params.dungeon_id);
-            const difficultyId = asString(params.difficulty_id);
-            const dungeonMatch = !dungeonId || dungeonId === event.dungeonId;
-            const difficultyMatch = !difficultyId || difficultyId === asString(event.difficultyId);
-            if (dungeonMatch && difficultyMatch) {
+      }
+
+      if (event.type === 'upgrade_technique') {
+        if (objType === 'upgrade_technique' && event.layer >= asNumber(params.layer, 1)) {
+          const techniqueId = asString(params.technique_id).trim();
+          const requiredQuality = asString(params.quality).trim();
+
+          if (techniqueId) {
+            // 按具体功法 ID 匹配
+            if (techniqueId === event.techniqueId) {
               matched = true;
-              delta = Math.max(1, Math.floor(event.count));
+              delta = 1;
             }
-          }
-        }
-  
-        if (event.type === 'craft_item') {
-          if (objType === 'craft_item') {
-            const recipeId = asString(params.recipe_id);
-            const recipeType = asString(params.recipe_type);
-            const craftKind = asString(params.craft_kind);
-            const itemId = asString(params.item_id);
-  
-            const recipeMatch = !recipeId || recipeId === asString(event.recipeId);
-            const recipeTypeMatch = !recipeType || recipeType === asString(event.recipeType);
-            const craftKindMatch = !craftKind || craftKind === asString(event.craftKind);
-            const itemMatch = !itemId || itemId === asString(event.itemId);
-            if (recipeMatch && recipeTypeMatch && craftKindMatch && itemMatch) {
+          } else if (requiredQuality) {
+            // 按品质匹配：查询触发事件的功法品质
+            const techDef = getTechniqueDefinitions().find(
+              (t) => t.id === event.techniqueId && t.enabled !== false,
+            );
+            if (techDef && asString(techDef.quality).trim() === requiredQuality) {
               matched = true;
-              delta = Math.max(1, Math.floor(event.count));
+              delta = 1;
             }
           }
         }
-  
-        if (event.type === 'reach') {
-          if (objType === 'reach' && asString(params.room_id) === event.roomId) {
-            matched = true;
-            delta = 1;
-          }
-        }
-  
-        if (event.type === 'upgrade_technique') {
-          if (objType === 'upgrade_technique' && event.layer >= asNumber(params.layer, 1)) {
-            const techniqueId = asString(params.technique_id).trim();
-            const requiredQuality = asString(params.quality).trim();
-  
-            if (techniqueId) {
-              // 按具体功法 ID 匹配
-              if (techniqueId === event.techniqueId) {
-                matched = true;
-                delta = 1;
-              }
-            } else if (requiredQuality) {
-              // 按品质匹配：查询触发事件的功法品质
-              const techDef = getTechniqueDefinitions().find(
-                (t) => t.id === event.techniqueId && t.enabled !== false,
-              );
-              if (techDef && asString(techDef.quality).trim() === requiredQuality) {
-                matched = true;
-                delta = 1;
-              }
-            }
-          }
-        }
-  
-        if (event.type === 'upgrade_realm') {
-          const requiredRealm = asString(params.realm).trim();
-          const requiredRealmRank = getRealmRank(requiredRealm);
-          const currentRealmRank = getRealmRank(event.realm);
-          if (objType === 'upgrade_realm' && requiredRealm && requiredRealmRank >= 0 && currentRealmRank >= requiredRealmRank) {
-            matched = true;
-            delta = 1;
-          }
-        }
-  
-        if (matched && delta > 0) {
-          progressData[objId] = Math.min(target, currentDone + delta);
-          updated = true;
+      }
+
+      if (event.type === 'upgrade_realm') {
+        const requiredRealm = asString(params.realm).trim();
+        const requiredRealmRank = getRealmRank(requiredRealm);
+        const currentRealmRank = getRealmRank(event.realm);
+        if (objType === 'upgrade_realm' && requiredRealm && requiredRealmRank >= 0 && currentRealmRank >= requiredRealmRank) {
+          matched = true;
+          delta = 1;
         }
       }
-  
-      if (!updated) {
-        await client.query('ROLLBACK');
-        return { success: true, message: '无匹配目标', updated: false, completed: false };
+
+      if (matched && delta > 0) {
+        progressData[objId] = Math.min(target, currentDone + delta);
+        updated = true;
       }
-  
-      const allDone = objectives.every((obj) => {
-        const objId = asString(obj.id);
-        if (!objId) return true;
-        const target = asNumber(obj.target, 1);
-        return asNumber(progressData[objId], 0) >= target;
-      });
-  
-      const newStatus: SectionStatus = allDone ? 'turnin' : 'objectives';
-      await client.query(
-        `UPDATE character_main_quest_progress
-         SET objectives_progress = $2::jsonb,
-             section_status = $3,
-             updated_at = NOW()
-         WHERE character_id = $1`,
-        [cid, JSON.stringify(progressData), newStatus],
-      );
-  return { success: true, message: 'ok', updated: true, completed: allDone };
+    }
+
+    if (!updated) {
+      await client.query('ROLLBACK');
+      return { success: true, message: '无匹配目标', updated: false, completed: false };
+    }
+
+    const allDone = objectives.every((obj) => {
+      const objId = asString(obj.id);
+      if (!objId) return true;
+      const target = asNumber(obj.target, 1);
+      return asNumber(progressData[objId], 0) >= target;
     });
-  } catch (error) {
-console.error('更新主线目标进度失败:', error);
-    return { success: false, message: '服务器错误', updated: false, completed: false };
-  }
+
+    const newStatus: SectionStatus = allDone ? 'turnin' : 'objectives';
+    await client.query(
+      `UPDATE character_main_quest_progress
+       SET objectives_progress = $2::jsonb,
+           section_status = $3,
+           updated_at = NOW()
+       WHERE character_id = $1`,
+      [cid, JSON.stringify(progressData), newStatus],
+    );
+return { success: true, message: 'ok', updated: true, completed: allDone };
+  });
 };
 
 type RewardResult =
