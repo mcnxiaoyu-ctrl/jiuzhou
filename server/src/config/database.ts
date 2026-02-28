@@ -310,7 +310,8 @@ const decoratePoolClient = (client: PoolClient): PoolClient => {
       return executeRawQueryAsPromise(rawQuery, 'BEGIN')
         .then(() => {
           state.depth = 1;
-          transactionContextStorage.enterWith({ client });
+          // 不在这里设置 AsyncLocalStorage
+          // AsyncLocalStorage 应该只在 withTransaction 的 transactionContextStorage.run() 中管理
           const writeResult = rawQuery(...queryArgs);
           if (!isPromiseLike(writeResult)) {
             throw new Error('自动写事务仅支持 Promise 风格调用');
