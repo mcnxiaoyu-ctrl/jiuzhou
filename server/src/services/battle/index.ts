@@ -178,10 +178,18 @@ export async function recoverBattlesFromRedis(): Promise<number> {
         }
 
         const state = JSON.parse(stateJson) as BattleState;
-        const participants = participantsJson ? JSON.parse(participantsJson) as number[] : [];
 
         // 跳过已结束的战斗
         if (state.phase === 'finished') {
+          await removeBattleFromRedis(battleId);
+          continue;
+        }
+        const participantsRaw = participantsJson ? JSON.parse(participantsJson) : null;
+        const participants = await resolveRecoveredBattleParticipants(state, participantsRaw);
+        if (participants.length === 0) {
+          // 参与者无法恢复时，该战斗无法被玩家重连接管，会导致“误判仍在战斗中”。
+          // 直接清理该脏战斗，避免阻塞后续开战。
+          console.warn(`  跳过恢复战斗 ${battleId}: 参与者缺失且无法从战斗状态反推`);
           await removeBattleFromRedis(battleId);
           continue;
         }
@@ -366,6 +374,10 @@ function findActiveBattleByCharacterId(characterId: number): ActiveBattleByChara
   if (!Number.isFinite(normalizedCharacterId) || normalizedCharacterId <= 0) return null;
 
   for (const [battleId, engine] of activeBattles.entries()) {
+    // 无参与者战斗无法被重连同步，视为脏状态，避免误拦截“正在战斗中”。
+    const participants = battleParticipants.get(battleId) || [];
+    if (participants.length === 0) continue;
+
     const state = engine.getState();
 
     // 战斗已结束不算作活跃战斗
@@ -436,6 +448,71 @@ function collectPlayerCharacterIdsFromBattleState(state: BattleState): number[] 
     if (!Number.isFinite(characterId) || characterId <= 0) continue;
     ids.add(characterId);
   }
+  return [...ids];
+}
+
+function normalizeBattleParticipantUserIds(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  const ids = new Set<number>();
+  for (const item of raw) {
+    const userId = Math.floor(Number(item));
+    if (!Number.isFinite(userId) || userId <= 0) continue;
+    ids.add(userId);
+  }
+  return [...ids];
+}
+
+function collectBattleOwnerUserIds(state: BattleState): number[] {
+  const ownerIds = new Set<number>();
+  const attackerOwnerId = Math.floor(Number(state.teams.attacker?.odwnerId));
+  const defenderOwnerId = Math.floor(Number(state.teams.defender?.odwnerId));
+  if (Number.isFinite(attackerOwnerId) && attackerOwnerId > 0) ownerIds.add(attackerOwnerId);
+  if (Number.isFinite(defenderOwnerId) && defenderOwnerId > 0) ownerIds.add(defenderOwnerId);
+  return [...ownerIds];
+}
+
+/**
+ * 恢复战斗参与者（userId 列表）
+ *
+ * 作用：
+ * - 优先复用 Redis 持久化的 participants
+ * - 若历史脏数据导致 participants 缺失，则从 BattleState 中反推角色归属用户
+ *
+ * 输入/输出：
+ * - state: BattleState（已从 Redis 反序列化）
+ * - participantsRaw: Redis participants 原始值（可能为空/脏格式）
+ * - 返回去重后的 userId 列表；无法恢复时返回空数组
+ *
+ * 数据流：
+ * - participantsRaw -> normalizeBattleParticipantUserIds
+ * - 缺失时：state.teams ownerId + collectPlayerCharacterIdsFromBattleState
+ *   -> getUserIdByCharacterId -> 去重 userId
+ *
+ * 关键边界条件与坑点：
+ * - participantsRaw 非数组或含非法值时，必须过滤，避免恢复出无效 userId。
+ * - BattleState 仅存 characterId，不直接存 userId；需通过角色归属查询反推。
+ */
+async function resolveRecoveredBattleParticipants(state: BattleState, participantsRaw: unknown): Promise<number[]> {
+  const fromRedis = normalizeBattleParticipantUserIds(participantsRaw);
+  if (fromRedis.length > 0) return fromRedis;
+
+  const ids = new Set<number>();
+  for (const ownerUserId of collectBattleOwnerUserIds(state)) {
+    ids.add(ownerUserId);
+  }
+
+  const playerCharacterIds = collectPlayerCharacterIdsFromBattleState(state);
+  if (playerCharacterIds.length > 0) {
+    const ownerUserIds = await Promise.all(
+      playerCharacterIds.map((characterId) => getUserIdByCharacterId(characterId)),
+    );
+    for (const userId of ownerUserIds) {
+      const normalizedUserId = Math.floor(Number(userId));
+      if (!Number.isFinite(normalizedUserId) || normalizedUserId <= 0) continue;
+      ids.add(normalizedUserId);
+    }
+  }
+
   return [...ids];
 }
 
