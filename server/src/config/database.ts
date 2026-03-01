@@ -313,11 +313,6 @@ const decoratePoolClient = (client: PoolClient): PoolClient => {
       }
 
       // 嵌套事务：创建 SAVEPOINT
-      console.log('创建 SAVEPOINT', {
-        clientId: state.clientId,
-        depth: state.depth,
-        savepointStack: state.savepointStack
-      });
       const savepointName = nextSavepointName(state);
       return executeRawQueryAsPromise(rawQuery, `SAVEPOINT ${savepointName}`).then(() => {
         state.savepointStack.push(savepointName);
