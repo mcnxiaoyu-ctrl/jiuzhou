@@ -2867,7 +2867,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/lin_ri_shen_dao.png",
+      "icon": "/assets/images/set-guiyuan/01-weapon-set-guiyuan-weapon.webp",
       "equip_slot": "weapon",
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
@@ -2894,7 +2894,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_Hat_1_16.png",
+      "icon": "/assets/images/set-guiyuan/02-head-set-guiyuan-head.webp",
       "equip_slot": "head",
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
@@ -2921,7 +2921,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_clothes_1_16.png",
+      "icon": "/assets/images/set-guiyuan/03-clothes-set-guiyuan-clothes.webp",
       "equip_slot": "clothes",
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
@@ -2948,7 +2948,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_shoulder armour_1_16.png",
+      "icon": "/assets/images/set-guiyuan/04-gloves-set-guiyuan-gloves.webp",
       "equip_slot": "gloves",
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
@@ -2974,7 +2974,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_pants_1_16.png",
+      "icon": "/assets/images/set-guiyuan/05-pants-set-guiyuan-pants.webp",
       "equip_slot": "pants",
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
@@ -3000,7 +3000,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_Jade pendants_1_16.png",
+      "icon": "/assets/images/set-guiyuan/06-necklace-set-guiyuan-necklace.webp",
       "equip_slot": "necklace",
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
@@ -3026,7 +3026,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_jiezhi_10010.png",
+      "icon": "/assets/images/set-guiyuan/07-accessory-set-guiyuan-accessory.webp",
       "equip_slot": "accessory",
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {
@@ -3052,7 +3052,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/guan_tian_jing.png",
+      "icon": "/assets/images/set-guiyuan/08-artifact-set-guiyuan-artifact.webp",
       "equip_slot": "artifact",
       "equip_req_realm": "炼炁化神·结胎期",
       "base_attrs": {

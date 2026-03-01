@@ -1047,14 +1047,32 @@ function refineRegionByBorderEdge(pixelData, imageWidth, imageHeight, channels, 
   };
 }
 
+function shouldFallbackFromIsolatedRegion(sourceRegion, isolatedRegion) {
+  const widthRatio = isolatedRegion.width / sourceRegion.width;
+  const heightRatio = isolatedRegion.height / sourceRegion.height;
+  const areaRatio = (isolatedRegion.width * isolatedRegion.height) / (sourceRegion.width * sourceRegion.height);
+
+  // 基础兜底：异常极小区域直接判定为误裁。
+  if (widthRatio < 0.3 || heightRatio < 0.3) {
+    return true;
+  }
+
+  // 细长主体只允许单轴明显收缩；若双轴一起缩小，通常是把主体误识别成局部高亮。
+  const shrunkOnBothAxes = widthRatio < 0.68 && heightRatio < 0.72;
+
+  // 再加一层面积约束，避免极端素材在单轴临界值附近漏判。
+  const aggressiveAreaShrink = areaRatio < 0.42 && (widthRatio < 0.78 || heightRatio < 0.78);
+
+  return shrunkOnBothAxes || aggressiveAreaShrink;
+}
+
 function refineRegionByContentIsolation(pixelData, imageWidth, channels, region) {
   const isolated = isolateInnerContentBounds(pixelData, imageWidth, channels, region);
   if (!isolated) {
     return region;
   }
 
-  // 避免误裁过度：如果隔离后尺寸异常缩小，回退到上一阶段结果。
-  if (isolated.width < region.width * 0.3 || isolated.height < region.height * 0.3) {
+  if (shouldFallbackFromIsolatedRegion(region, isolated)) {
     return region;
   }
 
