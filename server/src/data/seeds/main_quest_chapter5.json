@@ -82,14 +82,14 @@
           "type": "kill_monster",
           "text": "击败虚空残影",
           "target": 5,
-          "params": { "monster_def_id": "monster-yangshen-void-phantom" }
+          "params": { "monster_id": "monster-yangshen-void-phantom" }
         },
         {
           "id": "obj-2",
           "type": "kill_monster",
           "text": "击败神魂游丝",
           "target": 5,
-          "params": { "monster_def_id": "monster-yangshen-soul-wisp" }
+          "params": { "monster_id": "monster-yangshen-soul-wisp" }
         }
       ],
       "rewards": {
@@ -159,10 +159,10 @@
       "objectives": [
         {
           "id": "obj-1",
-          "type": "collect_item",
+          "type": "collect",
           "text": "收集神魂凝晶",
           "target": 10,
-          "params": { "item_def_id": "mat-shenhun-ningjing" }
+          "params": { "item_id": "mat-shenhun-ningjing" }
         },
         {
           "id": "obj-2",
