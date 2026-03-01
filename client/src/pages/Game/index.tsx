@@ -738,6 +738,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       title: m.role === 'leader' ? '队长' : '队员',
       realm: m.realm,
       avatar: m.avatar,
+      online: Boolean(m.online),
       hp: 0,
       maxHp: 0,
       qi: 0,

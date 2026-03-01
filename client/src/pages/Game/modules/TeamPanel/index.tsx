@@ -18,6 +18,7 @@ export type TeamMember = {
   title?: string;
   realm?: string;
   avatar?: string | null;
+  online?: boolean;
   hp: number;
   maxHp: number;
   qi: number;
@@ -51,10 +52,12 @@ const TeamPanel: React.FC<TeamPanelProps> = ({ members, onSelectMember, onLeaveT
       </div>
       <div className="team-panel-body">
         <div className="team-member-list">
-          {list.map((m) => (
+          {list.map((m) => {
+            const online = m.online === true;
+            return (
             <div
               key={m.id}
-              className="team-member"
+              className={`team-member${online ? '' : ' is-offline'}`}
               role={onSelectMember ? 'button' : undefined}
               tabIndex={onSelectMember ? 0 : -1}
               onClick={() => onSelectMember?.(m)}
@@ -68,8 +71,10 @@ const TeamPanel: React.FC<TeamPanelProps> = ({ members, onSelectMember, onLeaveT
                 {m.name}
               </div>
               {m.role === 'leader' ? <Tag color="gold">队长</Tag> : null}
+              <Tag color={online ? 'green' : 'default'}>{online ? '在线' : '离线'}</Tag>
             </div>
-          ))}
+            );
+          })}
           {list.length === 0 ? <div className="team-empty">暂无队伍成员</div> : null}
         </div>
       </div>
