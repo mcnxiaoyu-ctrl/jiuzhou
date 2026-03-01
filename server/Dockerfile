@@ -26,8 +26,7 @@ WORKDIR /app
 # 固定 pnpm、镜像源和 lockfile 相关配置，保证构建可复现
 RUN corepack enable && corepack prepare pnpm@latest --activate && \
     pnpm config set registry https://registry.npmmirror.com && \
-    pnpm config set inject-workspace-packages true && \
-    pnpm config set auto-install-peers false
+    pnpm config set auto-install-peers true
 
 # =======================================
 # 构建阶段：编译 server

@@ -159,6 +159,15 @@ const allowedCharacterAttrKeys = new Set<CharacterAttrKey>([
 
 const clampInt = clampGrowthInt;
 export const BAG_CAPACITY_MAX = 200;
+const DEFAULT_BAG_CAPACITY = 100;
+const DEFAULT_WAREHOUSE_CAPACITY = 1000;
+
+const createDefaultInventoryInfo = (): InventoryInfo => ({
+  bag_capacity: DEFAULT_BAG_CAPACITY,
+  warehouse_capacity: DEFAULT_WAREHOUSE_CAPACITY,
+  bag_used: 0,
+  warehouse_used: 0,
+});
 
 const getSlottedCapacity = (
   info: InventoryInfo,
@@ -1147,12 +1156,7 @@ export const getInventoryInfoWithClient = async (
       "INSERT INTO inventory (character_id) VALUES ($1) ON CONFLICT DO NOTHING",
       [characterId],
     );
-    return {
-      bag_capacity: 100,
-      warehouse_capacity: 50,
-      bag_used: 0,
-      warehouse_used: 0,
-    };
+    return createDefaultInventoryInfo();
   }
 
   const info = result.rows[0];
