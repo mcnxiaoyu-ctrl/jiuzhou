@@ -59,6 +59,7 @@ export const pool = new Pool({
 
 type TransactionContext = {
   client: PoolClient;
+  nestedExecutionToken?: number;
 };
 
 type QueryCallable = (...queryArgs: unknown[]) => unknown;
@@ -71,6 +72,9 @@ type ClientTransactionState = {
   savepointCounter: number;
   savepointStack: string[];
   clientId: number;
+  nestedQueue: Promise<void>;
+  nestedExecutionCounter: number;
+  activeNestedExecutionToken: number | null;
 };
 
 type DecoratedPoolClient = PoolClient & {
@@ -237,9 +241,28 @@ const executeRawQueryAsPromise = (
 const resetClientTransactionState = (state: ClientTransactionState): void => {
   state.depth = 0;
   state.savepointStack = [];
+  state.activeNestedExecutionToken = null;
+  state.nestedQueue = Promise.resolve();
   // 注意：不在这里清除 AsyncLocalStorage
   // AsyncLocalStorage 应该由 transactionContextStorage.run() 自动管理
   // 在这里清除可能会影响其他异步上下文
+};
+
+const enqueueNestedTransaction = <T>(
+  state: ClientTransactionState,
+  task: () => Promise<T>,
+): Promise<T> => {
+  const queuedTask = state.nestedQueue.then(task, task);
+  state.nestedQueue = queuedTask.then(
+    () => undefined,
+    () => undefined,
+  );
+  return queuedTask;
+};
+
+const nextNestedExecutionToken = (state: ClientTransactionState): number => {
+  state.nestedExecutionCounter += 1;
+  return state.nestedExecutionCounter;
 };
 
 const normalizeClientStateOnCheckout = (state: ClientTransactionState): void => {
@@ -284,13 +307,17 @@ const safeReleaseClient = (client: PoolClient): void => {
 const decoratePoolClient = (client: PoolClient): PoolClient => {
   const decoratedClient = client as DecoratedPoolClient;
   const rawQuery = (decoratedClient.__txRawQuery ?? client.query.bind(client)) as QueryCallable;
-  const rawRelease = client.release.bind(client) as (err?: Error | boolean) => void;
+  const rawRelease =
+    (decoratedClient.__txRawRelease ?? client.release.bind(client)) as (err?: Error | boolean) => void;
   const state: ClientTransactionState = decoratedClient.__txState ?? {
     depth: 0,
     released: false,
     savepointCounter: 0,
     savepointStack: [],
     clientId: ++decoratedClientIdCounter,
+    nestedQueue: Promise.resolve(),
+    nestedExecutionCounter: 0,
+    activeNestedExecutionToken: null,
   };
 
   decoratedClient.__txState = state;
@@ -578,27 +605,59 @@ export const withTransaction = async <T>(
 
   if (parentContext) {
     // 父上下文有效，执行嵌套事务
-    await parentContext.client.query('BEGIN');
-    try {
-      const result = await callback(parentContext.client);
-      await parentContext.client.query('COMMIT');
-      return result;
-    } catch (error) {
-      console.error('错误：嵌套事务执行失败，准备回滚到 SAVEPOINT', {
-        errorChain: buildErrorChain(error),
-        callStack: captureCallStack('withTransaction 嵌套事务异常调用栈'),
-      });
-      try {
-        await parentContext.client.query('ROLLBACK');
-      } catch (rollbackError) {
-        console.error('错误：嵌套事务回滚失败', {
-          errorChain: buildErrorChain(rollbackError),
-          callStack: captureCallStack('withTransaction 嵌套事务回滚失败调用栈'),
-        });
-        // 嵌套回滚失败不覆盖主异常，主异常继续上抛。
-      }
-      throw error;
+    const decoratedClient = parentContext.client as DecoratedPoolClient;
+    const state = decoratedClient.__txState;
+    if (!state) {
+      throw new Error('事务状态缺失：嵌套事务无法执行');
     }
+
+    const runNestedTransaction = async (nestedToken: number): Promise<T> => {
+      await parentContext.client.query('BEGIN');
+      try {
+        const nestedContext: TransactionContext = {
+          client: parentContext.client,
+          nestedExecutionToken: nestedToken,
+        };
+        const result = await transactionContextStorage.run(
+          nestedContext,
+          async () => callback(parentContext.client),
+        );
+        await parentContext.client.query('COMMIT');
+        return result;
+      } catch (error) {
+        console.error('错误：嵌套事务执行失败，准备回滚到 SAVEPOINT', {
+          errorChain: buildErrorChain(error),
+          callStack: captureCallStack('withTransaction 嵌套事务异常调用栈'),
+        });
+        try {
+          await parentContext.client.query('ROLLBACK');
+        } catch (rollbackError) {
+          console.error('错误：嵌套事务回滚失败', {
+            errorChain: buildErrorChain(rollbackError),
+            callStack: captureCallStack('withTransaction 嵌套事务回滚失败调用栈'),
+          });
+          // 嵌套回滚失败不覆盖主异常，主异常继续上抛。
+        }
+        throw error;
+      }
+    };
+
+    const inheritedToken = parentContext.nestedExecutionToken;
+    if (inheritedToken !== undefined && state.activeNestedExecutionToken === inheritedToken) {
+      return runNestedTransaction(inheritedToken);
+    }
+
+    const nestedToken = nextNestedExecutionToken(state);
+    return enqueueNestedTransaction(state, async () => {
+      state.activeNestedExecutionToken = nestedToken;
+      try {
+        return await runNestedTransaction(nestedToken);
+      } finally {
+        if (state.activeNestedExecutionToken === nestedToken) {
+          state.activeNestedExecutionToken = null;
+        }
+      }
+    });
   }
 
   const client = await pool.connect();
