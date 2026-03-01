@@ -433,20 +433,33 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
   const completeTask = useCallback(async (task: TaskItem | null) => {
     if (!task?.id) return;
     if (task.category !== 'daily' && task.category !== 'event') return;
+    const needSubmitToNpc = task.status === 'turnin';
     const npcId = String(task.giverNpcId ?? '').trim();
-    if (!npcId) {
+    if (needSubmitToNpc && !npcId) {
       message.error('该任务缺少发布NPC，无法完成');
       return;
     }
     try {
-      await submitTaskToNpc(npcId, task.id);
+      if (needSubmitToNpc) {
+        await submitTaskToNpc(npcId, task.id);
+      }
+
+      if (task.category === 'daily') {
+        const rewardRes = await claimTaskReward(task.id);
+        const rewardText = formatTaskRewardsToText(rewardRes.data?.rewards);
+        message.success('完成成功');
+        appendSystemChat(`【任务】已完成并领取奖励：${task.title}${rewardText ? `（${rewardText}）` : ''}`);
+        await refresh();
+        return;
+      }
+
       message.success('完成成功');
       appendSystemChat(`【任务】已完成：${task.title}`);
       await refresh();
     } catch (e: unknown) {
       void 0;
     }
-  }, [appendSystemChat, message, refresh]);
+  }, [appendSystemChat, formatTaskRewardsToText, message, refresh]);
 
   const submitMaterials = useCallback(
     async (task: TaskItem | null) => {
@@ -672,7 +685,6 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
                           提交材料
                         </Button>
                       ) : null}
-                      {/* 日常/周常任务在 turnin 阶段提供“完成”，领取阶段提供“领取”。 */}
                       <Button
                         className="task-action"
                         type="primary"
@@ -684,6 +696,10 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
                           )
                         }
                         onClick={() => {
+                          if (activeTask.category === 'daily' && (activeTask.status === 'turnin' || activeTask.status === 'claimable')) {
+                            void completeTask(activeTask);
+                            return;
+                          }
                           if (activeTask.status === 'claimable') {
                             void claimReward(activeTask);
                             return;
@@ -693,7 +709,9 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
                           }
                         }}
                       >
-                        {(activeTask.category === 'daily' || activeTask.category === 'event') && activeTask.status !== 'claimable' ? '完成' : '领取'}
+                        {activeTask.category === 'daily' && (activeTask.status === 'turnin' || activeTask.status === 'claimable')
+                          ? '完成'
+                          : (activeTask.category === 'event' && activeTask.status !== 'claimable' ? '完成' : '领取')}
                       </Button>
                     </div>
                   </>
