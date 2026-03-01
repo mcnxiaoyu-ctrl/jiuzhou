@@ -1712,8 +1712,11 @@ export async function startDungeonPVEBattle(
         if (Number.isFinite(memberCharacterId) && memberCharacterId > 0 && isCharacterInBattle(memberCharacterId)) {
           continue;
         }
-        if (Number.isFinite(memberCharacterId) && memberCharacterId > 0 && getBattleStartCooldownRemainingMs(memberCharacterId) > 0) {
-          continue;
+        // 秘境战斗跳过冷却检查：秘境是连续波次战斗，队友不应因冷却被过滤
+        if (!options?.skipCooldown) {
+          if (Number.isFinite(memberCharacterId) && memberCharacterId > 0 && getBattleStartCooldownRemainingMs(memberCharacterId) > 0) {
+            continue;
+          }
         }
         if (member.data.qixue > 0) {
           validTeamMembers.push({ ...member, data: withBattleStartResources(member.data) });
