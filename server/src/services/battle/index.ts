@@ -15,6 +15,7 @@ import { BattleEngine } from '../../battle/battleEngine.js';
 import { isFeared, isStunned } from '../../battle/modules/control.js';
 import type {
   BattleAttrs,
+  BattleUnit,
   BattleSkill,
   BattleState,
   BattleSetBonusEffect,
@@ -1299,6 +1300,28 @@ async function getUserIdByCharacterId(characterId: number): Promise<number | nul
   }
 }
 
+function getAttackerPlayerCount(state: BattleState): number {
+  return (state.teams?.attacker?.units ?? []).filter((unit) => unit.type === 'player').length;
+}
+
+async function shouldServerTakeoverDisconnectedPlayerTurn(
+  state: BattleState,
+  currentUnit: BattleUnit,
+): Promise<boolean> {
+  if (state.currentTeam !== 'attacker') return false;
+  if (currentUnit.type !== 'player') return false;
+  if (getAttackerPlayerCount(state) <= 1) return false;
+
+  const characterId = Math.floor(Number(currentUnit.sourceId));
+  if (!Number.isFinite(characterId) || characterId <= 0) return true;
+
+  const ownerUserId = await getUserIdByCharacterId(characterId);
+  if (!ownerUserId) return true;
+
+  const gameServer = getGameServer();
+  return !gameServer.isUserOnline(ownerUserId);
+}
+
 function emitBattleUpdate(battleId: string, payload: any): void {
   try {
     const participants = battleParticipants.get(battleId) || [];
@@ -1359,6 +1382,11 @@ async function tickBattle(battleId: string): Promise<void> {
         return;
       }
       if (isStunned(currentUnit) || isFeared(currentUnit)) {
+        engine.aiAction(true);
+        emitBattleUpdate(battleId, { kind: 'battle_state', battleId, state: engine.getState() });
+        return;
+      }
+      if (await shouldServerTakeoverDisconnectedPlayerTurn(state, currentUnit)) {
         engine.aiAction(true);
         emitBattleUpdate(battleId, { kind: 'battle_state', battleId, state: engine.getState() });
         return;
@@ -2413,7 +2441,7 @@ export async function onUserJoinTeam(userId: number): Promise<void> {
     const engine = activeBattles.get(battleId);
     if (!engine) continue;
     const state = engine.getState();
-    const playerCount = (state.teams?.attacker?.units ?? []).filter((u) => u.type === 'player').length;
+    const playerCount = getAttackerPlayerCount(state);
     if (state.battleType !== 'pve') continue;
     if (playerCount > 1) continue;
     try {
@@ -2466,7 +2494,7 @@ export async function onUserLeaveTeam(userId: number): Promise<void> {
     const engine = activeBattles.get(battleId);
     if (!engine) continue;
     const state = engine.getState();
-    const playerCount = (state.teams?.attacker?.units ?? []).filter((u) => u.type === 'player').length;
+    const playerCount = getAttackerPlayerCount(state);
     if (state.battleType !== 'pve') continue;
     if (playerCount <= 1) continue;
     const participants = battleParticipants.get(battleId) || [];

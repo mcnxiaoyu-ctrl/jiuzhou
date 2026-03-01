@@ -500,6 +500,14 @@ class GameServer {
     return true;
   }
 
+  public isUserOnline(userId: number): boolean {
+    if (!Number.isFinite(userId) || userId <= 0) return false;
+    const socketId = this.userSocketMap.get(userId);
+    if (!socketId) return false;
+    if (!this.sessions.has(socketId)) return false;
+    return this.io.sockets.sockets.has(socketId);
+  }
+
   /**
    * 向指定角色推送事件
    *
