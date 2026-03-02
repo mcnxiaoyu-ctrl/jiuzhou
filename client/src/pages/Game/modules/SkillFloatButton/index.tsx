@@ -261,16 +261,6 @@ const syncSkillCooldownsFromMap = (prev: SkillItem[], cdMap: SkillCooldownMapDto
   return changed ? next : prev;
 };
 
-const resetSkillCooldowns = (prev: SkillItem[]): SkillItem[] => {
-  let changed = false;
-  const next = prev.map((skill) => {
-    if (skill.cooldownLeft <= 0) return skill;
-    changed = true;
-    return { ...skill, cooldownLeft: 0 };
-  });
-  return changed ? next : prev;
-};
-
 type SkillFloatButtonProps = {
   turn?: number;
   turnSide?: 'enemy' | 'ally';
@@ -402,9 +392,10 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
     lastExternalTurnRef.current = turn;
   }, [turn]);
 
+  // 订阅战斗状态更新，同步技能冷却
+  // 注意：此 effect 不依赖 isBattleRunning，确保 battle_started 事件不会丢失
+  // 技能冷却完全依赖服务端推送的 skillCooldowns 状态
   useEffect(() => {
-    if (!isBattleRunning) return;
-
     const syncFromState = (state: unknown) => {
       if (!isRecord(state)) return;
       const stateLike = state as BattleStateWithUnitsDto;
@@ -438,6 +429,7 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
         });
       }
 
+      // 从服务端同步技能冷却（新战斗时 skillCooldowns 为 {}，所有技能冷却会被重置为 0）
       const cdMap = (isRecord(myUnit?.skillCooldowns) ? (myUnit.skillCooldowns as SkillCooldownMapDto) : {}) as SkillCooldownMapDto;
       setSkills((prev) => syncSkillCooldownsFromMap(prev, cdMap));
     };
@@ -454,8 +446,11 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
     });
 
     return () => unsub();
-  }, [isBattleRunning]);
+    // 故意不依赖 isBattleRunning，确保订阅持续存在，避免 battle_started 事件丢失
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // 追踪战斗 ID 变化，重置自动战斗状态
   useEffect(() => {
     if (!isBattleRunning) {
       lastBattleIdRef.current = null;
@@ -470,12 +465,13 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
     const battleId = rawKey.slice(0, last.index);
     if (!battleId) return;
     if (lastBattleIdRef.current === battleId) return;
+    // 新战斗开始：重置自动战斗相关状态
     lastBattleIdRef.current = battleId;
     lastExternalTurnRef.current = turn ?? null;
     lastAutoActionKeyRef.current = null;
     lastAutoAttemptKeyRef.current = null;
     autoRetryCountRef.current = 0;
-    setSkills((prev) => resetSkillCooldowns(prev));
+    // 注意：技能冷却完全依赖服务端推送的 skillCooldowns，不本地重置
   }, [actionKey, isBattleRunning, turn]);
 
   const nextLocalTurn = useCallback(() => {

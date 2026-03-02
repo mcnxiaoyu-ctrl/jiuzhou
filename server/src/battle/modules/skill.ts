@@ -75,6 +75,13 @@ function resolveEffectValue(
   const scaleAttr = scaleAttrRaw || fallbackScaleAttr;
   if (!scaleAttr) return Math.floor(value);
 
+  // 固定值 + 属性加成模式：baseValue + 属性值 * scaleRate
+  if (effect.valueType === 'combined') {
+    const baseValue = toFiniteNumber(effect.baseValue, 0);
+    const rate = toFiniteNumber(effect.scaleRate, 0);
+    return Math.floor(baseValue + getAttrValue(caster, scaleAttr) * rate);
+  }
+
   if (effect.valueType === 'scale') {
     const rate = toFiniteNumber(effect.scaleRate, value);
     return Math.floor(getAttrValue(caster, scaleAttr) * rate);

@@ -236,7 +236,8 @@ export interface SkillEffect {
     | 'lifesteal'
     | 'control';
   value?: number;
-  valueType?: 'flat' | 'percent' | 'scale';
+  valueType?: 'flat' | 'percent' | 'scale' | 'combined';
+  baseValue?: number;  // 固定基础值（用于 combined 模式）
   scaleAttr?: string;
   scaleRate?: number;
   buffId?: string;

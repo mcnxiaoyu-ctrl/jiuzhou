@@ -595,8 +595,10 @@
           "type": "buff",
           "buffId": "buff-hot",
           "duration": 4,
-          "value": 50,
-          "scaleAttr": "fagong"
+          "valueType": "combined",
+          "baseValue": 50,
+          "scaleAttr": "fagong",
+          "scaleRate": 0.6
         }
       ],
       "trigger_type": "active",
@@ -611,8 +613,10 @@
                 "type": "buff",
                 "buffId": "buff-hot",
                 "duration": 5,
-                "value": 60,
-                "scaleAttr": "fagong"
+                "valueType": "combined",
+                "baseValue": 100,
+                "scaleAttr": "fagong",
+                "scaleRate": 0.8
               }
             ]
           }
