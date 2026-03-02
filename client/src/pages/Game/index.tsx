@@ -973,6 +973,26 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     return undefined;
   }, [arenaBattleId, dungeonBattleId, dungeonInstanceId, handleArenaNext, handleDungeonNext, inTeam, isTeamLeader]);
 
+  /**
+   * 控制 BattleArea 是否允许“无 externalBattleId 时本地自动开战”。
+   *
+   * 设计目的：
+   * - 普通地图点击怪物进入战斗时，需要本地自动调用 `/battle/start`。
+   * - 秘境/竞技场/重连/队友战斗接管场景必须等待 externalBattleId，
+   *   否则会误用普通 PVE 开战接口，触发“战斗目标不在当前房间”。
+   *
+   * 关键边界条件：
+   * - 只要任一外部战斗上下文存在（实例、战斗ID、重连ID），就禁止本地自动开战。
+   * - 该开关只影响 BattleArea 的自动开战分支，不影响已存在 battleId 的状态拉取与行动请求。
+   */
+  const allowLocalBattleStart = useMemo(() => {
+    const hasDungeonContext = Boolean(dungeonInstanceId || dungeonBattleId);
+    const hasArenaContext = Boolean(arenaBattleId);
+    const hasReconnectContext = Boolean(reconnectBattleId);
+    const hasTeamReplayContext = Boolean(inTeam && !isTeamLeader && teamBattleId);
+    return !(hasDungeonContext || hasArenaContext || hasReconnectContext || hasTeamReplayContext);
+  }, [arenaBattleId, dungeonBattleId, dungeonInstanceId, inTeam, isTeamLeader, reconnectBattleId, teamBattleId]);
+
   const bindBattleSkillCaster = useCallback((caster: (skillId: string, targetType?: string) => Promise<boolean>) => {
     battleSkillCasterRef.current = caster;
   }, []);
@@ -989,15 +1009,19 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   );
 
   const handleBattleEscape = useCallback(() => {
+    // 仅当当前确有秘境 battleId 时才视为“主动退出秘境”，避免开战前失败分支误清空实例。
+    const shouldClearDungeonInstance = Boolean(dungeonBattleId);
     setViewMode('map');
     setBattleTurn(0);
     setBattlePhase(null);
     setBattleActiveUnitId(null);
     setArenaBattleId(null);
     setDungeonBattleId(null);
-    setDungeonInstanceId(null);
+    if (shouldClearDungeonInstance) {
+      setDungeonInstanceId(null);
+    }
     setReconnectBattleId(null);
-  }, []);
+  }, [dungeonBattleId]);
 
   const handleBattleCastSkill = useCallback((skillId: string, targetType?: string) => {
     return battleSkillCasterRef.current(skillId, targetType);
@@ -1762,6 +1786,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                     <BattleArea
                       enemies={battleEnemies}
                       allies={battleAllies}
+                      allowLocalStart={allowLocalBattleStart}
                       externalBattleId={externalBattleId}
                       allowAutoNext={allowAutoNextBattle}
                       onNext={battleOnNext}
@@ -1793,6 +1818,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                               <BattleArea
                                 enemies={battleEnemies}
                                 allies={battleAllies}
+                                allowLocalStart={allowLocalBattleStart}
                                 externalBattleId={externalBattleId}
                                 allowAutoNext={allowAutoNextBattle}
                                 onNext={battleOnNext}
@@ -1841,6 +1867,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                     <BattleArea
                       enemies={battleEnemies}
                       allies={battleAllies}
+                      allowLocalStart={allowLocalBattleStart}
                       externalBattleId={externalBattleId}
                       allowAutoNext={allowAutoNextBattle}
                       onNext={battleOnNext}

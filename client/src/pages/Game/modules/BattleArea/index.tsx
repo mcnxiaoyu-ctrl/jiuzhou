@@ -35,6 +35,12 @@ export type BattleUnit = {
 interface BattleAreaProps {
   enemies: BattleUnit[];
   allies: BattleUnit[];
+  /**
+   * 是否允许 BattleArea 在无 externalBattleId 时走本地 PVE 自动开战流程。
+   * - true：根据 enemies 自动调用 startPVEBattle（普通地图怪物攻击场景）。
+   * - false：禁止本地自动开战，仅等待 externalBattleId（秘境/竞技场/重连场景）。
+   */
+  allowLocalStart: boolean;
   onEscape?: () => void;
   onTurnChange?: (turnCount: number, turnSide: 'enemy' | 'ally', actionKey: string, activeUnitId: string | null, phase: string | null) => void;
   onBindSkillCaster?: (caster: (skillId: string, targetType?: string) => Promise<boolean>) => void;
@@ -245,6 +251,7 @@ const isTransientBattleActionError = (msg: unknown): boolean => {
 
 const BattleArea: React.FC<BattleAreaProps> = ({
   enemies,
+  allowLocalStart,
   onEscape,
   onTurnChange,
   onBindSkillCaster,
@@ -607,6 +614,9 @@ const BattleArea: React.FC<BattleAreaProps> = ({
   );
 
   useEffect(() => {
+    // 外部战斗上下文（秘境/竞技场/重连）必须依赖 externalBattleId 驱动，
+    // 禁止回退到本地 startPVEBattle，避免误命中“目标不在当前房间”并触发错误退出。
+    if (!allowLocalStart) return;
     if (resolvedExternalBattleId) return;
     const firstMonster = (enemies ?? []).find((u) => u.id.startsWith('monster-'))?.id ?? '';
     const rawMonsterId = firstMonster.startsWith('monster-') ? firstMonster.slice('monster-'.length) : '';
@@ -614,7 +624,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
     const monsterIds = baseMonsterId ? [baseMonsterId] : [];
     lastMonsterIdsRef.current = monsterIds;
     void startBattle(monsterIds, { retryOnCooldown: true, silentCooldown: true });
-  }, [enemies, resolvedExternalBattleId, startBattle]);
+  }, [allowLocalStart, enemies, resolvedExternalBattleId, startBattle]);
 
   // 监听服务端冷却结束推送
   useEffect(() => {
