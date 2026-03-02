@@ -443,30 +443,6 @@
       "sort_weight": 62
     },
     {
-      "id": "tech-houtu-xinjing",
-      "code": "houtu_xinjing",
-      "name": "厚土心经",
-      "type": "辅修",
-      "quality": "地",
-      "max_layer": 7,
-      "required_realm": "炼炁化神·炼己期",
-      "attribute_type": "support",
-      "attribute_element": "tu",
-      "tags": [
-        "辅修",
-        "土",
-        "防御",
-        "续航"
-      ],
-      "description": "厚土化守，稳固气血与灵识，擅长持久战。",
-      "obtain_type": "drop",
-      "obtain_hint": [
-        "灵脉矿渊",
-        "南海岸"
-      ],
-      "sort_weight": 63
-    },
-    {
       "id": "tech-taixi-ningtai-jue",
       "code": "xuanjia_fanzhen_jue",
       "name": "玄甲返震诀",
