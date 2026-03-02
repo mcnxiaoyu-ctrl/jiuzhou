@@ -1335,7 +1335,8 @@
           "type": "debuff",
           "buffId": "debuff-burn",
           "duration": 3,
-          "value": 30
+          "value": 30,
+          "bonusTargetMaxQixueRate": 0.01
         }
       ],
       "trigger_type": "active",
@@ -1357,7 +1358,8 @@
                 "type": "debuff",
                 "buffId": "debuff-burn",
                 "duration": 3,
-                "value": 30
+                "value": 30,
+                "bonusTargetMaxQixueRate": 0.01
               }
             ]
           }
@@ -1388,7 +1390,8 @@
           "type": "debuff",
           "buffId": "debuff-burn",
           "duration": 3,
-          "value": 50
+          "value": 50,
+          "bonusTargetMaxQixueRate": 0.01
         }
       ],
       "trigger_type": "active",
@@ -2011,6 +2014,7 @@
           "buffId": "debuff-burn",
           "duration": 2,
           "value": 0.35,
+          "bonusTargetMaxQixueRate": 0.01,
           "chance": 0.6
         }
       ],
@@ -2105,6 +2109,7 @@
           "buffId": "debuff-burn",
           "duration": 2,
           "value": 0.25,
+          "bonusTargetMaxQixueRate": 0.01,
           "chance": 0.45
         }
       ],
@@ -2301,6 +2306,7 @@
           "buffId": "debuff-burn",
           "duration": 2,
           "value": 0.22,
+          "bonusTargetMaxQixueRate": 0.01,
           "chance": 0.5
         }
       ],

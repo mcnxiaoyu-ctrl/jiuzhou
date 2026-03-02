@@ -30,7 +30,6 @@ interface SkillExecutionResult {
 }
 
 const PERCENT_BUFF_ATTR_SET = new Set(['wugong', 'fagong', 'wufang', 'fafang']);
-const BURN_TARGET_MAX_QIXUE_BONUS_RATE = 0.01;
 const BUFF_ATTR_ALIAS: Record<string, string> = {
   'max-lingqi': 'max_lingqi',
   'kongzhi-kangxing': 'kongzhi_kangxing',
@@ -49,6 +48,28 @@ function toFiniteNumber(value: unknown, fallback = 0): number {
     if (Number.isFinite(parsed)) return parsed;
   }
   return fallback;
+}
+
+/**
+ * 解析灼烧额外伤害比例。
+ *
+ * 作用：
+ * - 从技能效果数据中读取“目标最大气血附加比例伤害”，作为运行时 DOT 计算参数。
+ *
+ * 输入/输出：
+ * - 输入：effect.bonusTargetMaxQixueRate（后端技能定义字段）
+ * - 输出：>= 0 的比例值，非正数一律视为 0
+ *
+ * 数据流：
+ * - 技能定义 effects[] -> SkillEffect -> 本函数 -> DotEffect.bonusTargetMaxQixueRate
+ *
+ * 边界条件与坑点：
+ * 1) 非数值或空值会被归零，避免污染 DOT 结算。
+ * 2) 本函数不做默认常量兜底，配置缺失即表示“无附加比例伤害”。
+ */
+function resolveBurnTargetMaxQixueRate(effect: SkillEffect): number {
+  const rate = toFiniteNumber(effect.bonusTargetMaxQixueRate, 0);
+  return rate > 0 ? rate : 0;
 }
 
 function getAttrValue(unit: BattleUnit, attrKey: string): number {
@@ -119,12 +140,13 @@ function buildBuffRuntimeData(
   if (buffId === 'debuff-burn') {
     const scaleAttr = skill.damageType === 'magic' ? 'fagong' : 'wugong';
     const dotDamage = Math.max(1, resolveEffectValue(caster, skill, effect, scaleAttr));
+    const burnBonusRate = resolveBurnTargetMaxQixueRate(effect);
     return {
       dot: {
         damage: dotDamage,
         damageType: skill.damageType === 'magic' ? 'magic' : 'physical',
         element: skill.element || 'none',
-        bonusTargetMaxQixueRate: BURN_TARGET_MAX_QIXUE_BONUS_RATE,
+        bonusTargetMaxQixueRate: burnBonusRate > 0 ? burnBonusRate : undefined,
       },
     };
   }

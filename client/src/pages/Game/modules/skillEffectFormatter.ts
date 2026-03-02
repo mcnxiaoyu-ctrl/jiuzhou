@@ -220,10 +220,70 @@ const formatBuffValue = (effect: Record<string, unknown>, attr: string): string 
   return `数值 ${Math.floor(raw)}`;
 };
 
+/**
+ * 生成 Buff/Debuff 的额外规则说明。
+ *
+ * 作用：
+ * - 把“特定 buff 的额外效果文案”集中在单一函数中，避免业务组件和主格式化流程重复写分支。
+ *
+ * 输入：
+ * - effect: 当前效果对象（由后端技能数据透传）
+ * - buffId: Buff 标识
+ *
+ * 输出：
+ * - 可拼接在括号内的文案片段；无额外规则时返回空字符串
+ *
+ * 数据流：
+ * - effect/buffId -> 匹配对应规则 -> 读取后端字段 -> 产出文案片段
+ *
+ * 边界条件与坑点：
+ * 1) 未识别的 buffId 必须返回空字符串，避免误导性展示。
+ * 2) 本函数只负责“额外规则文案”，不处理基础 value 格式化，职责与 formatBuffValue 严格分离。
+ */
+const formatBuffExtraValue = (effect: Record<string, unknown>, buffId: string): string => {
+  if (buffId === 'debuff-burn') {
+    const burnBonusRate = toNumber(effect.bonusTargetMaxQixueRate);
+    if (burnBonusRate !== null && burnBonusRate > 0) {
+      return `目标最大气血 ${formatPercent(burnBonusRate)}%`;
+    }
+    return '';
+  }
+  return '';
+};
+
+/**
+ * 组合 Buff/Debuff 括号内的数值说明。
+ *
+ * 作用：
+ * - 把基础值文案与额外规则文案统一拼接为单一输出，确保所有调用点展示一致。
+ *
+ * 输入：
+ * - effect: 当前效果对象
+ * - buffId: Buff 标识
+ * - attr: 解析出的属性标识（用于基础值格式化）
+ *
+ * 输出：
+ * - 形如“数值 50 + 目标最大气血 1%”的组合文案；无内容时返回空字符串
+ *
+ * 数据流：
+ * - effect/attr -> formatBuffValue -> 基础文案
+ * - effect/buffId -> formatBuffExtraValue -> 额外文案
+ * - 两段文案按“ + ”连接为最终文案
+ *
+ * 边界条件与坑点：
+ * 1) 任一片段为空时会被过滤，避免出现多余连接符。
+ * 2) 保持“ + ”连接语义，明确表示同一效果由多段伤害规则共同组成。
+ */
+const formatBuffDetail = (effect: Record<string, unknown>, buffId: string, attr: string): string => {
+  const baseValueText = formatBuffValue(effect, attr);
+  const extraValueText = formatBuffExtraValue(effect, buffId);
+  return [baseValueText, extraValueText].filter((part) => part.length > 0).join(' + ');
+};
+
 const formatBuffEffect = (effect: Record<string, unknown>, effectType: 'buff' | 'debuff'): string => {
   const buffId = toText(effect.buffId);
   const { name, attr } = formatBuffName(buffId, effectType);
-  const valueText = formatBuffValue(effect, attr);
+  const valueText = formatBuffDetail(effect, buffId, attr);
   const duration = toPositiveInt(effect.duration);
 
   let text = `${effectType === 'buff' ? '施加增益' : '施加减益'}：${name}`;

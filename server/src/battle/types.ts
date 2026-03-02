@@ -243,6 +243,7 @@ export interface SkillEffect {
   buffId?: string;
   duration?: number;
   stacks?: number;
+  bonusTargetMaxQixueRate?: number;  // 额外附加目标最大气血比例伤害（用于灼烧等持续伤害）
   dispelType?: 'buff' | 'debuff' | 'all';
   count?: number;
   controlType?: string;
