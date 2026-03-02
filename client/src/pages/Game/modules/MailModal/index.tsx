@@ -198,7 +198,10 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
     stopClaimRef.current = true;
   };
 
-  // 逐封领取：前端遍历未领取邮件，逐封调用 claimMailAttachments，支持随时停止
+  // 逐封领取：前端遍历未领取邮件，逐封调用 claimMailAttachments。
+  // 关键约束：
+  // 1) 支持手动停止；
+  // 2) 任意一封领取失败（接口返回失败或请求异常）时立即中断，不再继续后续邮件。
   const claimAll = async () => {
     const unclaimedMails = mails.filter(hasUnclaimedAttachments);
     if (unclaimedMails.length === 0) {
@@ -212,7 +215,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
     setClaiming(true);
 
     let claimedCount = 0;
-    let skippedCount = 0;
+    let claimErrorMessage = "";
     let totalSilver = 0;
     let totalSpiritStones = 0;
     let totalItemCount = 0;
@@ -245,15 +248,36 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
           );
           setUnclaimedCount((c) => Math.max(0, c - 1));
         } else {
-          skippedCount += 1;
+          claimErrorMessage = res.message;
+          break;
         }
-      } catch {
-        skippedCount += 1;
+      } catch (error) {
+        claimErrorMessage =
+          error instanceof Error && error.message
+            ? error.message
+            : "领取失败";
+        break;
       }
     }
 
     setClaimProgress(null);
     setClaiming(false);
+
+    if (claimErrorMessage) {
+      if (claimedCount === 0) {
+        message.error(`领取失败：${claimErrorMessage}`);
+        return;
+      }
+
+      const rewards: string[] = [];
+      if (totalSilver) rewards.push(`银两 +${totalSilver}`);
+      if (totalSpiritStones) rewards.push(`灵石 +${totalSpiritStones}`);
+      if (totalItemCount) rewards.push(`物品 x${totalItemCount}`);
+      message.error(
+        `领取到第 ${claimedCount} 封后中断：${claimErrorMessage}${rewards.length > 0 ? `（已获得：${rewards.join("，")}）` : ""}`,
+      );
+      return;
+    }
 
     // 汇总提示
     const stopped = stopClaimRef.current;
@@ -266,10 +290,9 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
     if (totalSilver) rewards.push(`银两 +${totalSilver}`);
     if (totalSpiritStones) rewards.push(`灵石 +${totalSpiritStones}`);
     if (totalItemCount) rewards.push(`物品 x${totalItemCount}`);
-    const skippedTip = skippedCount > 0 ? `，${skippedCount} 封未领取` : "";
     const stoppedTip = stopped ? "（已手动停止）" : "";
     message.success(
-      `已领取 ${claimedCount} 封邮件附件${skippedTip}${rewards.length > 0 ? "：" + rewards.join("，") : ""}${stoppedTip}`,
+      `已领取 ${claimedCount} 封邮件附件${rewards.length > 0 ? "：" + rewards.join("，") : ""}${stoppedTip}`,
     );
   };
 
