@@ -2,7 +2,7 @@ import { App, Avatar, Button, Form, Input, InputNumber, Modal, Select, Table, Ta
 import { UserOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState } from 'react';
 import {
-  SERVER_BASE,
+  resolveAvatarUrl,
   claimBounty,
   getBountyBoard,
   getInfoTargetDetail,
@@ -82,14 +82,6 @@ interface InfoModalProps {
   onAction?: (action: string, target: InfoTarget) => void;
 }
 
-const resolveAvatarUrl = (avatar?: string | null) => {
-  if (!avatar) return undefined;
-  if (avatar.startsWith('http://') || avatar.startsWith('https://')) return avatar;
-  if (avatar.startsWith('/uploads/')) return `${SERVER_BASE}${avatar}`;
-  if (avatar.startsWith('/assets/')) return avatar;
-  if (avatar.startsWith('/')) return avatar;
-  return `${SERVER_BASE}/${avatar}`;
-};
 const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }) => {

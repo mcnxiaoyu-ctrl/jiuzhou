@@ -89,6 +89,21 @@ export const resolveAssetUrl = (path: string): string => {
   return `${CDN_BASE}/${raw}`;
 };
 
+/**
+ * 解析头像 URL（复用 resolveAssetUrl 逻辑）
+ *
+ * 与 resolveAssetUrl 的区别：输入为空时返回 undefined 而非空字符串，
+ * 便于 Ant Design Avatar 组件在 src 为 undefined 时展示 fallback icon。
+ *
+ * 被 PlayerInfo / TeamPanel / InfoModal 等展示头像的组件复用。
+ */
+export const resolveAvatarUrl = (
+  avatar?: string | null,
+): string | undefined => {
+  if (!avatar) return undefined;
+  return resolveAssetUrl(avatar);
+};
+
 const api = axios.create({
   baseURL: API_BASE,
   timeout: 10000,

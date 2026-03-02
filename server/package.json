@@ -25,6 +25,7 @@
     "bcryptjs": "^3.0.3",
     "boardgame.io": "^0.50.2",
     "cors": "^2.8.6",
+    "cos-nodejs-sdk-v5": "^2.15.4",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "ioredis": "^5.9.2",

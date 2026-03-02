@@ -1,16 +1,7 @@
 import { Avatar, Button, Tag } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
-import { SERVER_BASE } from '../../../../services/api';
+import { resolveAvatarUrl } from '../../../../services/api';
 import './index.scss';
-
-const resolveAvatarUrl = (avatar?: string | null) => {
-  if (!avatar) return undefined;
-  if (avatar.startsWith('http://') || avatar.startsWith('https://')) return avatar;
-  if (avatar.startsWith('/uploads/')) return `${SERVER_BASE}${avatar}`;
-  if (avatar.startsWith('/assets/')) return avatar;
-  if (avatar.startsWith('/')) return avatar;
-  return `${SERVER_BASE}/${avatar}`;
-};
 
 export type TeamMember = {
   id: string;

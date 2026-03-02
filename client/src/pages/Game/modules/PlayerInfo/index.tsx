@@ -3,7 +3,7 @@ import type { UploadProps } from 'antd';
 import { UserOutlined, LoadingOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { gameSocket, type CharacterData } from '../../../../services/gameSocket';
-import { SERVER_BASE, getRealmOverview, uploadAvatar, addAttributePoint, removeAttributePoint, type RealmOverviewDto } from '../../../../services/api';
+import { resolveAvatarUrl, getRealmOverview, uploadAvatar, addAttributePoint, removeAttributePoint, type RealmOverviewDto } from '../../../../services/api';
 import { formatPercent, formatRecovery } from '../../shared/formatAttr';
 import './index.scss';
 
@@ -175,7 +175,7 @@ const PlayerInfo: React.FC = () => {
     );
   }
 
-  const avatarUrl = character.avatar ? `${SERVER_BASE}${character.avatar}` : null;
+  const avatarUrl = resolveAvatarUrl(character.avatar);
   const qixueCurrent = Math.min(character.qixue, character.maxQixue);
   const lingqiCurrent = Math.min(character.lingqi, character.maxLingqi);
   const staminaMax = STAMINA_DISPLAY_MAX;
