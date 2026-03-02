@@ -9,6 +9,7 @@
     "dev:server": "pnpm --filter ./server dev",
     "build": "pnpm --parallel -r build",
     "build:client": "pnpm --filter ./client build",
+    "build:client:no-image": "pnpm --filter ./client build:no-image",
     "build:server": "pnpm --filter ./server build",
     "docker:build": "./docker-build.sh",
     "docker:push": "./docker-build.sh",
