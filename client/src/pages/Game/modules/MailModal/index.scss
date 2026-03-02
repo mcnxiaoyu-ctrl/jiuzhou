@@ -150,12 +150,15 @@
 }
 
 .mail-detail-header {
-  padding: 12px 14px;
+  /* 桌面端预留右上角关闭按钮点击区，避免“删除”按钮与关闭按钮重叠。 */
+  padding: 12px 56px 12px 14px;
   border-bottom: 1px solid var(--border-color-soft);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  box-sizing: border-box;
+  min-height: 57px;
 }
 
 .mail-detail-title {
