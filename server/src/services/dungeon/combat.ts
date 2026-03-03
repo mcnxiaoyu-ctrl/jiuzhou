@@ -38,6 +38,11 @@ import {
   getParticipantNicknameMap,
   getUserAndCharacter,
 } from './shared/participants.js';
+import {
+  DUNGEON_REWARD_ELIGIBLE_CHARACTER_IDS_FIELD,
+  buildDungeonRewardEligibleCharacterIds,
+  selectDungeonRewardEligibleParticipants,
+} from './shared/rewardEligibility.js';
 import { buildMonsterDefIdsFromWave, getStageAndWave } from './shared/stageData.js';
 import { rollDungeonRewardBundle, mergeDungeonRewardBundle } from './shared/rewards.js';
 import { asObject, asNumber, asString, countPlayerDeaths } from './shared/typeUtils.js';
@@ -92,6 +97,7 @@ export const startDungeonInstance = async (
     const staminaCost = dungeonDef.stamina_cost;
 
     const participants = parseParticipants(inst.participants);
+    const rewardEligibleCharacterIds = buildDungeonRewardEligibleCharacterIds(participants);
     const participantNicknameMap = await getParticipantNicknameMap(participants);
     if (participants.length < minPlayers) {
       return { success: false, message: `人数不足，需要至少${minPlayers}人` };
@@ -161,8 +167,17 @@ export const startDungeonInstance = async (
       );
 
       await query(
-        `UPDATE dungeon_instance SET instance_data = jsonb_set(COALESCE(instance_data, '{}'::jsonb), '{currentBattleId}', to_jsonb($1::text), true) WHERE id = $2`,
-        [battleId, instanceId]
+        `
+          UPDATE dungeon_instance
+          SET instance_data = jsonb_set(
+            jsonb_set(COALESCE(instance_data, '{}'::jsonb), '{currentBattleId}', to_jsonb($1::text), true),
+            '{${DUNGEON_REWARD_ELIGIBLE_CHARACTER_IDS_FIELD}}',
+            to_jsonb($2::int[]),
+            true
+          )
+          WHERE id = $3
+        `,
+        [battleId, rewardEligibleCharacterIds, instanceId]
       );
       return { success: true, data: { instanceId, status: 'running' as DungeonInstanceStatus, battleId, state } };
     },
@@ -200,6 +215,7 @@ export const nextDungeonInstance = async (
     if (!participants.some((p) => p.userId === userId)) return { success: false, message: '无权访问该秘境' };
 
     const dataObj = asObject(inst.instance_data) ?? {};
+    const rewardEligibleParticipants = selectDungeonRewardEligibleParticipants(participants, dataObj);
     const currentBattleId = typeof dataObj.currentBattleId === 'string' ? dataObj.currentBattleId : '';
     if (!currentBattleId) return { success: false, message: '当前战斗不存在' };
 
@@ -256,7 +272,7 @@ export const nextDungeonInstance = async (
         const difficultyDef = getDungeonDifficultyById(inst.difficulty_id);
         const firstClearRewardConfig = difficultyDef?.first_clear_rewards ?? {};
         const participantCharacterIds = [...new Set(
-          participants
+          rewardEligibleParticipants
             .map((p) => Number(p.characterId))
             .filter((id) => Number.isFinite(id) && id > 0)
         )].sort((a, b) => a - b);
@@ -388,7 +404,7 @@ export const nextDungeonInstance = async (
           }
         }
 
-        for (const p of participants) {
+        for (const p of rewardEligibleParticipants) {
           const characterId = Number(p.characterId);
           if (!Number.isFinite(characterId) || characterId <= 0) continue;
           let rewardBundle: DungeonRewardBundle = { exp: 0, silver: 0, items: [] };
@@ -510,7 +526,7 @@ export const nextDungeonInstance = async (
           }
         }
 
-      for (const p of participants) {
+      for (const p of rewardEligibleParticipants) {
         const characterId = Number(p.characterId);
         if (!Number.isFinite(characterId) || characterId <= 0) continue;
         await recordDungeonClearEvent(characterId, inst.dungeon_id, 1, inst.difficulty_id);

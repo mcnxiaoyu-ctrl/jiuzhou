@@ -15,6 +15,7 @@
 
 import { BattleEngine } from "../../battle/battleEngine.js";
 import type { MonsterData } from "../../battle/battleFactory.js";
+import { query } from "../../config/database.js";
 import {
   battleDropService,
   type BattleParticipant,
@@ -30,6 +31,7 @@ import { recordKillMonsterEvent } from "../taskService.js";
 import { getGameServer } from "../../game/gameServer.js";
 import { normalizeRealmKeepingUnknown } from "../shared/realmRules.js";
 import { getMonsterDefinitions } from "../staticConfigLoader.js";
+import { parseDungeonRewardEligibleCharacterIdSet } from "../dungeon/shared/rewardEligibility.js";
 import type { BattleResult } from "./battleTypes.js";
 import {
   activeBattles,
@@ -44,6 +46,32 @@ import {
 import { stopBattleTicker } from "./runtime/ticker.js";
 import { removeBattleFromRedis } from "./runtime/persistence.js";
 import { settleArenaBattleIfNeeded } from "./pvp.js";
+
+/**
+ * 读取当前秘境战斗的可领奖角色集合。
+ *
+ * 作用：
+ * - 按 battleId 在 dungeon_instance.instance_data.currentBattleId 中反查对应实例；
+ * - 从实例快照中读取 rewardEligibleCharacterIds。
+ *
+ * 边界条件：
+ * 1) 查询不到实例或名单字段缺失时，返回空集合（严格不发奖励，不回退到全员发奖）。
+ * 2) 仅匹配 status='running' 的实例，避免读取历史完成实例的脏数据。
+ */
+const loadDungeonBattleRewardEligibleCharacterIdSet = async (battleId: string): Promise<Set<number>> => {
+  const res = await query(
+    `
+      SELECT instance_data
+      FROM dungeon_instance
+      WHERE status = 'running'
+        AND instance_data ->> 'currentBattleId' = $1
+      LIMIT 1
+    `,
+    [battleId],
+  );
+  if (res.rows.length === 0) return new Set<number>();
+  return parseDungeonRewardEligibleCharacterIdSet(res.rows[0]?.instance_data);
+};
 
 export async function getBattleMonsters(engine: BattleEngine): Promise<MonsterData[]> {
   const state = engine.getState();
@@ -92,6 +120,15 @@ async function finishBattleCore(
       fuyuan: Number(computed.fuyuan ?? 1),
     });
   }
+  const rewardEligibleCharacterIdSet = isDungeonBattle
+    ? await loadDungeonBattleRewardEligibleCharacterIdSet(battleId)
+    : null;
+  const rewardParticipants =
+    rewardEligibleCharacterIdSet === null
+      ? participants
+      : participants.filter((participant) =>
+        rewardEligibleCharacterIdSet.has(Math.floor(Number(participant.characterId))),
+      );
 
   let dropResult: DistributeResult | null = null;
 
@@ -99,7 +136,7 @@ async function finishBattleCore(
     if (isVictory) {
       dropResult = await battleDropService.distributeBattleRewards(
         monsters,
-        participants,
+        rewardParticipants,
         true,
         { isDungeonBattle },
       );
@@ -122,7 +159,7 @@ async function finishBattleCore(
           killCounts.set(id, (killCounts.get(id) ?? 0) + 1);
         }
         if (killCounts.size > 0) {
-          for (const p of participants) {
+          for (const p of rewardParticipants) {
             const characterId = Number(p.characterId);
             if (!Number.isFinite(characterId) || characterId <= 0) continue;
             for (const [monsterId, count] of killCounts.entries()) {
@@ -153,7 +190,7 @@ async function finishBattleCore(
         silver: dropResult.rewards.silver,
         totalExp: dropResult.rewards.exp,
         totalSilver: dropResult.rewards.silver,
-        participantCount,
+        participantCount: rewardParticipants.length,
         items: dropResult.rewards.items.map((item) => ({
           itemDefId: item.itemDefId,
           name: item.itemName,

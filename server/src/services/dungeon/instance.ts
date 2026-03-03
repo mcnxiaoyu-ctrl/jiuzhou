@@ -11,7 +11,7 @@
  *
  * 边界条件：
  * 1) createDungeonInstance 组队时只有队长可创建。
- * 2) joinDungeonInstance 需要同一队伍且实例处于 preparing 状态。
+ * 2) joinDungeonInstance 依赖事务 + 行锁，确保“检查状态 + 写入 participants”原子执行。
  */
 
 import crypto from 'crypto';
@@ -22,7 +22,7 @@ import {
   getUserAndCharacter,
   getTeamParticipants,
 } from './shared/participants.js';
-import { asObject, asNumber, asString } from './shared/typeUtils.js';
+import { asObject, asNumber } from './shared/typeUtils.js';
 import type {
   DungeonInstanceStatus,
   DungeonInstanceParticipant,
@@ -89,7 +89,7 @@ export const joinDungeonInstance = async (
     if (!user.ok) return { success: false, message: user.message };
     if (!user.teamId) return { success: false, message: '未加入队伍，无法加入秘境' };
 
-    const instRes = await query(`SELECT * FROM dungeon_instance WHERE id = $1 LIMIT 1`, [instanceId]);
+    const instRes = await query(`SELECT * FROM dungeon_instance WHERE id = $1 LIMIT 1 FOR UPDATE`, [instanceId]);
     if (instRes.rows.length === 0) return { success: false, message: '秘境实例不存在' };
     const inst = instRes.rows[0] as DungeonInstanceRow;
     if (inst.status !== 'preparing') return { success: false, message: '该秘境已开始或已结束' };
@@ -100,9 +100,7 @@ export const joinDungeonInstance = async (
       return { success: true, data: { instanceId, status: inst.status, participants: curParticipants } };
     }
 
-    const ddRes = await query(`SELECT dungeon_id, difficulty_id FROM dungeon_instance WHERE id = $1 LIMIT 1`, [instanceId]);
-    const dungeonId = asString(ddRes.rows?.[0]?.dungeon_id, '');
-    const dd = await getDungeonAndDifficulty(dungeonId, 1);
+    const dd = await getDungeonAndDifficulty(inst.dungeon_id, 1);
     if (!dd.ok) return { success: false, message: dd.message };
 
     const nextParticipants = [...curParticipants, { userId, characterId: user.characterId, role: 'member' as const }];
@@ -110,7 +108,13 @@ export const joinDungeonInstance = async (
       return { success: false, message: `人数超限，最多${dd.dungeon.max_players}人` };
     }
 
-    await query(`UPDATE dungeon_instance SET participants = $1::jsonb WHERE id = $2`, [JSON.stringify(nextParticipants), instanceId]);
+    const updateRes = await query(
+      `UPDATE dungeon_instance SET participants = $1::jsonb WHERE id = $2 AND status = 'preparing'`,
+      [JSON.stringify(nextParticipants), instanceId],
+    );
+    if ((updateRes.rowCount ?? 0) === 0) {
+      return { success: false, message: '该秘境已开始或已结束' };
+    }
     return { success: true, data: { instanceId, status: inst.status, participants: nextParticipants } };
   } catch (error) {
     console.error('加入秘境实例失败:', error);

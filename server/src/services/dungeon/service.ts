@@ -7,7 +7,7 @@
  * 数据流：读方法直接委托，写方法通过 @Transactional 保证事务原子性。
  *
  * 边界条件：
- * 1) startDungeonInstance 和 nextDungeonInstance 使用 @Transactional 保证事务原子性。
+ * 1) joinDungeonInstance / startDungeonInstance / nextDungeonInstance 使用 @Transactional 保证事务原子性。
  * 2) 其他方法直接委托给对应独立函数。
  */
 
@@ -49,6 +49,7 @@ class DungeonService {
     return createDungeonInstance(userId, dungeonId, difficultyRank);
   }
 
+  @Transactional
   async joinDungeonInstance(userId: number, instanceId: string) {
     return joinDungeonInstance(userId, instanceId);
   }
