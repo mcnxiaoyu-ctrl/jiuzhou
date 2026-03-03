@@ -51,6 +51,7 @@ export {
   getInventoryItems,
   findEmptySlots,
   addItemToInventory,
+  moveItemInstanceToBagWithStacking,
   removeItemFromInventory,
   setItemLocked,
   moveItem,

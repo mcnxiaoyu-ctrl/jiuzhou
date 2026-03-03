@@ -18,7 +18,7 @@
 import { query, getTransactionClient } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { itemService } from './itemService.js';
-import { findEmptySlotsWithClient, getInventoryInfoWithClient } from './inventory/index.js';
+import { getInventoryInfoWithClient, moveItemInstanceToBagWithStacking } from './inventory/index.js';
 import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
 import { recordCollectItemEvent } from './taskService.js';
 import { getItemDefinitionsByIds } from './staticConfigLoader.js';
@@ -86,6 +86,13 @@ type ClaimMailRow = {
   expire_at: Date | string | null;
 };
 
+type ClaimInstanceRow = {
+  id: number;
+  item_def_id: string;
+  qty: number;
+  bind_type: string;
+};
+
 type MailAttachItemView = MailAttachItem & {
   item_name?: string;
   quality?: string;
@@ -136,6 +143,120 @@ class MailService {
     }
 
     return slots;
+  }
+
+  /**
+   * 估算“实例附件”领取时实际新增占用的背包格子数。
+   *
+   * 作用：
+   * - 复用背包堆叠规则（同 item_def_id + bind_type）；
+   * - 在真正写库前先计算是否会占新格，避免“先写后失败”导致事务内出现中间状态。
+   *
+   * 输入/输出：
+   * - 输入：角色ID、已锁定的实例附件列表（必须来自 mail 位置）
+   * - 输出：该批实例在当前背包下最少需要新增的格子数量
+   *
+   * 边界条件：
+   * 1) 仅 `stack_max > 1` 的实例会尝试消耗已有堆叠空余容量。
+   * 2) 同一批附件之间允许相互堆叠（先入包实例可承接后续实例），因此结果不会高估所需格子。
+   */
+  private async estimateRequiredSlotsForInstanceAttachments(
+    characterId: number,
+    instances: ClaimInstanceRow[],
+  ): Promise<number> {
+    if (instances.length === 0) return 0;
+
+    const uniqueItemDefIds = Array.from(
+      new Set(
+        instances
+          .map((row) => String(row.item_def_id || '').trim())
+          .filter((itemDefId) => itemDefId.length > 0),
+      ),
+    );
+    if (uniqueItemDefIds.length === 0) {
+      throw new Error('实例附件缺少有效 item_def_id，无法估算格子');
+    }
+
+    const defs = getItemDefinitionsByIds(uniqueItemDefIds);
+    const stackMaxByItemDefId = new Map<string, number>();
+    for (const itemDefId of uniqueItemDefIds) {
+      const def = defs.get(itemDefId);
+      if (!def) {
+        throw new Error(`实例附件缺少物品定义: ${itemDefId}`);
+      }
+      stackMaxByItemDefId.set(
+        itemDefId,
+        Math.max(1, Math.floor(Number(def.stack_max) || 1)),
+      );
+    }
+
+    const bagResult = await query(
+      `
+        SELECT item_def_id, bind_type, qty
+        FROM item_instance
+        WHERE owner_character_id = $1
+          AND location = 'bag'
+          AND item_def_id = ANY($2::varchar[])
+      `,
+      [characterId, uniqueItemDefIds],
+    );
+
+    const keyOf = (itemDefId: string, bindType: string): string =>
+      `${itemDefId}::${bindType}`;
+    const freeCapByGroup = new Map<string, number[]>();
+
+    for (const row of bagResult.rows) {
+      const itemDefId = String(row.item_def_id || '').trim();
+      if (!itemDefId) continue;
+
+      const stackMax = stackMaxByItemDefId.get(itemDefId);
+      if (stackMax === undefined || stackMax <= 1) continue;
+
+      const qty = Math.max(0, Math.floor(Number(row.qty) || 0));
+      const freeCap = Math.max(0, stackMax - qty);
+      if (freeCap <= 0) continue;
+
+      const bindType = String(row.bind_type || 'none');
+      const key = keyOf(itemDefId, bindType);
+      const caps = freeCapByGroup.get(key) ?? [];
+      caps.push(freeCap);
+      freeCapByGroup.set(key, caps);
+    }
+
+    let requiredSlots = 0;
+    for (const instance of instances) {
+      const itemDefId = String(instance.item_def_id || '').trim();
+      const bindType = String(instance.bind_type || 'none');
+      const stackMax = stackMaxByItemDefId.get(itemDefId);
+      if (stackMax === undefined) {
+        throw new Error(`实例附件缺少堆叠配置: ${itemDefId}`);
+      }
+      let remainingQty = Math.max(1, Math.floor(Number(instance.qty) || 1));
+
+      if (stackMax > 1) {
+        const key = keyOf(itemDefId, bindType);
+        const caps = freeCapByGroup.get(key) ?? [];
+        for (let index = 0; index < caps.length && remainingQty > 0; index += 1) {
+          const canUse = Math.min(remainingQty, Math.max(0, caps[index]));
+          if (canUse <= 0) continue;
+          caps[index] -= canUse;
+          remainingQty -= canUse;
+        }
+        freeCapByGroup.set(key, caps);
+      }
+
+      if (remainingQty > 0) {
+        requiredSlots += 1;
+        if (stackMax > 1) {
+          const key = keyOf(itemDefId, bindType);
+          const caps = freeCapByGroup.get(key) ?? [];
+          caps.push(Math.max(0, stackMax - remainingQty));
+          freeCapByGroup.set(key, caps);
+        }
+      }
+    }
+
+    return requiredSlots;
   }
 
   /**
@@ -553,16 +674,67 @@ class MailService {
       return { success: false, message: '该邮件没有附件' };
     }
 
+    let lockedInstanceRows: ClaimInstanceRow[] = [];
+    let requiredSlots = 0;
+    let freeSlots = 0;
+
     // 6. 检查背包空间（如果有物品附件）
     if (hasItems) {
+      if (attachInstanceIds.length > 0) {
+        const lockedInstanceResult = await client.query<ClaimInstanceRow>(
+          `
+            SELECT id, item_def_id, qty, bind_type
+            FROM item_instance
+            WHERE id = ANY($1::bigint[])
+              AND owner_user_id = $2
+              AND owner_character_id = $3
+              AND location = 'mail'
+            FOR UPDATE
+          `,
+          [attachInstanceIds, userId, characterId],
+        );
+        lockedInstanceRows = lockedInstanceResult.rows;
+
+        const lockedIds = new Set(lockedInstanceRows.map((row) => Number(row.id)));
+        for (const attachInstanceId of attachInstanceIds) {
+          if (!lockedIds.has(attachInstanceId)) {
+            return { success: false, message: '邮件附件状态异常' };
+          }
+        }
+
+        if (
+          lockedInstanceRows.some(
+            (row) => String(row.item_def_id || '').trim().length === 0,
+          )
+        ) {
+          return { success: false, message: '邮件附件状态异常' };
+        }
+
+        const uniqueItemDefIds = Array.from(
+          new Set(
+            lockedInstanceRows
+              .map((row) => String(row.item_def_id || '').trim())
+              .filter((itemDefId) => itemDefId.length > 0),
+          ),
+        );
+        if (uniqueItemDefIds.length === 0) {
+          return { success: false, message: '邮件附件状态异常' };
+        }
+        const defs = getItemDefinitionsByIds(uniqueItemDefIds);
+        if (defs.size !== uniqueItemDefIds.length) {
+          return { success: false, message: '物品配置不存在' };
+        }
+
+        requiredSlots = await this.estimateRequiredSlotsForInstanceAttachments(
+          characterId,
+          lockedInstanceRows,
+        );
+      } else {
+        requiredSlots = await this.estimateRequiredSlots(attachItems);
+      }
+
       const inventoryInfo = await getInventoryInfoWithClient(characterId, client);
-      // 约定：实例附件存在时，按实例附件发放；定义附件仅用于展示，不再重复创建实例。
-      // 这样可保证坊市交易装备的强化/词条等实例属性不丢失。
-      const requiredSlots =
-        attachInstanceIds.length > 0
-          ? attachInstanceIds.length
-          : await this.estimateRequiredSlots(attachItems);
-      const freeSlots = inventoryInfo.bag_capacity - inventoryInfo.bag_used;
+      freeSlots = inventoryInfo.bag_capacity - inventoryInfo.bag_used;
       if (freeSlots < requiredSlots) {
         return { success: false, message: `背包空间不足，需要${requiredSlots}格，当前剩余${freeSlots}格` };
       }
@@ -586,75 +758,25 @@ class MailService {
     const itemIds: number[] = [];
     if (hasItems) {
       if (attachInstanceIds.length > 0) {
-        // 实例附件领取：直接把实例从 mail 位置搬运到 bag，避免重建实例导致属性丢失。
-        const lockedInstanceResult = await client.query<{
-          id: number;
-          item_def_id: string;
-          qty: number;
-        }>(
-          `
-            SELECT id, item_def_id, qty
-            FROM item_instance
-            WHERE id = ANY($1::bigint[])
-              AND owner_user_id = $2
-              AND owner_character_id = $3
-              AND location = 'mail'
-            FOR UPDATE
-          `,
-          [attachInstanceIds, userId, characterId],
-        );
-
-        const lockedIds = new Set(lockedInstanceResult.rows.map((row) => Number(row.id)));
+        // 实例附件领取：复用库存模块“实例入包自动堆叠”逻辑，避免同规则在邮件/坊市重复实现。
         for (const attachInstanceId of attachInstanceIds) {
-          if (!lockedIds.has(attachInstanceId)) {
-            return { success: false, message: '邮件附件状态异常' };
-          }
-        }
-
-        const targetSlots = await findEmptySlotsWithClient(characterId, 'bag', attachInstanceIds.length, client);
-        if (targetSlots.length < attachInstanceIds.length) {
-          return {
-            success: false,
-            message: `背包空间不足，需要${attachInstanceIds.length}格，当前剩余${targetSlots.length}格`,
-          };
-        }
-
-        const slotByInstanceId = new Map<number, number>();
-        for (let index = 0; index < attachInstanceIds.length; index += 1) {
-          slotByInstanceId.set(attachInstanceIds[index], targetSlots[index]);
-        }
-
-        for (const attachInstanceId of attachInstanceIds) {
-          const slot = slotByInstanceId.get(attachInstanceId);
-          if (slot === undefined) {
-            return { success: false, message: '邮件附件状态异常' };
-          }
-
-          const updateResult = await client.query(
-            `
-              UPDATE item_instance
-              SET owner_user_id = $1,
-                  owner_character_id = $2,
-                  location = 'bag',
-                  location_slot = $3,
-                  equipped_slot = NULL,
-                  updated_at = NOW()
-              WHERE id = $4
-                AND owner_user_id = $1
-                AND owner_character_id = $2
-                AND location = 'mail'
-              RETURNING id
-            `,
-            [userId, characterId, slot, attachInstanceId],
+          const moveResult = await moveItemInstanceToBagWithStacking(
+            characterId,
+            attachInstanceId,
+            {
+              expectedSourceLocation: 'mail',
+              expectedOwnerUserId: userId,
+            },
           );
-
-          if (updateResult.rows.length === 0) {
-            return { success: false, message: '邮件附件状态异常' };
+          if (!moveResult.success) {
+            throw new Error(`实例附件入包失败: ${moveResult.message}`);
           }
-          itemIds.push(Number(updateResult.rows[0].id));
+          if (moveResult.itemId !== undefined) {
+            itemIds.push(moveResult.itemId);
+          }
         }
 
-        for (const row of lockedInstanceResult.rows) {
+        for (const row of lockedInstanceRows) {
           const key = String(row.item_def_id || '').trim();
           const qty = Math.max(1, Math.floor(Number(row.qty) || 1));
           if (key) collectCounts.set(key, (collectCounts.get(key) || 0) + qty);

@@ -1,6 +1,6 @@
 import { query } from "../config/database.js";
 import { Transactional } from "../decorators/transactional.js";
-import { findEmptySlotsWithClient } from "./inventory/index.js";
+import { moveItemInstanceToBagWithStacking } from "./inventory/index.js";
 import {
   lockCharacterInventoryMutexTx,
   lockCharacterInventoryMutexesTx,
@@ -95,19 +95,6 @@ const getTaxAmount = (totalPrice: bigint, taxRate: number): bigint => {
 const getListingFeeSilver = (totalPriceSpiritStones: bigint): bigint => {
   if (totalPriceSpiritStones <= 0n) return 0n;
   return totalPriceSpiritStones * MARKET_LISTING_FEE_SILVER_PER_SPIRIT_STONE;
-};
-
-const requireBuyerBagSlot = async (
-  buyerCharacterId: number,
-): Promise<number | null> => {
-  const slots = await findEmptySlotsWithClient(
-    buyerCharacterId,
-    "bag",
-    1,
-    null,
-  );
-  if (slots.length < 1) return null;
-  return slots[0];
 };
 
 const toListingDto = (
@@ -696,18 +683,24 @@ class MarketService {
       return { success: false, message: "物品不在坊市中，无法下架" };
     }
 
-    const slot = await requireBuyerBagSlot(params.characterId);
-    if (slot === null) {
-      return { success: false, message: "背包已满，无法下架" };
-    }
-    await query(
-      `
-        UPDATE item_instance
-        SET location = 'bag', location_slot = $1, equipped_slot = NULL, updated_at = NOW()
-        WHERE id = $2
-      `,
-      [slot, itemInstanceId],
+    // 统一复用背包实例入包逻辑：先尝试堆叠已有同类堆，再决定是否占新格子。
+    const moveResult = await moveItemInstanceToBagWithStacking(
+      params.characterId,
+      itemInstanceId,
+      {
+        expectedSourceLocation: "auction",
+        expectedOwnerUserId: params.userId,
+      },
     );
+    if (!moveResult.success) {
+      return {
+        success: false,
+        message:
+          moveResult.message === "背包已满"
+            ? "背包已满，无法下架"
+            : moveResult.message,
+      };
+    }
 
     await query(
       `

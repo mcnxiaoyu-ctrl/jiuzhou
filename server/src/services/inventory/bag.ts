@@ -9,6 +9,7 @@
  * - getInventoryItems(characterId, location, page, pageSize) — 分页查询物品列表
  * - findEmptySlots(characterId, location, count) — 查找空闲格子
  * - addItemToInventory(characterId, userId, itemDefId, qty, options) — 添加物品（智能堆叠）
+ * - moveItemInstanceToBagWithStacking(characterId, itemInstanceId, options) — 实例入包（保留实例+智能堆叠）
  * - removeItemFromInventory(characterId, itemInstanceId, qty) — 移除物品
  * - setItemLocked(characterId, itemInstanceId, locked) — 锁定/解锁物品
  * - moveItem(characterId, itemInstanceId, targetLocation, targetSlot) — 移动物品
@@ -20,7 +21,8 @@
  * - 读操作直接查询 inventory / item_instance 表
  * - 写操作在事务内执行（由外层 @Transactional 保证）
  *
- * 被引用方：service.ts、equipment.ts（findEmptySlots）、disassemble.ts（addItemToInventory）
+ * 被引用方：service.ts、equipment.ts（findEmptySlots）、disassemble.ts（addItemToInventory）、
+ *           marketService.ts / mailService.ts（moveItemInstanceToBagWithStacking）
  *
  * 边界条件：
  * 1. addItemToInventory 在 INSERT 遇到唯一约束冲突时会重试（最多 6 次），处理并发写入竞争
@@ -361,6 +363,204 @@ export const addItemToInventory = async (
 
     return { success: true, message: "添加成功", itemIds };
   });
+};
+
+type MoveToBagSourceLocation = "auction" | "mail";
+
+type MoveToBagSourceRow = {
+  id: number;
+  owner_user_id: number;
+  owner_character_id: number;
+  item_def_id: string;
+  qty: number;
+  location: string;
+  bind_type: string;
+};
+
+type MoveToBagStackRow = {
+  id: number;
+  qty: number;
+};
+
+/**
+ * 实例入包并自动堆叠（保留原实例属性）
+ *
+ * 作用：
+ * - 将来源为 `auction/mail` 的实例移入背包；
+ * - 若为可堆叠物品，优先合并到背包同类堆叠，再决定是否占用新格子。
+ *
+ * 输入/输出：
+ * - 输入：角色ID、实例ID、来源位置与可选 ownerUserId 校验
+ * - 输出：成功时返回最终承载该数量的实例ID（可能是原实例，也可能是被合并目标）
+ *
+ * 数据流：
+ * 1) 先锁定来源实例 + 目标可堆叠实例，计算是否需要新格子；
+ * 2) 再执行数量合并；
+ * 3) 若数量未合并完，则把来源实例迁移到背包空格。
+ *
+ * 边界条件：
+ * 1) 所有“可能失败”的条件（来源状态、空格不足）必须在写入前完成校验，避免事务提交半状态。
+ * 2) 该函数不主动加背包互斥锁，调用方必须先持有同角色背包锁，确保并发下空格与堆叠计算稳定。
+ */
+export const moveItemInstanceToBagWithStacking = async (
+  characterId: number,
+  itemInstanceId: number,
+  options: {
+    expectedSourceLocation: MoveToBagSourceLocation;
+    expectedOwnerUserId?: number;
+  },
+): Promise<{ success: boolean; message: string; itemId?: number }> => {
+  const sourceResult = await query(
+    `
+      SELECT
+        id,
+        owner_user_id,
+        owner_character_id,
+        item_def_id,
+        qty,
+        location,
+        bind_type
+      FROM item_instance
+      WHERE id = $1
+      FOR UPDATE
+    `,
+    [itemInstanceId],
+  );
+
+  if (sourceResult.rows.length === 0) {
+    return { success: false, message: "物品不存在" };
+  }
+
+  const source = sourceResult.rows[0] as MoveToBagSourceRow;
+  if (Number(source.owner_character_id) !== characterId) {
+    return { success: false, message: "物品归属异常" };
+  }
+  if (
+    options.expectedOwnerUserId !== undefined &&
+    Number(source.owner_user_id) !== options.expectedOwnerUserId
+  ) {
+    return { success: false, message: "物品归属异常" };
+  }
+
+  const location = String(source.location || "");
+  if (location !== options.expectedSourceLocation) {
+    return { success: false, message: "物品不在预期位置" };
+  }
+
+  const itemDefId = String(source.item_def_id || "").trim();
+  const itemDef = getStaticItemDef(itemDefId);
+  if (!itemDef) {
+    return { success: false, message: "物品不存在" };
+  }
+
+  const stackMax = Math.max(1, Math.floor(Number(itemDef.stack_max) || 1));
+  const sourceQty = Math.max(1, Math.floor(Number(source.qty) || 1));
+  const bindType = String(source.bind_type || "none");
+
+  let stackRows: MoveToBagStackRow[] = [];
+  if (stackMax > 1) {
+    const stackResult = await query(
+      `
+        SELECT id, qty
+        FROM item_instance
+        WHERE owner_character_id = $1
+          AND location = 'bag'
+          AND item_def_id = $2
+          AND bind_type = $3
+          AND qty < $4
+          AND id != $5
+        ORDER BY qty DESC, id ASC
+        FOR UPDATE
+      `,
+      [characterId, itemDefId, bindType, stackMax, itemInstanceId],
+    );
+    stackRows = stackResult.rows.map((row) => ({
+      id: Number(row.id),
+      qty: Math.max(0, Math.floor(Number(row.qty) || 0)),
+    }));
+  }
+
+  let freeInStacks = 0;
+  for (const row of stackRows) {
+    freeInStacks += Math.max(0, stackMax - row.qty);
+  }
+  const needsEmptySlot = Math.max(0, sourceQty - freeInStacks) > 0;
+  let targetSlot: number | null = null;
+  if (needsEmptySlot) {
+    const emptySlots = await findEmptySlots(characterId, "bag", 1);
+    if (emptySlots.length < 1) {
+      return { success: false, message: "背包已满" };
+    }
+    targetSlot = emptySlots[0];
+  }
+
+  let remainingQty = sourceQty;
+  let representativeItemId: number | null = null;
+  for (const row of stackRows) {
+    if (remainingQty <= 0) break;
+    const canAdd = Math.min(remainingQty, Math.max(0, stackMax - row.qty));
+    if (canAdd <= 0) continue;
+
+    await query(
+      `
+        UPDATE item_instance
+        SET qty = qty + $1, updated_at = NOW()
+        WHERE id = $2
+      `,
+      [canAdd, row.id],
+    );
+
+    if (representativeItemId === null) {
+      representativeItemId = row.id;
+    }
+    remainingQty -= canAdd;
+  }
+
+  if (remainingQty <= 0) {
+    await query(`DELETE FROM item_instance WHERE id = $1`, [itemInstanceId]);
+    if (representativeItemId === null) {
+      throw new Error("实例堆叠后缺少承载目标，数据状态异常");
+    }
+    return { success: true, message: "移动成功", itemId: representativeItemId };
+  }
+
+  if (targetSlot === null) {
+    throw new Error("实例剩余数量需落格但未分配格子，数据状态异常");
+  }
+
+  if (remainingQty !== sourceQty) {
+    await query(
+      `
+        UPDATE item_instance
+        SET qty = $1, updated_at = NOW()
+        WHERE id = $2
+      `,
+      [remainingQty, itemInstanceId],
+    );
+  }
+
+  const moveResult = await query(
+    `
+      UPDATE item_instance
+      SET location = 'bag',
+          location_slot = $1,
+          equipped_slot = NULL,
+          updated_at = NOW()
+      WHERE id = $2
+      RETURNING id
+    `,
+    [targetSlot, itemInstanceId],
+  );
+
+  if (moveResult.rows.length === 0) {
+    throw new Error("实例入包更新失败，数据状态异常");
+  }
+
+  return {
+    success: true,
+    message: "移动成功",
+    itemId: Number(moveResult.rows[0].id),
+  };
 };
 
 // ============================================
