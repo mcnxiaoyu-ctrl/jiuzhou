@@ -1,58 +1,79 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildInsightInjectPreview,
-  calcAffordableInsightLevels,
+  buildInsightBonusPctByLevel,
   calcInsightCostByLevel,
-  calcInsightTotalCost,
-  type InsightGrowthFormulaConfig,
-  shouldConfirmInsightInject,
+  calcInsightProgressPct,
+  simulateInsightInjectByExp,
+  type InsightGrowthStageConfig,
 } from '../insightShared';
 
-const mockGrowth: InsightGrowthFormulaConfig = {
-  costBaseExp: 100_000,
-  costStepExp: 20_000,
-  costQuadraticExp: 3_000,
+const mockGrowth: InsightGrowthStageConfig = {
+  costStageLevels: 50,
+  costStageBaseExp: 500_000,
   bonusPctPerLevel: 0.0005,
 };
 
 describe('insightShared', () => {
-  it('calcInsightCostByLevel: 单级消耗按二次公式递增', () => {
-    expect(calcInsightCostByLevel(1, mockGrowth)).toBe(100_000);
-    expect(calcInsightCostByLevel(2, mockGrowth)).toBe(123_000);
-    expect(calcInsightCostByLevel(10, mockGrowth)).toBe(523_000);
+  it('calcInsightCostByLevel: 单级消耗按 50 级分段递增', () => {
+    expect(calcInsightCostByLevel(1, mockGrowth)).toBe(500_000);
+    expect(calcInsightCostByLevel(50, mockGrowth)).toBe(500_000);
+    expect(calcInsightCostByLevel(51, mockGrowth)).toBe(1_000_000);
+    expect(calcInsightCostByLevel(101, mockGrowth)).toBe(1_500_000);
   });
 
-  it('calcInsightTotalCost: 批量消耗与逐级求和一致', () => {
-    const total = calcInsightTotalCost(0, 3, mockGrowth);
-    expect(total).toBe(100_000 + 123_000 + 152_000);
-  });
-
-  it('calcAffordableInsightLevels: 经验不足时按可支付等级截断', () => {
-    const affordable = calcAffordableInsightLevels(0, 200_000, 10, 100, mockGrowth);
-    expect(affordable).toBe(1);
-  });
-
-  it('buildInsightInjectPreview: 预估值应自洽', () => {
-    const preview = buildInsightInjectPreview({
+  it('simulateInsightInjectByExp: 经验不足升级时应累计到当前级进度', () => {
+    const preview = simulateInsightInjectByExp({
       currentLevel: 0,
-      characterExp: 1_000_000,
-      inputLevels: 10,
-      batchMaxLevels: 100,
+      currentProgressExp: 0,
+      injectExp: 120_000,
       growth: mockGrowth,
     });
 
-    expect(preview.actualInjectLevels).toBeGreaterThan(0);
-    expect(preview.actualInjectLevels).toBeLessThan(10);
-    expect(preview.plannedInjectLevels).toBe(10);
-    expect(preview.plannedSpentExp).toBe(calcInsightTotalCost(0, 10, mockGrowth));
-    expect(preview.actualSpentExp).toBeLessThanOrEqual(1_000_000);
-    expect(preview.remainingExp).toBe(1_000_000 - preview.actualSpentExp);
-    expect(preview.plannedGainedBonusPct).toBeGreaterThan(0);
+    expect(preview.appliedExp).toBe(120_000);
+    expect(preview.gainedLevels).toBe(0);
+    expect(preview.afterLevel).toBe(0);
+    expect(preview.afterProgressExp).toBe(120_000);
+    expect(preview.nextLevelCostExp).toBe(500_000);
   });
 
-  it('shouldConfirmInsightInject: 达到阈值才触发确认', () => {
-    expect(shouldConfirmInsightInject(99_999, 100_000)).toBe(false);
-    expect(shouldConfirmInsightInject(100_000, 100_000)).toBe(true);
-    expect(shouldConfirmInsightInject(120_000, 100_000)).toBe(true);
+  it('simulateInsightInjectByExp: 达到门槛后应自动升级并结转', () => {
+    const preview = simulateInsightInjectByExp({
+      currentLevel: 0,
+      currentProgressExp: 450_000,
+      injectExp: 100_000,
+      growth: mockGrowth,
+    });
+
+    expect(preview.appliedExp).toBe(100_000);
+    expect(preview.gainedLevels).toBe(1);
+    expect(preview.afterLevel).toBe(1);
+    expect(preview.afterProgressExp).toBe(50_000);
+    expect(preview.nextLevelCostExp).toBe(500_000);
+  });
+
+  it('buildInsightBonusPctByLevel: 加成为固定单级线性增长', () => {
+    expect(buildInsightBonusPctByLevel(0, mockGrowth.bonusPctPerLevel)).toBe(0);
+    expect(buildInsightBonusPctByLevel(10, mockGrowth.bonusPctPerLevel)).toBe(0.005);
+  });
+
+  it('calcInsightProgressPct: 进度百分比应在 0~100 内', () => {
+    expect(calcInsightProgressPct(0, 500_000)).toBe(0);
+    expect(calcInsightProgressPct(250_000, 500_000)).toBe(50);
+    expect(calcInsightProgressPct(999_999, 500_000)).toBe(100);
+  });
+
+  it('simulateInsightInjectByExp: 大额经验可跨多级并返回正确加成增量', () => {
+    const preview = simulateInsightInjectByExp({
+      currentLevel: 0,
+      currentProgressExp: 0,
+      injectExp: 1_500_000,
+      growth: mockGrowth,
+    });
+
+    expect(preview.appliedExp).toBe(1_500_000);
+    expect(preview.gainedLevels).toBe(3);
+    expect(preview.afterLevel).toBe(3);
+    expect(preview.afterProgressExp).toBe(0);
+    expect(preview.gainedBonusPct).toBe(0.0015);
   });
 });

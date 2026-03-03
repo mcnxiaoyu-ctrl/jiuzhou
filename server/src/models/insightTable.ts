@@ -2,7 +2,7 @@
  * 悟道系统进度表初始化
  *
  * 作用（做什么 / 不做什么）：
- * 1) 做什么：创建并维护 `character_insight_progress`，作为悟道等级与累计消耗经验的唯一数据源。
+ * 1) 做什么：创建并维护 `character_insight_progress`，作为悟道等级、当前级内进度与累计消耗经验的唯一数据源。
  * 2) 不做什么：不承载悟道业务规则，不处理经验扣减与属性结算。
  *
  * 输入/输出：
@@ -22,14 +22,19 @@ const insightProgressTableSQL = `
 CREATE TABLE IF NOT EXISTS character_insight_progress (
   character_id BIGINT PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE,
   level BIGINT NOT NULL DEFAULT 0,
+  progress_exp BIGINT NOT NULL DEFAULT 0,
   total_exp_spent BIGINT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE character_insight_progress
+ADD COLUMN IF NOT EXISTS progress_exp BIGINT NOT NULL DEFAULT 0;
+
 COMMENT ON TABLE character_insight_progress IS '角色悟道进度表（经验长期消耗系统）';
 COMMENT ON COLUMN character_insight_progress.character_id IS '角色ID（唯一）';
 COMMENT ON COLUMN character_insight_progress.level IS '悟道等级（无上限）';
+COMMENT ON COLUMN character_insight_progress.progress_exp IS '当前等级内已注入经验（达到下一等级消耗时自动升到下一级）';
 COMMENT ON COLUMN character_insight_progress.total_exp_spent IS '累计消耗经验';
 COMMENT ON COLUMN character_insight_progress.created_at IS '创建时间';
 COMMENT ON COLUMN character_insight_progress.updated_at IS '更新时间';

@@ -2,11 +2,11 @@
  * 悟道系统服务
  *
  * 作用（做什么 / 不做什么）：
- * 1) 做什么：提供悟道总览查询与经验注入写操作；校验解锁条件、计算可注入等级、扣减经验并更新进度。
+ * 1) 做什么：提供悟道总览查询与经验注入写操作；校验解锁条件、计算可注入结果、扣减经验并更新进度。
  * 2) 不做什么：不负责 HTTP 参数解析，不负责客户端提示文案渲染。
  *
  * 输入/输出：
- * - 输入：userId、注入等级数。
+ * - 输入：userId、本次注入经验预算（exp）。
  * - 输出：统一的 `{ success, message, data }` 业务结果。
  *
  * 数据流/状态流：
@@ -23,9 +23,7 @@ import { invalidateCharacterComputedCache } from './characterComputedService.js'
 import { getInsightGrowthConfig } from './staticConfigLoader.js';
 import {
   buildInsightPctBonusByLevel,
-  calcAffordableInjectLevels,
   calcInsightCostByLevel,
-  calcInsightTotalCost,
 } from './shared/insightRules.js';
 import { getRealmRankZeroBased, normalizeRealmKeepingUnknown } from './shared/realmRules.js';
 
@@ -33,18 +31,23 @@ export interface InsightOverviewDto {
   unlocked: boolean;
   unlockRealm: string;
   currentLevel: number;
+  currentProgressExp: number;
   currentBonusPct: number;
   nextLevelCostExp: number;
   characterExp: number;
+  costStageLevels: number;
+  costStageBaseExp: number;
+  bonusPctPerLevel: number;
 }
 
 export interface InsightInjectRequest {
-  levels: number;
+  exp: number;
 }
 
 export interface InsightInjectResultDto {
   beforeLevel: number;
   afterLevel: number;
+  afterProgressExp: number;
   actualInjectedLevels: number;
   spentExp: number;
   remainingExp: number;
@@ -70,6 +73,7 @@ export interface InsightInjectResolution {
   spentExp: number;
   remainingExp: number;
   afterLevel: number;
+  afterProgressExp: number;
   beforeBonusPct: number;
   afterBonusPct: number;
 }
@@ -103,12 +107,17 @@ const loadCharacterInsightRow = async (userId: number, forUpdate: boolean): Prom
   };
 };
 
-const loadInsightLevel = async (characterId: number, forUpdate: boolean): Promise<number> => {
+interface InsightProgressRow {
+  level: number;
+  progressExp: number;
+}
+
+const loadInsightProgress = async (characterId: number, forUpdate: boolean): Promise<InsightProgressRow> => {
   if (forUpdate) {
     await query(
       `
-        INSERT INTO character_insight_progress (character_id, level, total_exp_spent, created_at, updated_at)
-        VALUES ($1, 0, 0, NOW(), NOW())
+        INSERT INTO character_insight_progress (character_id, level, progress_exp, total_exp_spent, created_at, updated_at)
+        VALUES ($1, 0, 0, 0, NOW(), NOW())
         ON CONFLICT (character_id) DO NOTHING
       `,
       [characterId],
@@ -118,7 +127,7 @@ const loadInsightLevel = async (characterId: number, forUpdate: boolean): Promis
   const lockSql = forUpdate ? 'FOR UPDATE' : '';
   const progressRes = await query(
     `
-      SELECT level
+      SELECT level, progress_exp
       FROM character_insight_progress
       WHERE character_id = $1
       LIMIT 1
@@ -126,9 +135,14 @@ const loadInsightLevel = async (characterId: number, forUpdate: boolean): Promis
     `,
     [characterId],
   );
-  if (progressRes.rows.length <= 0) return 0;
+  if (progressRes.rows.length <= 0) {
+    return { level: 0, progressExp: 0 };
+  }
   const row = progressRes.rows[0] as Record<string, unknown>;
-  return normalizeInteger(row.level);
+  return {
+    level: normalizeInteger(row.level),
+    progressExp: normalizeInteger(row.progress_exp),
+  };
 };
 
 export const isInsightUnlocked = (realm: string, subRealm: string | null, unlockRealm: string): boolean => {
@@ -140,21 +154,67 @@ export const isInsightUnlocked = (realm: string, subRealm: string | null, unlock
 
 export const resolveInsightInjectPlan = (params: {
   beforeLevel: number;
+  beforeProgressExp: number;
   characterExp: number;
-  requestedLevels: number;
+  injectExpBudget: number;
   config: ReturnType<typeof getInsightGrowthConfig>;
 }): InsightInjectResolution => {
-  const { beforeLevel, characterExp, requestedLevels, config } = params;
-  const actualInjectedLevels = calcAffordableInjectLevels(beforeLevel, characterExp, requestedLevels, config);
-  const spentExp = calcInsightTotalCost(beforeLevel, actualInjectedLevels, config);
-  const afterLevel = beforeLevel + actualInjectedLevels;
-  const beforeBonusPct = buildInsightPctBonusByLevel(beforeLevel, config);
+  const { beforeLevel, beforeProgressExp, characterExp, injectExpBudget, config } = params;
+  const safeBeforeLevel = normalizeInteger(beforeLevel);
+  const safeCharacterExp = normalizeInteger(characterExp);
+  const safeInjectExpBudget = Math.min(safeCharacterExp, normalizeInteger(injectExpBudget));
+  let remainingBudgetExp = safeInjectExpBudget;
+  let currentLevel = safeBeforeLevel;
+  let currentProgressExp = normalizeInteger(beforeProgressExp);
+  let gainedLevels = 0;
+
+  /**
+   * 数据一致性校验：当前等级内进度不能大于等于该等级升级所需经验。
+   * 若出现异常，直接抛错阻断写入，避免写出更脏数据。
+   */
+  const beforeLevelCost = calcInsightCostByLevel(safeBeforeLevel + 1, config);
+  if (currentProgressExp >= beforeLevelCost) {
+    throw new Error('悟道进度异常：当前等级进度已超过升级需求');
+  }
+
+  /**
+   * 可部分注入结算：
+   * 1) 优先把经验注入当前等级剩余缺口；
+   * 2) 若填满则自动升 1 级并继续；
+   * 3) 不足以升级时也会累积到 progress_exp（允许 1 点经验注入）。
+   */
+  while (remainingBudgetExp > 0) {
+    const nextLevelCost = calcInsightCostByLevel(currentLevel + 1, config);
+    const requiredExp = Math.max(0, nextLevelCost - currentProgressExp);
+    if (requiredExp <= 0) {
+      currentLevel += 1;
+      currentProgressExp = 0;
+      gainedLevels += 1;
+      continue;
+    }
+
+    if (remainingBudgetExp >= requiredExp) {
+      remainingBudgetExp -= requiredExp;
+      currentLevel += 1;
+      currentProgressExp = 0;
+      gainedLevels += 1;
+      continue;
+    }
+
+    currentProgressExp += remainingBudgetExp;
+    remainingBudgetExp = 0;
+  }
+
+  const afterLevel = currentLevel;
+  const beforeBonusPct = buildInsightPctBonusByLevel(safeBeforeLevel, config);
   const afterBonusPct = buildInsightPctBonusByLevel(afterLevel, config);
+  const spentExp = safeInjectExpBudget - remainingBudgetExp;
   return {
-    actualInjectedLevels,
+    actualInjectedLevels: gainedLevels,
     spentExp,
-    remainingExp: Math.max(0, characterExp - spentExp),
+    remainingExp: Math.max(0, safeCharacterExp - spentExp),
     afterLevel,
+    afterProgressExp: currentProgressExp,
     beforeBonusPct,
     afterBonusPct,
   };
@@ -172,7 +232,7 @@ class InsightService {
         return { success: false, message: '角色不存在' };
       }
 
-      const currentLevel = await loadInsightLevel(character.characterId, false);
+      const progress = await loadInsightProgress(character.characterId, false);
       const unlocked = isInsightUnlocked(character.realm, character.subRealm, config.unlock_realm);
 
       return {
@@ -181,10 +241,14 @@ class InsightService {
         data: {
           unlocked,
           unlockRealm: config.unlock_realm,
-          currentLevel,
-          currentBonusPct: buildInsightPctBonusByLevel(currentLevel, config),
-          nextLevelCostExp: calcInsightCostByLevel(currentLevel + 1, config),
+          currentLevel: progress.level,
+          currentProgressExp: progress.progressExp,
+          currentBonusPct: buildInsightPctBonusByLevel(progress.level, config),
+          nextLevelCostExp: calcInsightCostByLevel(progress.level + 1, config),
           characterExp: character.exp,
+          costStageLevels: config.cost_stage_levels,
+          costStageBaseExp: config.cost_stage_base_exp,
+          bonusPctPerLevel: config.bonus_pct_per_level,
         },
       };
     } catch (error) {
@@ -200,11 +264,11 @@ class InsightService {
   async injectExp(userId: number, request: InsightInjectRequest): Promise<InsightResult<InsightInjectResultDto>> {
     try {
       const config = getInsightGrowthConfig();
-      const requestedLevels = normalizeInteger(request.levels);
-      if (requestedLevels <= 0) {
+      const injectExpBudget = normalizeInteger(request.exp);
+      if (injectExpBudget <= 0) {
         return {
           success: false,
-          message: '注入等级无效，需大于 0',
+          message: '注入经验无效，需大于 0',
         };
       }
 
@@ -218,14 +282,16 @@ class InsightService {
         return { success: false, message: `未达到${config.unlock_realm}，无法悟道` };
       }
 
-      const beforeLevel = await loadInsightLevel(character.characterId, true);
+      const beforeProgress = await loadInsightProgress(character.characterId, true);
+      const beforeLevel = beforeProgress.level;
       const injectPlan = resolveInsightInjectPlan({
         beforeLevel,
+        beforeProgressExp: beforeProgress.progressExp,
         characterExp: character.exp,
-        requestedLevels,
+        injectExpBudget,
         config,
       });
-      if (injectPlan.actualInjectedLevels <= 0) {
+      if (injectPlan.spentExp <= 0) {
         return { success: false, message: '经验不足，无法悟道' };
       }
 
@@ -245,11 +311,12 @@ class InsightService {
         `
           UPDATE character_insight_progress
           SET level = $2,
-              total_exp_spent = total_exp_spent + $3,
+              progress_exp = $3,
+              total_exp_spent = total_exp_spent + $4,
               updated_at = NOW()
           WHERE character_id = $1
         `,
-        [character.characterId, injectPlan.afterLevel, injectPlan.spentExp],
+        [character.characterId, injectPlan.afterLevel, injectPlan.afterProgressExp, injectPlan.spentExp],
       );
 
       await invalidateCharacterComputedCache(character.characterId);
@@ -260,6 +327,7 @@ class InsightService {
         data: {
           beforeLevel,
           afterLevel: injectPlan.afterLevel,
+          afterProgressExp: injectPlan.afterProgressExp,
           actualInjectedLevels: injectPlan.actualInjectedLevels,
           spentExp: injectPlan.spentExp,
           remainingExp: injectPlan.remainingExp,

@@ -292,18 +292,23 @@ export interface InsightOverviewDto {
   unlocked: boolean;
   unlockRealm: string;
   currentLevel: number;
+  currentProgressExp: number;
   currentBonusPct: number;
   nextLevelCostExp: number;
   characterExp: number;
+  costStageLevels: number;
+  costStageBaseExp: number;
+  bonusPctPerLevel: number;
 }
 
 export interface InsightInjectRequest {
-  levels: number;
+  exp: number;
 }
 
 export interface InsightInjectResultDto {
   beforeLevel: number;
   afterLevel: number;
+  afterProgressExp: number;
   actualInjectedLevels: number;
   spentExp: number;
   remainingExp: number;

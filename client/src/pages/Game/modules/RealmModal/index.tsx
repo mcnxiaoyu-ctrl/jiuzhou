@@ -1,5 +1,5 @@
 import { App, Button, Modal, Progress, Tag } from 'antd';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { CharacterData } from '../../../../services/gameSocket';
 import { gameSocket } from '../../../../services/gameSocket';
 import {
@@ -16,6 +16,11 @@ import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../
 import { useIsMobile } from '../../shared/responsive';
 import { REALM_ORDER, getRealmRankFromAlias, normalizeRealmWithAlias } from '../../shared/realm';
 import InsightPanel from './InsightPanel';
+import {
+  calcInsightProgressPct,
+  simulateInsightInjectByExp,
+  type InsightGrowthStageConfig,
+} from './insightShared';
 import './index.scss';
 
 interface RealmModalProps {
@@ -75,8 +80,17 @@ const getRequirementTag = (status: RequirementRow['status']) => {
   return <Tag>未知</Tag>;
 };
 
-const INSIGHT_HOLD_INJECT_INTERVAL_MS = 160;
-const INSIGHT_HOLD_REQUEST_LEVELS = 1_000_000;
+const INSIGHT_HOLD_START_STEP_EXP = 1;
+const INSIGHT_HOLD_STEP_ACCEL_BASE_PER_SEC = 120;
+const INSIGHT_HOLD_STEP_ACCEL_GROWTH_PER_SEC2 = 800;
+const INSIGHT_HOLD_MAX_STEP_EXP = 120_000;
+
+interface InsightHoldBaseSnapshot {
+  currentLevel: number;
+  currentProgressExp: number;
+  characterExp: number;
+  growth: InsightGrowthStageConfig;
+}
 
 const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => {
   const { message } = App.useApp();
@@ -90,12 +104,20 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
   const [insightHoldGainLevels, setInsightHoldGainLevels] = useState(0);
   const [insightHoldSpentExp, setInsightHoldSpentExp] = useState(0);
   const [insightHoldGainBonusPct, setInsightHoldGainBonusPct] = useState(0);
+  const [insightHoldAfterProgressExp, setInsightHoldAfterProgressExp] = useState(0);
+  const [insightHoldNextLevelCostExp, setInsightHoldNextLevelCostExp] = useState(0);
   const [activePane, setActivePane] = useState<RealmPaneKey>('breakthrough');
   const isMobile = useIsMobile();
   const [mobileSection, setMobileSection] = useState<MobileSectionKey>('requirements');
   const insightOverviewRef = useRef<InsightOverviewDto | null>(null);
   const insightHoldingRef = useRef(false);
-  const insightHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const insightHoldBaseRef = useRef<InsightHoldBaseSnapshot | null>(null);
+  const insightHoldIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const insightHoldStartTimestampRef = useRef<number | null>(null);
+  const insightHoldLastTimestampRef = useRef<number | null>(null);
+  const insightHoldSpentFloatRef = useRef(0);
+  const insightHoldStepFloatRef = useRef(INSIGHT_HOLD_START_STEP_EXP);
+  const insightHoldSpentExpRef = useRef(0);
 
   const refreshOverview = useCallback(async () => {
     if (!open) return;
@@ -136,16 +158,24 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
       void refreshInsightOverview();
     } else {
       insightHoldingRef.current = false;
-      if (insightHoldTimerRef.current) {
-        clearTimeout(insightHoldTimerRef.current);
-        insightHoldTimerRef.current = null;
+      if (insightHoldIntervalRef.current !== null) {
+        clearInterval(insightHoldIntervalRef.current);
+        insightHoldIntervalRef.current = null;
       }
+      insightHoldBaseRef.current = null;
+      insightHoldStartTimestampRef.current = null;
+      insightHoldLastTimestampRef.current = null;
+      insightHoldSpentFloatRef.current = 0;
+      insightHoldStepFloatRef.current = INSIGHT_HOLD_START_STEP_EXP;
+      insightHoldSpentExpRef.current = 0;
       setOverview(null);
       setInsightOverview(null);
       setInsightHolding(false);
       setInsightHoldGainLevels(0);
       setInsightHoldSpentExp(0);
       setInsightHoldGainBonusPct(0);
+      setInsightHoldAfterProgressExp(0);
+      setInsightHoldNextLevelCostExp(0);
       setActivePane('breakthrough');
     }
   }, [open, refreshInsightOverview, refreshOverview]);
@@ -153,6 +183,17 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
   useEffect(() => {
     insightOverviewRef.current = insightOverview;
   }, [insightOverview]);
+
+  useEffect(() => {
+    if (insightHolding) return;
+    if (!insightOverview) {
+      setInsightHoldAfterProgressExp(0);
+      setInsightHoldNextLevelCostExp(0);
+      return;
+    }
+    setInsightHoldAfterProgressExp(insightOverview.currentProgressExp);
+    setInsightHoldNextLevelCostExp(insightOverview.nextLevelCostExp);
+  }, [insightHolding, insightOverview]);
 
   const rank = useMemo<RealmRank>(() => {
     if (overview) {
@@ -235,18 +276,39 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
   }, [overview, plan.requirements, rank.next]);
 
   const insightUpgradeProgressPct = useMemo(() => {
+    const isPreviewing = insightHolding || insightHoldSpentExp > 0;
+    if (isPreviewing) {
+      return calcInsightProgressPct(insightHoldAfterProgressExp, insightHoldNextLevelCostExp);
+    }
     if (!insightOverview) return 0;
-    if (insightOverview.nextLevelCostExp <= 0) return 0;
-    const raw = (insightOverview.characterExp / insightOverview.nextLevelCostExp) * 100;
-    return Math.max(0, Math.min(100, raw));
-  }, [insightOverview]);
+    return calcInsightProgressPct(insightOverview.currentProgressExp, insightOverview.nextLevelCostExp);
+  }, [insightHoldAfterProgressExp, insightHoldNextLevelCostExp, insightHoldSpentExp, insightHolding, insightOverview]);
+
+  /**
+   * 悟道展示进度（分子/分母）：
+   * - 长按中使用前端模拟值，保证数字与进度条同步滚动；
+   * - 非长按时回落到服务端总览值。
+   */
+  const insightDisplayProgress = useMemo(() => {
+    const isPreviewing = insightHolding || insightHoldSpentExp > 0;
+    if (isPreviewing) {
+      return {
+        progressExp: insightHoldAfterProgressExp,
+        nextLevelCostExp: insightHoldNextLevelCostExp,
+      };
+    }
+    return {
+      progressExp: insightOverview?.currentProgressExp ?? 0,
+      nextLevelCostExp: insightOverview?.nextLevelCostExp ?? 0,
+    };
+  }, [insightHoldAfterProgressExp, insightHoldNextLevelCostExp, insightHoldSpentExp, insightHolding, insightOverview]);
 
   const insightInjectDisabled = useMemo(() => {
     return (
       !insightOverview ||
       !insightOverview.unlocked ||
       insightLoading ||
-      insightOverview.characterExp < insightOverview.nextLevelCostExp
+      insightOverview.characterExp <= 0
     );
   }, [insightLoading, insightOverview]);
 
@@ -273,11 +335,11 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
   }, [message, rank.next, refreshOverview]);
 
   const handleInjectInsight = useCallback(
-    async (levels: number, options?: { silent?: boolean }): Promise<InsightInjectResultDto | null> => {
+    async (exp: number, options?: { silent?: boolean }): Promise<InsightInjectResultDto | null> => {
       if (!insightOverview || !insightOverview.unlocked) return null;
       setInsightInjecting(true);
       try {
-        const res = await injectInsightExp({ levels });
+        const res = await injectInsightExp({ exp });
         if (!res.success || !res.data) {
           if (!options?.silent) message.error(res.message || '悟道失败');
           return null;
@@ -299,83 +361,217 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
   );
 
   /**
-   * 停止长按注入并清理定时器。
+   * 重置本次长按会话预览状态。
    *
    * 说明：
-   * - 这里只做状态机收口，不负责业务弹窗或注入请求。
-   * - 被多个路径复用：鼠标抬起、触摸结束、页签切换、模态关闭。
+   * - 这里只清理“前端模拟”数值，不触发后端请求。
+   * - 统一复用，避免在多个路径重复写同样清零逻辑。
    */
-  const stopInsightHoldInject = useCallback(() => {
+  const resetInsightHoldPreview = useCallback(() => {
+    insightHoldSpentFloatRef.current = 0;
+    insightHoldStepFloatRef.current = INSIGHT_HOLD_START_STEP_EXP;
+    insightHoldSpentExpRef.current = 0;
+    setInsightHoldGainLevels(0);
+    setInsightHoldSpentExp(0);
+    setInsightHoldGainBonusPct(0);
+  }, []);
+
+  /**
+   * 取消长按模拟（不提交后端）。
+   *
+   * 说明：
+   * - 仅做状态机收口与动画帧清理；
+   * - 用于页签切换、弹窗关闭、组件卸载等“非松手提交”路径。
+   */
+  const cancelInsightHoldInject = useCallback(() => {
     insightHoldingRef.current = false;
-    if (insightHoldTimerRef.current) {
-      clearTimeout(insightHoldTimerRef.current);
-      insightHoldTimerRef.current = null;
+    if (insightHoldIntervalRef.current !== null) {
+      clearInterval(insightHoldIntervalRef.current);
+      insightHoldIntervalRef.current = null;
     }
+    insightHoldBaseRef.current = null;
+    insightHoldStartTimestampRef.current = null;
+    insightHoldLastTimestampRef.current = null;
     setInsightHolding(false);
   }, []);
 
   /**
-   * 执行一次“长按脉冲注入”。
+   * 把“当前注入经验预算”映射为一组可展示的悟道预览值。
    *
    * 说明：
-   * - 每次按固定大等级请求发起一次注入（后端按可支付等级自动截断），成功后自动安排下一次脉冲。
-   * - 一旦失败或无法继续注入，立即停止长按状态，防止空转请求。
+   * 1) 该函数是长按模拟期唯一的预览更新入口，避免散落重复计算；
+   * 2) 输入为预算经验，内部用共享规则函数得到等级、加成和进度变化；
+   * 3) 会同步更新 `insightHoldSpentExpRef`，用于松手提交时读取最终经验值。
    */
-  const runInsightHoldPulse = useCallback(async (): Promise<void> => {
-    if (!insightHoldingRef.current) return;
-    const currentOverview = insightOverviewRef.current;
-    if (!currentOverview || !currentOverview.unlocked) {
-      stopInsightHoldInject();
-      return;
-    }
+  const applyInsightHoldPreview = useCallback((injectExpBudget: number) => {
+    const base = insightHoldBaseRef.current;
+    if (!base) return;
 
-    const result = await handleInjectInsight(INSIGHT_HOLD_REQUEST_LEVELS, { silent: true });
-    if (!insightHoldingRef.current) return;
-    if (!result || result.actualInjectedLevels <= 0) {
-      stopInsightHoldInject();
-      return;
-    }
+    const preview = simulateInsightInjectByExp({
+      currentLevel: base.currentLevel,
+      currentProgressExp: base.currentProgressExp,
+      injectExp: injectExpBudget,
+      growth: base.growth,
+    });
 
-    setInsightHoldGainLevels((prev) => prev + result.actualInjectedLevels);
-    setInsightHoldSpentExp((prev) => prev + result.spentExp);
-    setInsightHoldGainBonusPct((prev) => prev + result.gainedBonusPct);
-
-    insightHoldTimerRef.current = setTimeout(() => {
-      void runInsightHoldPulse();
-    }, INSIGHT_HOLD_INJECT_INTERVAL_MS);
-  }, [handleInjectInsight, stopInsightHoldInject]);
+    insightHoldSpentExpRef.current = preview.appliedExp;
+    setInsightHoldSpentExp(preview.appliedExp);
+    setInsightHoldGainLevels(preview.gainedLevels);
+    setInsightHoldGainBonusPct(preview.gainedBonusPct);
+    setInsightHoldAfterProgressExp(preview.afterProgressExp);
+    setInsightHoldNextLevelCostExp(preview.nextLevelCostExp);
+  }, []);
 
   /**
-   * 开始长按注入。
+   * 执行一次前端长按模拟帧。
    *
    * 说明：
-   * - 每次开始都会重置本次会话的“+XX”累计值。
-   * - 当注入条件不满足时直接忽略，不触发请求。
+   * 1) 只在前端推进“已注入经验预算”，不访问后端；
+   * 2) 注入步长从 1 开始并持续加速，形成“数字滚动越来越快”的观感；
+   * 3) 每帧基于同一份快照做纯计算，避免前后状态抖动。
+   */
+  const runInsightHoldSimulationTick = useCallback(() => {
+    if (!insightHoldingRef.current) return;
+    const base = insightHoldBaseRef.current;
+    if (!base) {
+      cancelInsightHoldInject();
+      return;
+    }
+    const now = performance.now();
+
+    if (insightHoldStartTimestampRef.current === null || insightHoldLastTimestampRef.current === null) {
+      insightHoldStartTimestampRef.current = now;
+      insightHoldLastTimestampRef.current = now;
+      /**
+       * 首帧直接推进 1 点预算，确保按下后能立即看到从 1 开始滚动。
+       */
+      insightHoldSpentFloatRef.current = Math.min(
+        base.characterExp,
+        Math.max(insightHoldSpentFloatRef.current, INSIGHT_HOLD_START_STEP_EXP),
+      );
+      applyInsightHoldPreview(insightHoldSpentFloatRef.current);
+      return;
+    }
+
+    const deltaSec = Math.max(0, (now - insightHoldLastTimestampRef.current) / 1000);
+    const elapsedSec = Math.max(0, (now - insightHoldStartTimestampRef.current) / 1000);
+    insightHoldLastTimestampRef.current = now;
+
+    /**
+     * 速度模型：
+     * - step 初始为 1；
+     * - 每秒按 (base + growth * elapsed) 增加步长，随时间越来越快；
+     * - 每帧至少 +1，保证数字持续滚动。
+     */
+    const currentAccelPerSec = INSIGHT_HOLD_STEP_ACCEL_BASE_PER_SEC + INSIGHT_HOLD_STEP_ACCEL_GROWTH_PER_SEC2 * elapsedSec;
+    insightHoldStepFloatRef.current = Math.min(
+      INSIGHT_HOLD_MAX_STEP_EXP,
+      insightHoldStepFloatRef.current + currentAccelPerSec * deltaSec,
+    );
+    const frameStepExp = Math.max(INSIGHT_HOLD_START_STEP_EXP, Math.floor(insightHoldStepFloatRef.current));
+
+    insightHoldSpentFloatRef.current = Math.min(
+      base.characterExp,
+      insightHoldSpentFloatRef.current + frameStepExp,
+    );
+    applyInsightHoldPreview(insightHoldSpentFloatRef.current);
+  }, [applyInsightHoldPreview, cancelInsightHoldInject]);
+
+  /**
+   * 开始长按注入模拟。
+   *
+   * 说明：
+   * 1) 按下时只启动前端模拟，不立即提交后端；
+   * 2) 松手时再以 `本次模拟经验` 一次性调用注入接口。
    */
   const startInsightHoldInject = useCallback(() => {
     if (insightHoldingRef.current) return;
     if (insightInjectDisabled || insightInjecting) return;
+    const currentOverview = insightOverviewRef.current;
+    if (!currentOverview || !currentOverview.unlocked) return;
 
-    setInsightHoldGainLevels(0);
-    setInsightHoldSpentExp(0);
-    setInsightHoldGainBonusPct(0);
+    resetInsightHoldPreview();
+    insightHoldBaseRef.current = {
+      currentLevel: currentOverview.currentLevel,
+      currentProgressExp: currentOverview.currentProgressExp,
+      characterExp: currentOverview.characterExp,
+      growth: {
+        costStageLevels: currentOverview.costStageLevels,
+        costStageBaseExp: currentOverview.costStageBaseExp,
+        bonusPctPerLevel: currentOverview.bonusPctPerLevel,
+      },
+    };
+    setInsightHoldAfterProgressExp(currentOverview.currentProgressExp);
+    setInsightHoldNextLevelCostExp(currentOverview.nextLevelCostExp);
+    insightHoldStartTimestampRef.current = null;
+    insightHoldLastTimestampRef.current = null;
     setInsightHolding(true);
     insightHoldingRef.current = true;
-    void runInsightHoldPulse();
-  }, [insightInjectDisabled, insightInjecting, runInsightHoldPulse]);
+    runInsightHoldSimulationTick();
+    insightHoldIntervalRef.current = setInterval(runInsightHoldSimulationTick, 16);
+  }, [insightInjectDisabled, insightInjecting, resetInsightHoldPreview, runInsightHoldSimulationTick]);
+
+  /**
+   * 松手结束长按：停止前端模拟并一次性提交后端。
+   */
+  const finishInsightHoldInject = useCallback(() => {
+    if (!insightHoldingRef.current) return;
+    const commitExp = Math.max(0, Math.floor(insightHoldSpentExpRef.current));
+    cancelInsightHoldInject();
+    if (commitExp <= 0) return;
+    void handleInjectInsight(commitExp).then(() => {
+      resetInsightHoldPreview();
+    });
+  }, [cancelInsightHoldInject, handleInjectInsight, resetInsightHoldPreview]);
+
+  /**
+   * 指针按下入口（统一鼠标/触控）：
+   * 1) 仅响应主键鼠标，避免右键误触发；
+   * 2) 禁用默认触控手势，避免长按过程中被浏览器手势中断。
+   */
+  const handleInsightPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    startInsightHoldInject();
+  }, [startInsightHoldInject]);
+
+  /**
+   * 指针释放入口：统一进入“停止模拟并提交后端”流程。
+   */
+  const handleInsightPointerUp = useCallback(() => {
+    finishInsightHoldInject();
+  }, [finishInsightHoldInject]);
+
+  /**
+   * 全局抬手监听：
+   * - 防止手指/鼠标离开按钮后收不到元素级 pointerup，导致“长按状态卡住”。
+   */
+  useEffect(() => {
+    if (!insightHolding) return;
+    const onPointerFinish = () => {
+      finishInsightHoldInject();
+    };
+    window.addEventListener('pointerup', onPointerFinish);
+    window.addEventListener('pointercancel', onPointerFinish);
+    return () => {
+      window.removeEventListener('pointerup', onPointerFinish);
+      window.removeEventListener('pointercancel', onPointerFinish);
+    };
+  }, [finishInsightHoldInject, insightHolding]);
 
   useEffect(() => {
     if (activePane !== 'insight') {
-      stopInsightHoldInject();
+      cancelInsightHoldInject();
+      resetInsightHoldPreview();
     }
-  }, [activePane, stopInsightHoldInject]);
+  }, [activePane, cancelInsightHoldInject, resetInsightHoldPreview]);
 
   useEffect(() => {
     return () => {
       insightHoldingRef.current = false;
-      if (insightHoldTimerRef.current) {
-        clearTimeout(insightHoldTimerRef.current);
-        insightHoldTimerRef.current = null;
+      if (insightHoldIntervalRef.current !== null) {
+        clearInterval(insightHoldIntervalRef.current);
+        insightHoldIntervalRef.current = null;
       }
     };
   }, []);
@@ -571,6 +767,8 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
                   holdGainLevels={insightHoldGainLevels}
                   holdSpentExp={insightHoldSpentExp}
                   holdGainBonusPct={insightHoldGainBonusPct}
+                  displayProgressExp={insightDisplayProgress.progressExp}
+                  displayNextLevelCostExp={insightDisplayProgress.nextLevelCostExp}
                   upgradeProgressPct={insightUpgradeProgressPct}
                 />
               </div>
@@ -585,14 +783,10 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
                 type="primary"
                 className={`realm-insight-hold-btn ${insightHolding ? 'is-holding' : ''}`.trim()}
                 loading={insightInjecting && !insightHolding}
-                disabled={insightInjectDisabled && !insightHolding}
-                onMouseDown={startInsightHoldInject}
-                onMouseUp={stopInsightHoldInject}
-                onMouseLeave={stopInsightHoldInject}
-                onTouchStart={startInsightHoldInject}
-                onTouchEnd={stopInsightHoldInject}
-                onTouchCancel={stopInsightHoldInject}
-                onTouchMove={stopInsightHoldInject}
+                disabled={(insightInjectDisabled || insightInjecting) && !insightHolding}
+                onPointerDown={handleInsightPointerDown}
+                onPointerUp={handleInsightPointerUp}
+                onPointerCancel={handleInsightPointerUp}
               >
                 {insightHolding ? '注入中，松开停止' : '按住注入经验'}
               </Button>
@@ -664,6 +858,8 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
               holdGainLevels={insightHoldGainLevels}
               holdSpentExp={insightHoldSpentExp}
               holdGainBonusPct={insightHoldGainBonusPct}
+              displayProgressExp={insightDisplayProgress.progressExp}
+              displayNextLevelCostExp={insightDisplayProgress.nextLevelCostExp}
               upgradeProgressPct={insightUpgradeProgressPct}
             />
           </div>
@@ -678,14 +874,10 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
             type="primary"
             className={`realm-insight-hold-btn ${insightHolding ? 'is-holding' : ''}`.trim()}
             loading={insightInjecting && !insightHolding}
-            disabled={insightInjectDisabled && !insightHolding}
-            onMouseDown={startInsightHoldInject}
-            onMouseUp={stopInsightHoldInject}
-            onMouseLeave={stopInsightHoldInject}
-            onTouchStart={startInsightHoldInject}
-            onTouchEnd={stopInsightHoldInject}
-            onTouchCancel={stopInsightHoldInject}
-            onTouchMove={stopInsightHoldInject}
+            disabled={(insightInjectDisabled || insightInjecting) && !insightHolding}
+            onPointerDown={handleInsightPointerDown}
+            onPointerUp={handleInsightPointerUp}
+            onPointerCancel={handleInsightPointerUp}
           >
             {insightHolding ? '注入中，松开停止' : '按住注入经验'}
           </Button>

@@ -19,27 +19,48 @@ test('isInsightUnlocked: 养气期及以上可解锁悟道', () => {
 test('resolveInsightInjectPlan: 经验不足时不产生注入等级', () => {
   const plan = resolveInsightInjectPlan({
     beforeLevel: 0,
-    characterExp: 499_999,
-    requestedLevels: 10,
+    beforeProgressExp: 0,
+    characterExp: 1_000_000,
+    injectExpBudget: 499_999,
     config: mockConfig,
   });
 
   assert.equal(plan.actualInjectedLevels, 0);
-  assert.equal(plan.spentExp, 0);
+  assert.equal(plan.spentExp, 499_999);
   assert.equal(plan.afterLevel, 0);
-  assert.equal(plan.remainingExp, 499_999);
+  assert.equal(plan.afterProgressExp, 499_999);
+  assert.equal(plan.remainingExp, 500_001);
 });
 
-test('resolveInsightInjectPlan: 请求超过可支付时按可支付等级结算', () => {
+test('resolveInsightInjectPlan: 达到门槛后自动升级并结转到下一等级进度', () => {
   const plan = resolveInsightInjectPlan({
     beforeLevel: 0,
-    characterExp: 1_000_000,
-    requestedLevels: 10,
+    beforeProgressExp: 450_000,
+    characterExp: 100_000,
+    injectExpBudget: 100_000,
     config: mockConfig,
   });
 
-  assert.ok(plan.actualInjectedLevels > 0, '应至少注入 1 级');
-  assert.ok(plan.actualInjectedLevels < 10, '应被可支付等级截断');
-  assert.ok(plan.spentExp <= 1_000_000, '不应超额扣减经验');
+  assert.equal(plan.actualInjectedLevels, 1);
+  assert.equal(plan.afterLevel, 1);
+  assert.equal(plan.afterProgressExp, 50_000);
+  assert.equal(plan.spentExp, 100_000);
+  assert.equal(plan.remainingExp, 0);
   assert.equal(plan.beforeBonusPct < plan.afterBonusPct, true);
+});
+
+test('resolveInsightInjectPlan: 注入预算小于角色经验时应保留剩余角色经验', () => {
+  const plan = resolveInsightInjectPlan({
+    beforeLevel: 0,
+    beforeProgressExp: 0,
+    characterExp: 1_000_000,
+    injectExpBudget: 500_000,
+    config: mockConfig,
+  });
+
+  assert.equal(plan.actualInjectedLevels, 1);
+  assert.equal(plan.afterLevel, 1);
+  assert.equal(plan.afterProgressExp, 0);
+  assert.equal(plan.spentExp, 500_000);
+  assert.equal(plan.remainingExp, 500_000);
 });

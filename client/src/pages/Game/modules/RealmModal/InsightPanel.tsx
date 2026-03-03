@@ -14,9 +14,8 @@
  *
  * 关键边界条件与坑点：
  * 1) 未解锁状态只展示解锁条件，不允许触发注入。
- * 2) “+XX” 增量是本次长按会话累计值，会在下一次长按开始时重置。
+ * 2) “+XX” 增量是本次长按会话累计值，会在下一次长按开始时重置；持久化进度需看 `overview.currentProgressExp`。
  */
-import { Progress } from 'antd';
 import type { InsightOverviewDto } from '../../../../services/api/combat-realm';
 import { formatInsightPctText } from './insightShared';
 
@@ -25,6 +24,8 @@ interface InsightPanelProps {
   holdGainLevels: number;
   holdSpentExp: number;
   holdGainBonusPct: number;
+  displayProgressExp: number;
+  displayNextLevelCostExp: number;
   upgradeProgressPct: number;
 }
 
@@ -33,6 +34,8 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
   holdGainLevels,
   holdSpentExp,
   holdGainBonusPct,
+  displayProgressExp,
+  displayNextLevelCostExp,
   upgradeProgressPct,
 }) => {
   if (!overview) {
@@ -67,13 +70,13 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
         </div>
         <div className="realm-insight-overview-card">
           <div className="realm-insight-overview-k">下一等级消耗</div>
-          <div className="realm-insight-overview-v">{overview.nextLevelCostExp.toLocaleString()}</div>
+          <div className="realm-insight-overview-v">{displayNextLevelCostExp.toLocaleString()}</div>
         </div>
         <div className="realm-insight-overview-card">
-          <div className="realm-insight-overview-k">当前经验</div>
+          <div className="realm-insight-overview-k">当前级进度</div>
           <div className="realm-insight-value-row">
-            <div className="realm-insight-overview-v">{overview.characterExp.toLocaleString()}</div>
-            <div className="realm-insight-value-delta">+{holdSpentExp.toLocaleString()}</div>
+            <div className="realm-insight-overview-v">{displayProgressExp.toLocaleString()}</div>
+            <div className="realm-insight-overview-sub">/ {displayNextLevelCostExp.toLocaleString()}</div>
           </div>
         </div>
       </div>
@@ -81,7 +84,7 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
       <div className="realm-insight-inject-card">
         <div className="realm-insight-inject-head">
           <div className="realm-insight-inject-title">注入经验</div>
-          <div className="realm-insight-inject-tip">按住底部按钮持续注入，松开即停止</div>
+          <div className="realm-insight-inject-tip">按住持续模拟注入，松开后一次性结算</div>
         </div>
 
         <div className="realm-insight-inject-metrics">
@@ -95,11 +98,20 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
           </div>
         </div>
 
+        <div className="realm-insight-inject-session-tip">
+          当前可注入经验：{overview.characterExp.toLocaleString()}（带 + 的数值为本次长按增量）
+        </div>
+
         <div className="realm-insight-progress-row">
           <div className="realm-insight-progress-k">升级进度</div>
           <div className="realm-insight-progress-v">{upgradeProgressPct.toFixed(2)}%</div>
         </div>
-        <Progress percent={upgradeProgressPct} showInfo={false} strokeColor="var(--primary-color)" />
+        <div className="realm-insight-progress-track" aria-hidden>
+          <div
+            className="realm-insight-progress-fill"
+            style={{ width: `${Math.max(0, Math.min(100, upgradeProgressPct))}%` }}
+          />
+        </div>
       </div>
     </div>
   );

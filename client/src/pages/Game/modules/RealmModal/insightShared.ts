@@ -1,45 +1,38 @@
 /**
- * 悟道前端共享计算
+ * 悟道前端共享计算（与服务端规则同源）
  *
  * 作用（做什么 / 不做什么）：
- * 1) 做什么：集中维护悟道预估公式、批量输入约束、百分比文案格式化，避免桌面与移动端重复写同一逻辑。
- * 2) 做什么：所有成本与收益计算均使用服务端下发配置，确保前后端同一数据源。
- * 3) 不做什么：不发起网络请求、不直接操作 React 状态。
+ * 1) 做什么：提供悟道单级消耗、按经验注入模拟、进度百分比与百分比文案格式化。
+ * 2) 做什么：作为 RealmModal 的唯一前端数值入口，避免在组件内重复写循环结算逻辑。
+ * 3) 不做什么：不发起网络请求，不依赖 React 状态，不读写全局 store。
  *
  * 输入/输出：
- * - 输入：当前悟道等级、当前经验、用户输入等级、批量上限、悟道成长配置。
- * - 输出：预估可注入等级、预计消耗、预计收益、预计剩余经验。
+ * - 输入：当前等级、当前级进度、模拟注入经验、悟道成长配置。
+ * - 输出：本次模拟可提升等级、消耗经验、注入后进度、加成增量等展示数据。
  *
  * 数据流/状态流：
- * InsightPanel 输入变化 -> buildInsightInjectPreview -> UI 预览卡片。
+ * RealmModal 长按状态 -> simulateInsightInjectByExp -> InsightPanel 展示预览；
+ * 松开后把 `appliedExp` 提交后端，后端按同规则真实结算。
  *
  * 关键边界条件与坑点：
- * 1) 单次注入等级必须在 [1, batchMaxLevels]，超界统一收敛，避免前后端规则漂移。
- * 2) 成本公式是“基础 + 线性 + 二次项”，总消耗采用逐级累加，必须与服务端扣费路径一致。
+ * 1) 所有输入均会收敛为非负整数，避免浮点动画中间值污染最终展示。
+ * 2) `currentProgressExp` 不允许大于等于当前升级需求，若异常将按边界收敛，避免前端出现负缺口。
  */
 
-export interface InsightGrowthFormulaConfig {
-  costBaseExp: number;
-  costStepExp: number;
-  costQuadraticExp: number;
+export interface InsightGrowthStageConfig {
+  costStageLevels: number;
+  costStageBaseExp: number;
   bonusPctPerLevel: number;
 }
 
-export interface InsightInjectPreview {
-  inputLevels: number;
-  normalizedLevels: number;
-  plannedInjectLevels: number;
-  plannedSpentExp: number;
-  plannedGainedBonusPct: number;
-  plannedAfterLevel: number;
-  plannedTotalBonusPct: number;
-  actualInjectLevels: number;
-  actualSpentExp: number;
-  actualGainedBonusPct: number;
-  actualAfterLevel: number;
-  actualTotalBonusPct: number;
-  remainingExp: number;
+export interface InsightInjectByExpPreview {
+  appliedExp: number;
+  gainedLevels: number;
+  afterLevel: number;
+  afterProgressExp: number;
   nextLevelCostExp: number;
+  gainedBonusPct: number;
+  afterBonusPct: number;
 }
 
 const toSafeInteger = (value: number): number => {
@@ -47,127 +40,104 @@ const toSafeInteger = (value: number): number => {
   return Math.max(0, Math.floor(value));
 };
 
-export const clampInsightInjectLevels = (inputLevels: number, batchMaxLevels: number): number => {
-  const max = Math.max(1, toSafeInteger(batchMaxLevels));
-  const n = toSafeInteger(inputLevels);
-  if (n <= 0) return 1;
-  return Math.min(n, max);
-};
-
 /**
- * 计算指定等级（1-based）的单级消耗。
- * 公式：base + step * idx + quadratic * idx^2，idx = level - 1。
+ * 计算目标等级（1-based）对应的单级消耗。
+ * 规则：每 `costStageLevels` 级进入下一档，每档单级成本增加一个 `costStageBaseExp`。
  */
-export const calcInsightCostByLevel = (level: number, growth: InsightGrowthFormulaConfig): number => {
+export const calcInsightCostByLevel = (level: number, growth: InsightGrowthStageConfig): number => {
   const safeLevel = Math.max(1, toSafeInteger(level));
-  const stepIndex = safeLevel - 1;
-  const cost =
-    growth.costBaseExp +
-    growth.costStepExp * stepIndex +
-    growth.costQuadraticExp * stepIndex * stepIndex;
-  return toSafeInteger(cost);
+  const safeStageLevels = Math.max(1, toSafeInteger(growth.costStageLevels));
+  const safeStageBaseExp = Math.max(1, toSafeInteger(growth.costStageBaseExp));
+  const stageIndex = Math.floor((safeLevel - 1) / safeStageLevels) + 1;
+  return safeStageBaseExp * stageIndex;
 };
 
 /**
- * 计算从 currentLevel 开始注入 injectLevels 级的总消耗。
- * 这里采用逐级累加，确保与服务端实际扣费严格一致。
+ * 计算指定悟道等级对应的总百分比加成（小数形式）。
  */
-export const calcInsightTotalCost = (
-  currentLevel: number,
-  injectLevels: number,
-  growth: InsightGrowthFormulaConfig,
-): number => {
-  const safeCurrentLevel = toSafeInteger(currentLevel);
-  const safeInjectLevels = toSafeInteger(injectLevels);
-  if (safeInjectLevels <= 0) return 0;
-
-  let total = 0;
-  for (let i = 0; i < safeInjectLevels; i += 1) {
-    const nextLevel = safeCurrentLevel + i + 1;
-    total += calcInsightCostByLevel(nextLevel, growth);
-  }
-  return toSafeInteger(total);
-};
-
-export const calcAffordableInsightLevels = (
-  currentLevel: number,
-  characterExp: number,
-  requestedLevels: number,
-  batchMaxLevels: number,
-  growth: InsightGrowthFormulaConfig,
-): number => {
-  const safeCurrentLevel = toSafeInteger(currentLevel);
-  let remainingExp = toSafeInteger(characterExp);
-  const cappedRequestedLevels = clampInsightInjectLevels(requestedLevels, batchMaxLevels);
-
-  let affordable = 0;
-  for (let i = 0; i < cappedRequestedLevels; i += 1) {
-    const nextLevel = safeCurrentLevel + i + 1;
-    const levelCost = calcInsightCostByLevel(nextLevel, growth);
-    if (remainingExp < levelCost) break;
-    remainingExp -= levelCost;
-    affordable += 1;
-  }
-  return affordable;
-};
-
 export const buildInsightBonusPctByLevel = (level: number, bonusPctPerLevel: number): number => {
-  return toSafeInteger(level) * bonusPctPerLevel;
+  return toSafeInteger(level) * Math.max(0, bonusPctPerLevel);
 };
 
-export const buildInsightInjectPreview = (params: {
+/**
+ * 按“经验预算”模拟一次悟道注入（仅前端预览，不落库）。
+ *
+ * 说明：
+ * 1) 预算经验会先填当前等级缺口，满级后自动进入下一等级继续计算；
+ * 2) 预算不足升级时，剩余经验会停留在 `afterProgressExp`；
+ * 3) 返回的 `appliedExp` 就是本次应提交给后端的经验值。
+ */
+export const simulateInsightInjectByExp = (params: {
   currentLevel: number;
-  characterExp: number;
-  inputLevels: number;
-  batchMaxLevels: number;
-  growth: InsightGrowthFormulaConfig;
-}): InsightInjectPreview => {
-  const { currentLevel, characterExp, inputLevels, batchMaxLevels, growth } = params;
-  const safeCurrentLevel = toSafeInteger(currentLevel);
-  const normalizedLevels = clampInsightInjectLevels(inputLevels, batchMaxLevels);
-  const plannedInjectLevels = normalizedLevels;
-  const plannedSpentExp = calcInsightTotalCost(safeCurrentLevel, plannedInjectLevels, growth);
-  const plannedAfterLevel = safeCurrentLevel + plannedInjectLevels;
-  const plannedTotalBonusPct = buildInsightBonusPctByLevel(plannedAfterLevel, growth.bonusPctPerLevel);
-  const plannedGainedBonusPct =
-    plannedTotalBonusPct - buildInsightBonusPctByLevel(safeCurrentLevel, growth.bonusPctPerLevel);
+  currentProgressExp: number;
+  injectExp: number;
+  growth: InsightGrowthStageConfig;
+}): InsightInjectByExpPreview => {
+  const { currentLevel, currentProgressExp, injectExp, growth } = params;
+  let level = toSafeInteger(currentLevel);
+  let progressExp = toSafeInteger(currentProgressExp);
+  let budgetExp = toSafeInteger(injectExp);
 
-  const actualInjectLevels = calcAffordableInsightLevels(
-    currentLevel,
-    characterExp,
-    normalizedLevels,
-    batchMaxLevels,
-    growth,
-  );
-  const actualSpentExp = calcInsightTotalCost(safeCurrentLevel, actualInjectLevels, growth);
-  const actualAfterLevel = safeCurrentLevel + actualInjectLevels;
-  const actualTotalBonusPct = buildInsightBonusPctByLevel(actualAfterLevel, growth.bonusPctPerLevel);
-  const actualGainedBonusPct =
-    actualTotalBonusPct - buildInsightBonusPctByLevel(safeCurrentLevel, growth.bonusPctPerLevel);
-  const remainingExp = Math.max(0, toSafeInteger(characterExp) - actualSpentExp);
+  const currentLevelCost = calcInsightCostByLevel(level + 1, growth);
+  if (progressExp >= currentLevelCost) {
+    progressExp = Math.max(0, currentLevelCost - 1);
+  }
 
+  const beforeBonusPct = buildInsightBonusPctByLevel(level, growth.bonusPctPerLevel);
+  let gainedLevels = 0;
+  let appliedExp = 0;
+
+  while (budgetExp > 0) {
+    const nextLevelCost = calcInsightCostByLevel(level + 1, growth);
+    const requiredExp = Math.max(0, nextLevelCost - progressExp);
+    if (requiredExp <= 0) {
+      level += 1;
+      progressExp = 0;
+      gainedLevels += 1;
+      continue;
+    }
+
+    if (budgetExp >= requiredExp) {
+      budgetExp -= requiredExp;
+      appliedExp += requiredExp;
+      level += 1;
+      progressExp = 0;
+      gainedLevels += 1;
+      continue;
+    }
+
+    progressExp += budgetExp;
+    appliedExp += budgetExp;
+    budgetExp = 0;
+  }
+
+  const afterBonusPct = buildInsightBonusPctByLevel(level, growth.bonusPctPerLevel);
   return {
-    inputLevels: toSafeInteger(inputLevels),
-    normalizedLevels,
-    plannedInjectLevels,
-    plannedSpentExp,
-    plannedGainedBonusPct,
-    plannedAfterLevel,
-    plannedTotalBonusPct,
-    actualInjectLevels,
-    actualSpentExp,
-    actualGainedBonusPct,
-    actualAfterLevel,
-    actualTotalBonusPct,
-    remainingExp,
-    nextLevelCostExp: calcInsightCostByLevel(actualAfterLevel + 1, growth),
+    appliedExp,
+    gainedLevels,
+    afterLevel: level,
+    afterProgressExp: progressExp,
+    nextLevelCostExp: calcInsightCostByLevel(level + 1, growth),
+    gainedBonusPct: afterBonusPct - beforeBonusPct,
+    afterBonusPct,
   };
 };
 
-export const shouldConfirmInsightInject = (spentExp: number, threshold: number): boolean => {
-  return toSafeInteger(spentExp) >= Math.max(1, toSafeInteger(threshold));
+/**
+ * 计算当前级进度百分比（0~100）。
+ */
+export const calcInsightProgressPct = (progressExp: number, nextLevelCostExp: number): number => {
+  const safeCost = toSafeInteger(nextLevelCostExp);
+  if (safeCost <= 0) return 0;
+  const safeProgress = Math.max(0, Math.min(safeCost, toSafeInteger(progressExp)));
+  const rawPct = (safeProgress / safeCost) * 100;
+  return Math.max(0, Math.min(100, rawPct));
 };
 
+/**
+ * 百分比文案格式化：0.001 -> "0.10%"。
+ */
 export const formatInsightPctText = (pct: number): string => {
   return `${(Math.max(0, pct) * 100).toFixed(2)}%`;
 };
+
