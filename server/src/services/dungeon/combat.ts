@@ -27,7 +27,7 @@ import {
   type AutoDisassembleSetting,
   type PendingMailItem,
 } from '../autoDisassembleRewardService.js';
-import { lockCharacterInventoryMutexesTx } from '../inventoryMutex.js';
+import { lockCharacterInventoryMutexes } from '../inventoryMutex.js';
 import { resolveQualityRankFromName } from '../shared/itemQuality.js';
 import { getDungeonDifficultyById, getItemDefinitionById } from '../staticConfigLoader.js';
 import { getDungeonDefById } from './shared/configLoader.js';
@@ -290,7 +290,7 @@ export const nextDungeonInstance = async (
         >();
 
         if (participantCharacterIds.length > 0) {
-          await lockCharacterInventoryMutexesTx(null, participantCharacterIds);
+          await lockCharacterInventoryMutexes(participantCharacterIds);
         }
 
         const appendGrantedItem = (

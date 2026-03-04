@@ -1,8 +1,7 @@
-import type { PoolClient } from 'pg';
-import { query, getTransactionClient } from '../config/database.js';
+import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
-import { addItemToInventoryTx } from './inventory/index.js';
-import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
+import { addItemToInventory } from './inventory/index.js';
+import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { recordCraftItemEvent } from './taskService.js';
 import { REALM_ORDER } from './shared/realmRules.js';
 import { getItemDefinitionById, getItemDefinitionsByIds, getItemRecipeById, getItemRecipeDefinitionsByType } from './staticConfigLoader.js';
@@ -476,16 +475,11 @@ class CraftService {
 
     const times = clampInt(payload.times, 1, 99);
 
-    const client = getTransactionClient();
-    if (!client) {
-      throw new Error('executeCraftRecipe 必须在事务上下文中执行');
-    }
-
     const characterSnapshot = await getCharacterByUserId(user, false);
     if (!characterSnapshot) {
       return { success: false, message: '角色不存在' };
     }
-    await lockCharacterInventoryMutexTx(null, characterSnapshot.id);
+    await lockCharacterInventoryMutex(characterSnapshot.id);
 
     const character = await getCharacterByUserId(user, true);
     if (!character) {
@@ -588,8 +582,7 @@ class CraftService {
 
     if (successCount > 0) {
       const totalProductQty = productQty * successCount;
-      const addResult = await addItemToInventoryTx(
-        client,
+      const addResult = await addItemToInventory(
         character.id,
         user,
         asString(recipe.product_item_def_id),
@@ -614,8 +607,7 @@ class CraftService {
       for (const itemCost of costItems) {
         const rollbackQty = Math.floor(itemCost.qty * failCount * (failReturnRate / 100));
         if (rollbackQty <= 0) continue;
-        const addResult = await addItemToInventoryTx(
-          client,
+        const addResult = await addItemToInventory(
           character.id,
           user,
           itemCost.itemDefId,

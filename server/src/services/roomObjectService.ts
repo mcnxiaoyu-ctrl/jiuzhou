@@ -1,10 +1,10 @@
-import { query, getTransactionClient } from '../config/database.js';
+import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import type { GridPosition, MapRoom } from './mapService.js';
 import { getRoomInMap } from './mapService.js';
 import { getGameServer } from '../game/gameServer.js';
-import { addItemToInventoryTx } from './inventory/index.js';
-import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
+import { addItemToInventory } from './inventory/index.js';
+import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { recordGatherResourceEvent } from './taskService.js';
 import {
   getItemDefinitionsByIds,
@@ -1036,11 +1036,7 @@ const gatherRoomResourceImpl = async (params: {
 
   const actionSec = 5;
 
-  const client = getTransactionClient();
-  if (!client) {
-    throw new Error('Transaction client not available');
-  }
-  await lockCharacterInventoryMutexTx(client, characterId);
+  await lockCharacterInventoryMutex(characterId);
 
   const stateRes = await query(
     `
@@ -1165,7 +1161,7 @@ const gatherRoomResourceImpl = async (params: {
     );
   }
 
-  const addResult = await addItemToInventoryTx(client, characterId, userId, resourceId, 1, {
+  const addResult = await addItemToInventory(characterId, userId, resourceId, 1, {
     location: 'bag',
     obtainedFrom: 'gather',
   });
@@ -1262,11 +1258,7 @@ const pickupRoomItemImpl = async (params: {
     }
   }
 
-  const client = getTransactionClient();
-  if (!client) {
-    throw new Error('Transaction client not available');
-  }
-  await lockCharacterInventoryMutexTx(client, characterId);
+  await lockCharacterInventoryMutex(characterId);
 
   // 检查一次性物品是否已拾取
   if (cfg.once) {
@@ -1293,7 +1285,7 @@ const pickupRoomItemImpl = async (params: {
   }
 
   // 添加物品到背包
-  const addResult = await addItemToInventoryTx(client, characterId, userId, itemDefId, 1, {
+  const addResult = await addItemToInventory(characterId, userId, itemDefId, 1, {
     location: 'bag',
     obtainedFrom: 'pickup',
   });

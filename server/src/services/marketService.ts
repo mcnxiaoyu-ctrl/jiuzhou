@@ -2,8 +2,8 @@ import { query } from "../config/database.js";
 import { Transactional } from "../decorators/transactional.js";
 import { moveItemInstanceToBagWithStacking } from "./inventory/index.js";
 import {
-  lockCharacterInventoryMutexTx,
-  lockCharacterInventoryMutexesTx,
+  lockCharacterInventoryMutex,
+  lockCharacterInventoryMutexes,
 } from "./inventoryMutex.js";
 import { buildEquipmentDisplayBaseAttrs } from "./equipmentGrowthRules.js";
 import {
@@ -468,7 +468,7 @@ class MarketService {
     const totalPriceSpiritStones = BigInt(unitPrice) * BigInt(qty);
     const listingFeeSilver = getListingFeeSilver(totalPriceSpiritStones);
 
-    await lockCharacterInventoryMutexTx(null, params.characterId);
+    await lockCharacterInventoryMutex(params.characterId);
 
     const itemResult = await query(
       `
@@ -637,7 +637,7 @@ class MarketService {
     if (listingId === null)
       return { success: false, message: "listingId参数错误" };
 
-    await lockCharacterInventoryMutexTx(null, params.characterId);
+    await lockCharacterInventoryMutex(params.characterId);
 
     const listingResult = await query(
       `
@@ -757,7 +757,7 @@ class MarketService {
     if (sellerCharacterIdFromMeta === params.buyerCharacterId) {
       return { success: false, message: "不能购买自己上架的物品" };
     }
-    await lockCharacterInventoryMutexesTx(null, [
+    await lockCharacterInventoryMutexes([
       params.buyerCharacterId,
       sellerCharacterIdFromMeta,
     ]);

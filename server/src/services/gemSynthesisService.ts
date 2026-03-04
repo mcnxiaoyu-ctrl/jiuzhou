@@ -1,8 +1,8 @@
-import { query, getTransactionClient } from '../config/database.js';
+import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { randomInt } from 'crypto';
-import { addItemToInventoryTx } from './inventory/index.js';
-import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
+import { addItemToInventory } from './inventory/index.js';
+import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { getCharacterComputedByCharacterId } from './characterComputedService.js';
 import {
   getEnabledItemDefinitions,
@@ -1064,10 +1064,7 @@ class GemSynthesisService {
 
     const requestedTimes = clampInt(params.times ?? 1, 1, 999999);
 
-    const client = getTransactionClient();
-    if (!client) return { success: false, message: '事务上下文缺失' };
-
-    await lockCharacterInventoryMutexTx(client, characterId);
+    await lockCharacterInventoryMutex(characterId);
 
     const wallet = await getCharacterWalletTx(characterId, true);
     if (!wallet) {
@@ -1172,7 +1169,7 @@ class GemSynthesisService {
       const produceQty = rolledOutputCounts.get(itemDefId) ?? 0;
       if (produceQty <= 0) continue;
 
-      const addRes = await addItemToInventoryTx(client, characterId, userId, itemDefId, produceQty, {
+      const addRes = await addItemToInventory(characterId, userId, itemDefId, produceQty, {
         location: 'bag',
         obtainedFrom: GEM_CONVERT_OBTAINED_FROM,
       });
@@ -1224,10 +1221,7 @@ class GemSynthesisService {
     const times = clampInt(params.times ?? 1, 1, 999999);
     if (!recipeId) return { success: false, message: 'recipeId参数错误' };
 
-    const client = getTransactionClient();
-    if (!client) return { success: false, message: '事务上下文缺失' };
-
-    await lockCharacterInventoryMutexTx(client, characterId);
+    await lockCharacterInventoryMutex(characterId);
 
     const wallet = await getCharacterWalletTx(characterId, true);
     if (!wallet) {
@@ -1286,7 +1280,7 @@ class GemSynthesisService {
     const produceQty = recipe.outputQty * successCount;
     let produced: { itemDefId: string; qty: number; itemIds: number[] } | null = null;
     if (produceQty > 0) {
-      const addRes = await addItemToInventoryTx(client, characterId, userId, recipe.outputItemDefId, produceQty, {
+      const addRes = await addItemToInventory(characterId, userId, recipe.outputItemDefId, produceQty, {
         location: 'bag',
         obtainedFrom: 'gem-synthesis',
       });
@@ -1348,10 +1342,7 @@ class GemSynthesisService {
     if (!gemType) return { success: false, message: 'gemType参数错误' };
     if (sourceLevel >= targetLevel) return { success: false, message: 'targetLevel必须大于sourceLevel' };
 
-    const client = getTransactionClient();
-    if (!client) return { success: false, message: '事务上下文缺失' };
-
-    await lockCharacterInventoryMutexTx(client, characterId);
+    await lockCharacterInventoryMutex(characterId);
 
     const wallet = await getCharacterWalletTx(characterId, true);
     if (!wallet) {
@@ -1458,7 +1449,7 @@ class GemSynthesisService {
       const produceQty = recipe.outputQty * successCount;
       let itemIds: number[] = [];
       if (produceQty > 0) {
-        const addRes = await addItemToInventoryTx(client, characterId, userId, recipe.outputItemDefId, produceQty, {
+        const addRes = await addItemToInventory(characterId, userId, recipe.outputItemDefId, produceQty, {
           location: 'bag',
           obtainedFrom: 'gem-synthesis',
         });

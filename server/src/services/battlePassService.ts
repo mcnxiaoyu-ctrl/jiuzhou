@@ -1,7 +1,7 @@
-import { query, getTransactionClient } from '../config/database.js';
+import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
-import { addItemToInventoryTx } from './inventory/index.js';
-import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
+import { addItemToInventory } from './inventory/index.js';
+import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { getBattlePassStaticConfig } from './staticConfigLoader.js';
 import { getCharacterIdByUserId as getCharacterIdByUserIdShared } from './shared/characterId.js';
 
@@ -147,7 +147,7 @@ const getFallbackBattlePassSeasonId = async (): Promise<string | null> => {
  * 纯读方法不加 @Transactional，写操作方法加 @Transactional
  *
  * 边界条件：
- * 1) claimBattlePassReward 内需要通过 getTransactionClient() 获取事务连接传给 lockCharacterInventoryMutexTx / addItemToInventoryTx
+ * 1) claimBattlePassReward 通过 @Transactional + query 自动复用事务上下文，并在发奖前获取背包互斥锁
  * 2) completeBattlePassTask 内的 FOR UPDATE 查询依赖事务上下文，由 @Transactional 保证
  */
 class BattlePassService {
@@ -425,10 +425,7 @@ class BattlePassService {
     const season = config?.season?.id === seasonId ? config.season : null;
     if (!season) return { success: false, message: '赛季配置不存在' };
 
-    // 获取事务连接，用于需要显式 client 的底层函数
-    const client = getTransactionClient()!;
-
-    await lockCharacterInventoryMutexTx(client, characterId);
+    await lockCharacterInventoryMutex(characterId);
 
     // 获取赛季配置
     const maxLevel = Number(season.max_level) || 30;
@@ -498,7 +495,7 @@ class BattlePassService {
         const itemDefId = reward.itemDefId ?? reward.item_def_id;
         const qty = Number(reward.qty) || 1;
         if (itemDefId && qty > 0) {
-          const addResult = await addItemToInventoryTx(client, characterId, userId, itemDefId, qty, {
+          const addResult = await addItemToInventory(characterId, userId, itemDefId, qty, {
             location: 'bag',
             obtainedFrom: 'battle_pass',
           });

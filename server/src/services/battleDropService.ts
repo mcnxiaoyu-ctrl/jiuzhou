@@ -7,7 +7,7 @@
  * 3. 分发物品、装备给玩家（组队按战利品条目独立ROLL点分配）
  * 4. 装备通过装备生成模块生成
  */
-import { query, getTransactionClient } from '../config/database.js';
+import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { itemService, CreateItemOptions } from './itemService.js';
 import { sendSystemMail, type MailAttachItem } from './mailService.js';
@@ -31,7 +31,7 @@ import {
   applyMonsterRealmDropQtyMultiplier,
   shouldApplyDropQuantityMultiplier,
 } from './shared/dropQuantityMultiplier.js';
-import { lockCharacterInventoryMutexesTx } from './inventoryMutex.js';
+import { lockCharacterInventoryMutexes } from './inventoryMutex.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { getRealmOrderIndex } from './shared/realmRules.js';
 
@@ -378,11 +378,6 @@ class BattleDropService {
     const pendingMailByReceiver = new Map<number, { userId: number; items: MailAttachItem[] }>();
     const collectCounts = new Map<string, { characterId: number; itemDefId: string; qty: number }>();
 
-    const client = getTransactionClient();
-    if (!client) {
-      throw new Error('Transaction client not available');
-    }
-
     const participantCharacterIds = [...new Set(
       participants
         .map((p) => Number(p.characterId))
@@ -535,8 +530,8 @@ class BattleDropService {
     if (requiresInventoryMutation && participantCharacterIds.length > 0) {
       // 统一顺序：先背包互斥锁，再角色行锁；并且把“纯计算”前置，缩短锁持有时长。
       // 这样可以减少和挂机/手动背包写请求的竞争窗口，避免 lock 等待被 statement_timeout 中断。
-      await lockCharacterInventoryMutexesTx(client, participantCharacterIds);
-      await client.query(
+      await lockCharacterInventoryMutexes(participantCharacterIds);
+      await query(
         `
           SELECT id
           FROM characters
