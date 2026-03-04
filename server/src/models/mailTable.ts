@@ -69,10 +69,11 @@ CREATE INDEX IF NOT EXISTS idx_mail_unread ON mail(recipient_character_id, read_
 CREATE INDEX IF NOT EXISTS idx_mail_unclaimed ON mail(recipient_character_id, claimed_at) WHERE claimed_at IS NULL AND deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_mail_created ON mail(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mail_expire ON mail(expire_at) WHERE expire_at IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_mail_active_char_created ON mail(recipient_character_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_mail_active_user_global_created ON mail(recipient_user_id, created_at DESC) WHERE deleted_at IS NULL AND recipient_character_id IS NULL;
 `;
 
 export const initMailTable = async (): Promise<void> => {
   await query(mailTableSQL);
   console.log('✓ 邮件表检测完成');
 };
-

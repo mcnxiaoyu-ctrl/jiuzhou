@@ -106,6 +106,25 @@ const MAIL_HAS_ATTACHMENTS_SQL = '(attach_silver > 0 OR attach_spirit_stones > 0
 
 class MailService {
   /**
+   * 生成“邮件收件人可见范围”SQL 片段。
+   *
+   * 作用：
+   * - 统一封装“角色邮件 + 账号级邮件”判定，避免同一业务规则在多个查询中重复拼接。
+   * - 通过参数位序显式传入，兼容不同 SQL 场景（例如第 1/2 位或第 2/3 位参数）。
+   *
+   * 输入/输出：
+   * - 输入：角色ID参数位序、用户ID参数位序（均为 1-based SQL 参数序号）
+   * - 输出：可直接拼接到 WHERE 的布尔表达式字符串
+   *
+   * 边界条件：
+   * 1) 仅负责条件表达式，不负责参数值有效性校验；调用方需保证传入为正整数位序。
+   * 2) 该表达式包含 `recipient_character_id IS NULL` 分支，确保账号级邮件与角色邮件互斥，不会重复命中。
+   */
+  private buildRecipientScopeSql(characterIdParamIndex: number, userIdParamIndex: number): string {
+    return `(recipient_character_id = $${characterIdParamIndex} OR (recipient_user_id = $${userIdParamIndex} AND recipient_character_id IS NULL))`;
+  }
+
+  /**
    * 估算邮件附件所需背包格子数
    * - 装备类：每个占一格
    * - 消耗品/材料：按堆叠上限计算
@@ -484,12 +503,14 @@ class MailService {
     pageSize: number = 50
   ): Promise<{ success: boolean; mails: MailDto[]; total: number; unreadCount: number; unclaimedCount: number }> {
     const offset = (page - 1) * pageSize;
+    const recipientScopeSql = this.buildRecipientScopeSql(1, 2);
+    const branchLimit = pageSize + offset;
 
     try {
       // 清理过期邮件（软删除）
       await query(`
         UPDATE mail SET deleted_at = NOW(), updated_at = NOW()
-        WHERE (recipient_character_id = $1 OR (recipient_user_id = $2 AND recipient_character_id IS NULL))
+        WHERE ${recipientScopeSql}
           AND expire_at IS NOT NULL
           AND expire_at < NOW()
           AND deleted_at IS NULL
@@ -497,16 +518,40 @@ class MailService {
 
       // 获取邮件列表
       const result = await query(`
+        WITH scoped_mail AS (
+          (
+            SELECT
+              id, sender_type, sender_name, mail_type, title, content,
+              attach_silver, attach_spirit_stones, attach_items, attach_instance_ids,
+              read_at, claimed_at, expire_at, created_at
+            FROM mail
+            WHERE recipient_character_id = $1
+              AND deleted_at IS NULL
+            ORDER BY created_at DESC
+            LIMIT $5
+          )
+          UNION ALL
+          (
+            SELECT
+              id, sender_type, sender_name, mail_type, title, content,
+              attach_silver, attach_spirit_stones, attach_items, attach_instance_ids,
+              read_at, claimed_at, expire_at, created_at
+            FROM mail
+            WHERE recipient_user_id = $2
+              AND recipient_character_id IS NULL
+              AND deleted_at IS NULL
+            ORDER BY created_at DESC
+            LIMIT $5
+          )
+        )
         SELECT
           id, sender_type, sender_name, mail_type, title, content,
           attach_silver, attach_spirit_stones, attach_items, attach_instance_ids,
           read_at, claimed_at, expire_at, created_at
-        FROM mail
-        WHERE (recipient_character_id = $1 OR (recipient_user_id = $2 AND recipient_character_id IS NULL))
-          AND deleted_at IS NULL
+        FROM scoped_mail
         ORDER BY created_at DESC
         LIMIT $3 OFFSET $4
-      `, [characterId, userId, pageSize, offset]);
+      `, [characterId, userId, pageSize, offset, branchLimit]);
 
       // 获取统计
       const statsResult = await query(`
@@ -515,7 +560,7 @@ class MailService {
           COUNT(*) FILTER (WHERE read_at IS NULL) as unread_count,
           COUNT(*) FILTER (WHERE claimed_at IS NULL AND ${MAIL_HAS_ATTACHMENTS_SQL}) as unclaimed_count
         FROM mail
-        WHERE (recipient_character_id = $1 OR (recipient_user_id = $2 AND recipient_character_id IS NULL))
+        WHERE ${recipientScopeSql}
           AND deleted_at IS NULL
       `, [characterId, userId]);
 
@@ -597,7 +642,7 @@ class MailService {
     const result = await query(`
       UPDATE mail SET read_at = COALESCE(read_at, NOW()), updated_at = NOW()
       WHERE id = $1
-        AND (recipient_character_id = $2 OR (recipient_user_id = $3 AND recipient_character_id IS NULL))
+        AND ${this.buildRecipientScopeSql(2, 3)}
         AND deleted_at IS NULL
       RETURNING id
     `, [mailId, characterId, userId]);
@@ -636,7 +681,7 @@ class MailService {
         SELECT id, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids, claimed_at, expire_at
         FROM mail
         WHERE id = $1
-          AND (recipient_character_id = $2 OR (recipient_user_id = $3 AND recipient_character_id IS NULL))
+          AND ${this.buildRecipientScopeSql(2, 3)}
           AND deleted_at IS NULL
         FOR UPDATE NOWAIT
       `, [mailId, characterId, userId]);
@@ -849,7 +894,7 @@ class MailService {
       `
       SELECT id, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids
       FROM mail
-      WHERE (recipient_character_id = $1 OR (recipient_user_id = $2 AND recipient_character_id IS NULL))
+      WHERE ${this.buildRecipientScopeSql(1, 2)}
         AND deleted_at IS NULL
         AND claimed_at IS NULL
         AND ${MAIL_HAS_ATTACHMENTS_SQL}
@@ -939,7 +984,7 @@ class MailService {
     const result = await query(`
       UPDATE mail SET deleted_at = NOW(), updated_at = NOW()
       WHERE id = $1
-        AND (recipient_character_id = $2 OR (recipient_user_id = $3 AND recipient_character_id IS NULL))
+        AND ${this.buildRecipientScopeSql(2, 3)}
         AND deleted_at IS NULL
       RETURNING id, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids
     `, [mailId, characterId, userId]);
@@ -973,7 +1018,7 @@ class MailService {
   ): Promise<{ success: boolean; message: string; deletedCount: number }> {
     let sql = `
       UPDATE mail SET deleted_at = NOW(), updated_at = NOW()
-      WHERE (recipient_character_id = $1 OR (recipient_user_id = $2 AND recipient_character_id IS NULL))
+      WHERE ${this.buildRecipientScopeSql(1, 2)}
         AND deleted_at IS NULL
     `;
 
@@ -1001,7 +1046,7 @@ class MailService {
   ): Promise<{ success: boolean; message: string; readCount: number }> {
     const result = await query(`
       UPDATE mail SET read_at = NOW(), updated_at = NOW()
-      WHERE (recipient_character_id = $1 OR (recipient_user_id = $2 AND recipient_character_id IS NULL))
+      WHERE ${this.buildRecipientScopeSql(1, 2)}
         AND deleted_at IS NULL
         AND read_at IS NULL
       RETURNING id
@@ -1028,7 +1073,7 @@ class MailService {
           COUNT(*) FILTER (WHERE read_at IS NULL) as unread_count,
           COUNT(*) FILTER (WHERE claimed_at IS NULL AND ${MAIL_HAS_ATTACHMENTS_SQL}) as unclaimed_count
         FROM mail
-        WHERE (recipient_character_id = $1 OR (recipient_user_id = $2 AND recipient_character_id IS NULL))
+        WHERE ${this.buildRecipientScopeSql(1, 2)}
           AND deleted_at IS NULL
           AND (expire_at IS NULL OR expire_at > NOW())
       `, [characterId, userId]);
