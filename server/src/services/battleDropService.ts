@@ -402,6 +402,12 @@ class BattleDropService {
       const winnerIndex = participantCount > 1 ? Math.floor(Math.random() * participantCount) : 0;
       return participants[winnerIndex]!;
     };
+    const resolveParticipantFuyuan = (participant: BattleParticipant): number => {
+      const parsed = Number(participant.fuyuan ?? 1);
+      return Number.isFinite(parsed) ? parsed : 1;
+    };
+    const teamAverageFuyuan =
+      participants.reduce((sum, participant) => sum + resolveParticipantFuyuan(participant), 0) / participantCount;
     const isDungeonBattle = options.isDungeonBattle === true;
     const baseExpAcc = new Map<number, number>();
     const baseSilverAcc = new Map<number, number>();
@@ -463,12 +469,11 @@ class BattleDropService {
       const dropPool = await this.getDropPool(monster.drop_pool_id);
       if (!dropPool) continue;
 
-      // 掉落生成仍按一次角色参数计算（福缘/境界压制），
+      // 掉落生成按“队伍平均福缘 + 一次角色境界压制”计算，
       // 但战利品归属改为“每个掉落条目按数量逐件独立ROLL点”。
       const dropRollParticipant = pickRollPointWinner();
-      const dropRollParticipantFuyuan = Number(dropRollParticipant.fuyuan ?? 1);
 
-      const drops = this.rollDrops(dropPool, dropRollParticipantFuyuan, {
+      const drops = this.rollDrops(dropPool, teamAverageFuyuan, {
         isDungeonBattle,
         monsterKind: normalizeMonsterKind(monster.kind),
         monsterRealm: monster.realm,
@@ -484,7 +489,7 @@ class BattleDropService {
             singleReceiver,
             drop,
             dropQty,
-            Number(singleReceiver.fuyuan ?? 1),
+            resolveParticipantFuyuan(singleReceiver),
           );
           continue;
         }
@@ -502,7 +507,7 @@ class BattleDropService {
           qtyByReceiver.set(receiverCharacterId, {
             receiver: rollWinner,
             qty: 1,
-            receiverFuyuan: Number(rollWinner.fuyuan ?? 1),
+            receiverFuyuan: resolveParticipantFuyuan(rollWinner),
           });
         }
 
