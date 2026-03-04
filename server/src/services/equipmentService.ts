@@ -54,8 +54,7 @@ const DEFAULT_AFFIX_COUNT_BY_QUALITY: Record<Quality, { min: number; max: number
   '地': { min: 4, max: 5 },
   '天': { min: 6, max: 6 },
 };
-const AFFIX_GEN_VERSION = 4;
-
+const AFFIX_GEN_VERSION = 5;
 const coerceQuality = (value: unknown): Quality | null => {
   if (!isQualityName(value)) return null;
   return value;

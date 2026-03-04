@@ -10,6 +10,9 @@ import { runDbMigrationOnce } from './migrationHistoryTable.js';
 import {
   normalizeGeneratedAffixModifiers,
   isRatioAttrKey,
+  buildAffixValueAndModifiers,
+  type AffixEffectType,
+  type AffixParams,
 } from '../services/shared/affixModifier.js';
 import {
   convertPercentToRating,
@@ -17,8 +20,9 @@ import {
   resolveRatingBaseAttrKey,
   toRatingAttrKey,
 } from '../services/shared/affixRating.js';
+import { QUALITY_MULTIPLIER_BY_RANK, resolveQualityRankFromName } from '../services/shared/itemQuality.js';
 import { getRealmRankOneBasedForEquipment } from '../services/shared/realmRules.js';
-import { getItemDefinitionById, getItemDefinitions } from '../services/staticConfigLoader.js';
+import { getAffixPoolDefinitions, getItemDefinitionById, getItemDefinitions } from '../services/staticConfigLoader.js';
 
 // ============================================
 // 1. 物品实例表（动态）
@@ -195,6 +199,34 @@ const parseAffixArray = (raw: unknown): unknown[] => {
   return [];
 };
 
+const CURRENT_AFFIX_GEN_VERSION = 5;
+
+const toFiniteNumber = (valueRaw: unknown): number | null => {
+  if (typeof valueRaw === 'number' && Number.isFinite(valueRaw)) return valueRaw;
+  if (typeof valueRaw === 'string') {
+    const parsed = Number(valueRaw);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
+const clampNumber = (value: number, min: number, max: number): number => {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+};
+
+const resolveAffixRollRatio = (affix: Record<string, unknown>): number | null => {
+  const rollRatioRaw = toFiniteNumber(affix.roll_ratio);
+  if (rollRatioRaw !== null) {
+    return clampNumber(rollRatioRaw, 0, 1);
+  }
+  const rollPercentRaw = toFiniteNumber(affix.roll_percent);
+  if (rollPercentRaw !== null) {
+    return clampNumber(rollPercentRaw / 100, 0, 1);
+  }
+  return null;
+};
+
 const normalizeItemInstanceAffixForModifiers = (affixRaw: unknown): {
   changed: boolean;
   normalized: unknown;
@@ -358,6 +390,97 @@ const normalizeItemInstanceAffixToRating = (
   return { changed, normalized: affix };
 };
 
+const normalizeItemInstancePercentAffixByConfigV5 = (params: {
+  affixRaw: unknown;
+  affixDefByKey: Map<string, Record<string, unknown>>;
+  attrFactor: number;
+}): {
+  changed: boolean;
+  normalized: unknown;
+  recalculated: boolean;
+} => {
+  if (!params.affixRaw || typeof params.affixRaw !== 'object') {
+    return { changed: false, normalized: params.affixRaw, recalculated: false };
+  }
+  const affix = { ...(params.affixRaw as Record<string, unknown>) };
+  const applyType = String(affix.apply_type || '').trim().toLowerCase();
+  if (applyType !== 'percent') {
+    return { changed: false, normalized: affix, recalculated: false };
+  }
+
+  const key = String(affix.key || '').trim();
+  if (!key) return { changed: false, normalized: affix, recalculated: false };
+  const affixDef = params.affixDefByKey.get(key);
+  if (!affixDef) return { changed: false, normalized: affix, recalculated: false };
+
+  const tier = Math.max(1, Math.floor(toFiniteNumber(affix.tier) ?? 1));
+  const tierRows = Array.isArray(affixDef.tiers) ? affixDef.tiers : [];
+  const tierDef = tierRows.find((tierRaw) => {
+    if (!tierRaw || typeof tierRaw !== 'object') return false;
+    const row = tierRaw as Record<string, unknown>;
+    return Math.max(1, Math.floor(toFiniteNumber(row.tier) ?? 1)) === tier;
+  });
+  if (!tierDef || typeof tierDef !== 'object') {
+    return { changed: false, normalized: affix, recalculated: false };
+  }
+
+  const tierRecord = tierDef as Record<string, unknown>;
+  const tierMin = toFiniteNumber(tierRecord.min);
+  const tierMax = toFiniteNumber(tierRecord.max);
+  if (tierMin === null || tierMax === null) {
+    return { changed: false, normalized: affix, recalculated: false };
+  }
+
+  let rollRatio = resolveAffixRollRatio(affix);
+  if (rollRatio === null) {
+    const currentValue = toFiniteNumber(affix.value);
+    if (currentValue === null) {
+      return { changed: false, normalized: affix, recalculated: false };
+    }
+    const unscaledValue =
+      Number.isFinite(params.attrFactor) && params.attrFactor > 0
+        ? currentValue / params.attrFactor
+        : currentValue;
+    const span = tierMax - tierMin;
+    rollRatio = span <= Number.EPSILON ? 1 : clampNumber((unscaledValue - tierMin) / span, 0, 1);
+  }
+
+  const sampledTierValue = tierMin + (tierMax - tierMin) * rollRatio;
+  const rawScaledValue =
+    Number.isFinite(params.attrFactor) && params.attrFactor !== 1
+      ? sampledTierValue * params.attrFactor
+      : sampledTierValue;
+  const resolved = buildAffixValueAndModifiers({
+    applyType: 'percent',
+    keyRaw: affixDef.key,
+    effectType: typeof affixDef.effect_type === 'string' ? (affixDef.effect_type as AffixEffectType) : undefined,
+    params:
+      affixDef.params && typeof affixDef.params === 'object' && !Array.isArray(affixDef.params)
+        ? (affixDef.params as AffixParams)
+        : undefined,
+    modifiersRaw: affixDef.modifiers,
+    rawScaledValue,
+  });
+  if (!resolved) return { changed: false, normalized: affix, recalculated: false };
+
+  let changed = false;
+  if (affix.value !== resolved.value) {
+    affix.value = resolved.value;
+    changed = true;
+  }
+  const nextModifiers = resolved.modifiers.map((row) => ({ attr_key: row.attr_key, value: row.value }));
+  if (JSON.stringify(affix.modifiers ?? null) !== JSON.stringify(nextModifiers)) {
+    affix.modifiers = nextModifiers;
+    changed = true;
+  }
+  if (!Number.isFinite(toFiniteNumber(affix.roll_ratio) ?? NaN)) {
+    affix.roll_ratio = rollRatio;
+    affix.roll_percent = Number((rollRatio * 100).toFixed(2));
+    changed = true;
+  }
+  return { changed, normalized: affix, recalculated: true };
+};
+
 const migrateItemInstanceAffixesToModifiers = async (): Promise<void> => {
   const result = await query(
     `
@@ -447,6 +570,111 @@ const migrateItemInstanceAffixesToRatingV3 = async (): Promise<void> => {
   console.log(`  → 词条Rating迁移完成：扫描装备=${scannedCount}，更新装备=${updatedCount}`);
 };
 
+const migrateItemInstancePercentAffixNerfV5 = async (): Promise<void> => {
+  const affixPoolById = new Map<string, Map<string, Record<string, unknown>>>();
+  for (const poolDef of getAffixPoolDefinitions()) {
+    if (poolDef.enabled === false) continue;
+    const poolId = String(poolDef.id || '').trim();
+    if (!poolId) continue;
+    const affixDefByKey = new Map<string, Record<string, unknown>>();
+    const affixRows = Array.isArray(poolDef.affixes) ? poolDef.affixes : [];
+    for (const affixRaw of affixRows) {
+      if (!affixRaw || typeof affixRaw !== 'object') continue;
+      const affix = affixRaw as Record<string, unknown>;
+      const key = String(affix.key || '').trim();
+      if (!key) continue;
+      const applyType = String(affix.apply_type || '').trim().toLowerCase();
+      if (applyType !== 'percent') continue;
+      affixDefByKey.set(key, affix);
+    }
+    affixPoolById.set(poolId, affixDefByKey);
+  }
+
+  const result = await query(
+    `
+      SELECT id, item_def_id, quality, quality_rank, affixes, affix_gen_version
+      FROM item_instance
+      WHERE affixes IS NOT NULL
+    `
+  );
+
+  let scannedCount = 0;
+  let updatedCount = 0;
+  let recalculatedAffixCount = 0;
+  let changedAffixCount = 0;
+
+  for (const row of result.rows as Array<{
+    id: string | number;
+    item_def_id: unknown;
+    quality: unknown;
+    quality_rank: unknown;
+    affixes: unknown;
+    affix_gen_version: unknown;
+  }>) {
+    const currentVersion = Number(row.affix_gen_version);
+    const needsVersionUpgrade = !Number.isFinite(currentVersion) || currentVersion < CURRENT_AFFIX_GEN_VERSION;
+    if (!needsVersionUpgrade) continue;
+
+    const affixes = parseAffixArray(row.affixes);
+    if (affixes.length <= 0) continue;
+    scannedCount += 1;
+
+    const itemDefId = String(row.item_def_id || '').trim();
+    const itemDef = getItemDefinitionById(itemDefId);
+    const poolId = String(itemDef?.affix_pool_id || '').trim();
+    const affixDefByKey = affixPoolById.get(poolId) ?? new Map<string, Record<string, unknown>>();
+
+    const defQualityRank = resolveQualityRankFromName(itemDef?.quality, 1);
+    const resolvedQualityRank = Number.isFinite(Number(row.quality_rank))
+      ? Math.max(1, Math.floor(Number(row.quality_rank)))
+      : resolveQualityRankFromName(row.quality, defQualityRank);
+    const defQualityMultiplier = QUALITY_MULTIPLIER_BY_RANK[defQualityRank] ?? 1;
+    const resolvedQualityMultiplier = QUALITY_MULTIPLIER_BY_RANK[resolvedQualityRank] ?? 1;
+    const attrFactor =
+      Number.isFinite(defQualityMultiplier) && defQualityMultiplier > 0
+        ? resolvedQualityMultiplier / defQualityMultiplier
+        : 1;
+
+    let changed = false;
+    const normalizedAffixes: unknown[] = [];
+    for (const affixRaw of affixes) {
+      const normalized = normalizeItemInstancePercentAffixByConfigV5({
+        affixRaw,
+        affixDefByKey,
+        attrFactor,
+      });
+      if (normalized.recalculated) {
+        recalculatedAffixCount += 1;
+      }
+      if (normalized.changed) {
+        changed = true;
+        changedAffixCount += 1;
+      }
+      normalizedAffixes.push(normalized.normalized);
+    }
+
+    updatedCount += 1;
+    await query(
+      `
+        UPDATE item_instance
+        SET affixes = $1::jsonb,
+            affix_gen_version = $2,
+            updated_at = NOW()
+        WHERE id = $3
+      `,
+      [
+        JSON.stringify(changed ? normalizedAffixes : affixes),
+        CURRENT_AFFIX_GEN_VERSION,
+        row.id,
+      ]
+    );
+  }
+
+  console.log(
+    `  → 百分比词条配置回溯完成：扫描装备=${scannedCount}，更新装备=${updatedCount}，重算词条=${recalculatedAffixCount}，变更词条=${changedAffixCount}`
+  );
+};
+
 const migrateTechniqueBookBindTypeForMarket = async (): Promise<void> => {
   const techniqueBookDefIds = getItemDefinitions()
     .filter((itemDef) => itemDef.enabled !== false && String(itemDef.sub_category || '').trim() === 'technique_book')
@@ -515,6 +743,12 @@ export const initItemTables = async (): Promise<void> => {
     migrationKey: 'item_instance_affixes_rating_v3',
     description: '将装备词条实例统一迁移为Rating语义（value_type=rating）',
     execute: migrateItemInstanceAffixesToRatingV3,
+  });
+
+  await runDbMigrationOnce({
+    migrationKey: 'item_instance_percent_affix_nerf_v5',
+    description: '将历史装备百分比词条数值下调75%并升级词条版本到v5',
+    execute: migrateItemInstancePercentAffixNerfV5,
   });
 
   await runDbMigrationOnce({

@@ -1222,38 +1222,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 0.006,
+              "max": 0.01,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 0.01,
+              "max": 0.016,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.056,
-              "max": 0.088,
+              "min": 0.014,
+              "max": 0.022,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.072,
-              "max": 0.112,
+              "min": 0.018,
+              "max": 0.028,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0828,
-              "max": 0.1288,
+              "min": 0.0207,
+              "max": 0.0322,
               "realm_rank_min": 7
             },
             {
               "tier": 8,
-              "min": 0.0936,
-              "max": 0.1456,
+              "min": 0.0234,
+              "max": 0.0364,
               "realm_rank_min": 8
             }
           ],
@@ -1322,38 +1322,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.024,
-              "max": 0.04,
+              "min": 0.006,
+              "max": 0.01,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.04,
-              "max": 0.064,
+              "min": 0.01,
+              "max": 0.016,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.056,
-              "max": 0.088,
+              "min": 0.014,
+              "max": 0.022,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.072,
-              "max": 0.112,
+              "min": 0.018,
+              "max": 0.028,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0828,
-              "max": 0.1288,
+              "min": 0.0207,
+              "max": 0.0322,
               "realm_rank_min": 7
             },
             {
               "tier": 8,
-              "min": 0.0936,
-              "max": 0.1456,
+              "min": 0.0234,
+              "max": 0.0364,
               "realm_rank_min": 8
             }
           ],
@@ -4098,38 +4098,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 0.004,
+              "max": 0.008,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.032,
-              "max": 0.056,
+              "min": 0.008,
+              "max": 0.014,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.048,
-              "max": 0.08,
+              "min": 0.012,
+              "max": 0.02,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.064,
-              "max": 0.104,
+              "min": 0.016,
+              "max": 0.026,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0736,
-              "max": 0.1196,
+              "min": 0.0184,
+              "max": 0.0299,
               "realm_rank_min": 7
             },
             {
               "tier": 8,
-              "min": 0.0832,
-              "max": 0.1352,
+              "min": 0.0208,
+              "max": 0.0338,
               "realm_rank_min": 8
             }
           ],
@@ -4248,38 +4248,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 0.004,
+              "max": 0.008,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.032,
-              "max": 0.056,
+              "min": 0.008,
+              "max": 0.014,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.048,
-              "max": 0.08,
+              "min": 0.012,
+              "max": 0.02,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.064,
-              "max": 0.104,
+              "min": 0.016,
+              "max": 0.026,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0736,
-              "max": 0.1196,
+              "min": 0.0184,
+              "max": 0.0299,
               "realm_rank_min": 7
             },
             {
               "tier": 8,
-              "min": 0.0832,
-              "max": 0.1352,
+              "min": 0.0208,
+              "max": 0.0338,
               "realm_rank_min": 8
             }
           ],
@@ -4348,38 +4348,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 0.004,
+              "max": 0.008,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.032,
-              "max": 0.056,
+              "min": 0.008,
+              "max": 0.014,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.048,
-              "max": 0.08,
+              "min": 0.012,
+              "max": 0.02,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.064,
-              "max": 0.104,
+              "min": 0.016,
+              "max": 0.026,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0736,
-              "max": 0.1196,
+              "min": 0.0184,
+              "max": 0.0299,
               "realm_rank_min": 7
             },
             {
               "tier": 8,
-              "min": 0.0832,
-              "max": 0.1352,
+              "min": 0.0208,
+              "max": 0.0338,
               "realm_rank_min": 8
             }
           ],
@@ -8145,38 +8145,38 @@
           "tiers": [
             {
               "tier": 3,
-              "min": 0.016,
-              "max": 0.032,
+              "min": 0.004,
+              "max": 0.008,
               "realm_rank_min": 3
             },
             {
               "tier": 4,
-              "min": 0.032,
-              "max": 0.056,
+              "min": 0.008,
+              "max": 0.014,
               "realm_rank_min": 4
             },
             {
               "tier": 5,
-              "min": 0.048,
-              "max": 0.08,
+              "min": 0.012,
+              "max": 0.02,
               "realm_rank_min": 5
             },
             {
               "tier": 6,
-              "min": 0.064,
-              "max": 0.104,
+              "min": 0.016,
+              "max": 0.026,
               "realm_rank_min": 6
             },
             {
               "tier": 7,
-              "min": 0.0736,
-              "max": 0.1196,
+              "min": 0.0184,
+              "max": 0.0299,
               "realm_rank_min": 7
             },
             {
               "tier": 8,
-              "min": 0.0832,
-              "max": 0.1352,
+              "min": 0.0208,
+              "max": 0.0338,
               "realm_rank_min": 8
             }
           ],
