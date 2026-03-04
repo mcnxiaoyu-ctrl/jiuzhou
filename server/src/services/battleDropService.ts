@@ -4,7 +4,7 @@
  * 功能：
  * 1. 从掉落池计算掉落物品
  * 2. 分发经验、银两给玩家（组队平分）
- * 3. 分发物品、装备给玩家（组队随机分配）
+ * 3. 分发物品、装备给玩家（组队按战利品条目独立ROLL点分配）
  * 4. 装备通过装备生成模块生成
  */
 import { query, getTransactionClient } from '../config/database.js';
@@ -398,6 +398,10 @@ class BattleDropService {
     };
 
     const participantCount = participants.length;
+    const pickRollPointWinner = (): BattleParticipant => {
+      const winnerIndex = participantCount > 1 ? Math.floor(Math.random() * participantCount) : 0;
+      return participants[winnerIndex]!;
+    };
     const isDungeonBattle = options.isDungeonBattle === true;
     const baseExpAcc = new Map<number, number>();
     const baseSilverAcc = new Map<number, number>();
@@ -429,6 +433,29 @@ class BattleDropService {
       string,
       { receiver: BattleParticipant; drop: DropResult; receiverFuyuan: number }
     >();
+    const appendMergedDropByReceiver = (
+      receiver: BattleParticipant,
+      drop: DropResult,
+      quantity: number,
+      receiverFuyuan: number,
+    ): void => {
+      const normalizedQty = Math.max(0, Math.floor(quantity));
+      if (normalizedQty <= 0) return;
+      const key = `${receiver.characterId}|${drop.itemDefId}|${drop.bindType}|${stableQualityWeightsKey(drop.qualityWeights)}`;
+      const existing = mergedDropsByReceiver.get(key);
+      if (existing) {
+        existing.drop.quantity += normalizedQty;
+      } else {
+        mergedDropsByReceiver.set(key, {
+          receiver,
+          receiverFuyuan,
+          drop: {
+            ...drop,
+            quantity: normalizedQty,
+          },
+        });
+      }
+    };
 
     for (const monster of monsters) {
       if (!monster.drop_pool_id) continue;
@@ -436,23 +463,56 @@ class BattleDropService {
       const dropPool = await this.getDropPool(monster.drop_pool_id);
       if (!dropPool) continue;
 
-      const receiverIndex = participantCount > 1 ? Math.floor(Math.random() * participantCount) : 0;
-      const receiver = participants[receiverIndex];
-      const receiverFuyuan = Number(receiver.fuyuan ?? 1);
+      // 掉落生成仍按一次角色参数计算（福缘/境界压制），
+      // 但战利品归属改为“每个掉落条目按数量逐件独立ROLL点”。
+      const dropRollParticipant = pickRollPointWinner();
+      const dropRollParticipantFuyuan = Number(dropRollParticipant.fuyuan ?? 1);
 
-      const drops = this.rollDrops(dropPool, receiverFuyuan, {
+      const drops = this.rollDrops(dropPool, dropRollParticipantFuyuan, {
         isDungeonBattle,
         monsterKind: normalizeMonsterKind(monster.kind),
         monsterRealm: monster.realm,
-        playerRealm: receiver.realm,
+        playerRealm: dropRollParticipant.realm,
       });
       for (const drop of drops) {
-        const key = `${receiver.characterId}|${drop.itemDefId}|${drop.bindType}|${stableQualityWeightsKey(drop.qualityWeights)}`;
-        const existing = mergedDropsByReceiver.get(key);
-        if (existing) {
-          existing.drop.quantity += drop.quantity;
-        } else {
-          mergedDropsByReceiver.set(key, { receiver, drop: { ...drop }, receiverFuyuan });
+        const dropQty = Math.max(0, Math.floor(Number(drop.quantity) || 0));
+        if (dropQty <= 0) continue;
+
+        if (participantCount <= 1) {
+          const singleReceiver = participants[0]!;
+          appendMergedDropByReceiver(
+            singleReceiver,
+            drop,
+            dropQty,
+            Number(singleReceiver.fuyuan ?? 1),
+          );
+          continue;
+        }
+
+        const qtyByReceiver = new Map<number, { receiver: BattleParticipant; qty: number; receiverFuyuan: number }>();
+        for (let i = 0; i < dropQty; i++) {
+          const rollWinner = pickRollPointWinner();
+          const receiverCharacterId = Number(rollWinner.characterId);
+          if (!Number.isInteger(receiverCharacterId) || receiverCharacterId <= 0) continue;
+          const existing = qtyByReceiver.get(receiverCharacterId);
+          if (existing) {
+            existing.qty += 1;
+            continue;
+          }
+          qtyByReceiver.set(receiverCharacterId, {
+            receiver: rollWinner,
+            qty: 1,
+            receiverFuyuan: Number(rollWinner.fuyuan ?? 1),
+          });
+        }
+
+        for (const allocation of qtyByReceiver.values()) {
+          appendMergedDropByReceiver(
+            allocation.receiver,
+            drop,
+            allocation.qty,
+            allocation.receiverFuyuan,
+          );
         }
       }
     }
@@ -503,7 +563,7 @@ class BattleDropService {
       totalSilver += silverGain;
     }
     
-    // 4. 分发物品（组队随机分配，单人全部获得）
+    // 4. 分发物品（组队按“每个战利品条目独立ROLL点”分配，单人全部获得）
     const allItems: DistributeResult['rewards']['items'] = [];
     const itemMetaCache = new Map<
       string,
