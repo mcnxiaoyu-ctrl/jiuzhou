@@ -2360,7 +2360,7 @@
       "bind_type": "none",
       "tradeable": true,
       "icon": "/assets/items/Props-baodai-2.png",
-      "description": "打开后可随机获得1个4~6级宝石。",
+      "description": "打开后可随机获得1个3~5级宝石。",
       "long_desc": "用于还虚阶段构筑强化，产出区间高于养神宝石袋。",
       "tags": [
         "宝箱",
@@ -2376,8 +2376,8 @@
           "effect_type": "loot",
           "params": {
             "loot_type": "random_gem",
-            "min_level": 4,
-            "max_level": 6,
+            "min_level": 3,
+            "max_level": 5,
             "gems_per_use": 1
           }
         }
