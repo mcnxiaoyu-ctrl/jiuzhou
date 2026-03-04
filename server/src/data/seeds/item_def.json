@@ -2253,7 +2253,7 @@
       "stack_max": 999,
       "bind_type": "none",
       "tradeable": true,
-      "icon": "/assets/items/kuangshi_jinghua.png",
+      "icon": "/assets/items/xuling-jinghua.png",
       "description": "虚灵神殿核心析出的高纯神识灵质，常用于养神期装备锻铸。",
       "long_desc": "该精华兼具神识共振与承压性，是养神期套装部件与法宝的关键底材。",
       "tags": [
