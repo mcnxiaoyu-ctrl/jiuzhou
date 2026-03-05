@@ -69,7 +69,6 @@ type MonsterRow = {
   attr_variance: unknown;
   attr_multiplier_min: unknown;
   attr_multiplier_max: unknown;
-  display_stats: unknown;
   drop_pool_id: string | null;
 };
 
@@ -107,20 +106,6 @@ type EquippedRow = {
 type EquippedTechniqueRow = {
   technique_id: string | null;
   current_layer: number | null;
-};
-
-const asStatList = (value: unknown): Array<{ label: string; value: string | number }> | undefined => {
-  if (!value) return undefined;
-  if (Array.isArray(value)) return value as Array<{ label: string; value: string | number }>;
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      return Array.isArray(parsed) ? (parsed as Array<{ label: string; value: string | number }>) : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
 };
 
 const attrLabelMap: Record<string, string> = {
@@ -246,10 +231,9 @@ const asNumber = (value: unknown): number | undefined => {
 
 const buildMonsterStats = (
   baseAttrs: Record<string, number> | undefined,
-  fallback: Array<{ label: string; value: string | number }> | undefined,
 ) => {
   const attrs = baseAttrs ?? {};
-  if (Object.keys(attrs).length === 0) return fallback;
+  if (Object.keys(attrs).length === 0) return [];
 
   const knownKeys = Object.keys(attrLabelMap);
   const used = new Set<string>();
@@ -431,7 +415,7 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
       ? await getDropsByPoolId(monster.drop_pool_id, { isDungeonBattle: false, monsterKind, monsterRealm: monster.realm })
       : [];
     const baseAttrs = asNumberRecord(monster.base_attrs);
-    const stats = buildMonsterStats(baseAttrs, asStatList(monster.display_stats)) ?? [];
+    const stats = buildMonsterStats(baseAttrs);
     const variance = asNumber(monster.attr_variance);
     const multMin = asNumber(monster.attr_multiplier_min);
     const multMax = asNumber(monster.attr_multiplier_max);

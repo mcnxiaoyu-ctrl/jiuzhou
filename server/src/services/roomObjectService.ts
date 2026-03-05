@@ -103,7 +103,6 @@ type MonsterLiteRow = {
   attr_variance: unknown;
   attr_multiplier_min: unknown;
   attr_multiplier_max: unknown;
-  display_stats: unknown;
 };
 
 type ItemLiteRow = {
@@ -112,20 +111,6 @@ type ItemLiteRow = {
   quality: string | null;
   icon: string | null;
   description: string | null;
-};
-
-const asStatList = (value: unknown): Array<{ label: string; value: string | number }> | undefined => {
-  if (!value) return undefined;
-  if (Array.isArray(value)) return value as Array<{ label: string; value: string | number }>;
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      return Array.isArray(parsed) ? (parsed as Array<{ label: string; value: string | number }>) : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
 };
 
 const asNumberRecord = (value: unknown): Record<string, number> | undefined => {
@@ -193,7 +178,6 @@ const getMonsterLiteByIds = async (ids: string[]): Promise<Map<string, MonsterLi
       attr_variance: entry.attr_variance ?? null,
       attr_multiplier_min: entry.attr_multiplier_min ?? null,
       attr_multiplier_max: entry.attr_multiplier_max ?? null,
-      display_stats: entry.display_stats ?? null,
     } satisfies MonsterLiteRow));
   return new Map(rows.map((row) => [row.id, row]));
 };
@@ -684,7 +668,6 @@ const getRoomObjectsImpl = async (mapId: string, roomId: string, excludeUserId?:
       attr_variance: asNumber(def.attr_variance),
       attr_multiplier_min: asNumber(def.attr_multiplier_min),
       attr_multiplier_max: asNumber(def.attr_multiplier_max),
-      stats: asStatList(def.display_stats),
     });
   }
 
@@ -978,7 +961,6 @@ const getAreaObjectsImpl = async (area: GridPosition): Promise<MapObjectDto[]> =
       attr_variance: asNumber(m.attr_variance),
       attr_multiplier_min: asNumber(m.attr_multiplier_min),
       attr_multiplier_max: asNumber(m.attr_multiplier_max),
-      stats: asStatList(m.display_stats),
     });
   }
 

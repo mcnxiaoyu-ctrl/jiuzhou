@@ -30,28 +30,6 @@
       "attr_variance": 0.05,
       "attr_multiplier_min": 0.95,
       "attr_multiplier_max": 1.1,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 1
-        },
-        {
-          "label": "气血",
-          "value": 60
-        },
-        {
-          "label": "物攻",
-          "value": 5
-        },
-        {
-          "label": "物防",
-          "value": 2
-        },
-        {
-          "label": "速度",
-          "value": 4
-        }
-      ],
       "ai_profile": {
         "skills": []
       },
@@ -89,28 +67,6 @@
       "attr_variance": 0.05,
       "attr_multiplier_min": 1.05,
       "attr_multiplier_max": 1.2,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 2
-        },
-        {
-          "label": "气血",
-          "value": 110
-        },
-        {
-          "label": "物攻",
-          "value": 10
-        },
-        {
-          "label": "物防",
-          "value": 6
-        },
-        {
-          "label": "速度",
-          "value": 3
-        }
-      ],
       "ai_profile": {
         "skills": []
       },
@@ -148,28 +104,6 @@
       "attr_variance": 0.05,
       "attr_multiplier_min": 1.08,
       "attr_multiplier_max": 1.25,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 3
-        },
-        {
-          "label": "气血",
-          "value": 170
-        },
-        {
-          "label": "物攻",
-          "value": 15
-        },
-        {
-          "label": "物防",
-          "value": 7
-        },
-        {
-          "label": "速度",
-          "value": 5
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-bite"
@@ -209,28 +143,6 @@
       "attr_variance": 0.05,
       "attr_multiplier_min": 1.12,
       "attr_multiplier_max": 1.3,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 5
-        },
-        {
-          "label": "气血",
-          "value": 260
-        },
-        {
-          "label": "物攻",
-          "value": 22
-        },
-        {
-          "label": "物防",
-          "value": 10
-        },
-        {
-          "label": "速度",
-          "value": 6
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-bite",
@@ -271,28 +183,6 @@
       "attr_variance": 0.05,
       "attr_multiplier_min": 1.1,
       "attr_multiplier_max": 1.28,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 4
-        },
-        {
-          "label": "气血",
-          "value": 140
-        },
-        {
-          "label": "物攻",
-          "value": 16
-        },
-        {
-          "label": "物防",
-          "value": 5
-        },
-        {
-          "label": "速度",
-          "value": 7
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-poison-bite"
@@ -332,28 +222,6 @@
       "attr_variance": 0.05,
       "attr_multiplier_min": 1.1,
       "attr_multiplier_max": 1.3,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 6
-        },
-        {
-          "label": "气血",
-          "value": 340
-        },
-        {
-          "label": "物攻",
-          "value": 24
-        },
-        {
-          "label": "物防",
-          "value": 20
-        },
-        {
-          "label": "速度",
-          "value": 2
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-stone-smash"
@@ -393,28 +261,6 @@
       "attr_variance": 0.03,
       "attr_multiplier_min": 1.15,
       "attr_multiplier_max": 1.35,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 8
-        },
-        {
-          "label": "气血",
-          "value": 500
-        },
-        {
-          "label": "物攻",
-          "value": 40
-        },
-        {
-          "label": "物防",
-          "value": 22
-        },
-        {
-          "label": "速度",
-          "value": 8
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-bite",
@@ -462,28 +308,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.15,
       "attr_multiplier_max": 1.35,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 10
-        },
-        {
-          "label": "气血",
-          "value": 2000
-        },
-        {
-          "label": "法攻",
-          "value": 50
-        },
-        {
-          "label": "物防",
-          "value": 30
-        },
-        {
-          "label": "法防",
-          "value": 40
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-vine-whip",
@@ -556,28 +380,6 @@
       "attr_variance": 0.04,
       "attr_multiplier_min": 1.1,
       "attr_multiplier_max": 1.28,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 6
-        },
-        {
-          "label": "气血",
-          "value": 320
-        },
-        {
-          "label": "物攻",
-          "value": 28
-        },
-        {
-          "label": "物防",
-          "value": 12
-        },
-        {
-          "label": "速度",
-          "value": 6
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-bite"
@@ -617,28 +419,6 @@
       "attr_variance": 0.04,
       "attr_multiplier_min": 1.12,
       "attr_multiplier_max": 1.3,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 7
-        },
-        {
-          "label": "气血",
-          "value": 300
-        },
-        {
-          "label": "法攻",
-          "value": 18
-        },
-        {
-          "label": "法防",
-          "value": 16
-        },
-        {
-          "label": "速度",
-          "value": 8
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-poison-bite"
@@ -678,28 +458,6 @@
       "attr_variance": 0.03,
       "attr_multiplier_min": 1.12,
       "attr_multiplier_max": 1.32,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 8
-        },
-        {
-          "label": "气血",
-          "value": 560
-        },
-        {
-          "label": "物攻",
-          "value": 34
-        },
-        {
-          "label": "物防",
-          "value": 30
-        },
-        {
-          "label": "速度",
-          "value": 2
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-stone-smash"
@@ -739,28 +497,6 @@
       "attr_variance": 0.03,
       "attr_multiplier_min": 1.14,
       "attr_multiplier_max": 1.35,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 9
-        },
-        {
-          "label": "气血",
-          "value": 460
-        },
-        {
-          "label": "物攻",
-          "value": 38
-        },
-        {
-          "label": "物防",
-          "value": 18
-        },
-        {
-          "label": "速度",
-          "value": 10
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-bite",
@@ -801,28 +537,6 @@
       "attr_variance": 0.02,
       "attr_multiplier_min": 1.18,
       "attr_multiplier_max": 1.4,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 11
-        },
-        {
-          "label": "气血",
-          "value": 980
-        },
-        {
-          "label": "物攻",
-          "value": 66
-        },
-        {
-          "label": "物防",
-          "value": 36
-        },
-        {
-          "label": "速度",
-          "value": 11
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-bite",
@@ -870,28 +584,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.2,
       "attr_multiplier_max": 1.45,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 12
-        },
-        {
-          "label": "气血",
-          "value": 2800
-        },
-        {
-          "label": "法攻",
-          "value": 72
-        },
-        {
-          "label": "物防",
-          "value": 44
-        },
-        {
-          "label": "法防",
-          "value": 56
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-vine-whip",
@@ -965,28 +657,6 @@
       "attr_variance": 0.06,
       "attr_multiplier_min": 1.08,
       "attr_multiplier_max": 1.24,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 26
-        },
-        {
-          "label": "气血",
-          "value": 3200
-        },
-        {
-          "label": "物攻",
-          "value": 118
-        },
-        {
-          "label": "物防",
-          "value": 94
-        },
-        {
-          "label": "法防",
-          "value": 78
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-stone-smash",
@@ -1032,28 +702,6 @@
       "attr_variance": 0.08,
       "attr_multiplier_min": 1.06,
       "attr_multiplier_max": 1.22,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 26
-        },
-        {
-          "label": "气血",
-          "value": 2900
-        },
-        {
-          "label": "法攻",
-          "value": 128
-        },
-        {
-          "label": "物防",
-          "value": 76
-        },
-        {
-          "label": "法防",
-          "value": 90
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-shadow-claw",
@@ -1099,28 +747,6 @@
       "attr_variance": 0.1,
       "attr_multiplier_min": 1.04,
       "attr_multiplier_max": 1.2,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 25
-        },
-        {
-          "label": "气血",
-          "value": 2600
-        },
-        {
-          "label": "物攻",
-          "value": 126
-        },
-        {
-          "label": "物防",
-          "value": 68
-        },
-        {
-          "label": "法防",
-          "value": 66
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-poison-bite",
@@ -1166,28 +792,6 @@
       "attr_variance": 0.07,
       "attr_multiplier_min": 1.06,
       "attr_multiplier_max": 1.24,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 27
-        },
-        {
-          "label": "气血",
-          "value": 3000
-        },
-        {
-          "label": "法攻",
-          "value": 132
-        },
-        {
-          "label": "物防",
-          "value": 82
-        },
-        {
-          "label": "法防",
-          "value": 86
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-tide-spike",
@@ -1233,28 +837,6 @@
       "attr_variance": 0.08,
       "attr_multiplier_min": 1.08,
       "attr_multiplier_max": 1.26,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 27
-        },
-        {
-          "label": "气血",
-          "value": 3400
-        },
-        {
-          "label": "双攻",
-          "value": 136
-        },
-        {
-          "label": "物防",
-          "value": 88
-        },
-        {
-          "label": "法防",
-          "value": 88
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-xinmo-thorn",
@@ -1300,28 +882,6 @@
       "attr_variance": 0.06,
       "attr_multiplier_min": 1.1,
       "attr_multiplier_max": 1.28,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 27
-        },
-        {
-          "label": "气血",
-          "value": 3600
-        },
-        {
-          "label": "物攻",
-          "value": 142
-        },
-        {
-          "label": "物防",
-          "value": 96
-        },
-        {
-          "label": "法防",
-          "value": 82
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-crystal-bash",
@@ -1367,28 +927,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.22,
       "attr_multiplier_max": 1.42,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 28
-        },
-        {
-          "label": "气血",
-          "value": 9200
-        },
-        {
-          "label": "双攻",
-          "value": 188
-        },
-        {
-          "label": "物防",
-          "value": 128
-        },
-        {
-          "label": "法防",
-          "value": 132
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-youming-slash",
@@ -1436,28 +974,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.2,
       "attr_multiplier_max": 1.44,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 28
-        },
-        {
-          "label": "气血",
-          "value": 9800
-        },
-        {
-          "label": "物攻",
-          "value": 204
-        },
-        {
-          "label": "物防",
-          "value": 146
-        },
-        {
-          "label": "法防",
-          "value": 124
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-crystal-bash",
@@ -1505,28 +1021,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.28,
       "attr_multiplier_max": 1.56,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 30
-        },
-        {
-          "label": "气血",
-          "value": 22800
-        },
-        {
-          "label": "双攻",
-          "value": 318
-        },
-        {
-          "label": "物防",
-          "value": 198
-        },
-        {
-          "label": "法防",
-          "value": 205
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-xinmo-pierce",
@@ -1600,28 +1094,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.3,
       "attr_multiplier_max": 1.58,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 30
-        },
-        {
-          "label": "气血",
-          "value": 24500
-        },
-        {
-          "label": "物攻",
-          "value": 332
-        },
-        {
-          "label": "物防",
-          "value": 228
-        },
-        {
-          "label": "法防",
-          "value": 188
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-earth-crush",
@@ -1705,28 +1177,6 @@
       "attr_variance": 0.07,
       "attr_multiplier_min": 1.08,
       "attr_multiplier_max": 1.28,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 28
-        },
-        {
-          "label": "气血",
-          "value": 3380
-        },
-        {
-          "label": "物攻",
-          "value": 138
-        },
-        {
-          "label": "法攻",
-          "value": 122
-        },
-        {
-          "label": "速度",
-          "value": 8
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-tide-spike",
@@ -1772,28 +1222,6 @@
       "attr_variance": 0.08,
       "attr_multiplier_min": 1.08,
       "attr_multiplier_max": 1.26,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 28
-        },
-        {
-          "label": "气血",
-          "value": 3200
-        },
-        {
-          "label": "法攻",
-          "value": 142
-        },
-        {
-          "label": "物防",
-          "value": 84
-        },
-        {
-          "label": "法防",
-          "value": 96
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-shadow-claw",
@@ -1839,28 +1267,6 @@
       "attr_variance": 0.06,
       "attr_multiplier_min": 1.1,
       "attr_multiplier_max": 1.3,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 28
-        },
-        {
-          "label": "气血",
-          "value": 3820
-        },
-        {
-          "label": "物攻",
-          "value": 148
-        },
-        {
-          "label": "物防",
-          "value": 104
-        },
-        {
-          "label": "法防",
-          "value": 88
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-crystal-bash",
@@ -1906,28 +1312,6 @@
       "attr_variance": 0.08,
       "attr_multiplier_min": 1.08,
       "attr_multiplier_max": 1.28,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 28
-        },
-        {
-          "label": "气血",
-          "value": 3560
-        },
-        {
-          "label": "双攻",
-          "value": 146
-        },
-        {
-          "label": "物防",
-          "value": 90
-        },
-        {
-          "label": "法防",
-          "value": 92
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-xinmo-thorn",
@@ -1973,28 +1357,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.24,
       "attr_multiplier_max": 1.46,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 29
-        },
-        {
-          "label": "气血",
-          "value": 10200
-        },
-        {
-          "label": "双攻",
-          "value": 212
-        },
-        {
-          "label": "物防",
-          "value": 138
-        },
-        {
-          "label": "法防",
-          "value": 142
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-youming-slash",
@@ -2042,28 +1404,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.22,
       "attr_multiplier_max": 1.46,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 29
-        },
-        {
-          "label": "气血",
-          "value": 10900
-        },
-        {
-          "label": "物攻",
-          "value": 226
-        },
-        {
-          "label": "物防",
-          "value": 152
-        },
-        {
-          "label": "法防",
-          "value": 132
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-crystal-bash",
@@ -2111,28 +1451,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.32,
       "attr_multiplier_max": 1.6,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 31
-        },
-        {
-          "label": "气血",
-          "value": 26200
-        },
-        {
-          "label": "物攻",
-          "value": 346
-        },
-        {
-          "label": "物防",
-          "value": 236
-        },
-        {
-          "label": "法防",
-          "value": 196
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-earth-crush",
@@ -2216,28 +1534,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.3,
       "attr_multiplier_max": 1.58,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 31
-        },
-        {
-          "label": "气血",
-          "value": 24400
-        },
-        {
-          "label": "双攻",
-          "value": 336
-        },
-        {
-          "label": "物防",
-          "value": 206
-        },
-        {
-          "label": "法防",
-          "value": 214
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-xinmo-pierce",
@@ -2311,28 +1607,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1,
       "attr_multiplier_max": 1,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 9
-        },
-        {
-          "label": "气血",
-          "value": 560
-        },
-        {
-          "label": "法攻",
-          "value": 42
-        },
-        {
-          "label": "物防",
-          "value": 18
-        },
-        {
-          "label": "法防",
-          "value": 24
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-vine-whip"
@@ -2375,28 +1649,6 @@
       "attr_variance": 0.08,
       "attr_multiplier_min": 1.1,
       "attr_multiplier_max": 1.3,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 32
-        },
-        {
-          "label": "气血",
-          "value": 4200
-        },
-        {
-          "label": "物攻",
-          "value": 168
-        },
-        {
-          "label": "物防",
-          "value": 108
-        },
-        {
-          "label": "法防",
-          "value": 98
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-poison-bite",
@@ -2442,28 +1694,6 @@
       "attr_variance": 0.08,
       "attr_multiplier_min": 1.1,
       "attr_multiplier_max": 1.32,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 33
-        },
-        {
-          "label": "气血",
-          "value": 3980
-        },
-        {
-          "label": "法攻",
-          "value": 176
-        },
-        {
-          "label": "物防",
-          "value": 96
-        },
-        {
-          "label": "法防",
-          "value": 110
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-shadow-claw",
@@ -2509,28 +1739,6 @@
       "attr_variance": 0.07,
       "attr_multiplier_min": 1.1,
       "attr_multiplier_max": 1.3,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 33
-        },
-        {
-          "label": "气血",
-          "value": 4060
-        },
-        {
-          "label": "物攻",
-          "value": 174
-        },
-        {
-          "label": "物防",
-          "value": 102
-        },
-        {
-          "label": "法防",
-          "value": 102
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-poison-bite",
@@ -2576,28 +1784,6 @@
       "attr_variance": 0.08,
       "attr_multiplier_min": 1.12,
       "attr_multiplier_max": 1.34,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 34
-        },
-        {
-          "label": "气血",
-          "value": 4300
-        },
-        {
-          "label": "双攻",
-          "value": 168
-        },
-        {
-          "label": "物防",
-          "value": 110
-        },
-        {
-          "label": "法防",
-          "value": 112
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-xinmo-thorn",
@@ -2643,28 +1829,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.26,
       "attr_multiplier_max": 1.5,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 35
-        },
-        {
-          "label": "气血",
-          "value": 12800
-        },
-        {
-          "label": "物攻",
-          "value": 248
-        },
-        {
-          "label": "物防",
-          "value": 166
-        },
-        {
-          "label": "法防",
-          "value": 142
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-crystal-bash",
@@ -2712,28 +1876,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.26,
       "attr_multiplier_max": 1.52,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 36
-        },
-        {
-          "label": "气血",
-          "value": 12200
-        },
-        {
-          "label": "双攻",
-          "value": 238
-        },
-        {
-          "label": "物防",
-          "value": 152
-        },
-        {
-          "label": "法防",
-          "value": 158
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-youming-slash",
@@ -2781,28 +1923,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.34,
       "attr_multiplier_max": 1.64,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 37
-        },
-        {
-          "label": "气血",
-          "value": 29800
-        },
-        {
-          "label": "双攻",
-          "value": 388
-        },
-        {
-          "label": "物防",
-          "value": 262
-        },
-        {
-          "label": "法防",
-          "value": 228
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-earth-crush",
@@ -2876,28 +1996,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.34,
       "attr_multiplier_max": 1.64,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 37
-        },
-        {
-          "label": "气血",
-          "value": 29800
-        },
-        {
-          "label": "双攻",
-          "value": 388
-        },
-        {
-          "label": "物防",
-          "value": 262
-        },
-        {
-          "label": "法防",
-          "value": 228
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-rift-crush",
@@ -2971,28 +2069,6 @@
       "attr_variance": 0.07,
       "attr_multiplier_min": 1.14,
       "attr_multiplier_max": 1.38,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 39
-        },
-        {
-          "label": "气血",
-          "value": 5060
-        },
-        {
-          "label": "物攻",
-          "value": 208
-        },
-        {
-          "label": "物防",
-          "value": 132
-        },
-        {
-          "label": "法防",
-          "value": 124
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-crystal-bash",
@@ -3038,28 +2114,6 @@
       "attr_variance": 0.08,
       "attr_multiplier_min": 1.14,
       "attr_multiplier_max": 1.4,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 40
-        },
-        {
-          "label": "气血",
-          "value": 4820
-        },
-        {
-          "label": "法攻",
-          "value": 226
-        },
-        {
-          "label": "物防",
-          "value": 122
-        },
-        {
-          "label": "法防",
-          "value": 138
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-xinmo-thorn",
@@ -3105,28 +2159,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.3,
       "attr_multiplier_max": 1.56,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 41
-        },
-        {
-          "label": "气血",
-          "value": 14500
-        },
-        {
-          "label": "双攻",
-          "value": 278
-        },
-        {
-          "label": "物防",
-          "value": 182
-        },
-        {
-          "label": "法防",
-          "value": 176
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-youming-slash",
@@ -3174,28 +2206,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.3,
       "attr_multiplier_max": 1.58,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 42
-        },
-        {
-          "label": "气血",
-          "value": 15200
-        },
-        {
-          "label": "双攻",
-          "value": 286
-        },
-        {
-          "label": "物防",
-          "value": 188
-        },
-        {
-          "label": "法防",
-          "value": 184
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-xinmo-pierce",
@@ -3243,28 +2253,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.38,
       "attr_multiplier_max": 1.7,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 43
-        },
-        {
-          "label": "气血",
-          "value": 35600
-        },
-        {
-          "label": "双攻",
-          "value": 442
-        },
-        {
-          "label": "物防",
-          "value": 298
-        },
-        {
-          "label": "法防",
-          "value": 286
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-xinmo-pierce",
@@ -3341,28 +2329,6 @@
       "attr_variance": 0.07,
       "attr_multiplier_min": 1.18,
       "attr_multiplier_max": 1.44,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 45
-        },
-        {
-          "label": "气血",
-          "value": 7800
-        },
-        {
-          "label": "物攻",
-          "value": 290
-        },
-        {
-          "label": "物防",
-          "value": 184
-        },
-        {
-          "label": "法防",
-          "value": 172
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-void-slash",
@@ -3408,28 +2374,6 @@
       "attr_variance": 0.07,
       "attr_multiplier_min": 1.16,
       "attr_multiplier_max": 1.42,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 46
-        },
-        {
-          "label": "气血",
-          "value": 6400
-        },
-        {
-          "label": "法攻",
-          "value": 268
-        },
-        {
-          "label": "物防",
-          "value": 148
-        },
-        {
-          "label": "法防",
-          "value": 192
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-soul-bolt",
@@ -3475,28 +2419,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.34,
       "attr_multiplier_max": 1.62,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 47
-        },
-        {
-          "label": "气血",
-          "value": 20200
-        },
-        {
-          "label": "双攻",
-          "value": 388
-        },
-        {
-          "label": "物防",
-          "value": 254
-        },
-        {
-          "label": "法防",
-          "value": 246
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-realm-crush",
@@ -3544,28 +2466,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.36,
       "attr_multiplier_max": 1.66,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 48
-        },
-        {
-          "label": "气血",
-          "value": 21800
-        },
-        {
-          "label": "双攻",
-          "value": 396
-        },
-        {
-          "label": "物防",
-          "value": 262
-        },
-        {
-          "label": "法防",
-          "value": 252
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-void-pierce",
@@ -3613,28 +2513,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.42,
       "attr_multiplier_max": 1.78,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 50
-        },
-        {
-          "label": "气血",
-          "value": 52000
-        },
-        {
-          "label": "双攻",
-          "value": 618
-        },
-        {
-          "label": "物防",
-          "value": 416
-        },
-        {
-          "label": "法防",
-          "value": 398
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-void-pierce",
@@ -3711,28 +2589,6 @@
       "attr_variance": 0.07,
       "attr_multiplier_min": 1.2,
       "attr_multiplier_max": 1.46,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 51
-        },
-        {
-          "label": "气血",
-          "value": 8400
-        },
-        {
-          "label": "物攻",
-          "value": 328
-        },
-        {
-          "label": "物防",
-          "value": 210
-        },
-        {
-          "label": "法防",
-          "value": 196
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-void-slash",
@@ -3778,28 +2634,6 @@
       "attr_variance": 0.07,
       "attr_multiplier_min": 1.18,
       "attr_multiplier_max": 1.44,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 52
-        },
-        {
-          "label": "气血",
-          "value": 7600
-        },
-        {
-          "label": "法攻",
-          "value": 306
-        },
-        {
-          "label": "物防",
-          "value": 188
-        },
-        {
-          "label": "法防",
-          "value": 214
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-soul-bolt",
@@ -3845,28 +2679,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.38,
       "attr_multiplier_max": 1.68,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 53
-        },
-        {
-          "label": "气血",
-          "value": 23200
-        },
-        {
-          "label": "双攻",
-          "value": 446
-        },
-        {
-          "label": "物防",
-          "value": 296
-        },
-        {
-          "label": "法防",
-          "value": 282
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-realm-crush",
@@ -3914,28 +2726,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.4,
       "attr_multiplier_max": 1.7,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 54
-        },
-        {
-          "label": "气血",
-          "value": 24400
-        },
-        {
-          "label": "双攻",
-          "value": 452
-        },
-        {
-          "label": "物防",
-          "value": 304
-        },
-        {
-          "label": "法防",
-          "value": 292
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-void-pierce",
@@ -3983,28 +2773,6 @@
       "attr_variance": 0,
       "attr_multiplier_min": 1.46,
       "attr_multiplier_max": 1.84,
-      "display_stats": [
-        {
-          "label": "等级",
-          "value": 56
-        },
-        {
-          "label": "气血",
-          "value": 59800
-        },
-        {
-          "label": "双攻",
-          "value": 704
-        },
-        {
-          "label": "物防",
-          "value": 476
-        },
-        {
-          "label": "法防",
-          "value": 456
-        }
-      ],
       "ai_profile": {
         "skills": [
           "sk-void-pierce",

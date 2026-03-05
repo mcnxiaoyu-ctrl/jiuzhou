@@ -158,7 +158,6 @@ type MonsterInfo = {
 | kind | varchar(32) | 否 | `normal` | 类型（normal/elite/boss/event） |
 | element | varchar(16) | 是 | `无` | 五行/元素（金木水火土/无） |
 | base_attrs | jsonb | 否 | `{...}` | 基础属性（与玩家角色属性字段一致） |
-| display_stats | jsonb | 是 | `[{...}]` | 展示属性（label/value列表） |
 | ai_profile | jsonb | 是 | `{...}` | AI配置（技能权重、条件、优先级） |
 | technique_slots | jsonb | 是 | `{"main":"tech-001","sub1":null,"sub2":null,"sub3":null}` | 功法装备栏位（与玩家一致） |
 | technique_layers | jsonb | 是 | `{"tech-001":2}` | 功法修炼层数（用于计算加成与解锁技能） |
@@ -232,13 +231,6 @@ type MonsterInfo = {
   "kind": "normal",
   "element": "无",
   "base_attrs": { "qixue": 180, "max_qixue": 180, "wugong": 14, "wufang": 6, "sudu": 2 },
-  "display_stats": [
-    { "label": "等级", "value": 6 },
-    { "label": "气血", "value": 180 },
-    { "label": "物攻", "value": 14 },
-    { "label": "物防", "value": 6 },
-    { "label": "速度", "value": 2 }
-  ],
   "drop_pool_id": "dp-wolf-001"
 }
 ```

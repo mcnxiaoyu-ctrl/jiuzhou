@@ -231,7 +231,6 @@ export type MonsterDefConfig = {
   attr_variance?: number;
   attr_multiplier_min?: number;
   attr_multiplier_max?: number;
-  display_stats?: unknown[];
   ai_profile?: MonsterAIProfileConfig;
   drop_pool_id?: string;
   exp_reward?: number;
