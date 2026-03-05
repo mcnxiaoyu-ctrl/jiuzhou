@@ -363,6 +363,7 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
   const [characterId, setCharacterId] = useState<number | null>(() => gameSocket.getCharacter()?.id ?? null);
   const [skills, setSkills] = useState<SkillItem[]>(() => buildSkillItems([], [], []));
   const [isCasting, setIsCasting] = useState(false);
+  const [skillConfigLoadState, setSkillConfigLoadState] = useState<'idle' | 'ok' | 'failed'>('idle');
   const [skillResourceState, setSkillResourceState] = useState<SkillResourceState>({
     lingqi: initialLingqi,
     qixue: initialQixue,
@@ -382,6 +383,7 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
   });
 
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const battleEnterSyncRef = useRef(false);
   const lastExternalTurnRef = useRef<number | null>(turn ?? null);
   const lastBattleIdRef = useRef<string | null>(null);
   const skillsRef = useRef<SkillItem[]>(skills);
@@ -458,14 +460,20 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
   const refreshSkillConfig = useCallback(async () => {
     if (!characterId) {
       setSkills((prev) => buildSkillItems([], [], prev));
+      setSkillConfigLoadState('idle');
       return;
     }
     try {
       const res = await getCharacterTechniqueStatus(characterId);
-      if (!res?.success || !res.data) return;
+      if (!res?.success || !res.data) {
+        setSkillConfigLoadState('failed');
+        return;
+      }
       setSkills((prev) => buildSkillItems(res.data?.equippedSkills ?? [], res.data?.availableSkills ?? [], prev));
+      setSkillConfigLoadState('ok');
     } catch {
-      setSkills((prev) => buildSkillItems([], [], prev));
+      // 网络抖动时保留当前技能栏，避免临时失败导致自动战斗只剩普攻
+      setSkillConfigLoadState('failed');
     }
   }, [characterId]);
 
@@ -483,6 +491,24 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
     }, 0);
     return () => window.clearTimeout(t);
   }, [open, refreshSkillConfig]);
+
+  useEffect(() => {
+    if (!isBattleRunning) {
+      battleEnterSyncRef.current = false;
+      return;
+    }
+    if (battleEnterSyncRef.current) return;
+    battleEnterSyncRef.current = true;
+    void refreshSkillConfig();
+  }, [isBattleRunning, refreshSkillConfig]);
+
+  useEffect(() => {
+    if (!isBattleRunning || skillConfigLoadState !== 'failed') return;
+    const t = window.setInterval(() => {
+      void refreshSkillConfig();
+    }, 2000);
+    return () => window.clearInterval(t);
+  }, [isBattleRunning, refreshSkillConfig, skillConfigLoadState]);
 
   useEffect(() => {
     if (turn == null) {
