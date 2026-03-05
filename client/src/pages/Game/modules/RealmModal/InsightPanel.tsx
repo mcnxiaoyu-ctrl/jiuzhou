@@ -17,7 +17,7 @@
  * 2) “+XX” 增量是本次长按会话累计值，会在下一次长按开始时重置；持久化进度需看 `overview.currentProgressExp`。
  */
 import type { InsightOverviewDto } from '../../../../services/api/combat-realm';
-import { formatInsightPctText } from './insightShared';
+import { calcInsightStaminaBonusByLevel, formatInsightPctText } from './insightShared';
 
 interface InsightPanelProps {
   overview: InsightOverviewDto | null;
@@ -51,6 +51,8 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
     );
   }
 
+  const staminaBonus = calcInsightStaminaBonusByLevel(overview.currentLevel);
+
   return (
     <div className="realm-insight-panel">
       <div className="realm-insight-overview-grid">
@@ -67,6 +69,10 @@ const InsightPanel: React.FC<InsightPanelProps> = ({
             <div className="realm-insight-overview-v">{formatInsightPctText(overview.currentBonusPct)}</div>
             <div className="realm-insight-value-delta">+{formatInsightPctText(holdGainBonusPct)}</div>
           </div>
+        </div>
+        <div className="realm-insight-overview-card">
+          <div className="realm-insight-overview-k">当前体力上限增加</div>
+          <div className="realm-insight-overview-v">+{staminaBonus.toLocaleString()}</div>
         </div>
         <div className="realm-insight-overview-card">
           <div className="realm-insight-overview-k">下一等级消耗</div>

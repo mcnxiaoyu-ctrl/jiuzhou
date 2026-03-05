@@ -26,6 +26,7 @@ import {
   calcInsightCostByLevel,
 } from './shared/insightRules.js';
 import { getRealmRankZeroBased, normalizeRealmKeepingUnknown } from './shared/realmRules.js';
+import { invalidateStaminaCache } from './staminaCacheService.js';
 
 export interface InsightOverviewDto {
   unlocked: boolean;
@@ -320,6 +321,7 @@ class InsightService {
       );
 
       await invalidateCharacterComputedCache(character.characterId);
+      await invalidateStaminaCache(character.characterId);
 
       return {
         success: true,

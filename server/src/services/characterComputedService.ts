@@ -28,6 +28,7 @@ import { extractFlatAffixDeltas, extractPercentAffixDeltas } from './shared/affi
 import { convertRatingToPercent, getEffectiveLevelByRealm, resolveRatingBaseAttrKey } from './shared/affixRating.js';
 import { buildInsightPctBonusByLevel } from './shared/insightRules.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
+import { calcCharacterStaminaMaxByInsightLevel } from './shared/staminaRules.js';
 import { CHARACTER_BASE_COLUMNS_SQL } from './shared/sqlFragments.js';
 
 type JsonRecord = Record<string, unknown>;
@@ -93,6 +94,7 @@ interface CharacterComputedStats {
 type CharacterBasePublicRow = Omit<CharacterBaseRow, 'insight_level'>;
 
 export interface CharacterComputedRow extends CharacterBasePublicRow, CharacterComputedStats {
+  stamina_max: number;
   qixue: number;
   lingqi: number;
 }
@@ -989,10 +991,14 @@ const buildComputedRow = async (
   const bypassStaticCache = options?.bypassStaticCache === true;
   const staticAttrs = await resolveStaticAttrs(base, bypassStaticCache);
   const resources = await ensureResourceState(base.id, staticAttrs.max_qixue, staticAttrs.max_lingqi);
+  const staminaMax = calcCharacterStaminaMaxByInsightLevel(base.insight_level);
+  const stamina = clampNumber(Math.floor(Number(base.stamina) || 0), 0, staminaMax);
   const { insight_level: _ignoredInsightLevel, ...baseWithoutInsight } = base;
 
   return {
     ...baseWithoutInsight,
+    stamina,
+    stamina_max: staminaMax,
     ...staticAttrs,
     qixue: resources.qixue,
     lingqi: resources.lingqi,

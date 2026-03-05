@@ -20,6 +20,7 @@
 
 import { query } from '../config/database.js';
 import { getCachedStamina, setCachedStamina, toRecoveryState } from './staminaCacheService.js';
+import { calcCharacterStaminaMaxByInsightLevel, STAMINA_BASE_MAX } from './shared/staminaRules.js';
 
 const toPositiveInt = (value: string | undefined, fallback: number): number => {
   const n = Number(value);
@@ -44,7 +45,7 @@ const parseTime = (value: unknown, fallbackMs: number): { ms: number; fallbackUs
   return { ms: fallbackMs, fallbackUsed: true };
 };
 
-export const STAMINA_MAX = toPositiveInt(process.env.STAMINA_MAX, 100);
+export const STAMINA_MAX = STAMINA_BASE_MAX;
 export const STAMINA_RECOVER_PER_TICK = toPositiveInt(process.env.STAMINA_RECOVER_PER_TICK, 1);
 export const STAMINA_RECOVER_INTERVAL_SEC = toPositiveInt(process.env.STAMINA_RECOVER_INTERVAL_SEC, 300);
 const STAMINA_RECOVER_INTERVAL_MS = STAMINA_RECOVER_INTERVAL_SEC * 1000;
@@ -52,6 +53,7 @@ const STAMINA_RECOVER_INTERVAL_MS = STAMINA_RECOVER_INTERVAL_SEC * 1000;
 export type StaminaRecoveryState = {
   characterId: number;
   stamina: number;
+  maxStamina: number;
   recovered: number;
   changed: boolean;
   staminaRecoverAt: Date;
@@ -71,20 +73,22 @@ const applyRecoveryFromRow = async (
 
   const nowMs = Date.now();
   const rawStamina = toNonNegativeInt(row.stamina, 0);
-  const currentStamina = Math.min(STAMINA_MAX, rawStamina);
+  const insightLevel = toNonNegativeInt(row.insight_level, 0);
+  const staminaMax = calcCharacterStaminaMaxByInsightLevel(insightLevel);
+  const currentStamina = Math.min(staminaMax, rawStamina);
   const parsedRecoverAt = parseTime(row.stamina_recover_at, nowMs);
 
   let nextStamina = currentStamina;
   let nextRecoverAtMs = parsedRecoverAt.ms;
   let recovered = 0;
 
-  if (currentStamina < STAMINA_MAX && STAMINA_RECOVER_INTERVAL_MS > 0 && STAMINA_RECOVER_PER_TICK > 0) {
+  if (currentStamina < staminaMax && STAMINA_RECOVER_INTERVAL_MS > 0 && STAMINA_RECOVER_PER_TICK > 0) {
     const elapsedMs = Math.max(0, nowMs - parsedRecoverAt.ms);
     const ticks = Math.floor(elapsedMs / STAMINA_RECOVER_INTERVAL_MS);
     if (ticks > 0) {
       const recoveredTotal = ticks * STAMINA_RECOVER_PER_TICK;
-      nextStamina = Math.min(STAMINA_MAX, currentStamina + recoveredTotal);
-      nextRecoverAtMs = nextStamina >= STAMINA_MAX ? nowMs : parsedRecoverAt.ms + ticks * STAMINA_RECOVER_INTERVAL_MS;
+      nextStamina = Math.min(staminaMax, currentStamina + recoveredTotal);
+      nextRecoverAtMs = nextStamina >= staminaMax ? nowMs : parsedRecoverAt.ms + ticks * STAMINA_RECOVER_INTERVAL_MS;
       recovered = Math.max(0, nextStamina - currentStamina);
     }
   }
@@ -107,13 +111,14 @@ const applyRecoveryFromRow = async (
   const state: StaminaRecoveryState = {
     characterId,
     stamina: nextStamina,
+    maxStamina: staminaMax,
     recovered,
     changed,
     staminaRecoverAt: new Date(nextRecoverAtMs),
   };
 
   // 回填缓存（DB 写入后同步）
-  await setCachedStamina(characterId, nextStamina, new Date(nextRecoverAtMs));
+  await setCachedStamina(characterId, nextStamina, new Date(nextRecoverAtMs), staminaMax);
 
   return state;
 };
@@ -128,8 +133,21 @@ const applyRecoveryByCharacterIdFromDB = async (
 ): Promise<StaminaRecoveryState | null> => {
   if (!Number.isFinite(characterId) || characterId <= 0) return null;
   const selectSql = lockRow
-    ? 'SELECT id, stamina, stamina_recover_at FROM characters WHERE id = $1 LIMIT 1 FOR UPDATE'
-    : 'SELECT id, stamina, stamina_recover_at FROM characters WHERE id = $1 LIMIT 1';
+    ? `
+      SELECT c.id, c.stamina, c.stamina_recover_at, COALESCE(cip.level, 0) AS insight_level
+      FROM characters c
+      LEFT JOIN character_insight_progress cip ON cip.character_id = c.id
+      WHERE c.id = $1
+      LIMIT 1
+      FOR UPDATE OF c
+    `
+    : `
+      SELECT c.id, c.stamina, c.stamina_recover_at, COALESCE(cip.level, 0) AS insight_level
+      FROM characters c
+      LEFT JOIN character_insight_progress cip ON cip.character_id = c.id
+      WHERE c.id = $1
+      LIMIT 1
+    `;
   const rowRes = await runQuery(selectSql, [characterId]);
   const row = rowRes.rows[0];
   if (!row) return null;
@@ -159,7 +177,16 @@ export const applyStaminaRecoveryByCharacterId = async (characterId: number): Pr
  */
 export const applyStaminaRecoveryByUserId = async (userId: number): Promise<StaminaRecoveryState | null> => {
   if (!Number.isFinite(userId) || userId <= 0) return null;
-  const rowRes = await query('SELECT id, stamina, stamina_recover_at FROM characters WHERE user_id = $1 LIMIT 1', [userId]);
+  const rowRes = await query(
+    `
+      SELECT c.id, c.stamina, c.stamina_recover_at, COALESCE(cip.level, 0) AS insight_level
+      FROM characters c
+      LEFT JOIN character_insight_progress cip ON cip.character_id = c.id
+      WHERE c.user_id = $1
+      LIMIT 1
+    `,
+    [userId],
+  );
   const row = rowRes.rows[0];
   if (!row) return null;
 

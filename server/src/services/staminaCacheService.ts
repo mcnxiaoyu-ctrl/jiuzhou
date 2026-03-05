@@ -35,7 +35,7 @@ const KEY_PREFIX = 'stamina:';
 const CACHE_TTL_SEC = 600; // 10 分钟兜底过期
 
 /** 内存缓存层（减少 Redis 往返） */
-const memoryCache = new Map<number, { stamina: number; recoverAtMs: number; expiresAt: number }>();
+const memoryCache = new Map<number, { stamina: number; recoverAtMs: number; maxStamina: number; expiresAt: number }>();
 const MEMORY_TTL_MS = 5_000; // 5 秒，挂机场景下体力变化频繁，内存 TTL 不宜过长
 
 // ============================================
@@ -55,19 +55,25 @@ function cacheKey(characterId: number): string {
  *   recovered = ticks * perTick
  *   stamina = min(max, stamina + recovered)
  */
-function applyRecovery(stamina: number, recoverAtMs: number, nowMs: number): { stamina: number; recoverAtMs: number } {
-  if (stamina >= STAMINA_MAX) return { stamina: STAMINA_MAX, recoverAtMs };
+function applyRecovery(
+  stamina: number,
+  recoverAtMs: number,
+  nowMs: number,
+  maxStamina: number,
+): { stamina: number; recoverAtMs: number; maxStamina: number } {
+  const resolvedMaxStamina = Math.max(1, Math.floor(Number(maxStamina) || STAMINA_MAX));
+  if (stamina >= resolvedMaxStamina) return { stamina: resolvedMaxStamina, recoverAtMs, maxStamina: resolvedMaxStamina };
   const intervalMs = STAMINA_RECOVER_INTERVAL_SEC * 1000;
-  if (intervalMs <= 0 || STAMINA_RECOVER_PER_TICK <= 0) return { stamina, recoverAtMs };
+  if (intervalMs <= 0 || STAMINA_RECOVER_PER_TICK <= 0) return { stamina, recoverAtMs, maxStamina: resolvedMaxStamina };
 
   const elapsedMs = Math.max(0, nowMs - recoverAtMs);
   const ticks = Math.floor(elapsedMs / intervalMs);
-  if (ticks <= 0) return { stamina, recoverAtMs };
+  if (ticks <= 0) return { stamina, recoverAtMs, maxStamina: resolvedMaxStamina };
 
   const recovered = ticks * STAMINA_RECOVER_PER_TICK;
-  const nextStamina = Math.min(STAMINA_MAX, stamina + recovered);
-  const nextRecoverAtMs = nextStamina >= STAMINA_MAX ? nowMs : recoverAtMs + ticks * intervalMs;
-  return { stamina: nextStamina, recoverAtMs: nextRecoverAtMs };
+  const nextStamina = Math.min(resolvedMaxStamina, stamina + recovered);
+  const nextRecoverAtMs = nextStamina >= resolvedMaxStamina ? nowMs : recoverAtMs + ticks * intervalMs;
+  return { stamina: nextStamina, recoverAtMs: nextRecoverAtMs, maxStamina: resolvedMaxStamina };
 }
 
 // ============================================
@@ -95,7 +101,7 @@ local data = cjson.decode(raw)
 local stamina = tonumber(data.stamina) or 0
 local recoverAtMs = tonumber(data.recoverAtMs) or 0
 local nowMs = tonumber(ARGV[2])
-local maxStamina = tonumber(ARGV[3])
+local maxStamina = tonumber(data.maxStamina) or tonumber(ARGV[3])
 local perTick = tonumber(ARGV[4])
 local intervalMs = tonumber(ARGV[5])
 local ttl = tonumber(ARGV[6])
@@ -127,6 +133,7 @@ end
 
 data.stamina = stamina
 data.recoverAtMs = recoverAtMs
+data.maxStamina = maxStamina
 redis.call('SET', KEYS[1], cjson.encode(data), 'EX', ttl)
 return stamina
 `;
@@ -139,6 +146,7 @@ export interface StaminaCacheState {
   characterId: number;
   stamina: number;
   recoverAtMs: number;
+  maxStamina: number;
 }
 
 /**
@@ -153,8 +161,8 @@ export async function getCachedStamina(characterId: number): Promise<StaminaCach
   const mem = memoryCache.get(characterId);
   if (mem && mem.expiresAt > Date.now()) {
     const nowMs = Date.now();
-    const { stamina, recoverAtMs } = applyRecovery(mem.stamina, mem.recoverAtMs, nowMs);
-    return { characterId, stamina, recoverAtMs };
+    const { stamina, recoverAtMs, maxStamina } = applyRecovery(mem.stamina, mem.recoverAtMs, nowMs, mem.maxStamina);
+    return { characterId, stamina, recoverAtMs, maxStamina };
   }
 
   // 2. Redis 层
@@ -162,14 +170,15 @@ export async function getCachedStamina(characterId: number): Promise<StaminaCach
     const raw = await redis.get(cacheKey(characterId));
     if (!raw) return null;
 
-    const data = JSON.parse(raw) as { stamina: number; recoverAtMs: number };
+    const data = JSON.parse(raw) as { stamina: number; recoverAtMs: number; maxStamina?: number };
+    const maxStamina = Math.max(1, Math.floor(Number(data.maxStamina) || STAMINA_MAX));
     const nowMs = Date.now();
-    const { stamina, recoverAtMs } = applyRecovery(data.stamina, data.recoverAtMs, nowMs);
+    const { stamina, recoverAtMs } = applyRecovery(data.stamina, data.recoverAtMs, nowMs, maxStamina);
 
     // 回填内存
-    memoryCache.set(characterId, { stamina, recoverAtMs, expiresAt: Date.now() + MEMORY_TTL_MS });
+    memoryCache.set(characterId, { stamina, recoverAtMs, maxStamina, expiresAt: Date.now() + MEMORY_TTL_MS });
 
-    return { characterId, stamina, recoverAtMs };
+    return { characterId, stamina, recoverAtMs, maxStamina };
   } catch {
     return null;
   }
@@ -178,12 +187,18 @@ export async function getCachedStamina(characterId: number): Promise<StaminaCach
 /**
  * 设置缓存中的体力值（用于 DB 写入后校准、启动挂机时初始化等）
  */
-export async function setCachedStamina(characterId: number, stamina: number, recoverAt: Date): Promise<void> {
+export async function setCachedStamina(
+  characterId: number,
+  stamina: number,
+  recoverAt: Date,
+  maxStamina: number,
+): Promise<void> {
+  const resolvedMaxStamina = Math.max(1, Math.floor(Number(maxStamina) || STAMINA_MAX));
   const recoverAtMs = recoverAt.getTime();
-  const payload = JSON.stringify({ stamina, recoverAtMs });
+  const payload = JSON.stringify({ stamina, recoverAtMs, maxStamina: resolvedMaxStamina });
 
   // 同时写 Redis 和内存
-  memoryCache.set(characterId, { stamina, recoverAtMs, expiresAt: Date.now() + MEMORY_TTL_MS });
+  memoryCache.set(characterId, { stamina, recoverAtMs, maxStamina: resolvedMaxStamina, expiresAt: Date.now() + MEMORY_TTL_MS });
 
   try {
     await redis.set(cacheKey(characterId), payload, 'EX', CACHE_TTL_SEC);
@@ -216,7 +231,13 @@ export async function decrCachedStamina(characterId: number, delta: number): Pro
     if (result === -1) return null;
 
     // 同步更新内存缓存
-    memoryCache.set(characterId, { stamina: result, recoverAtMs: Date.now(), expiresAt: Date.now() + MEMORY_TTL_MS });
+    const previousMaxStamina = memoryCache.get(characterId)?.maxStamina ?? STAMINA_MAX;
+    memoryCache.set(characterId, {
+      stamina: result,
+      recoverAtMs: Date.now(),
+      maxStamina: previousMaxStamina,
+      expiresAt: Date.now() + MEMORY_TTL_MS,
+    });
 
     return result;
   } catch {
@@ -264,6 +285,7 @@ export function toRecoveryState(cache: StaminaCacheState): StaminaRecoveryState 
   return {
     characterId: cache.characterId,
     stamina: cache.stamina,
+    maxStamina: cache.maxStamina,
     recovered: 0,
     changed: false,
     staminaRecoverAt: new Date(cache.recoverAtMs),

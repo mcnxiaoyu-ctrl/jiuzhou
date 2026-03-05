@@ -7,8 +7,6 @@ import { resolveAvatarUrl, getRealmOverview, uploadAvatar, addAttributePoint, re
 import { formatPercent, formatRecovery } from '../../shared/formatAttr';
 import './index.scss';
 
-const staminaMaxFromEnv = Number(import.meta.env.VITE_STAMINA_MAX);
-const STAMINA_DISPLAY_MAX = Number.isFinite(staminaMaxFromEnv) && staminaMaxFromEnv > 0 ? Math.floor(staminaMaxFromEnv) : 100;
 const CHARACTER_REFRESH_INTERVAL_MS = 30_000;
 const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
@@ -178,7 +176,7 @@ const PlayerInfo: React.FC = () => {
   const avatarUrl = resolveAvatarUrl(character.avatar);
   const qixueCurrent = Math.min(character.qixue, character.maxQixue);
   const lingqiCurrent = Math.min(character.lingqi, character.maxLingqi);
-  const staminaMax = STAMINA_DISPLAY_MAX;
+  const staminaMax = Math.max(1, Math.floor(Number(character.staminaMax) || 1));
   const staminaCurrent = Math.min(staminaMax, Math.max(0, Number(character.stamina) || 0));
   const qixuePercent = clampPercent(character.maxQixue > 0 ? (qixueCurrent / character.maxQixue) * 100 : 0);
   const lingqiPercent = clampPercent(character.maxLingqi > 0 ? (lingqiCurrent / character.maxLingqi) * 100 : 0);

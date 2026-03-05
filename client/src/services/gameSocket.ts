@@ -67,6 +67,7 @@ export interface CharacterData {
   spiritStones: number;
   silver: number;
   stamina: number;
+  staminaMax: number;
   realm: string;
   subRealm: string | null;
   exp: number;

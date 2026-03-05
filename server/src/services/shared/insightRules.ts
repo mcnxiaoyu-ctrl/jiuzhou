@@ -2,7 +2,7 @@
  * 悟道系统公式规则（纯函数）
  *
  * 作用（做什么 / 不做什么）：
- * 1) 做什么：集中维护悟道的成本、批量可支付等级、总加成百分比公式。
+ * 1) 做什么：集中维护悟道的成本、批量可支付等级、总加成百分比与体力上限增量公式。
  * 2) 不做什么：不访问数据库、不读写缓存、不处理权限与事务。
  *
  * 输入/输出：
@@ -98,4 +98,13 @@ export const calcAffordableInjectLevels = (
 export const buildInsightPctBonusByLevel = (level: number, config: InsightGrowthConfig): number => {
   const safeLevel = clampToNonNegativeInteger(level);
   return safeLevel * config.bonus_pct_per_level;
+};
+
+/**
+ * 计算某个悟道等级对应的体力上限增量。
+ * 规则：每 10 级悟道，体力上限 +1。
+ */
+export const calcInsightStaminaBonusByLevel = (level: number): number => {
+  const safeLevel = clampToNonNegativeInteger(level);
+  return Math.floor(safeLevel / 10);
 };

@@ -20,7 +20,7 @@ import { runDungeonStartFlow } from './shared/startFlow.js';
 import { itemService } from '../itemService.js';
 import { sendSystemMail, type MailAttachItem } from '../mailService.js';
 import { recordDungeonClearEvent } from '../taskService.js';
-import { applyStaminaRecoveryTx, STAMINA_MAX } from '../staminaService.js';
+import { applyStaminaRecoveryTx } from '../staminaService.js';
 import { normalizeAutoDisassembleSetting } from '../autoDisassembleRules.js';
 import {
   grantRewardItemWithAutoDisassemble,
@@ -111,6 +111,7 @@ export const startDungeonInstance = async (
       }
     }
 
+    const participantStaminaMaxMap = new Map<number, number>();
     if (staminaCost > 0) {
       for (const p of participants) {
         const participantLabel = buildParticipantLabel(p, participantNicknameMap);
@@ -119,6 +120,8 @@ export const startDungeonInstance = async (
           return { success: false, message: `${participantLabel}不存在` };
         }
         const stamina = asNumber(staminaState.stamina, 0);
+        const staminaMax = asNumber(staminaState.maxStamina, 0);
+        participantStaminaMaxMap.set(p.characterId, staminaMax);
         if (stamina < staminaCost) {
           return { success: false, message: `${participantLabel}体力不足，需要${staminaCost}，当前${stamina}` };
         }
@@ -145,13 +148,18 @@ export const startDungeonInstance = async (
       if (staminaCost > 0) {
         for (const p of participants) {
           const participantLabel = buildParticipantLabel(p, participantNicknameMap);
+          const staminaMaxRaw = participantStaminaMaxMap.get(p.characterId);
+          const staminaMax = Math.floor(Number(staminaMaxRaw) || 0);
+          if (staminaMax <= 0) {
+            return { success: false, message: `${participantLabel}体力上限数据缺失` };
+          }
           const updRes = await query(
             `UPDATE characters
                 SET stamina = stamina - $1,
                     stamina_recover_at = CASE WHEN stamina >= $3 THEN NOW() ELSE stamina_recover_at END,
                     updated_at = CURRENT_TIMESTAMP
               WHERE id = $2 AND stamina >= $1`,
-            [staminaCost, p.characterId, STAMINA_MAX]
+            [staminaCost, p.characterId, staminaMax]
           );
           if ((updRes.rowCount ?? 0) === 0) {
             return { success: false, message: `${participantLabel}体力扣除失败` };

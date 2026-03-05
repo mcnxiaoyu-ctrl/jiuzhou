@@ -15,6 +15,7 @@ export interface CharacterAttributes {
   spiritStones: number;
   silver: number;
   stamina: number;
+  staminaMax: number;
   realm: string;
   subRealm: string | null;
   exp: number;
@@ -71,6 +72,7 @@ export const dbToCharacterAttributes = (dbRow: Record<string, unknown>): Charact
   spiritStones: Number(dbRow.spirit_stones) || 0,
   silver: Number(dbRow.silver) || 0,
   stamina: Number(dbRow.stamina) || 0,
+  staminaMax: Math.max(1, Math.floor(Number(dbRow.stamina_max) || Number(dbRow.stamina) || 1)),
   realm: dbRow.realm as string,
   subRealm: dbRow.sub_realm as string | null,
   exp: Number(dbRow.exp) || 0,

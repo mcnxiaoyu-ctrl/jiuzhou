@@ -22,6 +22,7 @@ export interface Character {
   spirit_stones: number;
   silver: number;
   stamina: number;
+  stamina_max: number;
   realm: string;
   sub_realm: string | null;
   exp: number;

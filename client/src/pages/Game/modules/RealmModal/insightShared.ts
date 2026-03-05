@@ -60,6 +60,14 @@ export const buildInsightBonusPctByLevel = (level: number, bonusPctPerLevel: num
 };
 
 /**
+ * 计算指定悟道等级对应的体力上限增量。
+ * 规则：每 10 级悟道，体力上限 +1。
+ */
+export const calcInsightStaminaBonusByLevel = (level: number): number => {
+  return Math.floor(toSafeInteger(level) / 10);
+};
+
+/**
  * 按“经验预算”模拟一次悟道注入（仅前端预览，不落库）。
  *
  * 说明：
@@ -140,4 +148,3 @@ export const calcInsightProgressPct = (progressExp: number, nextLevelCostExp: nu
 export const formatInsightPctText = (pct: number): string => {
   return `${(Math.max(0, pct) * 100).toFixed(2)}%`;
 };
-
