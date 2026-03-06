@@ -39,6 +39,11 @@ import type {
   RewardItemEntry,
 } from './types.js';
 import { rowToIdleBattleRow, rowToIdleSessionRow } from './rowMappers.js';
+import { hasRegisteredIdleExecutionLoop } from './idleExecutionRegistry.js';
+import {
+  resolveOrphanStoppingSessionIds,
+  type IdleSessionActivitySnapshot,
+} from './idleSessionActivity.js';
 
 // ============================================
 // 常量
@@ -85,8 +90,73 @@ function normalizeCharacterIds(characterIds: number[]): number[] {
   return Array.from(normalized.values());
 }
 
+/**
+ * 收敛没有执行循环承接的 stopping 会话。
+ *
+ * 作用：
+ *   服务端在读取“当前活跃挂机状态”前先做一次自愈，避免孤儿 stopping 会话长期
+ *   被 `/status`、启动互斥和组队互斥误判成仍在挂机。
+ *
+ * 边界条件：
+ *   1. 只处理 status='stopping' 的会话，不会误伤 active 会话。
+ *   2. 只要执行循环仍在注册表内，就视为正在正常收尾，不提前强制结束。
+ */
+async function settleOrphanStoppingSessions(characterIds: number[]): Promise<void> {
+  const normalizedCharacterIds = normalizeCharacterIds(characterIds);
+  if (normalizedCharacterIds.length === 0) {
+    return;
+  }
+
+  const res = await query(
+    `SELECT id, character_id, status
+     FROM idle_sessions
+     WHERE character_id = ANY($1::int[])
+       AND status = 'stopping'`,
+    [normalizedCharacterIds],
+  );
+
+  if (res.rows.length === 0) {
+    return;
+  }
+
+  const stoppingSessions: IdleSessionActivitySnapshot[] = (res.rows as Array<{ id: unknown; character_id: unknown; status: unknown }>).map((row) => ({
+    id: String(row.id),
+    characterId: Number(row.character_id),
+    status: row.status as IdleSessionRow['status'],
+  }));
+  const orphanSessionIds = resolveOrphanStoppingSessionIds(
+    stoppingSessions,
+    hasRegisteredIdleExecutionLoop,
+  );
+
+  if (orphanSessionIds.length === 0) {
+    return;
+  }
+
+  await query(
+    `UPDATE idle_sessions
+     SET status = 'interrupted',
+         ended_at = NOW(),
+         updated_at = NOW()
+     WHERE id = ANY($1::uuid[])`,
+    [orphanSessionIds],
+  );
+
+  const orphanSessionIdSet = new Set(orphanSessionIds);
+  const orphanCharacterIds = Array.from(new Set(
+    stoppingSessions
+      .filter((session) => orphanSessionIdSet.has(session.id))
+      .map((session) => session.characterId),
+  ));
+
+  if (orphanCharacterIds.length > 0) {
+    await redis.del(...orphanCharacterIds.map(idleLockKey));
+  }
+}
+
 /** 查询角色当前活跃会话 ID（启动冲突判定专用） */
 async function findActiveSessionId(characterId: number): Promise<string | undefined> {
+  await settleOrphanStoppingSessions([characterId]);
   const existingRes = await query(
     `SELECT id FROM idle_sessions
      WHERE character_id = $1 AND status IN ('active', 'stopping')
@@ -299,6 +369,7 @@ class IdleSessionService {
    * 用于断线续战和状态同步。
    */
   async getActiveIdleSession(characterId: number): Promise<IdleSessionRow | null> {
+    await settleOrphanStoppingSessions([characterId]);
     const res = await query(
       `SELECT * FROM idle_sessions
        WHERE character_id = $1 AND status IN ('active', 'stopping')
@@ -335,6 +406,8 @@ class IdleSessionService {
     if (normalizedCharacterIds.length === 0) {
       return new Set<number>();
     }
+
+    await settleOrphanStoppingSessions(normalizedCharacterIds);
 
     const res = await query(
       `SELECT DISTINCT character_id

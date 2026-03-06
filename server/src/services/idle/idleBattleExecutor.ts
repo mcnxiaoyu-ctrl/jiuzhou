@@ -44,6 +44,11 @@ import { simulateIdleBattle } from './idleBattleSimulationCore.js';
 import type { BattleLogEntry } from '../../battle/types.js';
 import { rowToIdleSessionRow } from './rowMappers.js';
 import { idleSessionService } from './idleSessionService.js';
+import {
+  clearIdleExecutionLoopRegistry,
+  registerIdleExecutionLoop,
+  unregisterIdleExecutionLoop,
+} from './idleExecutionRegistry.js';
 
 // ============================================
 // 常量
@@ -363,10 +368,12 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
   const buffer = createBuffer();
   const runtime = { running: false, wakeRequested: false };
 
+  registerIdleExecutionLoop(session.id);
   loopRuntimeStates.set(session.id, runtime);
   activeBuffers.set(session.id, { characterId: session.characterId, buffer });
 
   function clearLoopRuntimeState(): void {
+    unregisterIdleExecutionLoop(session.id);
     activeLoops.delete(session.id);
     activeBuffers.delete(session.id);
     loopWakeHandlers.delete(session.id);
@@ -497,6 +504,7 @@ export function stopExecutionLoop(sessionId: string): void {
   if (handle) {
     clearTimeout(handle);
   }
+  unregisterIdleExecutionLoop(sessionId);
   activeLoops.delete(sessionId);
   activeBuffers.delete(sessionId);
   loopWakeHandlers.delete(sessionId);
@@ -587,6 +595,7 @@ export function stopAllExecutionLoops(): void {
   activeBuffers.clear();
   loopWakeHandlers.clear();
   loopRuntimeStates.clear();
+  clearIdleExecutionLoopRegistry();
 
   console.log('[IdleBattleExecutor] 所有执行循环已停止');
 }
