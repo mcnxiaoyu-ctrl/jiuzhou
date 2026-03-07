@@ -25,6 +25,11 @@ import {
   formatSignedPercent,
   formatPercent,
 } from "../../shared/formatAttr";
+import {
+  buildSocketedGemDisplayGroups,
+  parseSocketedGems,
+  type SocketedGemEntry,
+} from "../../shared/socketedGemDisplay";
 import { coerceAffixes as coerceItemMetaAffixes } from "../../shared/itemMetaFormat";
 import { ITEM_CATEGORY_LABELS } from "../../shared/itemTaxonomy";
 import type { GameItemCategory as SharedGameItemCategory } from "../../shared/itemTaxonomy";
@@ -71,21 +76,7 @@ export type EquipmentAffix = {
   is_legendary?: boolean;
   description?: string;
 };
-
-export type SocketedGemEffect = {
-  attrKey: string;
-  value: number;
-  applyType: "flat" | "percent" | "special";
-};
-
-export type SocketedGemEntry = {
-  slot: number;
-  itemDefId: string;
-  gemType: string;
-  effects: SocketedGemEffect[];
-  name?: string;
-  icon?: string;
-};
+export type { SocketedGemEffect, SocketedGemEntry } from "../../shared/socketedGemDisplay";
 
 export type SetBonusLineGroup = {
   pieceCount: number;
@@ -449,58 +440,6 @@ const coerceEffectDefs = (value: unknown): Array<Record<string, unknown>> => {
 
 /* ───────── 宝石 ───────── */
 
-export const parseSocketedGems = (raw: unknown): SocketedGemEntry[] => {
-  let arr: unknown = raw;
-  if (typeof arr === "string") {
-    try {
-      arr = JSON.parse(arr) as unknown;
-    } catch {
-      return [];
-    }
-  }
-  if (!Array.isArray(arr)) return [];
-
-  const out: SocketedGemEntry[] = [];
-  for (const it of arr) {
-    if (!it || typeof it !== "object") continue;
-    const row = it as Record<string, unknown>;
-    const slot = Number(row.slot);
-    const itemDefId = String(row.itemDefId ?? row.item_def_id ?? "").trim();
-    const gemType =
-      String(row.gemType ?? row.gem_type ?? "all").trim() || "all";
-    const effectsRaw = Array.isArray(row.effects) ? row.effects : [];
-    const effects: SocketedGemEffect[] = [];
-    for (const fx of effectsRaw) {
-      if (!fx || typeof fx !== "object") continue;
-      const f = fx as Record<string, unknown>;
-      const attrKey = String(f.attrKey ?? f.attr_key ?? f.attr ?? "").trim();
-      const value = Number(f.value);
-      const applyTypeRaw = String(f.applyType ?? f.apply_type ?? "flat")
-        .trim()
-        .toLowerCase();
-      const applyType: SocketedGemEffect["applyType"] =
-        applyTypeRaw === "percent"
-          ? "percent"
-          : applyTypeRaw === "special"
-            ? "special"
-            : "flat";
-      if (!attrKey || !Number.isFinite(value)) continue;
-      effects.push({ attrKey, value, applyType });
-    }
-    if (!Number.isInteger(slot) || slot < 0) continue;
-    if (!itemDefId || effects.length === 0) continue;
-    out.push({
-      slot,
-      itemDefId,
-      gemType,
-      effects,
-      name: typeof row.name === "string" ? row.name : undefined,
-      icon: typeof row.icon === "string" ? row.icon : undefined,
-    });
-  }
-  return out.sort((a, b) => a.slot - b.slot);
-};
-
 export const resolveSocketMax = (
   socketMaxRaw: unknown,
   qualityRaw: unknown,
@@ -703,23 +642,20 @@ export const buildEquipmentDetailLines = (
   lines.push(
     buildDetailLine("socket", "孔位", `${socketedGems.length}/${socketMax}`),
   );
-  for (const gem of socketedGems) {
-    const gemName = gem.name || gem.itemDefId;
-    const displaySlot = gem.slot + 1;
-    const gemLabel = `宝石[${displaySlot}]`;
-    lines.push(buildDetailLine("gem", gemLabel, gemName));
+  const socketedGemGroups = buildSocketedGemDisplayGroups(socketedGems, {
+    labelResolver: (attrKey) => attrLabel[attrKey] ?? attrKey,
+    formatSignedNumber,
+    formatSignedPercent,
+  });
+  for (const gem of socketedGemGroups) {
+    lines.push(buildDetailLine("gem", gem.slotText, gem.gemName));
     for (const effect of gem.effects) {
-      const label = attrLabel[effect.attrKey] ?? effect.attrKey;
-      const valText =
-        effect.applyType === "percent"
-          ? formatSignedPercent(effect.value)
-          : formatSignedNumber(effect.value);
       lines.push(
         buildDetailLine(
           "gem_effect",
-          label,
-          valText,
-          `  - ${label} ${valText}`,
+          effect.label,
+          effect.valueText,
+          `  - ${effect.text}`,
         ),
       );
     }

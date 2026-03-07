@@ -4,6 +4,7 @@ import { formatSignedNumber, formatSignedPercent } from './formatAttr';
 import { PERCENT_ATTR_KEYS, coerceAffixes, formatScalar, limitLines, normalizeText } from './itemMetaFormat';
 import { getItemQualityMeta } from './itemQuality';
 import { getItemTaxonomyLabel } from './itemTaxonomy';
+import { buildSocketedGemDisplayGroups } from './socketedGemDisplay';
 import './itemTooltip.scss';
 
 /**
@@ -252,6 +253,7 @@ export type MarketTooltipItemData = {
   refineLevel?: number | null;
   identified?: boolean;
   affixes?: unknown;
+  socketedGems?: unknown;
 };
 
 const MarketItemTooltipContent: React.FC<{ item: MarketTooltipItemData }> = ({ item }) => {
@@ -312,6 +314,14 @@ const MarketItemTooltipContent: React.FC<{ item: MarketTooltipItemData }> = ({ i
 
   const affixes = useMemo(() => coerceAffixes(item.affixes), [item.affixes]);
   const effectLines = useMemo(() => limitLines(formatLines(item.effectDefs), 10), [item.effectDefs]);
+  const socketedGemGroups = useMemo(() => {
+    if (!isEquip) return [];
+    return buildSocketedGemDisplayGroups(item.socketedGems, {
+      labelResolver: (attrKey) => translateKey(attrKey) ?? attrKey,
+      formatSignedNumber,
+      formatSignedPercent,
+    });
+  }, [isEquip, item.socketedGems]);
 
   return (
     <div className="item-tooltip">
@@ -343,6 +353,24 @@ const MarketItemTooltipContent: React.FC<{ item: MarketTooltipItemData }> = ({ i
             {equipMetaLines.map((x) => (
               <div key={x} className="item-tooltip-line">
                 {x}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {socketedGemGroups.length > 0 ? (
+        <div className="item-tooltip-section">
+          <div className="item-tooltip-section-title">已镶嵌宝石</div>
+          <div className="item-tooltip-lines">
+            {socketedGemGroups.map((group) => (
+              <div key={`${group.slot}-${group.gemName}`} className="item-tooltip-gem-group">
+                <div className="item-tooltip-line">{group.slotText}：{group.gemName}</div>
+                {group.effects.map((effect) => (
+                  <div key={`${group.slot}-${effect.text}`} className="item-tooltip-line item-tooltip-line--sub">
+                    {effect.text}
+                  </div>
+                ))}
               </div>
             ))}
           </div>

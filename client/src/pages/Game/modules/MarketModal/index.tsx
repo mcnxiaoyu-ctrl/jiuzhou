@@ -215,6 +215,7 @@ type ListingItem = {
   refineLevel: number;
   identified: boolean;
   affixes: unknown;
+  socketedGems: unknown;
   qty: number;
   unitPrice: number;
   seller: string;
@@ -282,6 +283,7 @@ const buildListingItem = (dto: MarketListingDto): ListingItem => {
     refineLevel: Math.max(0, Math.floor(Number(dto.refineLevel) || 0)),
     identified: Boolean(dto.identified),
     affixes: dto.affixes ?? [],
+    socketedGems: dto.socketedGems ?? null,
     qty: Number(dto.qty) || 0,
     unitPrice: Number(dto.unitPriceSpiritStones) || 0,
     seller: String(dto.sellerName ?? ''),

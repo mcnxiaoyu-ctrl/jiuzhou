@@ -115,6 +115,7 @@ const buildWarehouseTooltipItem = (it: InventoryItemDto): MarketTooltipItemData 
     refineLevel: it.refine_level,
     identified: Boolean(it.identified),
     affixes: it.affixes,
+    socketedGems: it.socketed_gems ?? null,
   };
 };
 

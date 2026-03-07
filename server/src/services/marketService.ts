@@ -48,6 +48,7 @@ export type MarketListingDto = {
   refineLevel: number;
   identified: boolean;
   affixes: unknown;
+  socketedGems: unknown;
   qty: number;
   unitPriceSpiritStones: number;
   sellerCharacterId: number;
@@ -128,7 +129,9 @@ const toListingDto = (
           resolvedQualityRankRaw: resolvedQualityRank,
           strengthenLevelRaw: row.strengthen_level,
           refineLevelRaw: row.refine_level,
-          socketedGemsRaw: row.socketed_gems,
+          // 坊市 Tooltip 会单独展示已镶嵌宝石，这里的基础属性只保留品质/强化/精炼后的装备本体数值，
+          // 避免宝石收益在“基础属性”和“已镶嵌宝石”里重复展示。
+          socketedGemsRaw: [],
         })
       : baseAttrsRaw;
   let normalizedAffixes = parseGeneratedAffixesForReroll(row.affixes);
@@ -213,6 +216,7 @@ const toListingDto = (
     identified: Boolean(row.identified),
     affixes:
       normalizedAffixes.length > 0 ? normalizedAffixes : (row.affixes ?? []),
+    socketedGems: row.socketed_gems ?? null,
     qty: Number(row.qty),
     unitPriceSpiritStones: Number(row.unit_price_spirit_stones),
     sellerCharacterId: Number(row.seller_character_id),

@@ -23,6 +23,7 @@ export interface MarketListingDto {
   refineLevel: number;
   identified: boolean;
   affixes: unknown;
+  socketedGems: unknown;
   qty: number;
   unitPriceSpiritStones: number;
   sellerCharacterId: number;

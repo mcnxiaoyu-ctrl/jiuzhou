@@ -133,6 +133,17 @@
   line-height: 1.35;
 }
 
+.item-tooltip-gem-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item-tooltip-line--sub {
+  padding-left: 12px;
+  color: var(--item-tooltip-muted);
+}
+
 @media screen and (min-width: 769px) {
   .item-tooltip .affix-tooltip-text {
     white-space: nowrap;
