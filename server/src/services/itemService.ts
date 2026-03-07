@@ -9,7 +9,7 @@
  *
  * 边界条件：
  * 1) useItem 使用 @Transactional 保证物品使用与资源更新的原子性
- * 2) createItem 支持在事务/非事务上下文中调用，内部统一走 query 自动复用事务上下文
+ * 2) createItem 支持在事务/非事务上下文中调用，内部统一复用 inventoryService / equipmentService 的事务入口
  */
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
@@ -19,6 +19,7 @@ import {
   expandInventory,
   SlottedInventoryLocation,
 } from './inventory/index.js';
+import { inventoryService } from './inventory/service.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
 import { getRealmRankZeroBased } from './shared/realmRules.js';
@@ -169,6 +170,11 @@ const createEquipmentItem = async (
 
 /**
  * 创建普通物品（支持堆叠）
+ *
+ * 设计说明：
+ * - 这里必须复用 inventoryService 的 @Transactional 入口，而不是直接调用 bag 底层函数。
+ * - 这样 createItem 在“外层已有事务”时会自动复用事务，在“独立调用”时也会自行开启事务，
+ *   避免奖励发放、邮件领取等普通物品写入路径再次散落事务判断逻辑。
  */
 const createNormalItem = async (
   userId: number,
@@ -177,7 +183,7 @@ const createNormalItem = async (
   qty: number,
   options: CreateItemOptions
 ): Promise<CreateItemResult> => {
-  const result = await addItemToInventory(characterId, userId, itemDefId, qty, {
+  const result = await inventoryService.addItemToInventory(characterId, userId, itemDefId, qty, {
     location: options.location || 'bag',
     bindType: options.bindType,
     obtainedFrom: options.obtainedFrom
@@ -197,13 +203,13 @@ const createNormalItem = async (
  * 不做：不处理路由层参数校验、不做权限判断
  *
  * 数据流：
- * - createItem：根据物品类型调用装备或普通物品创建逻辑
+ * - createItem：根据物品类型调用装备或普通物品创建逻辑，并统一复用对应领域服务的事务入口
  * - useItem：在事务中处理物品使用效果（资源、掉落、扩容、学习功法等）
  * - getItemInstance：读取物品实例详情
  *
  * 边界条件：
  * 1) useItem 使用 @Transactional 保证物品使用与资源更新的原子性
- * 2) createItem 不加 @Transactional，由内部调用的函数处理事务
+ * 2) createItem 不加 @Transactional，由内部复用的 inventoryService / equipmentService 统一处理事务
  */
 class ItemService {
   /**
