@@ -1,4 +1,4 @@
-import { App, Button, Input, Modal, Pagination, Segmented, Select, Table, Tag, Tooltip } from 'antd';
+import { App, Button, Drawer, Input, Modal, Pagination, Segmented, Select, Table, Tag, Tooltip } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveIconUrl, DEFAULT_ICON as coin01 } from '../../shared/resolveIcon';
@@ -21,6 +21,11 @@ import { useGameItemTaxonomy } from '../../shared/useGameItemTaxonomy';
 import MarketItemTooltipContent, {
   ITEM_TOOLTIP_CLASS_NAMES,
 } from '../../shared/MarketItemTooltipContent';
+import MarketEquipmentSummary from './MarketEquipmentSummary';
+import {
+  buildMarketEquipmentSummary,
+  type MarketEquipmentSummaryItem,
+} from './marketEquipmentSummary';
 import {
   buildBagItem,
   buildEquipmentDetailLines,
@@ -32,6 +37,7 @@ import {
 } from '../BagModal/bagShared';
 import { EquipmentDetailAttrList } from '../BagModal/EquipmentDetailAttrList';
 import { SetBonusDisplay } from '../BagModal/SetBonusDisplay';
+import type { SocketedGemEntry } from '../../shared/socketedGemDisplay';
 import './index.scss';
 
 type MarketPanel = 'market' | 'my' | 'list' | 'records';
@@ -42,6 +48,12 @@ type MarketCategory = string;
 
 type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
 type MarketTooltipPlacement = 'rightTop' | 'right' | 'rightBottom';
+type MobileListingPreviewSource = 'market' | 'my';
+
+type MobileListingPreview = {
+  source: MobileListingPreviewSource;
+  listingId: number;
+};
 
 /* ─── 移动端 Bottom Sheet 组件 ─── */
 
@@ -215,7 +227,8 @@ type ListingItem = {
   refineLevel: number;
   identified: boolean;
   affixes: unknown;
-  socketedGems: unknown;
+  socketedGems: string | SocketedGemEntry[] | null;
+  equipmentSummary: MarketEquipmentSummaryItem[];
   qty: number;
   unitPrice: number;
   seller: string;
@@ -262,6 +275,14 @@ const toNonNegativeIntegerOrUndefined = (value: string): number | undefined => {
 const buildListingItem = (dto: MarketListingDto): ListingItem => {
   const quality = normalizeQuality(dto.quality);
   const category = normalizeMarketCategory(dto.category);
+  const socketedGems =
+    typeof dto.socketedGems === 'string'
+      ? dto.socketedGems
+      : Array.isArray(dto.socketedGems)
+        ? (dto.socketedGems as SocketedGemEntry[])
+        : null;
+  const strengthenLevel = Math.max(0, Math.floor(Number(dto.strengthenLevel) || 0));
+  const refineLevel = Math.max(0, Math.floor(Number(dto.refineLevel) || 0));
   return {
     id: Number(dto.id),
     itemInstanceId: Number(dto.itemInstanceId) || 0,
@@ -279,11 +300,17 @@ const buildListingItem = (dto: MarketListingDto): ListingItem => {
     equipSlot: dto.equipSlot === null || dto.equipSlot === undefined ? null : String(dto.equipSlot),
     equipReqRealm: dto.equipReqRealm === null || dto.equipReqRealm === undefined ? null : String(dto.equipReqRealm),
     useType: dto.useType === null || dto.useType === undefined ? null : String(dto.useType),
-    strengthenLevel: Math.max(0, Math.floor(Number(dto.strengthenLevel) || 0)),
-    refineLevel: Math.max(0, Math.floor(Number(dto.refineLevel) || 0)),
+    strengthenLevel,
+    refineLevel,
     identified: Boolean(dto.identified),
     affixes: dto.affixes ?? [],
-    socketedGems: dto.socketedGems ?? null,
+    socketedGems,
+    equipmentSummary: buildMarketEquipmentSummary({
+      category,
+      strengthenLevel,
+      refineLevel,
+      socketedGems,
+    }),
     qty: Number(dto.qty) || 0,
     unitPrice: Number(dto.unitPriceSpiritStones) || 0,
     seller: String(dto.sellerName ?? ''),
@@ -384,6 +411,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const [records, setRecords] = useState<TradeRecord[]>([]);
   const [recordsTotal, setRecordsTotal] = useState(0);
   const [marketTooltipPlacement, setMarketTooltipPlacement] = useState<MarketTooltipPlacement>('right');
+  const [mobileListingPreview, setMobileListingPreview] = useState<MobileListingPreview | null>(null);
   const resolveMarketTooltipPlacement = useCallback((event: React.MouseEvent<HTMLElement>) => {
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
     if (!viewportHeight) return;
@@ -455,6 +483,11 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     () => (selectedBagId === null ? null : bagItems.find((b) => b.id === selectedBagId) ?? null),
     [bagItems, selectedBagId],
   );
+  const mobilePreviewListing = useMemo(() => {
+    if (!mobileListingPreview) return null;
+    const sourceListings = mobileListingPreview.source === 'market' ? marketListings : myListings;
+    return sourceListings.find((listing) => listing.id === mobileListingPreview.listingId) ?? null;
+  }, [marketListings, mobileListingPreview, myListings]);
 
   const refreshBag = useCallback(async () => {
     setBagLoading(true);
@@ -560,6 +593,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     setListPrice('');
     setListQty('1');
     setMobileFilterOpen(false);
+    setMobileListingPreview(null);
   };
 
   const menuItems = useMemo(
@@ -609,6 +643,12 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   useEffect(() => {
     if (!isMobile) setMobileFilterOpen(false);
   }, [isMobile]);
+
+  useEffect(() => {
+    if (!mobileListingPreview) return;
+    if (mobilePreviewListing) return;
+    setMobileListingPreview(null);
+  }, [mobileListingPreview, mobilePreviewListing]);
 
   const handlePanelChange = useCallback(
     (nextPanel: MarketPanel) => {
@@ -800,14 +840,26 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
             <div className="market-mobile-list">
               {marketLoading && marketListings.length === 0 ? <div className="market-empty">加载中...</div> : null}
               {marketListings.map((row) => (
-                <div key={row.id} className={`market-mobile-card ${getQualityClassName(row.quality)}`}>
+                <div
+                  key={row.id}
+                  className={`market-mobile-card ${getQualityClassName(row.quality)}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setMobileListingPreview({ source: 'market', listingId: row.id })}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    setMobileListingPreview({ source: 'market', listingId: row.id });
+                  }}
+                >
                   <div className="market-mobile-card-head">
                     <img className={`market-item-icon ${getQualityClassName(row.quality)}`} src={row.icon} alt={row.name} />
-                    <div className="market-mobile-head-main">
-                      <div className="market-item-name">{row.name}</div>
-                      <div className="market-item-tags">
-                        <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.quality)}`}>{row.quality}</Tag>
-                        <Tag className="market-tag">{ITEM_CATEGORY_LABELS[row.category] ?? row.category}</Tag>
+                      <div className="market-mobile-head-main">
+                        <div className="market-item-name">{row.name}</div>
+                        <MarketEquipmentSummary items={row.equipmentSummary} />
+                        <div className="market-item-tags">
+                          <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.quality)}`}>{row.quality}</Tag>
+                          <Tag className="market-tag">{ITEM_CATEGORY_LABELS[row.category] ?? row.category}</Tag>
                         {row.seller === playerName ? <Tag className="market-tag market-tag-mine">我的上架</Tag> : null}
                       </div>
                     </div>
@@ -836,7 +888,10 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                         type="primary"
                         size="small"
                         disabled={characterId !== null && row.sellerCharacterId === characterId}
-                        onClick={() => buyListing(row)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void buyListing(row);
+                        }}
                       >
                         购买
                       </Button>
@@ -873,6 +928,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                         <img className={`market-item-icon ${getQualityClassName(row.quality)}`} src={row.icon} alt={row.name} />
                         <div className="market-item-meta">
                           <div className="market-item-name">{row.name}</div>
+                          <MarketEquipmentSummary items={row.equipmentSummary} />
                           <div className="market-item-tags">
                             <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.quality)}`}>{row.quality}</Tag>
                             <Tag className="market-tag">{ITEM_CATEGORY_LABELS[row.category] ?? row.category}</Tag>
@@ -946,11 +1002,23 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
             <div className="market-mobile-list">
               {myLoading && myListings.length === 0 ? <div className="market-empty">加载中...</div> : null}
               {myListings.map((row) => (
-                <div key={row.id} className={`market-mobile-card ${getQualityClassName(row.quality)}`}>
+                <div
+                  key={row.id}
+                  className={`market-mobile-card ${getQualityClassName(row.quality)}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setMobileListingPreview({ source: 'my', listingId: row.id })}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    setMobileListingPreview({ source: 'my', listingId: row.id });
+                  }}
+                >
                   <div className="market-mobile-card-head">
                     <img className={`market-item-icon ${getQualityClassName(row.quality)}`} src={row.icon} alt={row.name} />
                     <div className="market-mobile-head-main">
                       <div className="market-item-name">{row.name}</div>
+                      <MarketEquipmentSummary items={row.equipmentSummary} />
                       <div className="market-item-tags">
                         <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.quality)}`}>{row.quality}</Tag>
                         <Tag className="market-tag">{ITEM_CATEGORY_LABELS[row.category] ?? row.category}</Tag>
@@ -979,7 +1047,13 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                       </span>
                     </div>
                     <div className="market-mobile-actions">
-                      <Button size="small" onClick={() => unlistMyItem(row)}>
+                      <Button
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void unlistMyItem(row);
+                        }}
+                      >
                         下架
                       </Button>
                     </div>
@@ -1014,6 +1088,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                         <img className={`market-item-icon ${getQualityClassName(row.quality)}`} src={row.icon} alt={row.name} />
                         <div className="market-item-meta">
                           <div className="market-item-name">{row.name}</div>
+                          <MarketEquipmentSummary items={row.equipmentSummary} />
                           <div className="market-item-tags">
                             <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.quality)}`}>{row.quality}</Tag>
                             <Tag className="market-tag">{ITEM_CATEGORY_LABELS[row.category] ?? row.category}</Tag>
@@ -1426,6 +1501,53 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         </div>
         <div className="market-right">{panelContent()}</div>
       </div>
+
+      {isMobile ? (
+        <Drawer
+          placement="bottom"
+          open={Boolean(mobilePreviewListing)}
+          onClose={() => setMobileListingPreview(null)}
+          height="56dvh"
+          className="market-mobile-preview-drawer"
+          styles={{
+            header: { display: 'none' },
+            body: { padding: '10px 12px 12px' },
+          }}
+        >
+          {mobilePreviewListing ? (
+            <div className="market-mobile-preview">
+              <div className="market-mobile-preview-content">
+                <div className="market-mobile-preview-surface">
+                  <MarketItemTooltipContent item={mobilePreviewListing} />
+                </div>
+              </div>
+              <div className="market-mobile-preview-actions">
+                {mobileListingPreview?.source === 'my' ? (
+                  <Button
+                    block
+                    onClick={() => {
+                      void unlistMyItem(mobilePreviewListing);
+                    }}
+                  >
+                    下架
+                  </Button>
+                ) : (
+                  <Button
+                    type="primary"
+                    block
+                    disabled={characterId !== null && mobilePreviewListing.sellerCharacterId === characterId}
+                    onClick={() => {
+                      void buyListing(mobilePreviewListing);
+                    }}
+                  >
+                    购买
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </Drawer>
+      ) : null}
     </Modal>
   );
 };
