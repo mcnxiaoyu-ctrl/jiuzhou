@@ -18,7 +18,12 @@
  * 2. 内联摘要只展示高频关键信息，避免移动端卡片过高；完整信息由 Tooltip 承载。
  */
 import type { ReactNode } from 'react';
-import { formatSkillEffectLines } from '../skillEffectFormatter';
+import type { TechniqueResearchJobDto } from '../../../../services/api';
+import {
+  formatDamageTypeLabel,
+  formatElementLabel,
+  formatSkillEffectLines,
+} from '../skillEffectFormatter';
 
 export type TechniqueSkillDetailLike = {
   id: string;
@@ -35,10 +40,18 @@ export type TechniqueSkillDetailLike = {
   effects?: unknown[];
 };
 
+export type TechniqueResearchPreviewSkill = NonNullable<TechniqueResearchJobDto['preview']>['skills'][number];
+
 type SkillDetailItem = {
   label: string;
   value: string;
   isEffect?: boolean;
+};
+
+type SkillCardSection = {
+  metaItems: Array<{ label: string; value: string }>;
+  gridItems: Array<{ label: string; value: string }>;
+  summaryItems: SkillDetailItem[];
 };
 
 const TARGET_TYPE_LABEL: Record<string, string> = {
@@ -60,6 +73,33 @@ const INLINE_SKILL_DETAIL_ORDER = [
   '气血消耗',
 ] as const;
 
+const getTargetTypeLabel = (value: string | undefined): string => {
+  if (!value) return '';
+  return TARGET_TYPE_LABEL[value] || value;
+};
+
+const pickSummaryItems = (items: SkillDetailItem[]): SkillDetailItem[] => {
+  const summaries = items.filter((item) => item.label === '描述' || item.isEffect);
+  if (summaries.length > 0) return summaries.slice(0, 3);
+
+  return items.slice(0, 2);
+};
+
+export const mapResearchPreviewSkillToDetail = (skill: TechniqueResearchPreviewSkill): TechniqueSkillDetailLike => ({
+  id: skill.id,
+  name: skill.name,
+  icon: skill.icon || '',
+  description: skill.description || undefined,
+  cost_lingqi: skill.costLingqi || undefined,
+  cost_qixue: skill.costQixue || undefined,
+  cooldown: skill.cooldown || undefined,
+  target_type: skill.targetType || undefined,
+  target_count: skill.targetCount || undefined,
+  damage_type: skill.damageType || undefined,
+  element: skill.element || undefined,
+  effects: Array.isArray(skill.effects) ? skill.effects : undefined,
+});
+
 export const getSkillDetailItems = (skill: TechniqueSkillDetailLike): SkillDetailItem[] => {
   const items: SkillDetailItem[] = [];
 
@@ -76,7 +116,7 @@ export const getSkillDetailItems = (skill: TechniqueSkillDetailLike): SkillDetai
     items.push({ label: '冷却回合', value: `${skill.cooldown}回合` });
   }
   if (skill.target_type) {
-    items.push({ label: '目标类型', value: TARGET_TYPE_LABEL[skill.target_type] || skill.target_type });
+    items.push({ label: '目标类型', value: getTargetTypeLabel(skill.target_type) });
   }
   if (skill.target_count && skill.target_count > 0) {
     items.push({ label: '目标数量', value: String(skill.target_count) });
@@ -91,6 +131,29 @@ export const getSkillDetailItems = (skill: TechniqueSkillDetailLike): SkillDetai
   });
 
   return items;
+};
+
+export const getSkillCardSections = (skill: TechniqueSkillDetailLike): SkillCardSection => {
+  const metaItems: SkillCardSection['metaItems'] = [];
+  if (skill.cost_lingqi && skill.cost_lingqi > 0) metaItems.push({ label: '灵气', value: String(skill.cost_lingqi) });
+  if (skill.cooldown && skill.cooldown > 0) metaItems.push({ label: '冷却', value: `${skill.cooldown}回合` });
+  if (skill.cost_qixue && skill.cost_qixue > 0) metaItems.push({ label: '气血', value: String(skill.cost_qixue) });
+
+  const gridItems: SkillCardSection['gridItems'] = [];
+  if (skill.target_type) gridItems.push({ label: '目标', value: getTargetTypeLabel(skill.target_type) });
+  if (skill.target_count && skill.target_count > 0) gridItems.push({ label: '数量', value: String(skill.target_count) });
+
+  const damageTypeText = formatDamageTypeLabel(skill.damage_type);
+  if (damageTypeText) gridItems.push({ label: '伤害', value: damageTypeText });
+
+  const elementText = formatElementLabel(skill.element);
+  if (elementText && elementText !== '无') gridItems.push({ label: '五行', value: elementText });
+
+  return {
+    metaItems,
+    gridItems,
+    summaryItems: pickSummaryItems(getSkillDetailItems(skill)),
+  };
 };
 
 export const getSkillInlineDetailItems = (skill: TechniqueSkillDetailLike): SkillDetailItem[] => {
@@ -115,6 +178,54 @@ export const getSkillInlineSummary = (skill: TechniqueSkillDetailLike): string =
   return detailItems
     .map((item) => (item.label === '描述' || item.isEffect ? item.value : `${item.label}:${item.value}`))
     .join(' · ');
+};
+
+export const renderSkillCardDetails = (skill: TechniqueSkillDetailLike): ReactNode => {
+  const sections = getSkillCardSections(skill);
+
+  return (
+    <div className="skill-card-details">
+      <div className="skill-card-header">
+        <div className="skill-card-title">{skill.name}</div>
+        {sections.metaItems.length > 0 ? (
+          <div className="skill-card-meta">
+            {sections.metaItems.map((item) => (
+              <span key={`${item.label}-${item.value}`} className="skill-card-meta-pill">
+                <span className="skill-card-meta-label">{item.label}</span>
+                <span className="skill-card-meta-value">{item.value}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      {sections.gridItems.length > 0 ? (
+        <div className="skill-card-grid">
+          {sections.gridItems.map((item) => (
+            <div key={`${item.label}-${item.value}`} className="skill-card-grid-item">
+              <span className="skill-card-grid-label">{item.label}</span>
+              <span className="skill-card-grid-value">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="skill-card-summary">
+        {sections.summaryItems.length > 0 ? (
+          sections.summaryItems.map((item, idx) => {
+            const rowClassName = item.isEffect ? 'skill-card-summary-row is-effect' : 'skill-card-summary-row is-description';
+            return (
+              <div key={`${item.label}-${idx}`} className={rowClassName}>
+                {item.value}
+              </div>
+            );
+          })
+        ) : (
+          <div className="skill-card-summary-empty">暂无详细信息</div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export const renderSkillInlineDetails = (skill: TechniqueSkillDetailLike): ReactNode => {

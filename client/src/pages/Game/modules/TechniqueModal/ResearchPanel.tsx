@@ -18,10 +18,13 @@
  * 2. 草稿详情中的技能可能没有完整描述，卡片需要优雅回退到摘要文本，避免出现空白块。
  */
 import { Button, Tag, Tooltip } from 'antd';
-import type { TechniqueResearchJobDto } from '../../../../services/api';
 import type { TechniqueResearchStatusData } from './researchShared';
 import { resolveTechniqueResearchPanelView } from './researchShared';
-import { getSkillInlineSummary, renderSkillTooltip } from './skillDetailShared';
+import {
+  mapResearchPreviewSkillToDetail,
+  renderSkillCardDetails,
+  renderSkillTooltip,
+} from './skillDetailShared';
 
 type ResearchPanelProps = {
   status: TechniqueResearchStatusData | null;
@@ -48,21 +51,6 @@ const QUALITY_TEXT: Record<'黄' | '玄' | '地' | '天', string> = {
   黄: '黄品',
 };
 
-const toPreviewSkill = (skill: NonNullable<TechniqueResearchJobDto['preview']>['skills'][number]) => ({
-  id: skill.id,
-  name: skill.name,
-  icon: skill.icon || '',
-  description: skill.description || undefined,
-  cost_lingqi: skill.costLingqi || undefined,
-  cost_qixue: skill.costQixue || undefined,
-  cooldown: skill.cooldown || undefined,
-  target_type: skill.targetType || undefined,
-  target_count: skill.targetCount || undefined,
-  damage_type: skill.damageType || undefined,
-  element: skill.element || undefined,
-  effects: Array.isArray(skill.effects) ? skill.effects : undefined,
-});
-
 const ResearchPanel: React.FC<ResearchPanelProps> = ({
   status,
   loading,
@@ -88,14 +76,14 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
   return (
     <div className="tech-pane">
       <div className="tech-pane-scroll">
-        <div className="tech-subtitle">洞府研修（每角色每周最多 1 次）</div>
+        <div className="tech-subtitle">洞府研修</div>
         <div className="tech-research-stats">
           <div className="tech-research-stat"><span>研修点</span><strong>{status?.pointsBalance ?? '--'}</strong></div>
           <div className="tech-research-stat"><span>本周已用</span><strong>{status?.weeklyUsed ?? '--'}</strong></div>
           <div className="tech-research-stat"><span>本周剩余</span><strong>{status?.weeklyRemaining ?? '--'}</strong></div>
         </div>
 
-        <div className="tech-research-costs">
+        {/* <div className="tech-research-costs">
           {(Object.entries(status?.generationCostByQuality || { 黄: 500, 玄: 500, 地: 500, 天: 500 }) as Array<[string, number]>).map(
             ([quality, cost]) => (
               <Tag key={quality} color="default">
@@ -103,7 +91,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
               </Tag>
             ),
           )}
-        </div>
+        </div> */}
 
         <div className="tech-research-actions">
           <Button loading={exchangeSubmitting} onClick={onExchangeBooks}>
@@ -169,12 +157,11 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
             </div>
             <div className="tech-research-skill-list">
               {panelView.preview.skills.map((skill) => {
-                const previewSkill = toPreviewSkill(skill);
+                const previewSkill = mapResearchPreviewSkillToDetail(skill);
                 return (
                   <Tooltip key={skill.id} title={renderSkillTooltip(previewSkill)} placement="top">
                     <div className="tech-research-skill-card">
-                      <div className="tech-research-skill-name">{skill.name}</div>
-                      <div className="tech-research-skill-summary">{getSkillInlineSummary(previewSkill)}</div>
+                      {renderSkillCardDetails(previewSkill)}
                     </div>
                   </Tooltip>
                 );

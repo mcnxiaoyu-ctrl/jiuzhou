@@ -115,6 +115,16 @@ const formatPercent = (value: number): string => {
   return Number.isInteger(percent) ? `${percent}` : `${Number(percent.toFixed(2))}`;
 };
 
+export const formatDamageTypeLabel = (value: string | null | undefined): string => {
+  if (!value) return '';
+  return DAMAGE_TYPE_LABEL[value] || value;
+};
+
+export const formatElementLabel = (value: string | null | undefined): string => {
+  if (!value) return '';
+  return ELEMENT_LABEL[value] || value;
+};
+
 const describeScaleAttr = (attrRaw: unknown): string => {
   const attr = normalizeAttrKey(toText(attrRaw));
   if (!attr) return '';
@@ -166,9 +176,9 @@ const formatScaledValue = (effect: Record<string, unknown>, kind: 'damage' | 'he
 
 const formatDamageEffect = (effect: Record<string, unknown>, context: SkillEffectContext): string => {
   const damageTypeRaw = toText(effect.damageType) || toText(context.damageType);
-  const damageType = DAMAGE_TYPE_LABEL[damageTypeRaw] || damageTypeRaw || '';
+  const damageType = formatDamageTypeLabel(damageTypeRaw);
   const elementRaw = toText(effect.element) || toText(context.element);
-  const element = ELEMENT_LABEL[elementRaw] || elementRaw || '';
+  const element = formatElementLabel(elementRaw);
   const scaled = formatScaledValue(effect, 'damage');
   const hitCount = Math.max(1, toPositiveInt(effect.hit_count) || 1);
 

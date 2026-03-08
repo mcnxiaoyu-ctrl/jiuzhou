@@ -486,9 +486,9 @@
 }
 
 .tech-research-skill-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
 }
 
 .tech-research-skill-list .ant-tag {
@@ -551,23 +551,125 @@
   border: 1px solid var(--border-color-soft);
   border-radius: 10px;
   background: var(--panel-bg);
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1 1 220px;
+  padding: 10px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
-.tech-research-skill-name {
-  font-size: 12px;
+.tech-research-skill-card:hover {
+  border-color: color-mix(in srgb, var(--accent-color) 38%, var(--border-color-soft));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+  transform: translateY(-1px);
+}
+
+.skill-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skill-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.skill-card-title {
+  min-width: 0;
+  font-size: 13px;
   font-weight: 900;
+  color: var(--text-color);
+  line-height: 1.4;
+}
+
+.skill-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.skill-card-meta-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-color) 24%, var(--border-color-soft));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 8%, var(--panel-bg-soft));
+}
+
+.skill-card-meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+
+.skill-card-meta-value {
+  font-size: 11px;
+  font-weight: 800;
   color: var(--text-color);
 }
 
-.tech-research-skill-summary {
+.skill-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.skill-card-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border-color-soft);
+  border-radius: 8px;
+  background: var(--panel-bg-soft);
+}
+
+.skill-card-grid-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+
+.skill-card-grid-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-color);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.skill-card-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color-soft);
+}
+
+.skill-card-summary-row {
   font-size: 11px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.skill-card-summary-row.is-description {
+  color: var(--text-color);
+}
+
+.skill-card-summary-row.is-effect {
   color: var(--text-secondary);
-  line-height: 1.6;
+}
+
+.skill-card-summary-empty {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .tech-research-publish {
@@ -589,6 +691,22 @@
 
 @media (max-width: 768px) {
   .tech-research-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .tech-research-skill-list {
+    grid-template-columns: 1fr;
+  }
+
+  .skill-card-header {
+    flex-direction: column;
+  }
+
+  .skill-card-meta {
+    justify-content: flex-start;
+  }
+
+  .skill-card-grid {
     grid-template-columns: 1fr;
   }
 }

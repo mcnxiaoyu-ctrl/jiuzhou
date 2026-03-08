@@ -205,10 +205,10 @@ const QUALITY_RANDOM_WEIGHT: Array<{ quality: TechniqueQuality; weight: number }
 ];
 
 const GENERATE_POINT_COST_BY_QUALITY: Record<TechniqueQuality, number> = {
-  黄: 500,
-  玄: 500,
-  地: 500,
-  天: 500,
+  黄: 0,
+  玄: 0,
+  地: 0,
+  天: 0,
 };
 
 const EXCHANGE_POINTS_BY_QUALITY_RANK: Record<number, number> = {
