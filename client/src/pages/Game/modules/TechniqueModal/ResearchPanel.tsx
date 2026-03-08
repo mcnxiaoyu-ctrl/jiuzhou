@@ -88,15 +88,18 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
         </div>
 
         <div className="tech-research-actions">
-          <Button
-            type="primary"
-            loading={generateSubmitting}
-            disabled={!actionState.canGenerate}
-            onClick={onGenerateDraft}
-          >
-            开始领悟
-          </Button>
-          <Button loading={refreshing} onClick={onRefresh}>
+          <div className="tech-research-primary-action">
+            <Button
+              className="tech-research-generate-button"
+              type="primary"
+              loading={generateSubmitting}
+              disabled={!actionState.canGenerate}
+              onClick={onGenerateDraft}
+            >
+              开始领悟
+            </Button>
+          </div>
+          <Button className="tech-research-refresh-button" loading={refreshing} onClick={onRefresh}>
             刷新
           </Button>
         </div>
@@ -144,21 +147,25 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
         ) : null}
         {!loading && panelView.kind === 'draft' ? (
           <div className="tech-research-draft">
-            <div className="tech-research-draft-name">{panelView.preview.aiSuggestedName}</div>
-            <div className="tech-research-draft-meta">
-              <Tag className={`tech-research-quality-tag ${QUALITY_TAG_CLASS[panelView.preview.quality]}`}>
-                {QUALITY_TEXT[panelView.preview.quality]}
-              </Tag>
-              <Tag color="default">{panelView.preview.type}</Tag>
-              <Tag color="default">最高{panelView.preview.maxLayer}层</Tag>
+            <div className="tech-research-draft-head">
+              <div className="tech-research-draft-head-main">
+                <div className="tech-research-draft-name">{panelView.preview.aiSuggestedName}</div>
+                <div className="tech-research-draft-meta">
+                  <Tag className={`tech-research-quality-tag ${QUALITY_TAG_CLASS[panelView.preview.quality]}`}>
+                    {QUALITY_TEXT[panelView.preview.quality]}
+                  </Tag>
+                  <Tag color="default">{panelView.preview.type}</Tag>
+                  <Tag color="default">最高{panelView.preview.maxLayer}层</Tag>
+                </div>
+              </div>
+              <div className="tech-research-draft-expire">
+                草稿过期时间：{panelView.job.draftExpireAt ? new Date(panelView.job.draftExpireAt).toLocaleString() : '--'}
+              </div>
             </div>
             <div className="tech-research-draft-desc">{panelView.preview.description || '暂无描述'}</div>
             {panelView.preview.longDesc ? (
               <div className="tech-research-draft-long-desc">{panelView.preview.longDesc}</div>
             ) : null}
-            <div className="tech-research-draft-expire">
-              草稿过期时间：{panelView.job.draftExpireAt ? new Date(panelView.job.draftExpireAt).toLocaleString() : '--'}
-            </div>
             <div className="tech-research-skill-list">
               {panelView.preview.skills.map((skill) => {
                 const previewSkill = mapResearchPreviewSkillToDetail(skill);

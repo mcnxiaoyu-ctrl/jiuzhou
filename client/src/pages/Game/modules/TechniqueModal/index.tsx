@@ -1,4 +1,4 @@
-import { App, Button, Modal, Table, Tag, Tooltip } from 'antd';
+import { App, Button, Modal, Segmented, Table, Tag, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveIconUrl, DEFAULT_ICON as coin01 } from '../../shared/resolveIcon';
 import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../shared/imageAssets';
@@ -373,6 +373,29 @@ const slotLabels: Record<SlotKey, string> = {
   sub1: '副功法Ⅰ',
   sub2: '副功法Ⅱ',
   sub3: '副功法Ⅲ',
+};
+
+const mobileSlotLabels: Record<SlotKey, string> = {
+  main: '主功',
+  sub1: '副一',
+  sub2: '副二',
+  sub3: '副三',
+};
+
+const panelLabels: Record<TechniquePanel, string> = {
+  slots: '功法栏',
+  learned: '已学功法',
+  bonus: '功法加成',
+  skills: '技能配置',
+  research: '洞府研修',
+};
+
+const mobilePanelLabels: Record<TechniquePanel, string> = {
+  slots: '功法',
+  learned: '已学',
+  bonus: '加成',
+  skills: '技能',
+  research: '研修',
 };
 
 interface TechniqueModalProps {
@@ -852,13 +875,13 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
   }, [equipped]);
 
   const leftItems: Array<{ key: TechniquePanel; label: string }> = [
-    { key: 'slots', label: '功法栏' },
-    { key: 'learned', label: '已学功法' },
-    { key: 'bonus', label: '功法加成' },
-    { key: 'skills', label: isMobile ? '技能' : '技能配置' },
+    { key: 'slots', label: panelLabels.slots },
+    { key: 'learned', label: panelLabels.learned },
+    { key: 'bonus', label: panelLabels.bonus },
+    { key: 'skills', label: isMobile ? mobilePanelLabels.skills : panelLabels.skills },
   ];
   if (TECHNIQUE_RESEARCH_ENABLED) {
-    leftItems.push({ key: 'research', label: '洞府研修' });
+    leftItems.push({ key: 'research', label: panelLabels.research });
   }
 
   const renderSlotCard = (k: SlotKey) => {
@@ -975,7 +998,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
                   className="tech-mobile-slot-tab"
                   onClick={() => setActiveSlot(k)}
                 >
-                  {slotLabels[k]}
+                  {mobileSlotLabels[k]}
                 </Button>
               ))}
             </div>
@@ -1312,18 +1335,32 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
             <img className="tech-left-icon" src={coin01} alt="功法" />
             <div className="tech-left-name">功法</div>
           </div>
-          <div className="tech-left-list">
-            {leftItems.map((it) => (
-              <Button
-                key={it.key}
-                type={panel === it.key ? 'primary' : 'default'}
-                className="tech-left-item"
-                onClick={() => setPanel(it.key)}
-              >
-                {it.label}
-              </Button>
-            ))}
-          </div>
+          {isMobile ? (
+            <div className="tech-left-segmented-wrap">
+              <Segmented
+                className="tech-left-segmented"
+                value={panel}
+                options={leftItems.map((it) => ({ value: it.key, label: mobilePanelLabels[it.key] }))}
+                onChange={(value) => {
+                  if (typeof value !== 'string') return;
+                  setPanel(value as TechniquePanel);
+                }}
+              />
+            </div>
+          ) : (
+            <div className="tech-left-list">
+              {leftItems.map((it) => (
+                <Button
+                  key={it.key}
+                  type={panel === it.key ? 'primary' : 'default'}
+                  className="tech-left-item"
+                  onClick={() => setPanel(it.key)}
+                >
+                  {it.label}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="tech-modal-right">{panelContent()}</div>

@@ -59,6 +59,23 @@
   font-weight: 800;
 }
 
+.tech-left-segmented-wrap {
+  display: none;
+}
+
+.tech-left-segmented {
+  width: max-content;
+
+  .ant-segmented-item-label {
+    min-height: 34px;
+    line-height: 34px;
+    padding-inline: 12px;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+}
+
 .tech-modal-right {
   flex: 1;
   min-width: 0;
@@ -386,10 +403,29 @@
 }
 
 .tech-research-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-color) 14%, var(--border-color-soft));
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-color) 6%, var(--panel-bg-soft)), var(--panel-bg-soft));
+}
+
+.tech-research-primary-action {
+  min-width: 0;
+  display: flex;
+}
+
+.tech-research-generate-button.ant-btn {
+  width: 100%;
+}
+
+.tech-research-refresh-button.ant-btn {
+  min-width: 96px;
 }
 
 .tech-research-copy-button {
@@ -411,6 +447,20 @@
   border-radius: 12px;
   background: var(--panel-bg-soft);
   padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tech-research-draft-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tech-research-draft-head-main {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -447,6 +497,15 @@
   font-size: 12px;
   color: var(--text-color);
   line-height: 1.7;
+}
+
+.tech-research-draft-expire {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .tech-research-card {
@@ -724,7 +783,31 @@
 
 @media (max-width: 768px) {
   .tech-research-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tech-research-stats .tech-research-stat:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .tech-research-actions {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .tech-research-refresh-button.ant-btn {
+    min-width: 84px;
+  }
+
+  .tech-research-draft-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tech-research-draft-expire {
+    text-align: left;
+    white-space: normal;
   }
 
   .tech-research-skill-list {
@@ -1516,21 +1599,25 @@
   }
 
   .tech-left-list {
-    padding: 0;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    gap: 6px;
+    display: none;
   }
 
-  .tech-left-item {
-    width: calc((100% - 18px) / 4);
-    min-width: 0;
-    height: 32px;
-    padding: 0 4px;
-    border-radius: 9px;
-    font-size: 12px;
-    white-space: nowrap;
-    flex: 0 0 auto;
+  .tech-left-segmented-wrap {
+    display: block;
+    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-right: 8px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tech-left-segmented-wrap::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tech-left-segmented {
+    min-width: 100%;
   }
 
   .tech-modal-right {
