@@ -403,7 +403,6 @@ interface TechniqueModalProps {
   onClose: () => void;
   onResearchIndicatorChange?: (resultStatus: TechniqueResearchResultStatusDto | null) => void;
 }
-const TECHNIQUE_RESEARCH_ENABLED = !import.meta.env.PROD;
 type ResearchStatusRefreshMode = 'initial' | 'manual' | 'background';
 
 const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResearchIndicatorChange }) => {
@@ -581,21 +580,13 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
   }, [characterId, onResearchIndicatorChange]);
 
   useEffect(() => {
-    if (!TECHNIQUE_RESEARCH_ENABLED) {
-      setResearchLoading(false);
-      setResearchRefreshing(false);
-      researchStatusRef.current = null;
-      setResearchStatus(null);
-      onResearchIndicatorChange?.(null);
-      return;
-    }
     if (!open || panel !== 'research') return;
     const nextMode: ResearchStatusRefreshMode = researchStatusRef.current == null ? 'initial' : 'background';
     void refreshResearchStatus(nextMode);
   }, [onResearchIndicatorChange, open, panel, refreshResearchStatus]);
 
   useEffect(() => {
-    if (!open || panel !== 'research' || !TECHNIQUE_RESEARCH_ENABLED || !characterId) return undefined;
+    if (!open || panel !== 'research' || !characterId) return undefined;
     return gameSocket.onTechniqueResearchResult((payload) => {
       if (payload.characterId !== characterId) return;
       void refreshResearchStatus('background');
@@ -611,7 +602,6 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
     if (
       !open ||
       panel !== 'research' ||
-      !TECHNIQUE_RESEARCH_ENABLED ||
       !characterId ||
       !shouldPollTechniqueResearchStatus(researchStatus)
     ) return undefined;
@@ -880,9 +870,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
     { key: 'bonus', label: panelLabels.bonus },
     { key: 'skills', label: isMobile ? mobilePanelLabels.skills : panelLabels.skills },
   ];
-  if (TECHNIQUE_RESEARCH_ENABLED) {
-    leftItems.push({ key: 'research', label: panelLabels.research });
-  }
+  leftItems.push({ key: 'research', label: panelLabels.research });
 
   const renderSlotCard = (k: SlotKey) => {
     const t = equippedTech[k];
@@ -1303,7 +1291,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
     if (panel === 'slots') return renderSlotsPanel();
     if (panel === 'learned') return renderLearnedPanel();
     if (panel === 'bonus') return renderBonusPanel();
-    if (panel === 'research' && TECHNIQUE_RESEARCH_ENABLED) return renderResearchPanel();
+    if (panel === 'research') return renderResearchPanel();
     return renderSkillsPanel();
   };
 

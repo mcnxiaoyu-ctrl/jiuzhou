@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 /**
  * 九州修仙录 - 角色功法路由
@@ -23,7 +23,6 @@ import {
 } from '../services/techniqueGenerationJobRunner.js';
 
 const router = Router();
-const isTechniqueResearchEnabled = process.env.NODE_ENV !== 'production';
 
 // 扩展Request类型以包含user和params
 interface AuthRequest extends Request<{ characterId: string; techniqueId?: string }> {
@@ -58,13 +57,6 @@ const characterOwnershipMiddleware = async (req: Request, res: Response, next: (
 };
 
 router.use('/:characterId', requireAuth, characterOwnershipMiddleware);
-router.use('/:characterId/technique/research', (_req: Request, _res: Response, next: NextFunction) => {
-  if (isTechniqueResearchEnabled) {
-    next();
-    return;
-  }
-  next(new BusinessError('洞府研修功能在生产环境暂时关闭', 403));
-});
 
 
 // ============================================
