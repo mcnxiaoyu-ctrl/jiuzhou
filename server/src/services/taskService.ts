@@ -19,6 +19,12 @@ import {
   getTaskDefinitionsByNpcIds,
 } from './taskDefinitionService.js';
 import { getCharacterIdByUserId as getCharacterIdByUserIdShared } from './shared/characterId.js';
+import {
+  applyCharacterRewardDeltas,
+  createCharacterRewardDelta,
+  mergeCharacterRewardDelta,
+  type CharacterRewardDelta,
+} from './shared/characterRewardSettlement.js';
 
 export type TaskCategory = 'main' | 'side' | 'daily' | 'event';
 
@@ -602,6 +608,21 @@ type ClaimedRewardResult =
   | { type: 'silver'; amount: number }
   | { type: 'spirit_stones'; amount: number }
   | { type: 'item'; itemDefId: string; qty: number; itemIds?: number[]; itemName?: string; itemIcon?: string };
+
+const appendClaimedCurrencyReward = (
+  rewards: ClaimedRewardResult[],
+  rewardDelta: CharacterRewardDelta,
+  type: 'silver' | 'spirit_stones',
+  amount: number,
+): void => {
+  if (amount <= 0) return;
+  if (type === 'silver') {
+    mergeCharacterRewardDelta(rewardDelta, { silver: amount });
+  } else {
+    mergeCharacterRewardDelta(rewardDelta, { spiritStones: amount });
+  }
+  rewards.push({ type, amount });
+};
 
 export const claimTaskReward = async (
   userId: number,
@@ -1257,8 +1278,12 @@ class TaskService {
       return { success: false, message: applyResult.message };
     }
 
-    const bountyRewards = await this.applyBountyRewardOnTaskClaim(cid, tid);
-    if (bountyRewards.length > 0) applyResult.rewards.push(...bountyRewards);
+    const bountyResult = await this.applyBountyRewardOnTaskClaim(cid, tid);
+    if (bountyResult.rewards.length > 0) {
+      applyResult.rewards.push(...bountyResult.rewards);
+    }
+    mergeCharacterRewardDelta(applyResult.rewardDelta, bountyResult.rewardDelta);
+    await applyCharacterRewardDeltas(new Map([[cid, applyResult.rewardDelta]]));
 
     await query(
       `
@@ -1282,23 +1307,22 @@ class TaskService {
     userId: number,
     characterId: number,
     rewards: RawReward[]
-  ): Promise<{ success: boolean; message: string; rewards: ClaimedRewardResult[] }> {
+  ): Promise<{ success: boolean; message: string; rewards: ClaimedRewardResult[]; rewardDelta: CharacterRewardDelta }> {
     const out: ClaimedRewardResult[] = [];
+    const rewardDelta = createCharacterRewardDelta();
 
     for (const rw of rewards) {
       const type = asNonEmptyString(rw?.type) ?? '';
       if (type === 'silver') {
         const amount = asFiniteNonNegativeInt(rw?.amount, 0);
         if (amount <= 0) continue;
-        await query(`UPDATE characters SET silver = silver + $1, updated_at = NOW() WHERE id = $2`, [amount, characterId]);
-        out.push({ type: 'silver', amount });
+        appendClaimedCurrencyReward(out, rewardDelta, 'silver', amount);
         continue;
       }
       if (type === 'spirit_stones') {
         const amount = asFiniteNonNegativeInt(rw?.amount, 0);
         if (amount <= 0) continue;
-        await query(`UPDATE characters SET spirit_stones = spirit_stones + $1, updated_at = NOW() WHERE id = $2`, [amount, characterId]);
-        out.push({ type: 'spirit_stones', amount });
+        appendClaimedCurrencyReward(out, rewardDelta, 'spirit_stones', amount);
         continue;
       }
       if (type === 'item') {
@@ -1310,7 +1334,7 @@ class TaskService {
         const itemName = asNonEmptyString(itemDef?.name);
         const itemIcon = asNonEmptyString(itemDef?.icon);
         const result = await itemService.createItem(userId, characterId, itemDefId, qty, { obtainedFrom: 'task_reward' });
-        if (!result.success) return { success: false, message: result.message, rewards: out };
+        if (!result.success) return { success: false, message: result.message, rewards: out, rewardDelta };
         out.push({
           type: 'item',
           itemDefId,
@@ -1323,7 +1347,7 @@ class TaskService {
       }
     }
 
-    return { success: true, message: 'ok', rewards: out };
+    return { success: true, message: 'ok', rewards: out, rewardDelta };
   }
 
   /**
@@ -1332,7 +1356,7 @@ class TaskService {
   private async applyBountyRewardOnTaskClaim(
     characterId: number,
     taskId: string
-  ): Promise<ClaimedRewardResult[]> {
+  ): Promise<{ rewards: ClaimedRewardResult[]; rewardDelta: CharacterRewardDelta }> {
     const res = await query(
       `
         SELECT
@@ -1349,30 +1373,30 @@ class TaskService {
       `,
       [characterId, taskId]
     );
-    if ((res.rows ?? []).length === 0) return [];
+    if ((res.rows ?? []).length === 0) {
+      return { rewards: [], rewardDelta: createCharacterRewardDelta() };
+    }
 
     const row = res.rows[0] as any;
     const claimId = Number(row?.claim_id);
-    if (!Number.isFinite(claimId) || claimId <= 0) return [];
+    if (!Number.isFinite(claimId) || claimId <= 0) {
+      return { rewards: [], rewardDelta: createCharacterRewardDelta() };
+    }
 
+    const out: ClaimedRewardResult[] = [];
+    const rewardDelta = createCharacterRewardDelta();
     const spirit = asFiniteNonNegativeInt(row?.spirit_stones_reward, 0);
     const silver = asFiniteNonNegativeInt(row?.silver_reward, 0);
-    const out: ClaimedRewardResult[] = [];
 
     if (spirit > 0) {
-      await query(`UPDATE characters SET spirit_stones = spirit_stones + $1, updated_at = NOW() WHERE id = $2`, [
-        spirit,
-        characterId,
-      ]);
-      out.push({ type: 'spirit_stones', amount: spirit });
+      appendClaimedCurrencyReward(out, rewardDelta, 'spirit_stones', spirit);
     }
     if (silver > 0) {
-      await query(`UPDATE characters SET silver = silver + $1, updated_at = NOW() WHERE id = $2`, [silver, characterId]);
-      out.push({ type: 'silver', amount: silver });
+      appendClaimedCurrencyReward(out, rewardDelta, 'silver', silver);
     }
 
     await query(`UPDATE bounty_claim SET status = 'rewarded', updated_at = NOW() WHERE id = $1`, [claimId]);
-    return out;
+    return { rewards: out, rewardDelta };
   }
 
   /**

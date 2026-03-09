@@ -32,6 +32,11 @@ import {
   shouldApplyDropQuantityMultiplier,
 } from './shared/dropQuantityMultiplier.js';
 import { lockCharacterInventoryMutexes } from './inventoryMutex.js';
+import {
+  addCharacterRewardDelta,
+  applyCharacterRewardDeltas,
+  type CharacterRewardDelta,
+} from './shared/characterRewardSettlement.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { getRealmOrderIndex } from './shared/realmRules.js';
 
@@ -381,6 +386,7 @@ class BattleDropService {
 
     const pendingMailByReceiver = new Map<number, { userId: number; items: MailAttachItem[] }>();
     const collectCounts = new Map<string, { characterId: number; itemDefId: string; qty: number }>();
+    const pendingCharacterRewardDeltas = new Map<number, CharacterRewardDelta>();
 
     const participantCharacterIds = [...new Set(
       participants
@@ -532,22 +538,12 @@ class BattleDropService {
     const requiresInventoryMutation = mergedDropsByReceiver.size > 0;
 
     if (requiresInventoryMutation && participantCharacterIds.length > 0) {
-      // 统一顺序：先背包互斥锁，再角色行锁；并且把“纯计算”前置，缩短锁持有时长。
-      // 这样可以减少和挂机/手动背包写请求的竞争窗口，避免 lock 等待被 statement_timeout 中断。
+      // 这里只拿背包互斥锁，不提前锁 characters。
+      // 角色资源改为在所有入包完成后统一落库，避免“先 characters 行锁、后背包锁”的反向等待。
       await lockCharacterInventoryMutexes(participantCharacterIds);
-      await query(
-        `
-          SELECT id
-          FROM characters
-          WHERE id = ANY($1)
-          ORDER BY id
-          FOR UPDATE
-        `,
-        [participantCharacterIds]
-      );
     }
     
-    // 3. 分发经验和银两（按个人境界压制后的累计值结算）
+    // 3. 先汇总经验和银两，等所有入包流程结束后再统一写回，缩短 characters 行锁持有时长。
     let totalExp = 0;
     let totalSilver = 0;
     
@@ -557,12 +553,10 @@ class BattleDropService {
       const expGain = Math.max(0, Math.floor(baseExpAcc.get(participant.characterId) ?? 0));
       const silverGain = Math.max(0, Math.floor(baseSilverAcc.get(participant.characterId) ?? 0));
 
-      // 更新角色经验和银两
-      await query(`
-        UPDATE characters
-        SET exp = exp + $1, silver = silver + $2, updated_at = NOW()
-        WHERE id = $3
-      `, [expGain, silverGain, participant.characterId]);
+      addCharacterRewardDelta(pendingCharacterRewardDeltas, participant.characterId, {
+        exp: expGain,
+        silver: silverGain,
+      });
       
       perPlayerRewards.push({
         characterId: participant.characterId,
@@ -736,16 +730,9 @@ class BattleDropService {
         addSilver: async (ownerCharacterId, silverGain) => {
           const safeSilver = Math.max(0, Math.floor(Number(silverGain) || 0));
           if (safeSilver <= 0) return { success: true, message: '无需增加银两' };
-          const updateResult = await query(
-            `
-              UPDATE characters
-              SET silver = silver + $1,
-                  updated_at = NOW()
-              WHERE id = $2
-            `,
-            [safeSilver, ownerCharacterId]
-          );
-          if (updateResult.rowCount === 0) return { success: false, message: '角色不存在' };
+          addCharacterRewardDelta(pendingCharacterRewardDeltas, ownerCharacterId, {
+            silver: safeSilver,
+          });
           return { success: true, message: '银两增加成功' };
         },
       });
@@ -796,6 +783,8 @@ class BattleDropService {
         }
       }
     }
+
+    await applyCharacterRewardDeltas(pendingCharacterRewardDeltas);
     
     return {
       success: true,
