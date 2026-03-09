@@ -7,7 +7,7 @@
  * 3) 不做什么：不做 HTTP 参数校验，不直接生成草稿，也不在此处实现 UI 状态判断。
  *
  * 输入/输出：
- * - 输入：generationId / characterId / quality / userId。
+ * - 输入：generationId / characterId / techniqueType / quality / userId。
  * - 输出：无同步业务结果；任务完成后通过 WebSocket 推送结果事件。
  *
  * 数据流/状态流：
@@ -23,6 +23,7 @@ import { fileURLToPath } from 'url';
 import { query } from '../config/database.js';
 import { getGameServer } from '../game/gameServer.js';
 import { getCharacterUserId } from './sect/db.js';
+import { isGeneratedTechniqueType } from './shared/techniqueGenerationConstraints.js';
 import {
   techniqueGenerationService,
   type TechniqueQuality,
@@ -112,6 +113,7 @@ class TechniqueGenerationJobRunner {
             payload: {
               characterId: params.characterId,
               generationId: params.generationId,
+              techniqueType: params.techniqueType,
               quality: params.quality,
             },
           };
@@ -159,7 +161,7 @@ class TechniqueGenerationJobRunner {
   private async recoverPendingJobs(): Promise<void> {
     const result = await query(
       `
-        SELECT id, character_id, quality_rolled
+        SELECT id, character_id, type_rolled, quality_rolled
         FROM technique_generation_job
         WHERE status = 'pending'
         ORDER BY created_at ASC
@@ -169,12 +171,18 @@ class TechniqueGenerationJobRunner {
     for (const row of result.rows as Array<Record<string, unknown>>) {
       const generationId = typeof row.id === 'string' ? row.id : '';
       const characterId = Number(row.character_id);
+      const techniqueType = typeof row.type_rolled === 'string' ? row.type_rolled : '';
       const quality = (typeof row.quality_rolled === 'string' ? row.quality_rolled : '黄') as TechniqueQuality;
       if (!generationId || !Number.isFinite(characterId) || characterId <= 0) continue;
+      if (!isGeneratedTechniqueType(techniqueType)) {
+        await techniqueGenerationService.failPendingGenerationJob(characterId, generationId, '研修任务缺少有效功法类型，已终止');
+        continue;
+      }
       const userId = await getCharacterUserId(characterId);
       await this.enqueue({
         generationId,
         characterId,
+        techniqueType,
         quality,
         userId: userId ?? undefined,
       });

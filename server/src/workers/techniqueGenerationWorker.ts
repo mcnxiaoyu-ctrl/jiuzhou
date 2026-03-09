@@ -6,7 +6,7 @@
  * 2) 不做什么：不处理 HTTP、不会直接推送 WebSocket，也不管理任务队列。
  *
  * 输入/输出：
- * - 输入：`executeTechniqueGeneration`，包含 characterId / generationId / quality。
+ * - 输入：`executeTechniqueGeneration`，包含 characterId / generationId / techniqueType / quality。
  * - 输出：`result`（成功或失败结果）或 `error`（worker 级异常）。
  *
  * 数据流/状态流：

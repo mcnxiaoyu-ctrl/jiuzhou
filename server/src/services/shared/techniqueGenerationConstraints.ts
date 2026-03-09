@@ -45,7 +45,8 @@ import {
   validateTechniqueStructuredBuffEffect,
 } from './techniqueStructuredBuffCatalog.js';
 
-export type GeneratedTechniqueType = '武技' | '心法' | '法诀' | '身法' | '辅修';
+export const GENERATED_TECHNIQUE_TYPE_LIST = ['武技', '心法', '法诀', '身法', '辅修'] as const;
+export type GeneratedTechniqueType = (typeof GENERATED_TECHNIQUE_TYPE_LIST)[number];
 export type GeneratedTechniqueQuality = '黄' | '玄' | '地' | '天';
 export type TechniquePassiveMode = 'percent' | 'flat';
 export type TechniquePassivePoolEntry = { key: string; mode: TechniquePassiveMode };
@@ -61,6 +62,10 @@ export const TECHNIQUE_PROMPT_SYSTEM_MESSAGE =
 export const TECHNIQUE_EFFECT_TYPE_LIST = TECHNIQUE_SKILL_EFFECT_TYPE_LIST;
 
 export const TECHNIQUE_EFFECT_UNSUPPORTED_FIELDS = ['valueFormula'] as const;
+
+export const isGeneratedTechniqueType = (raw: unknown): raw is GeneratedTechniqueType => {
+  return typeof raw === 'string' && GENERATED_TECHNIQUE_TYPE_LIST.includes(raw as GeneratedTechniqueType);
+};
 
 export const TECHNIQUE_PASSIVE_KEY_MEANING_MAP: Record<string, string> = {
   wugong: '物理攻击（百分比加成）',
@@ -245,6 +250,7 @@ export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   'chance 统一使用 0~1 浮点概率（0.1=10%），禁止使用 10/60 这类百分数整数',
   'valueType=combined 时必须同时提供 baseValue 与 scaleRate',
   'valueType=scale 时必须提供 scaleAttr 与 scaleRate',
+  'technique.type 必须等于 techniqueType，禁止自行改成其他功法类型',
   'technique.requiredRealm 必须来自 realmEnum',
   'buff/debuff 必须使用结构化 Buff 字段（buffKind/buffKey/attrKey/applyType），禁止使用 buffId，且 buffKey/attrKey 必须来自 allowedBuffConfigRules',
   'mark.markId 必须来自 allowedMarkIds',
@@ -256,7 +262,7 @@ export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   '禁止输出 null/undefined 字段；可省略可选字段，不要输出空字符串占位',
 ] as const;
 
-export const TECHNIQUE_PROMPT_TYPE_ENUM = ['武技', '心法', '法诀', '身法', '辅修'] as const;
+export const TECHNIQUE_PROMPT_TYPE_ENUM = GENERATED_TECHNIQUE_TYPE_LIST;
 
 export const TECHNIQUE_PROMPT_REALM_ENUM = REALM_ORDER;
 
@@ -432,7 +438,7 @@ export const TECHNIQUE_PROMPT_UPGRADE_SCHEMA = {
 export const TECHNIQUE_PROMPT_FIELD_SEMANTICS = {
   technique: {
     name: '功法内部名/建议名，发布时会由玩家最终命名',
-    type: '功法类型：武技/心法/法诀/身法/辅修',
+    type: '功法类型，必须严格等于 techniqueType',
     quality: '功法品质，必须与 quality 入参一致',
     maxLayer: '最大层数，必须与 quality 对应层数一致',
     requiredRealm: '学习最低境界，必须在 realmEnum 中（如 凡人 / 炼精化炁·养气期）',
@@ -786,22 +792,24 @@ export const TECHNIQUE_PROMPT_OUTPUT_CHECKLIST = [
 ] as const;
 
 export const buildTechniqueGeneratorPromptInput = (params: {
+  techniqueType: GeneratedTechniqueType;
   quality: GeneratedTechniqueQuality;
   maxLayer: number;
   effectTypeEnum: readonly string[];
 }) => {
-  const { quality, maxLayer, effectTypeEnum } = params;
+  const { techniqueType, quality, maxLayer, effectTypeEnum } = params;
   const skillCountRange = TECHNIQUE_SKILL_COUNT_RANGE_BY_QUALITY[quality];
   const promptBuffConfigRules = buildTechniquePromptBuffConfigRules();
   const passiveValueGuideByKey = buildTechniquePassiveValueGuideByKey(quality);
   return {
     task: '生成完整功法定义',
+    techniqueType,
     quality,
     maxLayer,
     constraints: {
       generalRules: [...TECHNIQUE_PROMPT_GENERAL_RULES],
       fieldSemantics: TECHNIQUE_PROMPT_FIELD_SEMANTICS,
-      typeEnum: [...TECHNIQUE_PROMPT_TYPE_ENUM],
+      typeEnum: [techniqueType],
       realmEnum: [...TECHNIQUE_PROMPT_REALM_ENUM],
       targetTypeEnum: [...TECHNIQUE_PROMPT_TARGET_TYPE_ENUM],
       elementEnum: [...TECHNIQUE_PROMPT_ELEMENT_ENUM],
@@ -830,6 +838,7 @@ export const buildTechniqueGeneratorPromptInput = (params: {
       allowedPassiveKeys: [...SUPPORTED_TECHNIQUE_PASSIVE_KEYS],
       passiveKeyMeanings: TECHNIQUE_PASSIVE_KEY_MEANING_MAP,
       passiveValueGuideByKey,
+      typeRule: 'technique.type 必须严格等于 techniqueType',
       passiveRule:
         'layers.passives[].key 可自由从 allowedPassiveKeys 中组合，不受功法类型限制；每层 value 必须 > 0 且不超过 passiveValueGuideByKey[key].maxPerLayer，同一个 key 在全部 layers 的累计值不能超过 passiveValueGuideByKey[key].maxTotal',
       skillCountRange,

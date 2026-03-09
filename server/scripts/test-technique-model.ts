@@ -27,6 +27,7 @@ import {
 } from '../src/services/shared/techniqueTextModelShared.js';
 import {
   buildTechniqueGeneratorPromptInput,
+  GENERATED_TECHNIQUE_TYPE_LIST,
   TECHNIQUE_EFFECT_TYPE_LIST,
   TECHNIQUE_EFFECT_UNSUPPORTED_FIELDS,
   TECHNIQUE_PASSIVE_KEY_POOL_BY_TYPE,
@@ -65,19 +66,18 @@ const sanitizeSkillEffect = (raw: Record<string, unknown>): Record<string, unkno
   return next;
 };
 
-const toTechniqueType = (raw: unknown): GeneratedTechniqueType => {
-  const text = asString(raw);
-  if (text === '武技' || text === '心法' || text === '法诀' || text === '身法' || text === '辅修') {
-    return text;
-  }
-  return '武技';
+const resolveTechniqueTypeByRandom = (): GeneratedTechniqueType => {
+  const index = Math.floor(Math.random() * GENERATED_TECHNIQUE_TYPE_LIST.length);
+  return GENERATED_TECHNIQUE_TYPE_LIST[index]!;
 };
 
-const normalizeParsedLayers = (parsed: Record<string, unknown>): Record<string, unknown> => {
+const normalizeParsedLayers = (
+  parsed: Record<string, unknown>,
+  techniqueType: GeneratedTechniqueType,
+): Record<string, unknown> => {
   const technique = parsed.technique && typeof parsed.technique === 'object' && !Array.isArray(parsed.technique)
     ? (parsed.technique as Record<string, unknown>)
     : null;
-  const techniqueType = toTechniqueType(technique?.type);
   const passivePool = TECHNIQUE_PASSIVE_KEY_POOL_BY_TYPE[techniqueType];
   const layers = Array.isArray(parsed.layers) ? parsed.layers : [];
   const normalizedLayers = layers.map((layerRaw) => {
@@ -109,6 +109,7 @@ const normalizeParsedLayers = (parsed: Record<string, unknown>): Record<string, 
 
   return {
     ...parsed,
+    technique: technique ? { ...technique, type: techniqueType } : technique,
     skills: Array.isArray(parsed.skills)
       ? parsed.skills.map((skillRaw) => {
           if (!skillRaw || typeof skillRaw !== 'object' || Array.isArray(skillRaw)) return skillRaw;
@@ -258,12 +259,14 @@ const attachGeneratedSkillIcons = async (
 const main = async (): Promise<void> => {
   const args = parseArgMap(process.argv.slice(2));
   const quality = resolveQualityArg(args.quality);
+  const techniqueType = resolveTechniqueTypeByRandom();
   const seed = resolveSeedArg(args.seed);
   const endpointRaw = asString(process.env.AI_TECHNIQUE_MODEL_URL);
   const endpoint = resolveTechniqueTextModelEndpoint(endpointRaw);
   const apiKey = asString(process.env.AI_TECHNIQUE_MODEL_KEY);
   const modelName = asString(process.env.AI_TECHNIQUE_MODEL_NAME) || 'gpt-4o-mini';
   const promptInput = buildTechniqueGeneratorPromptInput({
+    techniqueType,
     quality,
     maxLayer: QUALITY_MAX_LAYER[quality],
     effectTypeEnum: [...TECHNIQUE_EFFECT_TYPE_LIST],
@@ -310,7 +313,7 @@ const main = async (): Promise<void> => {
     message?.content as string | Array<{ text?: string | null }> | null | undefined,
   );
   const parsed = parseModelJson(content);
-  const normalized = normalizeParsedLayers(parsed);
+  const normalized = normalizeParsedLayers(parsed, techniqueType);
   const imageEnabled = isSkillImageGenEnabled();
   const withIcons = imageEnabled
     ? await attachGeneratedSkillIcons(normalized)

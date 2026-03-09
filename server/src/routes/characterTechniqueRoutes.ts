@@ -109,6 +109,7 @@ router.post('/:characterId/technique/research/generate', asyncHandler(async (req
         await enqueueTechniqueGenerationJob({
           characterId,
           generationId: result.data.generationId,
+          techniqueType: result.data.techniqueType,
           quality: result.data.quality,
           userId,
         });

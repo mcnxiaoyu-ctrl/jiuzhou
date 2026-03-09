@@ -61,6 +61,11 @@ const generatedTechniqueDefCompatibleColumns: readonly CompatibleColumnDefinitio
 
 const techniqueGenerationJobCompatibleColumns: readonly CompatibleColumnDefinition[] = [
   {
+    name: 'type_rolled',
+    definition: 'type_rolled VARCHAR(16)',
+    comment: '程序预先随机出的功法类型',
+  },
+  {
     name: 'draft_technique_id',
     definition: 'draft_technique_id VARCHAR(64)',
   },
@@ -245,6 +250,7 @@ CREATE TABLE IF NOT EXISTS technique_generation_job (
   week_key VARCHAR(16) NOT NULL,
   status VARCHAR(32) NOT NULL,
 
+  type_rolled VARCHAR(16) NOT NULL,
   quality_rolled VARCHAR(4) NOT NULL,
   cost_points INTEGER NOT NULL,
   prompt_snapshot JSONB,

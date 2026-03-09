@@ -14,7 +14,7 @@
  * worker -> techniqueGenerationWorkerResponse -> runner
  *
  * 关键边界条件与坑点：
- * 1) `quality` 与 `status` 都必须复用后端业务类型，避免字符串拼写漂移。
+ * 1) `techniqueType` / `quality` / `status` 都必须复用后端业务类型，避免字符串拼写漂移。
  * 2) 该协议只覆盖当前研修任务，不混入其他 worker 任务，防止不同业务共享消息体导致耦合。
  */
 import type {
@@ -22,10 +22,12 @@ import type {
   TechniqueQuality,
   TechniqueResearchResultStatus,
 } from '../services/techniqueGenerationService.js';
+import type { GeneratedTechniqueType } from '../services/shared/techniqueGenerationConstraints.js';
 
 export type TechniqueGenerationWorkerPayload = {
   characterId: number;
   generationId: string;
+  techniqueType: GeneratedTechniqueType;
   quality: TechniqueQuality;
 };
 

@@ -38,6 +38,7 @@ import {
 import { resolveTechniqueGenerationRequestFailure } from './shared/techniqueGenerationRequestFailure.js';
 import {
   buildTechniqueGeneratorPromptInput,
+  GENERATED_TECHNIQUE_TYPE_LIST,
   TECHNIQUE_EFFECT_TYPE_LIST,
   TECHNIQUE_EFFECT_UNSUPPORTED_FIELDS,
   TECHNIQUE_PROMPT_SYSTEM_MESSAGE,
@@ -45,6 +46,7 @@ import {
   isSupportedTechniquePassiveKey,
   validateTechniqueSkillEffect,
   validateTechniqueSkillUpgrade,
+  type GeneratedTechniqueType,
 } from './shared/techniqueGenerationConstraints.js';
 import type { TechniqueSkillUpgradeEntry } from './shared/techniqueSkillGenerationSpec.js';
 import {
@@ -283,12 +285,9 @@ const resolveQualityByWeight = (): TechniqueQuality => {
   return QUALITY_RANDOM_WEIGHT[QUALITY_RANDOM_WEIGHT.length - 1]?.quality ?? '黄';
 };
 
-const toTechniqueType = (raw: unknown): TechniqueGenerationCandidate['technique']['type'] => {
-  const text = asString(raw);
-  if (text === '武技' || text === '心法' || text === '法诀' || text === '身法' || text === '辅修') {
-    return text;
-  }
-  return '武技';
+const resolveTechniqueTypeByRandom = (): GeneratedTechniqueType => {
+  const index = Math.floor(Math.random() * GENERATED_TECHNIQUE_TYPE_LIST.length);
+  return GENERATED_TECHNIQUE_TYPE_LIST[index]!;
 };
 
 const toTargetType = (raw: unknown): TechniqueGenerationCandidate['skills'][number]['targetType'] => {
@@ -430,11 +429,15 @@ const normalizeEffects = (raw: unknown): unknown[] => {
 
 const validateCandidate = (
   candidate: TechniqueGenerationCandidate,
+  expectedTechniqueType: GeneratedTechniqueType,
   expectedQuality: TechniqueQuality,
 ): ServiceResult<null> => {
   const quality = candidate.technique.quality;
   if (!candidate.technique.name) {
     return { success: false, message: 'AI结果功法名称缺失', code: 'GENERATOR_INVALID' };
+  }
+  if (candidate.technique.type !== expectedTechniqueType) {
+    return { success: false, message: 'AI结果功法类型与随机类型不一致', code: 'GENERATOR_INVALID' };
   }
   if (quality !== expectedQuality) {
     return { success: false, message: 'AI结果品质与随机品质不一致', code: 'GENERATOR_INVALID' };
@@ -553,7 +556,11 @@ const validateCandidate = (
   return { success: true, message: 'ok', data: null };
 };
 
-const sanitizeCandidateFromModel = (raw: unknown, quality: TechniqueQuality): TechniqueGenerationCandidate | null => {
+const sanitizeCandidateFromModel = (
+  raw: unknown,
+  techniqueType: GeneratedTechniqueType,
+  quality: TechniqueQuality,
+): TechniqueGenerationCandidate | null => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const source = raw as Record<string, unknown>;
 
@@ -561,14 +568,13 @@ const sanitizeCandidateFromModel = (raw: unknown, quality: TechniqueQuality): Te
     ? (source.technique as Record<string, unknown>)
     : null;
   if (!rawTechnique) return null;
-  const type = toTechniqueType(rawTechnique?.type);
   const maxLayer = QUALITY_MAX_LAYER[quality];
   const techniqueName = asString(rawTechnique?.name);
   if (!techniqueName) return null;
 
   const technique: TechniqueGenerationCandidate['technique'] = {
     name: techniqueName,
-    type,
+    type: techniqueType,
     quality,
     maxLayer,
     requiredRealm: asString(rawTechnique?.requiredRealm) || DEFAULT_REQUIRED_REALM,
@@ -703,7 +709,10 @@ const summarizeHttpErrorResponse = (responseText: string): string => {
   return normalized.slice(0, 300);
 };
 
-const tryCallExternalGenerator = async (quality: TechniqueQuality): Promise<TechniqueGenerationAttemptResult> => {
+const tryCallExternalGenerator = async (
+  techniqueType: GeneratedTechniqueType,
+  quality: TechniqueQuality,
+): Promise<TechniqueGenerationAttemptResult> => {
   const endpoint = resolveTechniqueTextModelEndpoint(asString(process.env.AI_TECHNIQUE_MODEL_URL));
   const apiKey = asString(process.env.AI_TECHNIQUE_MODEL_KEY);
   const modelName = asString(process.env.AI_TECHNIQUE_MODEL_NAME) || 'gpt-4o-mini';
@@ -715,6 +724,7 @@ const tryCallExternalGenerator = async (quality: TechniqueQuality): Promise<Tech
     });
   }
   const promptInput = buildTechniqueGeneratorPromptInput({
+    techniqueType,
     quality,
     maxLayer: QUALITY_MAX_LAYER[quality],
     effectTypeEnum: Array.from(DAMAGE_EFFECT_TYPE_SET),
@@ -784,7 +794,7 @@ const tryCallExternalGenerator = async (quality: TechniqueQuality): Promise<Tech
       });
     }
 
-    const candidate = sanitizeCandidateFromModel(parsedResult.data, quality);
+    const candidate = sanitizeCandidateFromModel(parsedResult.data, techniqueType, quality);
     if (!candidate) {
       return buildTechniqueGenerationAttemptFailure({
         stage: 'candidate_sanitize_failed',
@@ -819,16 +829,17 @@ const tryCallExternalGenerator = async (quality: TechniqueQuality): Promise<Tech
 const generateCandidateWithRetry = async (args: {
   generationId: string;
   characterId: number;
+  techniqueType: GeneratedTechniqueType;
   quality: TechniqueQuality;
 }): Promise<{ candidate: TechniqueGenerationCandidate; modelName: string; attemptCount: number; promptSnapshot: string }> => {
-  const { generationId, characterId, quality } = args;
+  const { generationId, characterId, techniqueType, quality } = args;
   const maxAttempts = 3;
   let lastFailure: TechniqueGenerationAttemptFailure | null = null;
   let attemptCount = 0;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     attemptCount = attempt;
-    const external = await tryCallExternalGenerator(quality);
+    const external = await tryCallExternalGenerator(techniqueType, quality);
     if (!external.success) {
       lastFailure = external;
       logTechniqueGenerationAttemptFailure({
@@ -843,7 +854,7 @@ const generateCandidateWithRetry = async (args: {
       if (external.stage === 'config_missing') break;
       continue;
     }
-    const validate = validateCandidate(external.candidate, quality);
+    const validate = validateCandidate(external.candidate, techniqueType, quality);
     if (!validate.success) {
       lastFailure = buildTechniqueGenerationAttemptFailure({
         stage: 'candidate_validate_failed',
@@ -1157,7 +1168,13 @@ class TechniqueGenerationService {
   }
 
   @Transactional
-  private async createGenerationJobTx(characterId: number): Promise<ServiceResult<{ generationId: string; quality: TechniqueQuality; costPoints: number; weekKey: string }>> {
+  private async createGenerationJobTx(characterId: number): Promise<ServiceResult<{
+    generationId: string;
+    techniqueType: GeneratedTechniqueType;
+    quality: TechniqueQuality;
+    costPoints: number;
+    weekKey: string;
+  }>> {
     await this.refundExpiredDraftJobsTx(characterId);
 
     const charRes = await query(
@@ -1194,6 +1211,7 @@ class TechniqueGenerationService {
     }
     const weekKey = resolveWeekKey(new Date());
 
+    const techniqueType = resolveTechniqueTypeByRandom();
     const quality = resolveQualityByWeight();
     const costPoints = TECHNIQUE_RESEARCH_FRAGMENT_COST;
     const fragmentBalance = await this.getResearchFragmentBalanceTx(characterId);
@@ -1223,24 +1241,25 @@ class TechniqueGenerationService {
           character_id,
           week_key,
           status,
+          type_rolled,
           quality_rolled,
           cost_points,
           draft_expire_at,
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, 'pending', $4, $5,
+          $1, $2, $3, 'pending', $4, $5, $6,
           NULL,
           NOW(), NOW()
         )
       `,
-      [generationId, characterId, weekKey, quality, costPoints],
+      [generationId, characterId, weekKey, techniqueType, quality, costPoints],
     );
 
     return {
       success: true,
       message: '创建任务成功',
-      data: { generationId, quality, costPoints, weekKey },
+      data: { generationId, techniqueType, quality, costPoints, weekKey },
     };
   }
 
@@ -1248,6 +1267,7 @@ class TechniqueGenerationService {
   private async saveGeneratedDraftTx(args: {
     characterId: number;
     generationId: string;
+    techniqueType: GeneratedTechniqueType;
     quality: TechniqueQuality;
     modelName: string;
     promptSnapshot: string;
@@ -1257,6 +1277,7 @@ class TechniqueGenerationService {
     const {
       characterId,
       generationId,
+      techniqueType,
       quality,
       modelName,
       promptSnapshot,
@@ -1282,14 +1303,14 @@ class TechniqueGenerationService {
       return { success: false, message: '生成任务状态异常', code: 'GENERATION_STATE_INVALID' };
     }
 
-    const validate = validateCandidate(candidate, quality);
+    const validate = validateCandidate(candidate, techniqueType, quality);
     if (!validate.success) {
       return { success: false, message: validate.message, code: validate.code };
     }
 
     // 强制由系统重建技能ID，避免模型返回ID污染全局主键空间。
     const normalizedCandidate = remapGeneratedSkillIds(candidate);
-    const validateNormalized = validateCandidate(normalizedCandidate, quality);
+    const validateNormalized = validateCandidate(normalizedCandidate, techniqueType, quality);
     if (!validateNormalized.success) {
       return { success: false, message: validateNormalized.message, code: validateNormalized.code };
     }
@@ -1561,6 +1582,7 @@ class TechniqueGenerationService {
   async processPendingGenerationJob(args: {
     characterId: number;
     generationId: string;
+    techniqueType: GeneratedTechniqueType;
     quality: TechniqueQuality;
   }): Promise<ServiceResult<{
     generationId: string;
@@ -1568,12 +1590,13 @@ class TechniqueGenerationService {
     preview: TechniquePreview | null;
     errorMessage: string | null;
   }>> {
-    const { characterId, generationId, quality } = args;
+    const { characterId, generationId, techniqueType, quality } = args;
 
     try {
       const generated = await generateCandidateWithRetry({
         generationId,
         characterId,
+        techniqueType,
         quality,
       });
       const executionResult = await generateTechniqueCandidateWithIcons({
@@ -1584,6 +1607,7 @@ class TechniqueGenerationService {
       const saveRes = await this.saveGeneratedDraftTx({
         characterId,
         generationId,
+        techniqueType,
         quality,
         modelName: generated.modelName,
         promptSnapshot: generated.promptSnapshot,
@@ -1643,6 +1667,7 @@ class TechniqueGenerationService {
 
   async generateTechniqueDraft(characterId: number): Promise<ServiceResult<{
     generationId: string;
+    techniqueType: GeneratedTechniqueType;
     quality: TechniqueQuality;
     status: 'pending';
   }>> {
@@ -1654,12 +1679,13 @@ class TechniqueGenerationService {
       return { success: false, message: '创建生成任务失败', code: 'GENERATION_FAILED' };
     }
 
-    const { generationId, quality } = createRes.data;
+    const { generationId, techniqueType, quality } = createRes.data;
     return {
       success: true,
       message: '已加入洞府推演队列',
       data: {
         generationId,
+        techniqueType,
         quality,
         status: 'pending',
       },

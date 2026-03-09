@@ -65,6 +65,22 @@ test('旧表升级时应先补 viewed_at 系列列，再创建注释与未读索
   );
 });
 
+test('旧表升级时应包含 type_rolled 补列与注释，确保任务类型可恢复', () => {
+  const queries = getTechniqueGenerationCompatibilityQueries();
+
+  const addTypeRolledIndex = findQueryIndex(
+    queries,
+    /ALTER TABLE technique_generation_job ADD COLUMN IF NOT EXISTS type_rolled VARCHAR\(16\)/,
+  );
+  const commentTypeRolledIndex = findQueryIndex(
+    queries,
+    /COMMENT ON COLUMN technique_generation_job\.type_rolled IS '程序预先随机出的功法类型'/,
+  );
+
+  assert.ok(addTypeRolledIndex >= 0, '应生成 type_rolled 补列语句');
+  assert.ok(commentTypeRolledIndex > addTypeRolledIndex, 'type_rolled 列注释必须在补列之后');
+});
+
 test('旧表升级时应先补 generated_technique_def 的发布列，再创建相关索引', () => {
   const queries = getTechniqueGenerationCompatibilityQueries();
 
