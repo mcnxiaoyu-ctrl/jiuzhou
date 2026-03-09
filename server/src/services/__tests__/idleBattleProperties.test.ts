@@ -195,6 +195,7 @@ const BASE_ATTRS: BattleAttrs = {
 function makeUnit(overrides: {
   skills?: BattleSkill[];
   skillCooldowns?: Record<string, number>;
+  skillCooldownDiscountBank?: Record<string, number>;
   lingqi?: number;
   qixue?: number;
 }): BattleUnit {
@@ -212,6 +213,7 @@ function makeUnit(overrides: {
     buffs: [],
     skills: overrides.skills ?? [],
     skillCooldowns: overrides.skillCooldowns ?? {},
+    skillCooldownDiscountBank: overrides.skillCooldownDiscountBank ?? {},
     setBonusEffects: [],
     controlDiminishing: {},
     isAlive: true,

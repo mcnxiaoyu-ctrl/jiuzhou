@@ -23,6 +23,7 @@ import { isFeared, isStunned } from './modules/control.js';
 import { triggerSetBonusEffects } from './modules/setBonus.js';
 import { decayUnitMarksAtRoundStart } from './modules/mark.js';
 import { decayUnitMomentumAtRoundEnd } from './modules/momentum.js';
+import { reduceUnitSkillCooldowns } from './utils/cooldown.js';
 import {
   DEFAULT_PERCENT_BUFF_ATTR_SET,
   normalizeBuffApplyType,
@@ -203,11 +204,7 @@ export class BattleEngine {
    * 技能冷却递减
    */
   private reduceCooldowns(unit: BattleUnit): void {
-    for (const skillId of Object.keys(unit.skillCooldowns)) {
-      if (unit.skillCooldowns[skillId] > 0) {
-        unit.skillCooldowns[skillId]--;
-      }
-    }
+    reduceUnitSkillCooldowns(unit);
   }
   
   /**
@@ -428,6 +425,7 @@ export class BattleEngine {
         momentum: null,
         skills: battleSkills,
         skillCooldowns: {},
+        skillCooldownDiscountBank: {},
         setBonusEffects: [],
         aiProfile: template.aiProfile,
         triggeredPhaseIds: [],

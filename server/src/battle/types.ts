@@ -66,6 +66,7 @@ export interface BattleUnit {
   // 技能与冷却
   skills: BattleSkill[];
   skillCooldowns: Record<string, number>;
+  skillCooldownDiscountBank: Record<string, number>;
 
   // 套装战斗效果（仅战斗期触发型效果）
   setBonusEffects: BattleSetBonusEffect[];

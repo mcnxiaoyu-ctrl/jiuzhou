@@ -75,6 +75,7 @@ function createUnit(id: string, overrides: Partial<BattleAttrs> = {}): BattleUni
     buffs: [],
     skills: [],
     skillCooldowns: {},
+    skillCooldownDiscountBank: {},
     setBonusEffects: [],
     controlDiminishing: {},
     isAlive: true,

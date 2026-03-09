@@ -34,6 +34,11 @@ import {
 import { applyReactiveTrueDamage, calculateReactiveDamageByRate } from './reactiveDamage.js';
 import { resolveSkillCostForResourceState } from '../../shared/skillCost.js';
 import {
+  applySkillCooldownAfterCast,
+  getSkillCooldownBlockedMessage,
+  getSkillCooldownRemainingRounds,
+} from '../utils/cooldown.js';
+import {
   DEFAULT_PERCENT_BUFF_ATTR_SET,
   normalizeBuffApplyType,
   normalizeBuffAttrKey,
@@ -501,9 +506,9 @@ export function executeSkill(
   }
   
   // 检查冷却
-  const cooldown = caster.skillCooldowns[skill.id] || 0;
-  if (cooldown > 0) {
-    return { success: false, error: `技能冷却中: ${cooldown}回合` };
+  const cooldownMessage = getSkillCooldownBlockedMessage(caster, skill.id);
+  if (cooldownMessage) {
+    return { success: false, error: cooldownMessage };
   }
   
   // 检查消耗
@@ -525,9 +530,7 @@ export function executeSkill(
   
   // 设置冷却
   if (skill.cooldown > 0) {
-    const cdReduction = Math.min(caster.currentAttrs.lengque, 0.5);
-    const actualCd = Math.max(1, Math.floor(skill.cooldown * (1 - cdReduction)));
-    caster.skillCooldowns[skill.id] = actualCd;
+    applySkillCooldownAfterCast(caster, skill.id, skill.cooldown);
   }
   
   // 解析目标
@@ -1087,7 +1090,7 @@ export function getNormalAttack(unit: BattleUnit): BattleSkill {
 export function getAvailableSkills(unit: BattleUnit): BattleSkill[] {
   return unit.skills.filter(skill => {
     // 检查冷却
-    if ((unit.skillCooldowns[skill.id] || 0) > 0) return false;
+    if (getSkillCooldownRemainingRounds(unit, skill.id) > 0) return false;
     
     // 检查消耗
     const cost = resolveCasterSkillCost(unit, skill);

@@ -90,6 +90,7 @@ export const createUnit = (args: {
     momentum: null,
     skills: [],
     skillCooldowns: {},
+    skillCooldownDiscountBank: {},
     setBonusEffects: args.setBonusEffects ?? [],
     controlDiminishing: {},
     isAlive: true,

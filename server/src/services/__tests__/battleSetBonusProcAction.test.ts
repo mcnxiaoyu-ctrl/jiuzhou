@@ -54,6 +54,7 @@ const createUnit = (id: string, name: string, effects: BattleSetBonusEffect[] = 
     buffs: [],
     skills: [],
     skillCooldowns: {},
+    skillCooldownDiscountBank: {},
     setBonusEffects: effects,
     controlDiminishing: {},
     isAlive: true,

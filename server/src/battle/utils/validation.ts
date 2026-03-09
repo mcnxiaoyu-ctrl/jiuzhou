@@ -5,6 +5,7 @@
 
 import type { BattleState, BattleUnit, BattleSkill, BattleAttrs } from '../types.js';
 import { resolveSkillCostForResourceState } from '../../shared/skillCost.js';
+import { getSkillCooldownBlockedMessage } from './cooldown.js';
 
 interface ValidationResult {
   valid: boolean;
@@ -140,9 +141,9 @@ export function validateSkillUse(
   }
   
   // 检查冷却
-  const cooldown = unit.skillCooldowns[skill.id] || 0;
-  if (cooldown > 0) {
-    return { valid: false, error: `技能冷却中: ${cooldown}回合` };
+  const cooldownMessage = getSkillCooldownBlockedMessage(unit, skill.id);
+  if (cooldownMessage) {
+    return { valid: false, error: cooldownMessage };
   }
   
   // 检查消耗
