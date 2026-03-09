@@ -14,7 +14,7 @@
  *
  * 关键边界条件与坑点：
  * 1) key 统一按 trim 后匹配，空字符串一律视为非法。
- * 2) 默认被动池中的 key 必须来自支持词典，否则会导致生成回退链路失效。
+ * 2) 共享被动池中的 key 必须来自支持词典，否则会导致 AI 生成约束与运行时校验漂移。
  * 3) 结构化 Buff 的允许列表来自静态预定义数据，若直接手写会与运行时支持集合漂移。
  */
 import { REALM_ORDER } from './realmRules.js';
@@ -47,6 +47,8 @@ import {
 
 export type GeneratedTechniqueType = '武技' | '心法' | '法诀' | '身法' | '辅修';
 export type GeneratedTechniqueQuality = '黄' | '玄' | '地' | '天';
+export type TechniquePassiveMode = 'percent' | 'flat';
+export type TechniquePassivePoolEntry = { key: string; mode: TechniquePassiveMode };
 
 export const TECHNIQUE_PROMPT_SYSTEM_MESSAGE =
   '你是修仙RPG功法设计器。请严格输出JSON，不要输出额外文本。';
@@ -89,38 +91,68 @@ export const TECHNIQUE_PASSIVE_KEY_MEANING_MAP: Record<string, string> = {
 export const SUPPORTED_TECHNIQUE_PASSIVE_KEYS = Object.freeze(Object.keys(TECHNIQUE_PASSIVE_KEY_MEANING_MAP));
 export const SUPPORTED_TECHNIQUE_PASSIVE_KEY_SET = new Set<string>(SUPPORTED_TECHNIQUE_PASSIVE_KEYS);
 
-export const TECHNIQUE_PASSIVE_KEY_POOL_BY_TYPE: Record<GeneratedTechniqueType, Array<{ key: string; mode: 'percent' | 'flat' }>> = {
-  武技: [
-    { key: 'wugong', mode: 'percent' },
-    { key: 'baoji', mode: 'percent' },
-    { key: 'baoshang', mode: 'percent' },
-    { key: 'jianbaoshang', mode: 'percent' },
-    { key: 'mingzhong', mode: 'percent' },
-  ],
-  心法: [
-    { key: 'max_lingqi', mode: 'flat' },
-    { key: 'lingqi_huifu', mode: 'flat' },
-    { key: 'max_qixue', mode: 'percent' },
-    { key: 'lengque', mode: 'percent' },
-  ],
-  法诀: [
-    { key: 'fagong', mode: 'percent' },
-    { key: 'zengshang', mode: 'percent' },
-    { key: 'huo_kangxing', mode: 'percent' },
-    { key: 'shui_kangxing', mode: 'percent' },
-  ],
-  身法: [
-    { key: 'sudu', mode: 'flat' },
-    { key: 'shanbi', mode: 'percent' },
-    { key: 'mingzhong', mode: 'percent' },
-    { key: 'kongzhi_kangxing', mode: 'percent' },
-  ],
-  辅修: [
-    { key: 'zhiliao', mode: 'percent' },
-    { key: 'max_qixue', mode: 'percent' },
-    { key: 'qixue_huifu', mode: 'flat' },
-    { key: 'jianliao', mode: 'percent' },
-  ],
+const TECHNIQUE_PASSIVE_MODE_BY_KEY: Record<string, TechniquePassiveMode> = {
+  wugong: 'percent',
+  fagong: 'percent',
+  wufang: 'percent',
+  fafang: 'percent',
+  max_qixue: 'percent',
+  max_lingqi: 'flat',
+  mingzhong: 'percent',
+  shanbi: 'percent',
+  zhaojia: 'percent',
+  baoji: 'percent',
+  baoshang: 'percent',
+  jianbaoshang: 'percent',
+  kangbao: 'percent',
+  zengshang: 'percent',
+  zhiliao: 'percent',
+  jianliao: 'percent',
+  xixue: 'percent',
+  lengque: 'percent',
+  sudu: 'flat',
+  shuxing_shuzhi: 'percent',
+  kongzhi_kangxing: 'percent',
+  jin_kangxing: 'percent',
+  mu_kangxing: 'percent',
+  shui_kangxing: 'percent',
+  huo_kangxing: 'percent',
+  tu_kangxing: 'percent',
+  qixue_huifu: 'flat',
+  lingqi_huifu: 'flat',
+};
+
+/**
+ * 共享功法被动池
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1) 做什么：集中维护 AI 可选的全部功法被动 key 与对应数值模式，避免再按类型复制多份候选池。
+ * 2) 不做什么：不根据功法类型做二次筛选，不承担运行时合法性校验。
+ *
+ * 输入/输出：
+ * - 输入：受支持的功法被动 key 列表与每个 key 的数值模式。
+ * - 输出：可直接复用的只读被动池条目数组。
+ *
+ * 数据流/状态流：
+ * 被动语义字典/数值模式映射 -> 共享被动池 -> 各功法类型复用同一份候选集合 -> prompt 与测试保持一致。
+ *
+ * 关键边界条件与坑点：
+ * 1) 这里是 AI 选项池，不是运行时白名单；真正合法性仍由 `isSupportedTechniquePassiveKey` 统一校验。
+ * 2) 若新增支持 key 但漏配 mode，会让共享池与支持词典脱节，因此必须和 `TECHNIQUE_PASSIVE_KEY_MEANING_MAP` 同步维护。
+ */
+export const TECHNIQUE_PASSIVE_ENTRY_POOL = Object.freeze(
+  SUPPORTED_TECHNIQUE_PASSIVE_KEYS.map((key) => ({
+    key,
+    mode: TECHNIQUE_PASSIVE_MODE_BY_KEY[key],
+  })),
+);
+
+export const TECHNIQUE_PASSIVE_KEY_POOL_BY_TYPE: Record<GeneratedTechniqueType, TechniquePassivePoolEntry[]> = {
+  武技: [...TECHNIQUE_PASSIVE_ENTRY_POOL],
+  心法: [...TECHNIQUE_PASSIVE_ENTRY_POOL],
+  法诀: [...TECHNIQUE_PASSIVE_ENTRY_POOL],
+  身法: [...TECHNIQUE_PASSIVE_ENTRY_POOL],
+  辅修: [...TECHNIQUE_PASSIVE_ENTRY_POOL],
 };
 
 export const TECHNIQUE_SKILL_COUNT_RANGE_BY_QUALITY: Record<GeneratedTechniqueQuality, { min: number; max: number }> = {
@@ -151,6 +183,7 @@ export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   'skills[*].upgrades 只允许使用 { layer, changes } 结构，不要返回 description/effectChanges/effectIndex',
   'upgrades[*].changes 仅允许 target_count/cooldown/cost_lingqi/cost_lingqi_rate/cost_qixue/cost_qixue_rate/ai_priority/effects/addEffect',
   '如果要调整效果，只能使用 changes.effects 全量替换，或 changes.addEffect 追加',
+  '功法类型不会限制被动 key 搭配，layers.passives 可自由从 allowedPassiveKeys 中组合',
   '禁止输出 null/undefined 字段；可省略可选字段，不要输出空字符串占位',
 ] as const;
 
@@ -727,7 +760,7 @@ export const buildTechniqueGeneratorPromptInput = (params: {
       effectRule: 'effects 不支持 valueFormula；请使用 value/valueType/scaleAttr/scaleRate 表达数值',
       allowedPassiveKeys: [...SUPPORTED_TECHNIQUE_PASSIVE_KEYS],
       passiveKeyMeanings: TECHNIQUE_PASSIVE_KEY_MEANING_MAP,
-      passiveRule: 'layers.passives[].key 必须从 allowedPassiveKeys 中选择，value 必须为有限数字',
+      passiveRule: 'layers.passives[].key 可自由从 allowedPassiveKeys 中组合，不受功法类型限制；value 必须为有限数字',
       skillCountRange,
       skillCountRule: `skills.length 必须在${skillCountRange.min}~${skillCountRange.max}之间`,
       noMaterialRule: '生成功法不需要升级材料，layers[].costMaterials 必须始终为空数组',
