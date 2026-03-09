@@ -1,0 +1,39 @@
+/**
+ * 技能效果格式化回归测试
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1) 做什么：验证结构化 Buff 的特殊展示规则会通过统一格式化入口输出稳定文案，避免技能详情回退成原始 key 或错误数值。
+ * 2) 不做什么：不覆盖技能卡布局、图标渲染或后端战斗结算，只锁定前端效果文本拼装。
+ *
+ * 输入/输出：
+ * - 输入：技能 effects 数组中的结构化 Buff 对象。
+ * - 输出：`formatSkillEffectLines` 返回的可展示文本数组。
+ *
+ * 数据流/状态流：
+ * - 测试数据 -> `formatSkillEffectLines` -> Buff 特例规则表/通用格式化函数 -> 最终技能效果文案。
+ *
+ * 关键边界条件与坑点：
+ * 1) `reflect_damage` 的 `value` 是比例值，展示时必须转成百分比，不能再被 `Math.floor` 截成 0。
+ * 2) 技能详情需要展示语义化名称，不能把 `buff-reflect-damage` 这种内部 key 直接暴露给玩家。
+ */
+
+import { describe, expect, it } from 'vitest';
+import { formatSkillEffectLines } from '../skillEffectFormatter';
+
+describe('skillEffectFormatter', () => {
+  it('应将 reflect_damage Buff 格式化为反震比例文案', () => {
+    const lines = formatSkillEffectLines([
+      {
+        type: 'buff',
+        duration: 3,
+        value: 0.3,
+        buffKey: 'buff-reflect-damage',
+        buffKind: 'reflect_damage',
+      },
+    ]);
+
+    expect(lines).toEqual([
+      '施加增益：受击反震（反震本次实际受击伤害 30%），持续3回合',
+    ]);
+  });
+});

@@ -56,6 +56,7 @@ const BUFF_KEY_NAME: Record<string, string> = {
   'debuff-burn': '灼烧',
   'buff-hot': '持续治疗',
   'buff-dodge-next': '下一次闪避',
+  'buff-reflect-damage': '受击反震',
 };
 
 const PERCENT_BUFF_ATTR_SET = new Set([
@@ -91,6 +92,8 @@ const normalizeAttrKey = (raw: string): string => {
 };
 
 const normalizeBuffKey = (raw: unknown): string => toText(raw).toLowerCase();
+
+const normalizeBuffKind = (raw: unknown): string => toText(raw).toLowerCase();
 
 const normalizeBuffApplyType = (raw: unknown): 'flat' | 'percent' | '' => {
   const applyType = toText(raw).toLowerCase();
@@ -268,6 +271,56 @@ const formatBuffValue = (
   return `数值 ${Math.floor(raw)}`;
 };
 
+type BuffDetailResolver = {
+  override?: (effect: Record<string, unknown>) => string;
+  extra?: (effect: Record<string, unknown>) => string;
+};
+
+const formatReflectDamageDetail = (effect: Record<string, unknown>): string => {
+  const rate = toNumber(effect.value);
+  if (rate === null || rate <= 0) return '';
+  return `反震本次实际受击伤害 ${formatPercent(rate)}%`;
+};
+
+const formatBurnExtraDetail = (effect: Record<string, unknown>): string => {
+  const burnBonusRate = toNumber(effect.bonusTargetMaxQixueRate);
+  if (burnBonusRate === null || burnBonusRate <= 0) return '';
+  return `目标最大气血 ${formatPercent(burnBonusRate)}%`;
+};
+
+/**
+ * Buff 特例展示规则表。
+ *
+ * 作用：
+ * - 把“需要专属文案的 Buff”集中到单一入口，避免技能卡、背包弹窗等多个展示位各写一套判断。
+ * - 支持按 buffKind 覆盖基础数值文案，或按 buffKey 追加额外规则说明。
+ *
+ * 输入：
+ * - effect：当前结构化 Buff 效果对象。
+ *
+ * 输出：
+ * - override：完全替代默认数值文案。
+ * - extra：在默认数值文案后追加说明。
+ *
+ * 数据流：
+ * - 技能效果对象 -> kind/key 对应规则 -> `formatBuffDetail` 统一拼装 -> 所有技能详情入口复用同一结果。
+ *
+ * 关键边界条件与坑点：
+ * 1) `reflect_damage` 的 value 是比例，不能再走通用 `Math.floor`，否则 0.3 会错误显示成 0。
+ * 2) 表里只收“已有明确展示语义”的 Buff，避免把普通属性 Buff 过度特殊化，反而增加维护成本。
+ */
+const BUFF_DETAIL_RESOLVER_BY_KIND: Record<string, BuffDetailResolver> = {
+  reflect_damage: {
+    override: formatReflectDamageDetail,
+  },
+};
+
+const BUFF_DETAIL_RESOLVER_BY_KEY: Record<string, BuffDetailResolver> = {
+  'debuff-burn': {
+    extra: formatBurnExtraDetail,
+  },
+};
+
 /**
  * 生成 Buff/Debuff 的额外规则说明。
  *
@@ -288,15 +341,13 @@ const formatBuffValue = (
  * 1) 未识别的 buffKey 必须返回空字符串，避免误导性展示。
  * 2) 本函数只负责“额外规则文案”，不处理基础 value 格式化，职责与 formatBuffValue 严格分离。
  */
-const formatBuffExtraValue = (effect: Record<string, unknown>, buffKey: string): string => {
-  if (buffKey === 'debuff-burn') {
-    const burnBonusRate = toNumber(effect.bonusTargetMaxQixueRate);
-    if (burnBonusRate !== null && burnBonusRate > 0) {
-      return `目标最大气血 ${formatPercent(burnBonusRate)}%`;
-    }
-    return '';
+const formatBuffExtraValue = (effect: Record<string, unknown>, buffKey: string, buffKind: string): string => {
+  const keyResolver = BUFF_DETAIL_RESOLVER_BY_KEY[buffKey];
+  if (keyResolver?.extra) {
+    return keyResolver.extra(effect);
   }
-  return '';
+  const kindResolver = BUFF_DETAIL_RESOLVER_BY_KIND[buffKind];
+  return kindResolver?.extra ? kindResolver.extra(effect) : '';
 };
 
 /**
@@ -325,18 +376,28 @@ const formatBuffExtraValue = (effect: Record<string, unknown>, buffKey: string):
 const formatBuffDetail = (
   effect: Record<string, unknown>,
   buffKey: string,
+  buffKind: string,
   attr: string,
   applyType: 'flat' | 'percent' | '',
 ): string => {
+  const kindResolver = BUFF_DETAIL_RESOLVER_BY_KIND[buffKind];
+  if (kindResolver?.override) {
+    return kindResolver.override(effect);
+  }
+  const keyResolver = BUFF_DETAIL_RESOLVER_BY_KEY[buffKey];
+  if (keyResolver?.override) {
+    return keyResolver.override(effect);
+  }
   const baseValueText = formatBuffValue(effect, attr, applyType);
-  const extraValueText = formatBuffExtraValue(effect, buffKey);
+  const extraValueText = formatBuffExtraValue(effect, buffKey, buffKind);
   return [baseValueText, extraValueText].filter((part) => part.length > 0).join(' + ');
 };
 
 const formatBuffEffect = (effect: Record<string, unknown>, effectType: 'buff' | 'debuff'): string => {
   const applyType = normalizeBuffApplyType(effect.applyType);
+  const buffKind = normalizeBuffKind(effect.buffKind);
   const { name, attr, buffKey } = formatBuffName(effect, effectType);
-  const valueText = formatBuffDetail(effect, buffKey, attr, applyType);
+  const valueText = formatBuffDetail(effect, buffKey, buffKind, attr, applyType);
   const duration = toPositiveInt(effect.duration);
 
   let text = `${effectType === 'buff' ? '施加增益' : '施加减益'}：${name}`;
