@@ -722,6 +722,24 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const inTeam = Boolean(teamInfo?.id);
   const externalBattleId = arenaBattleId || dungeonBattleId || (inTeam && !isTeamLeader ? teamBattleId : null) || reconnectBattleId;
 
+  const clearBattleAutoCloseTimer = useCallback(() => {
+    if (!teamBattleAutoCloseTimerRef.current) return;
+    window.clearTimeout(teamBattleAutoCloseTimerRef.current);
+    teamBattleAutoCloseTimerRef.current = null;
+  }, []);
+
+  const syncRealtimeBattleView = useCallback((battleId: string) => {
+    if (inTeam && !isTeamLeader) {
+      setTeamBattleId(battleId);
+    } else {
+      setTeamBattleId(null);
+      setReconnectBattleId(battleId);
+    }
+    setViewMode('battle');
+    setTopTab('map');
+    setInfoTarget(null);
+  }, [inTeam, isTeamLeader]);
+
   const handleRoomObjectSelect = useCallback((target: InfoTarget) => {
     if (target.type === 'item' && target.id === 'obj-warehouse') {
       setWarehouseModalOpen(true);
@@ -937,11 +955,16 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         messageRef.current.error('推进秘境失败：未返回战斗ID');
         return;
       }
+      clearBattleAutoCloseTimer();
       setDungeonBattleId(nextBattleId);
+      setReconnectBattleId(null);
+      setViewMode('battle');
+      setTopTab('map');
+      setInfoTarget(null);
     } catch (e) {
       void 0;
     }
-  }, [dungeonInstanceId]);
+  }, [clearBattleAutoCloseTimer, dungeonInstanceId]);
 
   const handleArenaNext = useCallback(async () => {
     setArenaBattleId(null);
@@ -1375,27 +1398,13 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       if (!battleId) return;
 
       if (kind === 'battle_started' || kind === 'battle_state') {
-        if (teamBattleAutoCloseTimerRef.current) {
-          window.clearTimeout(teamBattleAutoCloseTimerRef.current);
-          teamBattleAutoCloseTimerRef.current = null;
-        }
-        if (inTeam && !isTeamLeader) {
-          setTeamBattleId(battleId);
-        } else {
-          setTeamBattleId(null);
-          setReconnectBattleId(battleId);
-        }
-        setViewMode('battle');
-        setTopTab('map');
-        setInfoTarget(null);
+        clearBattleAutoCloseTimer();
+        syncRealtimeBattleView(battleId);
         return;
       }
 
       if (kind === 'battle_abandoned') {
-        if (teamBattleAutoCloseTimerRef.current) {
-          window.clearTimeout(teamBattleAutoCloseTimerRef.current);
-          teamBattleAutoCloseTimerRef.current = null;
-        }
+        clearBattleAutoCloseTimer();
         setTeamBattleId(null);
         setReconnectBattleId(null);
         setViewMode('map');
@@ -1405,19 +1414,11 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       }
 
       if (kind === 'battle_finished') {
-        if (teamBattleAutoCloseTimerRef.current) {
-          window.clearTimeout(teamBattleAutoCloseTimerRef.current);
-          teamBattleAutoCloseTimerRef.current = null;
+        clearBattleAutoCloseTimer();
+        syncRealtimeBattleView(battleId);
+        if (battleId === dungeonBattleId) {
+          return;
         }
-        if (inTeam && !isTeamLeader) {
-          setTeamBattleId(battleId);
-        } else {
-          setTeamBattleId(null);
-          setReconnectBattleId(battleId);
-        }
-        setViewMode('battle');
-        setTopTab('map');
-        setInfoTarget(null);
         teamBattleAutoCloseTimerRef.current = window.setTimeout(() => {
           setTeamBattleId(null);
           setReconnectBattleId(null);
@@ -1426,13 +1427,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       }
     });
     return () => {
-      if (teamBattleAutoCloseTimerRef.current) {
-        window.clearTimeout(teamBattleAutoCloseTimerRef.current);
-        teamBattleAutoCloseTimerRef.current = null;
-      }
+      clearBattleAutoCloseTimer();
       unsub();
     };
-  }, [inTeam, isTeamLeader]);
+  }, [clearBattleAutoCloseTimer, dungeonBattleId, syncRealtimeBattleView]);
 
   useEffect(() => {
     if (!characterId) return;
@@ -1451,10 +1449,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         return;
       }
       messageRef.current.success(res.message || '已退出队伍');
-      if (teamBattleAutoCloseTimerRef.current) {
-        window.clearTimeout(teamBattleAutoCloseTimerRef.current);
-        teamBattleAutoCloseTimerRef.current = null;
-      }
+      clearBattleAutoCloseTimer();
       setTeamBattleId(null);
       setReconnectBattleId(null);
       setArenaBattleId(null);
@@ -1469,7 +1464,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     } catch {
       void 0;
     }
-  }, [characterId, refreshTeamData]);
+  }, [characterId, clearBattleAutoCloseTimer, refreshTeamData]);
 
   useEffect(() => {
     if (!character || hydratedPositionRef.current) return;
