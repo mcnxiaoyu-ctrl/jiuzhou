@@ -873,7 +873,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     return (
       <div className="partner-pane-card">
         <div className="partner-section-title">
-          <span>AI 伙伴招募</span>
+          <span>伙伴招募</span>
           {recruitStatus ? <Tag color="gold">消耗灵石 {recruitStatus.spiritStoneCost.toLocaleString()}</Tag> : null}
         </div>
 
@@ -952,7 +952,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
           </div>
         ) : null}
 
-        <div className="partner-action-row">
+        <div className="partner-action-row partner-recruit-action-row">
           <Button
             type="primary"
             loading={actionKey === 'recruit-generate'}

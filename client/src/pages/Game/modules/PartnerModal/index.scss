@@ -372,9 +372,13 @@
 }
 
 .partner-quick-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.partner-quick-actions .ant-btn {
+  width: 100%;
 }
 
 .partner-technique-grid,
@@ -633,6 +637,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.partner-recruit-action-row {
+  width: 100%;
+}
+
+.partner-recruit-action-row .ant-btn {
+  width: 100%;
 }
 
 @media screen and (min-width: 769px) {
