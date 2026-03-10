@@ -28,6 +28,7 @@ import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { buildTechniqueResearchJobState } from './shared/techniqueResearchJobShared.js';
 import { normalizeTechniqueName, validateTechniqueCustomName, getTechniqueNameRulesView } from './shared/techniqueNameRules.js';
 import { isCharacterVisibleTechniqueDefinition } from './shared/techniqueUsageScope.js';
+import { broadcastWorldSystemMessage } from './shared/worldChatBroadcast.js';
 import { generateTechniqueCandidateWithIcons } from './shared/techniqueGenerationExecution.js';
 import {
   buildTechniqueTextModelPayload,
@@ -57,6 +58,7 @@ import {
   buildTechniqueResearchUnlockState,
   type TechniqueResearchUnlockState,
 } from './shared/techniqueResearchUnlock.js';
+import { getGeneratedTechniqueDefinitionById } from './generatedTechniqueConfigStore.js';
 
 export type TechniqueGenerationStatus =
   | 'pending'
@@ -923,6 +925,40 @@ const remapGeneratedSkillIds = (
 };
 
 class TechniqueGenerationService {
+  private async broadcastHeavenTechniquePublish(
+    characterId: number,
+    techniqueId: string,
+    techniqueName: string,
+  ): Promise<void> {
+    const generatedTechnique = getGeneratedTechniqueDefinitionById(techniqueId);
+    if (!generatedTechnique || generatedTechnique.quality !== '天') {
+      return;
+    }
+
+    const characterRes = await query(
+      `
+        SELECT nickname
+        FROM characters
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [characterId],
+    );
+    if (characterRes.rows.length === 0) {
+      return;
+    }
+
+    const nickname = asString((characterRes.rows[0] as Record<string, unknown>).nickname);
+    if (!nickname) {
+      return;
+    }
+
+    broadcastWorldSystemMessage({
+      senderTitle: '天机传音',
+      content: `【洞府研修】${nickname}抄写出天阶功法《${techniqueName}》，道韵惊世，声传九州！`,
+    });
+  }
+
   private async getTechniqueResearchUnlockStateTx(
     characterId: number,
     lockRow: boolean,
@@ -1980,7 +2016,15 @@ class TechniqueGenerationService {
     customName: string;
   }): Promise<ServiceResult<{ techniqueId: string; finalName: string; bookItemInstanceId: number }>> {
     try {
-      return await this.publishGeneratedTechniqueTx(args);
+      const result = await this.publishGeneratedTechniqueTx(args);
+      if (result.success && result.data) {
+        await this.broadcastHeavenTechniquePublish(
+          args.characterId,
+          result.data.techniqueId,
+          result.data.finalName,
+        );
+      }
+      return result;
     } catch (error) {
       if (isTechniqueGenerationRollbackError(error)) {
         return {
