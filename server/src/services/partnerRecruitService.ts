@@ -30,7 +30,6 @@ import {
   getTechniqueDefinitions,
   refreshGeneratedPartnerSnapshots,
   refreshGeneratedTechniqueSnapshots,
-  type PartnerBaseAttrConfig,
   type PartnerDefConfig,
 } from './staticConfigLoader.js';
 import { partnerService } from './partnerService.js';
@@ -50,13 +49,13 @@ import {
   buildPartnerRecruitCooldownState,
   buildPartnerRecruitPreviewExpireAt,
   buildPartnerRecruitPromptInput,
+  fillPartnerRecruitBaseAttrs,
   formatPartnerRecruitCooldownRemaining,
   getPartnerRecruitExpectedInnateTechniqueCount,
   getPartnerRecruitTechniqueMaxLayer,
   isPartnerRecruitPreviewExpired,
   PARTNER_RECRUIT_SPIRIT_STONES_COST,
   resolvePartnerRecruitQualityByWeight,
-  type PartnerRecruitBaseAttrs,
   type PartnerRecruitDraft,
   type PartnerRecruitElement,
   type PartnerRecruitPassiveKey,
@@ -193,15 +192,6 @@ const buildPartnerRecruitGenerationId = (): string => normalizeGeneratedId('part
 const buildGeneratedPartnerDefId = (): string => normalizeGeneratedId('partner-gen');
 const buildGeneratedTechniqueId = (): string => normalizeGeneratedId('tech-partner');
 const buildGeneratedSkillId = (): string => normalizeGeneratedId('skill-partner');
-
-const extractCoreBaseAttrs = (attrs: PartnerBaseAttrConfig): PartnerRecruitBaseAttrs => ({
-  max_qixue: Math.max(1, Math.floor(Number(attrs.max_qixue) || 0)),
-  wugong: Math.floor(Number(attrs.wugong) || 0),
-  fagong: Math.floor(Number(attrs.fagong) || 0),
-  wufang: Math.floor(Number(attrs.wufang) || 0),
-  fafang: Math.floor(Number(attrs.fafang) || 0),
-  sudu: Math.max(1, Math.floor(Number(attrs.sudu) || 1)),
-});
 
 const extractPassiveKeyIncrementByLayer = (
   totalValue: number,
@@ -384,14 +374,8 @@ const buildPartnerDefFromDraft = (
     role: draft.partner.role,
     max_technique_slots: draft.partner.maxTechniqueSlots,
     innate_technique_ids: techniques.map((entry) => entry.techniqueId),
-    base_attrs: {
-      ...draft.partner.baseAttrs,
-      max_lingqi: 0,
-    },
-    level_attr_gains: {
-      ...draft.partner.levelAttrGains,
-      max_lingqi: 0,
-    },
+    base_attrs: draft.partner.baseAttrs,
+    level_attr_gains: draft.partner.levelAttrGains,
     enabled: true,
     sort_weight: 1000,
     created_by_character_id: characterId,
@@ -425,15 +409,8 @@ const buildPreviewFromPartnerDefinition = (
     element: definition.attribute_element ?? 'none',
     role: definition.role ?? '伙伴',
     slotCount: Math.max(1, Number(definition.max_technique_slots) || 1),
-    baseAttrs: extractCoreBaseAttrs(definition.base_attrs),
-    levelAttrGains: extractCoreBaseAttrs({
-      max_qixue: Number(definition.level_attr_gains?.max_qixue) || 0,
-      wugong: Number(definition.level_attr_gains?.wugong) || 0,
-      fagong: Number(definition.level_attr_gains?.fagong) || 0,
-      wufang: Number(definition.level_attr_gains?.wufang) || 0,
-      fafang: Number(definition.level_attr_gains?.fafang) || 0,
-      sudu: Number(definition.level_attr_gains?.sudu) || 0,
-    }),
+    baseAttrs: fillPartnerRecruitBaseAttrs(definition.base_attrs),
+    levelAttrGains: fillPartnerRecruitBaseAttrs(definition.level_attr_gains),
     innateTechniques: definition.innate_technique_ids.map((techniqueId) => {
       const technique = techniqueMap.get(techniqueId);
       return {

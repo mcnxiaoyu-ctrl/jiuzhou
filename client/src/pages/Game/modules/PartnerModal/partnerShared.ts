@@ -19,6 +19,7 @@
  */
 
 import type {
+  PartnerBaseAttrsDto,
   PartnerBookDto,
   PartnerComputedAttrsDto,
   PartnerDetailDto,
@@ -50,7 +51,7 @@ export const PARTNER_GROWTH_ATTRS: Array<keyof PartnerDetailDto['growth']> = [
   'sudu',
 ];
 
-export const PARTNER_COMBAT_ATTR_ORDER: Array<keyof PartnerComputedAttrsDto> = [
+export const PARTNER_COMBAT_ATTR_ORDER: Array<keyof PartnerBaseAttrsDto> = [
   'max_qixue',
   'max_lingqi',
   'wugong',
@@ -132,10 +133,24 @@ export const getPartnerEmptySlotCount = (partner: PartnerDetailDto): number => {
 
 export const getPartnerVisibleCombatAttrs = (
   computedAttrs: PartnerComputedAttrsDto,
-): Array<{ key: keyof PartnerComputedAttrsDto; value: number }> => {
+): Array<{ key: keyof PartnerBaseAttrsDto; value: number }> => {
   return PARTNER_COMBAT_ATTR_ORDER
     .map((key) => ({ key, value: Number(computedAttrs[key]) || 0 }))
     .filter((entry) => entry.value !== 0);
+};
+
+export const getPartnerVisibleBaseAttrs = (
+  baseAttrs: PartnerBaseAttrsDto,
+  compareAttrs?: PartnerBaseAttrsDto,
+): Array<{ key: keyof PartnerBaseAttrsDto; value: number }> => {
+  return PARTNER_COMBAT_ATTR_ORDER
+    .map((key) => ({
+      key,
+      value: Number(baseAttrs[key]) || 0,
+      compareValue: Number(compareAttrs?.[key]) || 0,
+    }))
+    .filter((entry) => entry.value !== 0 || entry.compareValue !== 0)
+    .map(({ key, value }) => ({ key, value }));
 };
 
 export const formatPartnerTechniquePassiveLines = (

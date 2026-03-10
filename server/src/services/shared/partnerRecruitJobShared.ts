@@ -17,6 +17,7 @@
  * 1) `refunded` 对前端仍属于失败结果，否则玩家看不到“失败并已退款”的原因。
  * 2) `accepted/discarded` 必须从当前任务视图里隐去，否则确认收下后结果卡不会消失。
  */
+import type { PartnerRecruitBaseAttrs } from './partnerRecruitRules.js';
 
 export type PartnerRecruitJobStatus =
   | 'pending'
@@ -44,22 +45,8 @@ export type PartnerRecruitPreviewDto = {
   element: string;
   role: string;
   slotCount: number;
-  baseAttrs: {
-    max_qixue: number;
-    wugong: number;
-    fagong: number;
-    wufang: number;
-    fafang: number;
-    sudu: number;
-  };
-  levelAttrGains: {
-    max_qixue: number;
-    wugong: number;
-    fagong: number;
-    wufang: number;
-    fafang: number;
-    sudu: number;
-  };
+  baseAttrs: PartnerRecruitBaseAttrs;
+  levelAttrGains: PartnerRecruitBaseAttrs;
   innateTechniques: PartnerRecruitPreviewTechniqueDto[];
 };
 

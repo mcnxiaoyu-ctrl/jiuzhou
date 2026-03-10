@@ -42,6 +42,8 @@ export type PartnerComputedAttrsDto = {
   lingqi_huifu: number;
 };
 
+export type PartnerBaseAttrsDto = Omit<PartnerComputedAttrsDto, 'qixue' | 'lingqi'>;
+
 export type PartnerPassiveAttrsDto = Record<string, number>;
 
 export type PartnerTechniqueSkillDto = {
@@ -138,8 +140,8 @@ export type PartnerRecruitPreviewDto = {
   element: string;
   role: string;
   slotCount: number;
-  baseAttrs: PartnerGrowthDto;
-  levelAttrGains: PartnerGrowthDto;
+  baseAttrs: PartnerBaseAttrsDto;
+  levelAttrGains: PartnerBaseAttrsDto;
   innateTechniques: PartnerRecruitPreviewTechniqueDto[];
 };
 

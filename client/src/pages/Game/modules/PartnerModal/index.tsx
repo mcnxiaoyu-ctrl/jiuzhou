@@ -36,6 +36,7 @@ import {
   formatPartnerTechniquePassiveLines,
   getPartnerAttrLabel,
   getPartnerEmptySlotCount,
+  getPartnerVisibleBaseAttrs,
   getPartnerVisibleCombatAttrs,
   PARTNER_PANEL_OPTIONS,
   resolvePartnerAvatar,
@@ -789,6 +790,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   };
 
   const renderRecruitPreview = (preview: PartnerRecruitPreviewDto) => {
+    const visibleBaseAttrs = getPartnerVisibleBaseAttrs(preview.baseAttrs, preview.levelAttrGains);
     return (
       <div className="partner-recruit-preview-card">
         <div className="partner-current-top">
@@ -805,22 +807,19 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
           </div>
         </div>
         <div className="partner-combat-grid">
-          {([
-            ['max_qixue', preview.baseAttrs.max_qixue],
-            ['wugong', preview.baseAttrs.wugong],
-            ['fagong', preview.baseAttrs.fagong],
-            ['wufang', preview.baseAttrs.wufang],
-            ['fafang', preview.baseAttrs.fafang],
-            ['sudu', preview.baseAttrs.sudu],
-          ] as const).map(([key, value]) => (
-            <div key={key} className="partner-stat-item">
-              <div className="partner-stat-label">{getPartnerAttrLabel(key)}</div>
-              <div className="partner-stat-value">{formatPartnerAttrValue(key, value)}</div>
-              <div className="partner-recruit-growth-line">
-                每级 +{formatPartnerAttrValue(key, preview.levelAttrGains[key])}
+          {visibleBaseAttrs.length > 0 ? (
+            visibleBaseAttrs.map(({ key, value }) => (
+              <div key={key} className="partner-stat-item">
+                <div className="partner-stat-label">{getPartnerAttrLabel(key)}</div>
+                <div className="partner-stat-value">{formatPartnerAttrValue(key, value)}</div>
+                <div className="partner-recruit-growth-line">
+                  每级 +{formatPartnerAttrValue(key, preview.levelAttrGains[key])}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            <div className="partner-empty">本次招募结果未生成有效属性</div>
+          )}
         </div>
         <div className="partner-section-title">天生功法</div>
         <div className="partner-technique-grid">

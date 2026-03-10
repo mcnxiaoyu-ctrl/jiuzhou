@@ -18,6 +18,11 @@
  * 1) 草稿校验不允许偷偷兜底成“低质量占位伙伴”，任一关键字段非法都应直接失败退款。
  * 2) 冷却判断与状态接口必须共用同一套纯函数，否则前端倒计时与服务端拦截会在临界秒不一致。
  */
+import type { PartnerBaseAttrConfig } from '../staticConfigLoader.js';
+import {
+  PARTNER_INTEGER_ATTR_KEYS,
+  normalizePartnerAttrValue,
+} from './partnerRules.js';
 
 export type PartnerRecruitQuality = '黄' | '玄' | '地' | '天';
 export type PartnerRecruitElement = 'jin' | 'mu' | 'shui' | 'huo' | 'tu' | 'none';
@@ -34,12 +39,7 @@ export type PartnerRecruitPassiveKey =
   | 'zhiliao';
 
 export type PartnerRecruitBaseAttrs = {
-  max_qixue: number;
-  wugong: number;
-  fagong: number;
-  wufang: number;
-  fafang: number;
-  sudu: number;
+  [Key in keyof Required<PartnerBaseAttrConfig>]: number;
 };
 
 export type PartnerRecruitDraft = {
@@ -68,8 +68,6 @@ type AttrRange = {
 };
 
 type DraftStatRanges = {
-  baseAttrs: Record<keyof PartnerRecruitBaseAttrs, AttrRange>;
-  levelAttrGains: Record<keyof PartnerRecruitBaseAttrs, AttrRange>;
   techniqueSlots: AttrRange;
   innateTechniqueCount: AttrRange;
 };
@@ -96,84 +94,55 @@ export const PARTNER_RECRUIT_ALLOWED_PASSIVE_KEYS: readonly PartnerRecruitPassiv
   'zhiliao',
 ] as const;
 
+export const PARTNER_RECRUIT_BASE_ATTR_KEYS = [
+  'max_qixue',
+  'max_lingqi',
+  'wugong',
+  'fagong',
+  'wufang',
+  'fafang',
+  'sudu',
+  'mingzhong',
+  'shanbi',
+  'zhaojia',
+  'baoji',
+  'baoshang',
+  'jianbaoshang',
+  'kangbao',
+  'zengshang',
+  'zhiliao',
+  'jianliao',
+  'xixue',
+  'lengque',
+  'kongzhi_kangxing',
+  'jin_kangxing',
+  'mu_kangxing',
+  'shui_kangxing',
+  'huo_kangxing',
+  'tu_kangxing',
+  'qixue_huifu',
+  'lingqi_huifu',
+] as const satisfies ReadonlyArray<keyof PartnerRecruitBaseAttrs>;
+
+const PARTNER_RECRUIT_STRICT_POSITIVE_ATTR_KEYS = new Set<keyof PartnerRecruitBaseAttrs>([
+  'max_qixue',
+  'sudu',
+]);
+
 const DRAFT_STAT_RANGES_BY_QUALITY: Record<PartnerRecruitQuality, DraftStatRanges> = {
   黄: {
-    baseAttrs: {
-      max_qixue: { min: 120, max: 220 },
-      wugong: { min: 12, max: 28 },
-      fagong: { min: 12, max: 28 },
-      wufang: { min: 10, max: 24 },
-      fafang: { min: 10, max: 24 },
-      sudu: { min: 10, max: 18 },
-    },
-    levelAttrGains: {
-      max_qixue: { min: 10, max: 22 },
-      wugong: { min: 1, max: 4 },
-      fagong: { min: 1, max: 4 },
-      wufang: { min: 1, max: 3 },
-      fafang: { min: 1, max: 3 },
-      sudu: { min: 1, max: 2 },
-    },
     techniqueSlots: { min: 2, max: 2 },
     innateTechniqueCount: { min: 1, max: 1 },
   },
   玄: {
-    baseAttrs: {
-      max_qixue: { min: 180, max: 300 },
-      wugong: { min: 18, max: 36 },
-      fagong: { min: 18, max: 36 },
-      wufang: { min: 14, max: 30 },
-      fafang: { min: 14, max: 30 },
-      sudu: { min: 12, max: 22 },
-    },
-    levelAttrGains: {
-      max_qixue: { min: 16, max: 30 },
-      wugong: { min: 2, max: 5 },
-      fagong: { min: 2, max: 5 },
-      wufang: { min: 1, max: 4 },
-      fafang: { min: 1, max: 4 },
-      sudu: { min: 1, max: 3 },
-    },
     techniqueSlots: { min: 2, max: 3 },
     innateTechniqueCount: { min: 1, max: 1 },
   },
   地: {
-    baseAttrs: {
-      max_qixue: { min: 240, max: 400 },
-      wugong: { min: 24, max: 46 },
-      fagong: { min: 24, max: 46 },
-      wufang: { min: 18, max: 38 },
-      fafang: { min: 18, max: 38 },
-      sudu: { min: 14, max: 26 },
-    },
-    levelAttrGains: {
-      max_qixue: { min: 22, max: 40 },
-      wugong: { min: 3, max: 6 },
-      fagong: { min: 3, max: 6 },
-      wufang: { min: 2, max: 5 },
-      fafang: { min: 2, max: 5 },
-      sudu: { min: 1, max: 3 },
-    },
     techniqueSlots: { min: 3, max: 3 },
     innateTechniqueCount: { min: 2, max: 2 },
   },
   天: {
-    baseAttrs: {
-      max_qixue: { min: 320, max: 520 },
-      wugong: { min: 30, max: 58 },
-      fagong: { min: 30, max: 58 },
-      wufang: { min: 24, max: 46 },
-      fafang: { min: 24, max: 46 },
-      sudu: { min: 16, max: 30 },
-    },
-    levelAttrGains: {
-      max_qixue: { min: 28, max: 52 },
-      wugong: { min: 4, max: 8 },
-      fagong: { min: 4, max: 8 },
-      wufang: { min: 2, max: 6 },
-      fafang: { min: 2, max: 6 },
-      sudu: { min: 2, max: 4 },
-    },
     techniqueSlots: { min: 3, max: 4 },
     innateTechniqueCount: { min: 2, max: 2 },
   },
@@ -191,6 +160,11 @@ const asString = (raw: unknown): string => (typeof raw === 'string' ? raw.trim()
 const asInt = (raw: unknown): number => {
   const n = Number(raw);
   return Number.isFinite(n) ? Math.floor(n) : 0;
+};
+
+const asFiniteNumber = (raw: unknown): number => {
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : Number.NaN;
 };
 
 const isPartnerRecruitQuality = (raw: unknown): raw is PartnerRecruitQuality => {
@@ -213,17 +187,79 @@ const isPartnerRecruitPassiveKey = (raw: unknown): raw is PartnerRecruitPassiveK
   return PARTNER_RECRUIT_ALLOWED_PASSIVE_KEYS.includes(raw as PartnerRecruitPassiveKey);
 };
 
-const normalizeBaseAttrs = (raw: unknown): PartnerRecruitBaseAttrs | null => {
+const createEmptyPartnerRecruitBaseAttrs = (): PartnerRecruitBaseAttrs => ({
+  max_qixue: 0,
+  max_lingqi: 0,
+  wugong: 0,
+  fagong: 0,
+  wufang: 0,
+  fafang: 0,
+  sudu: 0,
+  mingzhong: 0,
+  shanbi: 0,
+  zhaojia: 0,
+  baoji: 0,
+  baoshang: 0,
+  jianbaoshang: 0,
+  kangbao: 0,
+  zengshang: 0,
+  zhiliao: 0,
+  jianliao: 0,
+  xixue: 0,
+  lengque: 0,
+  kongzhi_kangxing: 0,
+  jin_kangxing: 0,
+  mu_kangxing: 0,
+  shui_kangxing: 0,
+  huo_kangxing: 0,
+  tu_kangxing: 0,
+  qixue_huifu: 0,
+  lingqi_huifu: 0,
+});
+
+const normalizeStrictBaseAttrValue = (
+  row: Record<string, unknown>,
+  key: keyof PartnerRecruitBaseAttrs,
+  requirePositiveCoreAttrs: boolean,
+): number | null => {
+  if (!(key in row)) return null;
+  const value = asFiniteNumber(row[key]);
+  if (!Number.isFinite(value) || value < 0) return null;
+  if (PARTNER_INTEGER_ATTR_KEYS.has(key) && !Number.isInteger(value)) {
+    return null;
+  }
+  if (requirePositiveCoreAttrs && PARTNER_RECRUIT_STRICT_POSITIVE_ATTR_KEYS.has(key) && value <= 0) {
+    return null;
+  }
+  return normalizePartnerAttrValue(key, value);
+};
+
+export const fillPartnerRecruitBaseAttrs = (
+  raw: Partial<PartnerBaseAttrConfig> | null | undefined,
+): PartnerRecruitBaseAttrs => {
+  const baseAttrs = createEmptyPartnerRecruitBaseAttrs();
+  if (!raw) return baseAttrs;
+  for (const key of PARTNER_RECRUIT_BASE_ATTR_KEYS) {
+    const value = asFiniteNumber(raw[key]);
+    if (!Number.isFinite(value) || value < 0) continue;
+    baseAttrs[key] = normalizePartnerAttrValue(key, value);
+  }
+  return baseAttrs;
+};
+
+const normalizeBaseAttrs = (
+  raw: unknown,
+  requirePositiveCoreAttrs: boolean,
+): PartnerRecruitBaseAttrs | null => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const row = raw as Record<string, unknown>;
-  return {
-    max_qixue: asInt(row.max_qixue),
-    wugong: asInt(row.wugong),
-    fagong: asInt(row.fagong),
-    wufang: asInt(row.wufang),
-    fafang: asInt(row.fafang),
-    sudu: asInt(row.sudu),
-  };
+  const baseAttrs = createEmptyPartnerRecruitBaseAttrs();
+  for (const key of PARTNER_RECRUIT_BASE_ATTR_KEYS) {
+    const value = normalizeStrictBaseAttrValue(row, key, requirePositiveCoreAttrs);
+    if (value === null) return null;
+    baseAttrs[key] = value;
+  }
+  return baseAttrs;
 };
 
 const isAttrInRange = (value: number, range: AttrRange): boolean => {
@@ -232,16 +268,19 @@ const isAttrInRange = (value: number, range: AttrRange): boolean => {
 
 const validateBaseAttrs = (
   attrs: PartnerRecruitBaseAttrs,
-  ranges: Record<keyof PartnerRecruitBaseAttrs, AttrRange>,
+  requirePositiveCoreAttrs: boolean,
 ): boolean => {
-  return (
-    isAttrInRange(attrs.max_qixue, ranges.max_qixue) &&
-    isAttrInRange(attrs.wugong, ranges.wugong) &&
-    isAttrInRange(attrs.fagong, ranges.fagong) &&
-    isAttrInRange(attrs.wufang, ranges.wufang) &&
-    isAttrInRange(attrs.fafang, ranges.fafang) &&
-    isAttrInRange(attrs.sudu, ranges.sudu)
-  );
+  return PARTNER_RECRUIT_BASE_ATTR_KEYS.every((key) => {
+    const value = attrs[key];
+    if (!Number.isFinite(value) || value < 0) return false;
+    if (PARTNER_INTEGER_ATTR_KEYS.has(key) && !Number.isInteger(value)) {
+      return false;
+    }
+    if (requirePositiveCoreAttrs && PARTNER_RECRUIT_STRICT_POSITIVE_ATTR_KEYS.has(key) && value <= 0) {
+      return false;
+    }
+    return true;
+  });
 };
 
 export const resolvePartnerRecruitQualityByWeight = (): PartnerRecruitQuality => {
@@ -271,6 +310,7 @@ export const getPartnerRecruitExpectedInnateTechniqueCount = (
 
 export const buildPartnerRecruitPromptInput = (quality: PartnerRecruitQuality): Record<string, unknown> => {
   const ranges = DRAFT_STAT_RANGES_BY_QUALITY[quality];
+  const percentAttrKeys = PARTNER_RECRUIT_BASE_ATTR_KEYS.filter((key) => !PARTNER_INTEGER_ATTR_KEYS.has(key));
   return {
     worldview: '中国仙侠世界《九州修仙录》',
     quality,
@@ -280,13 +320,20 @@ export const buildPartnerRecruitPromptInput = (quality: PartnerRecruitQuality): 
     allowedPassiveKeys: [...PARTNER_RECRUIT_ALLOWED_PASSIVE_KEYS],
     techniqueCount: getPartnerRecruitExpectedInnateTechniqueCount(quality),
     techniqueMaxLayer: getPartnerRecruitTechniqueMaxLayer(quality),
-    statRanges: ranges,
+    techniqueSlotRange: ranges.techniqueSlots,
+    requiredAttrKeys: [...PARTNER_RECRUIT_BASE_ATTR_KEYS],
+    integerAttrKeys: [...PARTNER_INTEGER_ATTR_KEYS],
+    percentAttrKeys,
     constraints: [
       '必须返回严格 JSON 对象，禁止额外解释文本',
       '伙伴名字 2-6 个中文字符，不得包含标点或空格',
       '伙伴描述 35-90 个中文字符',
       '每个天生功法名字 2-6 个中文字符，描述 18-60 个中文字符',
-      '属性、槽位、天生功法数量必须落在给定范围内',
+      'partner.baseAttrs 与 partner.levelAttrGains 必须完整包含 requiredAttrKeys 中的全部字段，禁止缺项',
+      'integerAttrKeys 中的属性必须使用非负整数；其中 partner.baseAttrs.max_qixue 与 partner.baseAttrs.sudu 必须大于 0，成长值允许为 0',
+      'percentAttrKeys 中的属性必须使用非负数字，小数表示百分比，例如 0.18 表示 18%',
+      '当前版本不限制属性数值最大值，但禁止负数、NaN、Infinity',
+      '槽位与天生功法数量必须落在给定范围内',
     ],
   };
 };
@@ -312,13 +359,13 @@ export const validatePartnerRecruitDraft = (
     return null;
   }
 
-  const baseAttrs = normalizeBaseAttrs(partner.baseAttrs);
-  const levelAttrGains = normalizeBaseAttrs(partner.levelAttrGains);
+  const baseAttrs = normalizeBaseAttrs(partner.baseAttrs, true);
+  const levelAttrGains = normalizeBaseAttrs(partner.levelAttrGains, false);
   if (!baseAttrs || !levelAttrGains) return null;
 
   const ranges = DRAFT_STAT_RANGES_BY_QUALITY[quality];
   const maxTechniqueSlots = asInt(partner.maxTechniqueSlots);
-  if (!validateBaseAttrs(baseAttrs, ranges.baseAttrs) || !validateBaseAttrs(levelAttrGains, ranges.levelAttrGains)) {
+  if (!validateBaseAttrs(baseAttrs, true) || !validateBaseAttrs(levelAttrGains, false)) {
     return null;
   }
   if (!isAttrInRange(maxTechniqueSlots, ranges.techniqueSlots)) {
@@ -338,7 +385,7 @@ export const validatePartnerRecruitDraft = (
     const techniqueDescription = asString(row.description);
     const kind = row.kind;
     const passiveKey = row.passiveKey;
-    const passiveValue = asInt(row.passiveValue);
+    const passiveValue = asFiniteNumber(row.passiveValue);
     if (
       techniqueName.length < 2 ||
       techniqueName.length > 12 ||
@@ -346,6 +393,7 @@ export const validatePartnerRecruitDraft = (
       techniqueDescription.length > 100 ||
       !isPartnerRecruitTechniqueKind(kind) ||
       !isPartnerRecruitPassiveKey(passiveKey) ||
+      !Number.isFinite(passiveValue) ||
       passiveValue <= 0
     ) {
       return [];

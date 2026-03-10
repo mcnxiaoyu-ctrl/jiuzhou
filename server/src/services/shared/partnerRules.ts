@@ -50,7 +50,7 @@ export interface PartnerLearnedTechniqueState {
   isInnate: boolean;
 }
 
-const PARTNER_INTEGER_ATTR_KEYS = new Set<string>([
+export const PARTNER_INTEGER_ATTR_KEYS = new Set<string>([
   'max_qixue',
   'max_lingqi',
   'wugong',
@@ -108,7 +108,7 @@ const cloneBaseAttrs = (
   };
 };
 
-const normalizePartnerAttrValue = (key: string, value: number): number => {
+export const normalizePartnerAttrValue = (key: string, value: number): number => {
   if (PARTNER_INTEGER_ATTR_KEYS.has(key)) {
     return Math.max(0, Math.round(value));
   }
