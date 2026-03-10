@@ -9,8 +9,8 @@
       "entries": [
         {
           "item_def_id": "box-001",
-          "chance": 0.02,
-          "chance_add_by_monster_realm": 0.02,
+          "chance": 0.04,
+          "chance_add_by_monster_realm": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
