@@ -49,6 +49,7 @@ import {
   type PartnerGrowthValues,
   type PartnerLearnedTechniqueState,
 } from './shared/partnerRules.js';
+import { activateCharacterPartnerExclusively } from './shared/partnerActivation.js';
 import { resolveTechniqueBookLearning } from './shared/techniqueBookRules.js';
 import {
   getItemMetaMap,
@@ -1000,15 +1001,13 @@ class PartnerService {
       const targetPartner = await loadSinglePartnerRow(characterId, partnerId, true);
       if (!targetPartner) return { success: false, message: '伙伴不存在' };
 
-      await query(
-        `
-          UPDATE character_partner
-          SET is_active = CASE WHEN id = $2 THEN TRUE ELSE FALSE END,
-              updated_at = NOW()
-          WHERE character_id = $1
-        `,
-        [characterId, partnerId],
-      );
+      if (!targetPartner.is_active) {
+        await activateCharacterPartnerExclusively({
+          characterId,
+          partnerId,
+          execute: query,
+        });
+      }
 
       const rows = await loadPartnerRows(characterId, false);
       const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
