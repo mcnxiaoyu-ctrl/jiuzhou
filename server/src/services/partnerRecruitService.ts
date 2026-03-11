@@ -410,7 +410,7 @@ const buildPreviewFromPartnerDefinition = (
 const tryCallPartnerRecruitTextModel = async (
   quality: PartnerRecruitQuality,
 ): Promise<RecruitTextAttemptResult> => {
-  const timeoutMs = 180_000;
+  const timeoutMs = 300_000;
   const external = await callConfiguredTextModel({
     responseFormat: buildPartnerRecruitResponseFormat(quality),
     systemMessage: PARTNER_RECRUIT_PROMPT_SYSTEM_MESSAGE,

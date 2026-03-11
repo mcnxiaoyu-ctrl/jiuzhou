@@ -29,6 +29,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      cos-js-sdk-v5:
+        specifier: ^1.10.1
+        version: 1.10.1
       dayjs:
         specifier: ^1.11.13
         version: 1.11.19
@@ -1870,6 +1873,9 @@ packages:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
 
+  cos-js-sdk-v5@1.10.1:
+    resolution: {integrity: sha512-a4SRfCY5g6Z35C7OWe9te/S1zk77rVQzfpvZ33gmTdJQzKxbNbEG7Aw/v453XwVMsQB352FIf7KRMm5Ya/wlZQ==}
+
   cos-nodejs-sdk-v5@2.15.4:
     resolution: {integrity: sha512-TP/iYTvKKKhRK89on9SRfSMGEw/9SFAAU8EC1kdT5Fmpx7dAwaCNM2+R2H1TSYoQt+03rwOs8QEfNkX8GOHjHQ==}
     engines: {node: '>= 6'}
@@ -2164,6 +2170,10 @@ packages:
 
   fast-xml-parser@4.2.5:
     resolution: {integrity: sha512-B9/wizE4WngqQftFPmdaMYlXoJlJOYxGQOanC77fq9k8+Z0v5dDSVh+3glErdIROP//s/jgb7ZuxKfB8nVyo0g==}
+    hasBin: true
+
+  fast-xml-parser@4.5.0:
+    resolution: {integrity: sha512-/PlTQCI96+fZMAOLMZK4CWG1ItCbfZ/0jx7UIJFChPNrx7tcEgerUgWbeieCM9MfHInUDyK8DWYZ+YrywDJuTg==}
     hasBin: true
 
   fdir@6.5.0:
@@ -5490,6 +5500,10 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
+  cos-js-sdk-v5@1.10.1:
+    dependencies:
+      fast-xml-parser: 4.5.0
+
   cos-nodejs-sdk-v5@2.15.4:
     dependencies:
       conf: 9.0.2
@@ -5849,6 +5863,10 @@ snapshots:
   fast-levenshtein@2.0.6: {}
 
   fast-xml-parser@4.2.5:
+    dependencies:
+      strnum: 1.1.2
+
+  fast-xml-parser@4.5.0:
     dependencies:
       strnum: 1.1.2
 
