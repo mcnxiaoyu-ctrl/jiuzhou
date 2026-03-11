@@ -647,6 +647,15 @@
   width: 100%;
 }
 
+.partner-recruit-result-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+}
+
+.partner-recruit-result-action-row .ant-btn {
+  width: 100%;
+}
+
 @media screen and (min-width: 769px) {
   .partner-current-card {
     display: grid;

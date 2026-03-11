@@ -22,6 +22,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { query } from '../config/database.js';
 import { getGameServer } from '../game/gameServer.js';
+import {
+  refreshGeneratedPartnerSnapshots,
+  refreshGeneratedTechniqueSnapshots,
+} from './staticConfigLoader.js';
 import { getCharacterUserId } from './sect/db.js';
 import { partnerRecruitService } from './partnerRecruitService.js';
 import type { PartnerRecruitQuality } from './shared/partnerRecruitRules.js';
@@ -38,6 +42,27 @@ type EnqueueParams = PartnerRecruitWorkerPayload & {
 class PartnerRecruitJobRunner {
   private activeWorkers = new Map<string, Worker>();
   private initialized = false;
+
+  /**
+   * 作用（做什么 / 不做什么）：
+   * 1) 做什么：在主线程同步 worker 刚写入数据库的动态伙伴/功法快照，确保后续状态接口和确认收下读取的是最新定义。
+   * 2) 不做什么：不改任务状态、不吞掉业务失败；刷新失败应让本次结果直接走失败链路，避免生成成功却无法展示预览。
+   *
+   * 输入/输出：
+   * - 输入：无。
+   * - 输出：主线程内存中的最新生成配置快照。
+   *
+   * 数据流/状态流：
+   * worker 落库 -> syncGeneratedRecruitSnapshots -> 状态接口 / confirm 收下 / 前端预览。
+   *
+   * 关键边界条件与坑点：
+   * 1) worker 线程刷新的是自己的模块缓存，主线程不会自动同步，因此必须在 runner 统一补刷。
+   * 2) 预览依赖伙伴定义和天生功法/技能定义两套缓存，只刷新一边仍会导致预览不完整或直接缺失。
+   */
+  private async syncGeneratedRecruitSnapshots(): Promise<void> {
+    await refreshGeneratedTechniqueSnapshots();
+    await refreshGeneratedPartnerSnapshots();
+  }
 
   private resolveWorkerScript(): string {
     const __filename = fileURLToPath(import.meta.url);
@@ -122,6 +147,10 @@ class PartnerRecruitJobRunner {
         if (message.type === 'error') {
           await failJob(`伙伴招募 worker 执行失败：${message.payload.error}`);
           return;
+        }
+
+        if (message.payload.status === 'generated_draft') {
+          await this.syncGeneratedRecruitSnapshots();
         }
 
         if (!userId) return;

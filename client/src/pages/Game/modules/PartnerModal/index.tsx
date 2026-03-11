@@ -81,7 +81,7 @@ type RecruitStatusRefreshMode = 'initial' | 'background';
  * 2. 当前选择的伙伴在刷新后可能失效，需要在 overview 更新时自动校正到出战伙伴或首个伙伴。
  */
 const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const isMobile = useIsMobile();
   const recruitEnabled = isPartnerRecruitEnabled();
   const [loading, setLoading] = useState(false);
@@ -395,18 +395,27 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   }, [message, refreshOverview, refreshRecruitStatus]);
 
   const handleDiscardRecruit = useCallback(async (generationId: string) => {
-    setActionKey(`recruit-discard-${generationId}`);
-    try {
-      const res = await discardPartnerRecruitDraft(generationId);
-      if (!res.success) throw new Error(getUnifiedApiErrorMessage(res, '放弃预览失败'));
-      message.success(res.message || '已放弃本次预览');
-      await refreshRecruitStatus();
-    } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error as { message?: string }, '放弃预览失败'));
-    } finally {
-      setActionKey('');
-    }
-  }, [message, refreshRecruitStatus]);
+    modal.confirm({
+      title: '确认放弃当前伙伴预览？',
+      content: '放弃后这次生成结果会立即作废，需要重新开始招募才能获得新的伙伴预览。',
+      okText: '确认放弃',
+      cancelText: '继续查看',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setActionKey(`recruit-discard-${generationId}`);
+        try {
+          const res = await discardPartnerRecruitDraft(generationId);
+          if (!res.success) throw new Error(getUnifiedApiErrorMessage(res, '放弃预览失败'));
+          message.success(res.message || '已放弃本次预览');
+          await refreshRecruitStatus();
+        } catch (error) {
+          message.error(getUnifiedApiErrorMessage(error as { message?: string }, '放弃预览失败'));
+        } finally {
+          setActionKey('');
+        }
+      },
+    });
+  }, [message, modal, refreshRecruitStatus]);
 
   const toggleTechniqueSkills = useCallback((techniqueId: string) => {
     setExpandedTechniqueSkills((current) => ({
@@ -916,16 +925,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
               ) : null}
             </div>
             {renderRecruitPreview(recruitPanelView.preview)}
-            <div className="partner-action-row">
-              <Button
-                type="primary"
-                loading={actionKey === `recruit-confirm-${recruitPanelView.job.generationId}`}
-                onClick={() => {
-                  void handleConfirmRecruit(recruitPanelView.job.generationId);
-                }}
-              >
-                确认收下
-              </Button>
+            <div className="partner-action-row partner-recruit-action-row partner-recruit-result-action-row">
               <Button
                 danger
                 loading={actionKey === `recruit-discard-${recruitPanelView.job.generationId}`}
@@ -934,6 +934,15 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
                 }}
               >
                 放弃预览
+              </Button>
+              <Button
+                type="primary"
+                loading={actionKey === `recruit-confirm-${recruitPanelView.job.generationId}`}
+                onClick={() => {
+                  void handleConfirmRecruit(recruitPanelView.job.generationId);
+                }}
+              >
+                确认收下
               </Button>
             </div>
           </div>
@@ -955,18 +964,20 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
           </div>
         ) : null}
 
-        <div className="partner-action-row partner-recruit-action-row">
-          <Button
-            type="primary"
-            loading={actionKey === 'recruit-generate'}
-            disabled={!recruitActionState.canGenerate}
-            onClick={() => {
-              void handleGenerateRecruit();
-            }}
-          >
-            开始招募
-          </Button>
-        </div>
+        {recruitPanelView.kind !== 'draft' ? (
+          <div className="partner-action-row partner-recruit-action-row">
+            <Button
+              type="primary"
+              loading={actionKey === 'recruit-generate'}
+              disabled={!recruitActionState.canGenerate}
+              onClick={() => {
+                void handleGenerateRecruit();
+              }}
+            >
+              开始招募
+            </Button>
+          </div>
+        ) : null}
       </div>
     );
   };
