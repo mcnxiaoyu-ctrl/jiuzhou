@@ -885,6 +885,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       : coolingDown
         ? `剩余${cooldownText}`
         : '可招募';
+    const shouldShowSpiritStoneCost = (recruitStatus?.spiritStoneCost ?? 0) > 0;
     const cooldownRuleText = recruitStatus?.cooldownHours === 0
       ? '当前环境已关闭伙伴招募冷却，可连续招募。'
       : `每次开始招募后会进入冷却，当前默认冷却时长为 ${recruitStatus?.cooldownHours} 小时。`;
@@ -893,7 +894,9 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       <div className="partner-pane-card">
         <div className="partner-section-title">
           <span>伙伴招募</span>
-          {recruitStatus ? <Tag color="gold">消耗灵石 {recruitStatus.spiritStoneCost.toLocaleString()}</Tag> : null}
+          {recruitStatus && shouldShowSpiritStoneCost ? (
+            <Tag color="gold">消耗灵石 {recruitStatus.spiritStoneCost.toLocaleString()}</Tag>
+          ) : null}
         </div>
 
         <div className="partner-recruit-meta-grid">
@@ -963,7 +966,9 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
           <div className="partner-recruit-state-card">
             <div className="partner-section-title">开始招募</div>
             <div className="partner-meta">
-              消耗灵石后异步生成伙伴形象、属性与天生功法。生成失败会自动退款。
+              {shouldShowSpiritStoneCost
+                ? '消耗灵石后异步生成伙伴形象、属性与天生功法。生成失败会自动退款。'
+                : '异步生成伙伴形象、属性与天生功法。'}
             </div>
           </div>
         ) : null}

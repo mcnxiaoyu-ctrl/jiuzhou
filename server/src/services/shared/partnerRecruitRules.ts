@@ -94,7 +94,7 @@ const PARTNER_RECRUIT_TEXT_LENGTH_LIMITS = {
   techniqueDescription: { min: 18, max: 60 },
 } as const satisfies Record<string, TextLengthRange>;
 
-export const PARTNER_RECRUIT_SPIRIT_STONES_COST = 50_000;
+export const PARTNER_RECRUIT_SPIRIT_STONES_COST = 0;
 export const PARTNER_RECRUIT_COOLDOWN_HOURS = 168;
 export const PARTNER_RECRUIT_PREVIEW_EXPIRE_HOURS = 24;
 export const PARTNER_RECRUIT_ALLOWED_ELEMENTS: readonly PartnerRecruitElement[] = ['jin', 'mu', 'shui', 'huo', 'tu', 'none'] as const;
