@@ -95,7 +95,7 @@ const PARTNER_RECRUIT_TEXT_LENGTH_LIMITS = {
 } as const satisfies Record<string, TextLengthRange>;
 
 export const PARTNER_RECRUIT_SPIRIT_STONES_COST = 50_000;
-export const PARTNER_RECRUIT_COOLDOWN_HOURS = 12;
+export const PARTNER_RECRUIT_COOLDOWN_HOURS = 168;
 export const PARTNER_RECRUIT_PREVIEW_EXPIRE_HOURS = 24;
 export const PARTNER_RECRUIT_ALLOWED_ELEMENTS: readonly PartnerRecruitElement[] = ['jin', 'mu', 'shui', 'huo', 'tu', 'none'] as const;
 export const PARTNER_RECRUIT_ALLOWED_COMBAT_STYLES: readonly PartnerRecruitCombatStyle[] = ['physical', 'magic'] as const;

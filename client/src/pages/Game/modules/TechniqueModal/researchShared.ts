@@ -22,6 +22,7 @@ import type {
   TechniqueResearchResultStatusDto,
   TechniqueResearchStatusResponse,
 } from '../../../../services/api';
+import { formatGameCooldownRemaining } from '../../shared/cooldownText';
 
 export type TechniqueResearchStatusData = NonNullable<TechniqueResearchStatusResponse['data']>;
 export const TECHNIQUE_RESEARCH_STATUS_POLL_INTERVAL_MS = 20_000;
@@ -41,10 +42,6 @@ export type TechniqueResearchActionState = {
   canGenerate: boolean;
   pendingGenerationId: string | null;
 };
-
-const MINUTE_SECONDS = 60;
-const HOUR_SECONDS = 60 * MINUTE_SECONDS;
-const DAY_SECONDS = 24 * HOUR_SECONDS;
 
 export const buildTechniqueResearchIndicator = (
   status: TechniqueResearchStatusData | null,
@@ -100,33 +97,7 @@ export const isTechniqueResearchCoolingDown = (
 
 export const formatTechniqueResearchCooldownRemaining = (
   cooldownRemainingSeconds: number,
-): string => {
-  const safeSeconds = Math.max(0, Math.floor(cooldownRemainingSeconds));
-  if (safeSeconds >= DAY_SECONDS) {
-    const days = Math.floor(safeSeconds / DAY_SECONDS);
-    const hours = Math.floor((safeSeconds % DAY_SECONDS) / HOUR_SECONDS);
-    const minutes = Math.floor((safeSeconds % HOUR_SECONDS) / MINUTE_SECONDS);
-    if (minutes > 0) return `${days}天${hours}小时${minutes}分`;
-    if (hours > 0) return `${days}天${hours}小时`;
-    return `${days}天`;
-  }
-
-  if (safeSeconds >= HOUR_SECONDS) {
-    const hours = Math.floor(safeSeconds / HOUR_SECONDS);
-    const minutes = Math.floor((safeSeconds % HOUR_SECONDS) / MINUTE_SECONDS);
-    if (minutes > 0) return `${hours}小时${minutes}分`;
-    return `${hours}小时`;
-  }
-
-  if (safeSeconds >= MINUTE_SECONDS) {
-    const minutes = Math.floor(safeSeconds / MINUTE_SECONDS);
-    const seconds = safeSeconds % MINUTE_SECONDS;
-    if (seconds > 0) return `${minutes}分${seconds}秒`;
-    return `${minutes}分`;
-  }
-
-  return `${safeSeconds}秒`;
-};
+): string => formatGameCooldownRemaining(cooldownRemainingSeconds);
 
 export const resolveTechniqueResearchActionState = (
   status: TechniqueResearchStatusData | null,

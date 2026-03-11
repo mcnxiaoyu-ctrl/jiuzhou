@@ -45,6 +45,7 @@ import {
 import {
   buildPartnerRecruitIndicator,
   formatPartnerRecruitCooldownRemaining,
+  isPartnerRecruitCoolingDown,
   PARTNER_RECRUIT_STATUS_POLL_INTERVAL_MS,
   resolvePartnerRecruitActionState,
   resolvePartnerRecruitPanelView,
@@ -875,12 +876,18 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       );
     }
 
+    const coolingDown = isPartnerRecruitCoolingDown(recruitStatus);
     const cooldownText = recruitStatus
       ? formatPartnerRecruitCooldownRemaining(recruitStatus.cooldownRemainingSeconds)
       : '';
+    const cooldownStatusText = !recruitStatus
+      ? '--'
+      : coolingDown
+        ? `剩余${cooldownText}`
+        : '可招募';
     const cooldownRuleText = recruitStatus?.cooldownHours === 0
       ? '当前环境已关闭伙伴招募冷却，可连续招募。'
-      : `当前可招募，冷却 ${recruitStatus?.cooldownHours ?? 12} 小时`;
+      : `每次开始招募后会进入冷却，当前默认冷却时长为 ${recruitStatus?.cooldownHours} 小时。`;
 
     return (
       <div className="partner-pane-card">
@@ -896,11 +903,8 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
           </div>
           <div className="partner-recruit-meta-card">
             <div className="partner-stat-label">冷却状态</div>
-            <div className="partner-meta">
-              {recruitStatus && recruitStatus.cooldownRemainingSeconds > 0
-                ? `冷却中，还需等待 ${cooldownText}`
-                : cooldownRuleText}
-            </div>
+            <div className="partner-meta">{cooldownStatusText}</div>
+            <div className="partner-meta">{cooldownRuleText}</div>
           </div>
         </div>
 
