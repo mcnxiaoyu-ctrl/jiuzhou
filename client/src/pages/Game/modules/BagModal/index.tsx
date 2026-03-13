@@ -34,7 +34,7 @@ import {
   formatAffixRollPercent,
   formatEquipmentAffixLine,
   formatMergedLootResultParts,
-  getAffixRollColor,
+  getAffixRollColorVars,
   getAffixRollPercent,
   getEquipSlotLabel,
   isDisassemblableBagItem,
@@ -1702,7 +1702,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                   {rerollState.affixes.map((affix, index) => {
                     const locked = rerollState.lockIndexSet.has(index);
                     const rollPercent = getAffixRollPercent(affix);
-                    const rollColor = getAffixRollColor(rollPercent);
+                    const rollColorVars = getAffixRollColorVars(rollPercent);
                     return (
                       <button
                         key={`${index}-${affix.key ?? 'affix'}`}
@@ -1714,21 +1714,13 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                         <span className="bag-reroll-affix-index">#{index + 1}</span>
                         <span className="bag-reroll-affix-main">
                           <span className="bag-reroll-affix-text">{formatEquipmentAffixLine(affix)}</span>
-                          <span className="bag-reroll-affix-roll">
+                          <span className="bag-reroll-affix-roll" style={rollColorVars ?? undefined}>
                             <span className="bag-reroll-affix-roll-label">ROLL</span>
-                            <span
-                              className="bag-reroll-affix-roll-value"
-                              style={rollColor ? { color: rollColor } : undefined}
-                            >
-                              {formatAffixRollPercent(rollPercent)}
-                            </span>
+                            <span className="bag-reroll-affix-roll-value">{formatAffixRollPercent(rollPercent)}</span>
                             <span className="bag-reroll-affix-roll-track" aria-hidden="true">
                               <span
                                 className="bag-reroll-affix-roll-fill"
-                                style={{
-                                  width: `${rollPercent ?? 0}%`,
-                                  background: rollColor ?? "var(--border-color-soft)",
-                                }}
+                                style={{ width: `${rollPercent ?? 0}%` }}
                               />
                             </span>
                           </span>

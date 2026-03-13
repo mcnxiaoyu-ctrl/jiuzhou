@@ -1,7 +1,9 @@
+import type { CSSProperties } from 'react';
+
 /**
- * 作用：统一装备词条 ROLL 的解析、格式化与颜色渐变算法。
+ * 作用：统一装备词条 ROLL 的解析、格式化与双主题颜色渐变算法。
  * 输入：词条中的 roll_ratio(0~1) 或 roll_percent(0~100)。
- * 输出：可直接给 UI 使用的百分比与颜色。
+ * 输出：可直接给 UI 使用的百分比与浅/深主题颜色变量。
  * 关键约束：颜色分段固定为 0~25 绿、25~50 蓝、50~75 紫、75~100 红。
  */
 
@@ -63,6 +65,18 @@ type RollColorSegment = {
   to: Rgb;
 };
 
+export type AffixRollThemeColor = {
+  light: string;
+  dark: string;
+};
+
+export type AffixRollColorVars = {
+  '--affix-roll-color-light': string;
+  '--affix-roll-color-dark': string;
+};
+
+export type AffixRollColorStyle = CSSProperties & AffixRollColorVars;
+
 const ROLL_COLOR_SEGMENTS: ReadonlyArray<RollColorSegment> = [
   { start: 0, end: 25, from: [111, 195, 145], to: [45, 138, 94] }, // 青玉
   { start: 25, end: 50, from: [126, 190, 228], to: [54, 116, 185] }, // 霁青
@@ -72,12 +86,11 @@ const ROLL_COLOR_SEGMENTS: ReadonlyArray<RollColorSegment> = [
 
 /**
  * ROLL 颜色分段规则：
- * 1) 0~25% 绿渐变
- * 2) 25~50% 蓝渐变
- * 3) 50~75% 紫渐变
- * 4) 75~100% 红渐变（80% 与 100% 明显不同）
+ * 1) 浅色主题：数值越高颜色越深，强化亮底上的对比度。
+ * 2) 暗色主题：数值越高颜色越亮，强化暗底上的高 roll 感知。
+ * 3) 色相分段保持 0~25 绿、25~50 蓝、50~75 紫、75~100 红。
  */
-export const getAffixRollColor = (rollPercent: number | null): string | null => {
+export const getAffixRollColor = (rollPercent: number | null): AffixRollThemeColor | null => {
   if (rollPercent === null || !Number.isFinite(rollPercent)) return null;
   const normalized = clampPercent(rollPercent);
   const segment =
@@ -86,5 +99,17 @@ export const getAffixRollColor = (rollPercent: number | null): string | null => 
   if (!segment) return null;
   const span = Math.max(1, segment.end - segment.start);
   const progress = (normalized - segment.start) / span;
-  return rgbToCss(mixRgb(segment.from, segment.to, progress));
+  return {
+    light: rgbToCss(mixRgb(segment.from, segment.to, progress)),
+    dark: rgbToCss(mixRgb(segment.to, segment.from, progress)),
+  };
+};
+
+export const getAffixRollColorVars = (rollPercent: number | null): AffixRollColorStyle | null => {
+  const colors = getAffixRollColor(rollPercent);
+  if (!colors) return null;
+  return {
+    '--affix-roll-color-light': colors.light,
+    '--affix-roll-color-dark': colors.dark,
+  };
 };

@@ -58,6 +58,13 @@ body.theme-dark {
 .affix-tooltip-row .ant-tag.affix-tooltip-roll-tag {
   width: 60px;
   text-align: center;
+  color: var(--affix-roll-color-light);
+  border-color: var(--affix-roll-color-light);
+}
+
+body.theme-dark .affix-tooltip-row .ant-tag.affix-tooltip-roll-tag {
+  color: var(--affix-roll-color-dark);
+  border-color: var(--affix-roll-color-dark);
 }
 
 .affix-tooltip-text {

@@ -50,10 +50,14 @@
   #{$value-selector} {
     font-size: 11px;
     font-weight: 800;
-    color: var(--text-color);
+    color: var(--affix-roll-color-light, var(--text-color));
     min-width: $value-min-width;
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+
+  body.theme-dark #{$value-selector} {
+    color: var(--affix-roll-color-dark, var(--text-color));
   }
 
   #{$track-selector} {
@@ -81,6 +85,11 @@
     bottom: 0;
     min-width: 2px;
     border-radius: inherit;
+    background: var(--affix-roll-color-light, var(--border-color-soft));
     transition: width 0.25s ease, background 0.25s ease;
+  }
+
+  body.theme-dark #{$fill-selector} {
+    background: var(--affix-roll-color-dark, var(--border-color-soft));
   }
 }

@@ -18,6 +18,7 @@ import { formatMarkEffectText } from "../../shared/markEffectText";
 import {
   formatAffixRollPercent,
   getAffixRollColor,
+  getAffixRollColorVars,
   getAffixRollPercent,
 } from "../../shared/equipmentAffixRoll";
 import {
@@ -329,7 +330,7 @@ export const formatEquipmentAffixLine = (affix: EquipmentAffix): string => {
   });
   return displayText ? displayText.fullText : "词条 T-：未知";
 };
-export { formatAffixRollPercent, getAffixRollColor, getAffixRollPercent };
+export { formatAffixRollPercent, getAffixRollColor, getAffixRollColorVars, getAffixRollPercent };
 
 const toFiniteNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
