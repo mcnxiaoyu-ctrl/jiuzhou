@@ -30,6 +30,7 @@ import { formatTechniquePassiveAmount } from '../../shared/techniquePassiveDispl
 import { getPartnerAttrLabel } from '../../shared/partnerDisplay';
 
 export {
+  buildPartnerCombatAttrRows,
   formatPartnerAttrValue,
   formatPartnerElementLabel,
   getPartnerAttrLabel,

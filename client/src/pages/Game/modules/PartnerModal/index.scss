@@ -198,35 +198,6 @@
   color: color-mix(in srgb, var(--warning-color, #d48806) 84%, var(--text-color) 16%);
 }
 
-.partner-summary-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-top: 2px;
-}
-
-.partner-summary-actions .ant-btn {
-  min-width: 104px;
-}
-
-.partner-sell-modal {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.partner-sell-modal__target {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-color);
-}
-
-.partner-sell-modal__hint {
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-}
-
 .partner-list-card {
   padding: 14px;
   display: flex;
@@ -394,6 +365,11 @@
   color: var(--text-color);
   line-height: 1.35;
   word-break: break-word;
+}
+
+.partner-stat-growth {
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .partner-upgrade-top {
@@ -878,8 +854,7 @@
   .partner-action-row .ant-btn,
   .partner-quick-actions .ant-btn,
   .partner-book-card .ant-btn,
-  .partner-technique-upgrade .ant-btn,
-  .partner-summary-actions .ant-btn {
+  .partner-technique-upgrade .ant-btn {
     width: 100%;
   }
 

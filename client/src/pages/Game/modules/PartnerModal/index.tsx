@@ -2,7 +2,6 @@ import { App, Button, Drawer, Empty, InputNumber, Modal, Progress, Segmented, Sk
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   activatePartner,
-  createPartnerMarketListing,
   confirmPartnerRecruitDraft,
   dismissPartner,
   discardPartnerRecruitDraft,
@@ -29,6 +28,7 @@ import { dispatchPartnerChangedEvent, PARTNER_CHANGED_EVENT } from '../../shared
 import { useIsMobile } from '../../shared/responsive';
 import { getSkillCardSections } from '../TechniqueModal/skillDetailShared';
 import {
+  buildPartnerCombatAttrRows,
   formatPartnerElementLabel,
   formatPartnerAttrValue,
   formatPartnerTechniqueLayerLabel,
@@ -39,7 +39,6 @@ import {
   getPartnerAttrLabel,
   getPartnerEmptySlotCount,
   getPartnerVisibleBaseAttrs,
-  getPartnerVisibleCombatAttrs,
   PARTNER_PANEL_OPTIONS,
   resolvePartnerActionLabel,
   resolvePartnerAvatar,
@@ -97,8 +96,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const [techniqueResultText, setTechniqueResultText] = useState('');
   const [techniqueUpgradeCosts, setTechniqueUpgradeCosts] = useState<Record<string, PartnerTechniqueUpgradeCostDto | null>>({});
   const [expandedTechniqueSkills, setExpandedTechniqueSkills] = useState<Record<string, boolean>>({});
-  const [sellPriceValue, setSellPriceValue] = useState<number | null>(null);
-  const [sellModalOpen, setSellModalOpen] = useState(false);
   const markingRecruitViewedRef = useRef(false);
 
   const refreshOverview = useCallback(async () => {
@@ -144,8 +141,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       setTechniqueResultText('');
       setTechniqueUpgradeCosts({});
       setExpandedTechniqueSkills({});
-      setSellPriceValue(null);
-      setSellModalOpen(false);
       setActionKey('');
       return;
     }
@@ -322,33 +317,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       setActionKey('');
     }
   }, [message, refreshOverview]);
-
-  const handleSellPartner = useCallback(async () => {
-    if (!selectedPartner) return;
-    const price = Math.max(0, Math.floor(Number(sellPriceValue) || 0));
-    if (price <= 0) {
-      message.warning('请输入有效的挂牌价格');
-      return;
-    }
-    setActionKey(`sell-${selectedPartner.id}`);
-    try {
-      const res = await createPartnerMarketListing({
-        partnerId: selectedPartner.id,
-        unitPriceSpiritStones: price,
-      });
-      if (!res.success) throw new Error(getUnifiedApiErrorMessage(res, '挂牌失败'));
-      message.success(res.message || '已挂牌到坊市');
-      setSellModalOpen(false);
-      setSellPriceValue(null);
-      dispatchPartnerChangedEvent();
-      await refreshOverview();
-      gameSocket.refreshCharacter();
-    } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error as { message?: string }, '挂牌失败'));
-    } finally {
-      setActionKey('');
-    }
-  }, [message, refreshOverview, selectedPartner, sellPriceValue]);
 
   const handleInjectExp = useCallback(async () => {
     if (!selectedPartner) return;
@@ -576,18 +544,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
             {selectedPartner.tradeStatus === 'market_listed' ? (
               <div className="partner-meta partner-meta--warning">已在坊市挂单，无法出战、灌注或修炼功法。</div>
             ) : null}
-            <div className="partner-summary-actions">
-              <Button
-                disabled={selectedPartner.isActive || selectedPartner.tradeStatus === 'market_listed'}
-                loading={actionKey === `sell-${selectedPartner.id}`}
-                onClick={() => {
-                  setSellPriceValue(null);
-                  setSellModalOpen(true);
-                }}
-              >
-                挂牌出售
-              </Button>
-            </div>
           </div>
         </div>
       </div>
@@ -596,7 +552,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
 
   const renderOverviewPanel = () => {
     if (!selectedPartner) return <div className="partner-empty">暂无伙伴数据</div>;
-    const combatAttrs = getPartnerVisibleCombatAttrs(selectedPartner.computedAttrs);
+    const combatAttrs = buildPartnerCombatAttrRows(selectedPartner);
 
     return (
       <div className="partner-pane-card">
@@ -605,8 +561,11 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
         <div className="partner-combat-grid">
           {combatAttrs.map((entry) => (
             <div key={entry.key} className="partner-stat-item">
-              <div className="partner-stat-label">{getPartnerAttrLabel(entry.key)}</div>
-              <div className="partner-stat-value">{formatPartnerAttrValue(entry.key, entry.value)}</div>
+              <div className="partner-stat-label">{entry.label}</div>
+              <div className="partner-stat-value">
+                {entry.valueText}
+                {entry.growthText ? <span className="partner-stat-growth"> + {entry.growthText}</span> : null}
+              </div>
             </div>
           ))}
         </div>
@@ -1128,40 +1087,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     );
   };
 
-  const sellPartnerModal = selectedPartner ? (
-    <Modal
-      open={sellModalOpen}
-      title="挂牌出售伙伴"
-      onCancel={() => {
-        setSellModalOpen(false);
-      }}
-      onOk={() => {
-        void handleSellPartner();
-      }}
-      okText="确认挂牌"
-      cancelText="取消"
-      confirmLoading={actionKey === `sell-${selectedPartner.id}`}
-      destroyOnHidden
-    >
-      <div className="partner-sell-modal">
-        <div className="partner-sell-modal__target">
-          当前伙伴：{selectedPartner.nickname || selectedPartner.name}（等级 {selectedPartner.level}）
-        </div>
-        <div className="partner-sell-modal__hint">
-          已上架的伙伴无法继续出战、灌注或修炼功法，购买后会转移完整伙伴实例。
-        </div>
-        <InputNumber<number>
-          min={1}
-          value={sellPriceValue}
-          onChange={(value) => setSellPriceValue(value)}
-          controls={false}
-          style={{ width: '100%' }}
-          placeholder="请输入挂牌价格（灵石）"
-        />
-      </div>
-    </Modal>
-  ) : null;
-
   if (isMobile) {
     return (
       <>
@@ -1178,7 +1103,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
         >
           {renderBody()}
         </Drawer>
-        {sellPartnerModal}
       </>
     );
   }
@@ -1199,7 +1123,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       >
         {renderBody()}
       </Modal>
-      {sellPartnerModal}
     </>
   );
 };

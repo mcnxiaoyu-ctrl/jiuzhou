@@ -2,11 +2,11 @@ import React from 'react';
 import { Modal, Button, Tag } from 'antd';
 import type { PartnerDisplayDto } from '../../../../services/api';
 import {
+  buildPartnerCombatAttrRows,
   formatPartnerElementLabel,
   resolvePartnerAvatar,
 } from '../../shared/partnerDisplay';
 import { getItemQualityMeta } from '../../shared/itemQuality';
-import { buildPartnerMarketAttrRows } from './partnerMarketShared';
 
 interface MarketPartnerBuyModalProps {
   partner: PartnerDisplayDto | null;
@@ -68,7 +68,7 @@ const MarketPartnerBuyModal: React.FC<MarketPartnerBuyModalProps> = ({
           <div className="market-list-detail-section" style={{ flex: '0 0 300px', paddingRight: '8px' }}>
             <div className="market-list-detail-title">属性</div>
             <div className="market-list-detail-attr-grid" style={{ gap: '12px 12px' }}>
-              {buildPartnerMarketAttrRows(partner).map((item) => (
+              {buildPartnerCombatAttrRows(partner).map((item) => (
                 <div key={item.key} className="market-list-detail-line market-partner-attr-row">
                   <span className="market-partner-attr-row__label">{item.label}</span>
                   <span className="market-partner-attr-row__value">{item.valueText}</span>

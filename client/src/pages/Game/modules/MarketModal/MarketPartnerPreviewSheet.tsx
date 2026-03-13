@@ -1,11 +1,11 @@
 import React from 'react';
 import type { PartnerDisplayDto } from '../../../../services/api';
 import {
+  buildPartnerCombatAttrRows,
   formatPartnerElementLabel,
   resolvePartnerAvatar,
 } from '../../shared/partnerDisplay';
 import { getItemQualityMeta } from '../../shared/itemQuality';
-import { buildPartnerMarketAttrRows } from './partnerMarketShared';
 
 interface MarketPartnerPreviewSheetProps {
   partner: PartnerDisplayDto | null;
@@ -68,7 +68,7 @@ const MarketPartnerPreviewSheet: React.FC<MarketPartnerPreviewSheetProps> = ({
           <div className="market-list-sheet-section">
             <div className="market-list-sheet-section-title">属性</div>
             <div className="market-list-sheet-effect-list market-list-sheet-effect-list--partner-attrs">
-              {buildPartnerMarketAttrRows(partner).map((item) => (
+              {buildPartnerCombatAttrRows(partner).map((item) => (
                 <div key={item.key} className="market-list-sheet-effect-chip market-partner-attr-row">
                   <span className="market-partner-attr-row__label">{item.label}</span>
                   <span className="market-partner-attr-row__value">{item.valueText}</span>
