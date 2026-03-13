@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import type { IdleBatchDto } from '../types';
+import type { IdleBatchSummaryDto } from '../types';
 
 // ============================================
 // 从 ReplayViewer 提取的纯筛选逻辑（与组件内 useMemo 保持一致）
@@ -12,7 +12,7 @@ import type { IdleBatchDto } from '../types';
 
 type BatchFilter = 'all' | 'win' | 'lose';
 
-const filterBatches = (batches: IdleBatchDto[], filter: BatchFilter): IdleBatchDto[] => {
+const filterBatches = (batches: IdleBatchSummaryDto[], filter: BatchFilter): IdleBatchSummaryDto[] => {
   if (filter === 'all') return batches;
   if (filter === 'win') return batches.filter((b) => b.result === 'attacker_win');
   return batches.filter((b) => b.result === 'defender_win');
@@ -22,31 +22,21 @@ const filterBatches = (batches: IdleBatchDto[], filter: BatchFilter): IdleBatchD
 // Arbitraries
 // ============================================
 
-const batchResultArb = fc.constantFrom<IdleBatchDto['result']>(
+const batchResultArb = fc.constantFrom<IdleBatchSummaryDto['result']>(
   'attacker_win',
   'defender_win',
   'draw',
 );
 
-const batchArb: fc.Arbitrary<IdleBatchDto> = fc.record({
+const batchArb: fc.Arbitrary<IdleBatchSummaryDto> = fc.record({
   id: fc.uuid(),
   sessionId: fc.uuid(),
   batchIndex: fc.nat({ max: 999 }),
   result: batchResultArb,
   roundCount: fc.integer({ min: 1, max: 50 }),
-  randomSeed: fc.integer({ min: 0, max: 2 ** 31 - 1 }),
   expGained: fc.nat({ max: 100_000 }),
   silverGained: fc.nat({ max: 100_000 }),
-  itemsGained: fc.array(
-    fc.record({
-      itemDefId: fc.string({ minLength: 1, maxLength: 20 }),
-      itemName: fc.string({ minLength: 1, maxLength: 20 }),
-      quantity: fc.integer({ min: 1, max: 99 }),
-    }),
-    { maxLength: 5 },
-  ),
-  battleLog: fc.constant([]),
-  monsterIds: fc.array(fc.string({ minLength: 1, maxLength: 20 }), { maxLength: 3 }),
+  itemCount: fc.nat({ max: 5 }),
   executedAt: fc.date().map((d) => d.toISOString()),
 });
 

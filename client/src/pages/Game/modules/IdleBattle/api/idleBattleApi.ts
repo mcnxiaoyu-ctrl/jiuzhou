@@ -25,6 +25,7 @@ import type {
   IdleStatusResponse,
   IdleHistoryResponse,
   IdleBatchesResponse,
+  IdleBatchDetailResponse,
   IdleProgressResponse,
   IdleConfigResponse,
   IdleConfigDto,
@@ -70,6 +71,15 @@ export const getIdleBatches = (
 ): Promise<IdleBatchesResponse> =>
   unwrapData<IdleBatchesResponse>(
     api.get(`/idle/history/${sessionId}/batches`),
+  );
+
+/** 查询单个战斗批次详情（回放日志） */
+export const getIdleBatchDetail = (
+  sessionId: string,
+  batchId: string,
+): Promise<IdleBatchDetailResponse> =>
+  unwrapData<IdleBatchDetailResponse>(
+    api.get(`/idle/history/${sessionId}/batches/${batchId}`),
   );
 
 /** 标记会话已查看 */

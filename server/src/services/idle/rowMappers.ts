@@ -8,7 +8,8 @@
  *
  * 输入/输出：
  *   - rowToIdleSessionRow(row) => IdleSessionRow
- *   - rowToIdleBattleRow(row) => IdleBattleRow
+ *   - rowToIdleBattleSummaryRow(row) => IdleBattleSummaryRow
+ *   - rowToIdleBattleDetailRow(row) => IdleBattleDetailRow
  *
  * 数据流：
  *   DB query rows（snake_case）→ rowMappers 统一转换 → 业务模块（Service/Executor）消费
@@ -21,7 +22,8 @@
 
 import type { BattleLogEntry } from '../../battle/types.js';
 import type {
-  IdleBattleRow,
+  IdleBattleDetailRow,
+  IdleBattleSummaryRow,
   IdleSessionRow,
   RewardItemEntry,
   SessionSnapshot,
@@ -50,20 +52,28 @@ export function rowToIdleSessionRow(row: Record<string, unknown>): IdleSessionRo
   };
 }
 
-/** 将 idle_battle_batches 查询行映射为 IdleBattleRow。 */
-export function rowToIdleBattleRow(row: Record<string, unknown>): IdleBattleRow {
+/** 将 idle_battle_batches 摘要查询行映射为 IdleBattleSummaryRow。 */
+export function rowToIdleBattleSummaryRow(row: Record<string, unknown>): IdleBattleSummaryRow {
   return {
     id: String(row.id),
     sessionId: String(row.session_id),
     batchIndex: Number(row.batch_index),
-    result: row.result as IdleBattleRow['result'],
+    result: row.result as IdleBattleSummaryRow['result'],
     roundCount: Number(row.round_count),
-    randomSeed: Number(row.random_seed),
     expGained: Number(row.exp_gained),
     silverGained: Number(row.silver_gained),
+    itemCount: Number(row.item_count),
+    executedAt: new Date(row.executed_at as string),
+  };
+}
+
+/** 将 idle_battle_batches 详情查询行映射为 IdleBattleDetailRow。 */
+export function rowToIdleBattleDetailRow(row: Record<string, unknown>): IdleBattleDetailRow {
+  return {
+    ...rowToIdleBattleSummaryRow(row),
+    randomSeed: Number(row.random_seed),
     itemsGained: (row.items_gained as RewardItemEntry[]) ?? [],
     battleLog: (row.battle_log as BattleLogEntry[]) ?? [],
     monsterIds: (row.monster_ids as string[]) ?? [],
-    executedAt: new Date(row.executed_at as string),
   };
 }

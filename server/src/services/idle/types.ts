@@ -12,7 +12,7 @@
  * 数据流：
  *   客户端 → IdleConfigDto → idleRoutes → idleSessionService → IdleSessionRow（持久化）
  *   IdleSessionRow.sessionSnapshot → IdleBattleExecutor → BattleEngine（战斗结算）
- *   IdleBattleRow → 客户端回放展示
+ *   IdleBattleSummaryRow / IdleBattleDetailRow → 客户端回放展示
  *
  * 关键边界条件：
  *   1. maxDurationMs 合法范围为 [60_000, 28_800_000]（1 分钟 ~ 8 小时），超出范围应在路由层拒绝
@@ -120,30 +120,37 @@ export interface IdleSessionRow {
 }
 
 /**
- * 单场战斗记录行（idle_battle_batches 表的 TypeScript 映射）
- * - batchIndex：会话内序号，从 1 开始，用于回放排序
- * - randomSeed：持久化随机种子，保证相同输入可复现相同战斗结果
- * - battleLog：完整战斗日志，复用 BattleLogEntry 类型
- * - 战败时 expGained / silverGained / itemsGained 均为零/空（由 executeSingleBatch 保证）
+ * 单场战斗摘要行（idle_battle_batches 表的轻量回放映射）
+ * - 用于左侧批次列表与断线补全，只保留列表渲染必需字段
+ * - itemCount 直接在 SQL 层聚合，避免把整段 items_gained JSON 传到前端后再求长度
  */
-export interface IdleBattleRow {
+export interface IdleBattleSummaryRow {
   id: string;
   sessionId: string;
   batchIndex: number;
   result: 'attacker_win' | 'defender_win' | 'draw';
   roundCount: number;
-  randomSeed: number;
   expGained: number;
   silverGained: number;
-  itemsGained: RewardItemEntry[];
-  battleLog: import('../../battle/types.js').BattleLogEntry[];
-  monsterIds: string[];
+  itemCount: number;
   executedAt: Date;
 }
 
 /**
+ * 单场战斗详情行（idle_battle_batches 表的完整回放映射）
+ * - 仅在玩家点击单个批次后读取，避免列表接口一次返回整场 battle_log
+ * - 复用摘要字段，确保列表和详情的业务规则只有一份来源
+ */
+export interface IdleBattleDetailRow extends IdleBattleSummaryRow {
+  randomSeed: number;
+  itemsGained: RewardItemEntry[];
+  battleLog: import('../../battle/types.js').BattleLogEntry[];
+  monsterIds: string[];
+}
+
+/**
  * 奖励物品条目
- * - 用于 IdleSessionRow.rewardItems 和 IdleBattleRow.itemsGained
+ * - 用于 IdleSessionRow.rewardItems 和 IdleBattleDetailRow.itemsGained
  * - itemDefId：物品定义 ID；itemName：展示名称（快照，防止物品改名后历史记录显示异常）
  */
 export interface RewardItemEntry {

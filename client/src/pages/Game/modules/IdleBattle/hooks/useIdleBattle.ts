@@ -14,7 +14,7 @@
  *   gameSocket.onIdleUpdate → 更新 activeSession 实时收益
  *   gameSocket.onIdleFinished → 清空 activeSession，触发历史刷新
  *   断线 30s 后 → getIdleProgress → 补全进度
- *   selectSession → getIdleBatches → sessionBatches → selectBatch → batchLog
+ *   selectSession → getIdleBatches(摘要) → sessionBatches → selectBatch → getIdleBatchDetail(详情) → batchLog
  *
  * 关键边界条件：
  *   1. 断线检测：监听 gameSocket 连接状态，断线超过 RECONNECT_PROGRESS_DELAY_MS 后
@@ -34,6 +34,7 @@ import {
   getIdleStatus,
   getIdleHistory,
   getIdleBatches,
+  getIdleBatchDetail,
   markIdleSessionViewed,
   getIdleProgress,
   getIdleConfig,
@@ -41,7 +42,8 @@ import {
 } from '../api/idleBattleApi';
 import type {
   IdleSessionDto,
-  IdleBatchDto,
+  IdleBatchDetailDto,
+  IdleBatchSummaryDto,
   IdleConfigDto,
 } from '../types';
 import type { BattleLogEntryDto } from '../../../../../services/api/combat-realm';
@@ -90,8 +92,9 @@ export interface UseIdleBattleReturn {
   // 回放控制
   selectedSession: IdleSessionDto | null;
   selectSession: (sessionId: string | null) => void;
-  sessionBatches: IdleBatchDto[];
-  selectedBatch: IdleBatchDto | null;
+  sessionBatches: IdleBatchSummaryDto[];
+  selectedBatchId: string | null;
+  selectedBatchDetail: IdleBatchDetailDto | null;
   selectBatch: (batchId: string | null) => void;
   batchLog: BattleLogEntryDto[];
 }
@@ -110,12 +113,15 @@ export function useIdleBattle(): UseIdleBattleReturn {
   const [history, setHistory] = useState<IdleSessionDto[]>([]);
 
   const [selectedSession, setSelectedSession] = useState<IdleSessionDto | null>(null);
-  const [sessionBatches, setSessionBatches] = useState<IdleBatchDto[]>([]);
-  const [selectedBatch, setSelectedBatch] = useState<IdleBatchDto | null>(null);
+  const [sessionBatches, setSessionBatches] = useState<IdleBatchSummaryDto[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [selectedBatchDetail, setSelectedBatchDetail] = useState<IdleBatchDetailDto | null>(null);
 
   // 断线时间戳（用于计算是否需要补全进度）
   const disconnectedAtRef = useRef<number | null>(null);
   const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedSessionIdRef = useRef<string | null>(null);
+  const selectedBatchIdRef = useRef<string | null>(null);
 
   // ============================================
   // 初始化：加载当前状态和配置
@@ -137,6 +143,62 @@ export function useIdleBattle(): UseIdleBattleReturn {
       setConfigState(res.config);
     } catch (err) {
       setError(getUnifiedApiErrorMessage(err, '加载挂机配置失败'));
+    }
+  }, []);
+
+  /**
+   * 加载指定会话的战斗批次摘要。
+   *
+   * 作用：
+   * - 统一承接“选中历史会话”和“断线重连后刷新当前会话”的摘要加载逻辑；
+   * - 只读取左侧列表所需字段，避免多处重复请求完整 battle_log。
+   *
+   * 输入/输出：
+   * - 输入：sessionId
+   * - 输出：无；成功时写入 sessionBatches，失败时更新 error
+   *
+   * 边界条件：
+   * 1. 若用户已切换到其他会话，则丢弃旧请求返回，避免旧会话数据覆盖当前 UI。
+   * 2. 加载新会话摘要前会清空已选中的批次详情，防止旧日志残留。
+   */
+  const loadSessionBatches = useCallback(async (sessionId: string): Promise<void> => {
+    try {
+      const res = await getIdleBatches(sessionId);
+      if (selectedSessionIdRef.current !== sessionId) return;
+      setSessionBatches(res.batches);
+    } catch (err) {
+      if (selectedSessionIdRef.current !== sessionId) return;
+      setSessionBatches([]);
+      setError(getUnifiedApiErrorMessage(err, '加载挂机回放失败'));
+    }
+  }, []);
+
+  /**
+   * 加载指定会话下某个批次的详细日志。
+   *
+   * 作用：
+   * - 将“列表高频读取”和“日志低频读取”拆成两次请求，降低单次查询与传输体积；
+   * - 统一处理批次切换时的异步竞态，保证右侧日志面板只展示当前选中项。
+   *
+   * 输入/输出：
+   * - 输入：sessionId、batchId
+   * - 输出：无；成功时写入 selectedBatchDetail，失败时更新 error
+   *
+   * 边界条件：
+   * 1. 若用户在请求返回前切换了会话或批次，旧响应必须被丢弃，不能污染当前面板。
+   * 2. 加载开始时先清空 selectedBatchDetail，让 UI 能明确进入“等待详情”状态。
+   */
+  const loadBatchDetail = useCallback(async (sessionId: string, batchId: string): Promise<void> => {
+    setSelectedBatchDetail(null);
+    try {
+      const res = await getIdleBatchDetail(sessionId, batchId);
+      if (selectedSessionIdRef.current !== sessionId) return;
+      if (selectedBatchIdRef.current !== batchId) return;
+      setSelectedBatchDetail(res.batch);
+    } catch (err) {
+      if (selectedSessionIdRef.current !== sessionId) return;
+      if (selectedBatchIdRef.current !== batchId) return;
+      setError(getUnifiedApiErrorMessage(err, '加载战斗日志失败'));
     }
   }, []);
 
@@ -198,18 +260,13 @@ export function useIdleBattle(): UseIdleBattleReturn {
           void (async () => {
             try {
               const res = await getIdleProgress();
-              setActiveSession(res.session);
-              if (res.session && res.batches.length > 0) {
+              const currentSession = res.session;
+              setActiveSession(currentSession);
+              if (currentSession && res.batches.length > 0) {
                 // 有新批次时，若当前选中的是该会话，刷新批次列表
                 setSelectedSession((prev) => {
-                  if (prev?.id === res.session?.id) {
-                    void getIdleBatches(res.session!.id)
-                      .then((batchRes) => {
-                        setSessionBatches(batchRes.batches);
-                      })
-                      .catch((error) => {
-                        setError(getUnifiedApiErrorMessage(error, '刷新挂机回放失败'));
-                      });
+                  if (prev?.id === currentSession.id) {
+                    void loadSessionBatches(currentSession.id);
                   }
                   return prev;
                 });
@@ -223,7 +280,7 @@ export function useIdleBattle(): UseIdleBattleReturn {
     });
 
     return unsubscribeConnect;
-  }, []);
+  }, [loadSessionBatches]);
 
   // 监听 socket 断线（通过 isSocketConnected 轮询不合适，改为监听 error 事件作为断线信号）
   useEffect(() => {
@@ -324,9 +381,12 @@ export function useIdleBattle(): UseIdleBattleReturn {
 
   const selectSession = useCallback((sessionId: string | null) => {
     if (!sessionId) {
+      selectedSessionIdRef.current = null;
+      selectedBatchIdRef.current = null;
       setSelectedSession(null);
       setSessionBatches([]);
-      setSelectedBatch(null);
+      setSelectedBatchId(null);
+      setSelectedBatchDetail(null);
       return;
     }
 
@@ -336,16 +396,14 @@ export function useIdleBattle(): UseIdleBattleReturn {
       (activeSession?.id === sessionId ? activeSession : null);
 
     setSelectedSession(found ?? null);
-    setSelectedBatch(null);
+    selectedSessionIdRef.current = found?.id ?? null;
+    selectedBatchIdRef.current = null;
+    setSelectedBatchId(null);
+    setSelectedBatchDetail(null);
+    setSessionBatches([]);
 
     if (found) {
-      void getIdleBatches(sessionId)
-        .then((res) => {
-          setSessionBatches(res.batches);
-        })
-        .catch((error) => {
-          setError(getUnifiedApiErrorMessage(error, '加载挂机回放失败'));
-        });
+      void loadSessionBatches(sessionId);
 
       // 标记已查看（幂等，服务端有 viewed_at IS NULL 保护）
       void markIdleSessionViewed(sessionId).catch((error) => {
@@ -356,19 +414,24 @@ export function useIdleBattle(): UseIdleBattleReturn {
         prev.map((s) => (s.id === sessionId && s.viewedAt === null ? { ...s, viewedAt: new Date().toISOString() } : s))
       );
     }
-  }, [history, activeSession]);
+  }, [history, activeSession, loadSessionBatches]);
 
   const selectBatch = useCallback((batchId: string | null) => {
     if (!batchId) {
-      setSelectedBatch(null);
+      selectedBatchIdRef.current = null;
+      setSelectedBatchId(null);
+      setSelectedBatchDetail(null);
       return;
     }
-    const found = sessionBatches.find((b) => b.id === batchId) ?? null;
-    setSelectedBatch(found);
-  }, [sessionBatches]);
+    const currentSessionId = selectedSessionIdRef.current;
+    if (!currentSessionId) return;
+    selectedBatchIdRef.current = batchId;
+    setSelectedBatchId(batchId);
+    void loadBatchDetail(currentSessionId, batchId);
+  }, [loadBatchDetail]);
 
-  // batchLog 从 selectedBatch 派生，无需额外状态
-  const batchLog: BattleLogEntryDto[] = selectedBatch?.battleLog ?? [];
+  // batchLog 从 selectedBatchDetail 派生，无需额外状态
+  const batchLog: BattleLogEntryDto[] = selectedBatchDetail?.battleLog ?? [];
 
   // ============================================
   // 清理
@@ -400,7 +463,8 @@ export function useIdleBattle(): UseIdleBattleReturn {
     selectedSession,
     selectSession,
     sessionBatches,
-    selectedBatch,
+    selectedBatchId,
+    selectedBatchDetail,
     selectBatch,
     batchLog,
   };

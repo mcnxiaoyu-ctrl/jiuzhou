@@ -67,7 +67,8 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle }) => {
     selectedSession,
     selectSession,
     sessionBatches,
-    selectedBatch,
+    selectedBatchId,
+    selectedBatchDetail,
     selectBatch,
   } = idle;
 
@@ -133,7 +134,8 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle }) => {
       <ReplayViewer
         session={selectedSession}
         batches={sessionBatches}
-        selectedBatch={selectedBatch}
+        selectedBatchId={selectedBatchId}
+        selectedBatchDetail={selectedBatchDetail}
         onSelectBatch={selectBatch}
         onClose={() => selectSession(null)}
       />

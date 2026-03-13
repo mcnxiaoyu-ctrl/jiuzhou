@@ -10,16 +10,17 @@
  *
  * 输入/输出：
  *   - session: 当前查看的会话（null 时 Modal 不显示）
- *   - batches: 该会话的所有战斗批次
- *   - selectedBatch: 当前选中的批次
+ *   - batches: 该会话的所有战斗批次摘要
+ *   - selectedBatchId: 当前选中的批次 ID
+ *   - selectedBatchDetail: 当前选中批次的详细日志
  *   - onSelectBatch: 选中批次回调
  *   - onClose: 关闭回调
  *
  * 数据流：
  *   useIdleBattle.selectedSession → props.session → Modal open
  *   useIdleBattle.sessionBatches → props.batches → BatchList 渲染
- *   useIdleBattle.selectedBatch → props.selectedBatch → BattleLogPanel 渲染
- *   用户点击批次 → onSelectBatch → useIdleBattle.selectBatch → selectedBatch 更新
+ *   useIdleBattle.selectedBatchDetail → props.selectedBatchDetail → BattleLogPanel 渲染
+ *   用户点击批次 → onSelectBatch → useIdleBattle.selectBatch → selectedBatchDetail 更新
  *
  * 关键边界条件：
  *   1. batches 为空时展示空状态，不报错
@@ -31,7 +32,11 @@ import React, { useMemo, useState } from 'react';
 import { Modal, Tag, Empty, Segmented } from 'antd';
 import { TrophyOutlined, FrownOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { formatBattleLogLineFast } from '../../BattleArea/logFormatterFast';
-import type { IdleSessionDto, IdleBatchDto } from '../types';
+import type {
+  IdleSessionDto,
+  IdleBatchDetailDto,
+  IdleBatchSummaryDto,
+} from '../types';
 import './ReplayViewer.scss';
 
 // ============================================
@@ -46,13 +51,13 @@ const FILTER_OPTIONS: Array<{ value: BatchFilter; label: React.ReactNode }> = [
   { value: 'lose', label: <><FrownOutlined /> 失败</> },
 ];
 
-const RESULT_LABEL: Record<IdleBatchDto['result'], string> = {
+const RESULT_LABEL: Record<IdleBatchSummaryDto['result'], string> = {
   attacker_win: '胜',
   defender_win: '败',
   draw: '平',
 };
 
-const RESULT_COLOR: Record<IdleBatchDto['result'], string> = {
+const RESULT_COLOR: Record<IdleBatchSummaryDto['result'], string> = {
   attacker_win: 'success',
   defender_win: 'error',
   draw: 'default',
@@ -63,7 +68,7 @@ const RESULT_COLOR: Record<IdleBatchDto['result'], string> = {
 // ============================================
 
 interface BatchListProps {
-  batches: IdleBatchDto[];
+  batches: IdleBatchSummaryDto[];
   filter: BatchFilter;
   selectedBatchId: string | null;
   onSelect: (batchId: string) => void;
@@ -115,8 +120,8 @@ const BatchList: React.FC<BatchListProps> = ({ batches, filter, selectedBatchId,
                 <span className="replay-batch-silver">银两+{batch.silverGained.toLocaleString()}</span>
               </>
             )}
-            {batch.itemsGained.length > 0 && (
-              <span className="replay-batch-items">物品×{batch.itemsGained.length}</span>
+            {batch.itemCount > 0 && (
+              <span className="replay-batch-items">物品×{batch.itemCount}</span>
             )}
           </div>
         </div>
@@ -130,18 +135,22 @@ const BatchList: React.FC<BatchListProps> = ({ batches, filter, selectedBatchId,
 // ============================================
 
 interface BattleLogPanelProps {
-  batch: IdleBatchDto | null;
+  selectedBatchId: string | null;
+  batch: IdleBatchDetailDto | null;
 }
 
 /**
  * 战斗日志面板
  * 复用 formatBattleLogLineFast，与在线战斗日志格式一致
  */
-const BattleLogPanel: React.FC<BattleLogPanelProps> = ({ batch }) => {
+const BattleLogPanel: React.FC<BattleLogPanelProps> = ({ selectedBatchId, batch }) => {
   if (!batch) {
     return (
       <div className="replay-log-empty">
-        <Empty description="选择左侧战斗批次查看日志" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        <Empty
+          description={selectedBatchId ? '战斗日志加载中' : '选择左侧战斗批次查看日志'}
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
       </div>
     );
   }
@@ -178,8 +187,9 @@ const BattleLogPanel: React.FC<BattleLogPanelProps> = ({ batch }) => {
 
 interface ReplayViewerProps {
   session: IdleSessionDto | null;
-  batches: IdleBatchDto[];
-  selectedBatch: IdleBatchDto | null;
+  batches: IdleBatchSummaryDto[];
+  selectedBatchId: string | null;
+  selectedBatchDetail: IdleBatchDetailDto | null;
   onSelectBatch: (batchId: string | null) => void;
   onClose: () => void;
 }
@@ -187,7 +197,8 @@ interface ReplayViewerProps {
 const ReplayViewer: React.FC<ReplayViewerProps> = ({
   session,
   batches,
-  selectedBatch,
+  selectedBatchId,
+  selectedBatchDetail,
   onSelectBatch,
   onClose,
 }) => {
@@ -237,12 +248,12 @@ const ReplayViewer: React.FC<ReplayViewerProps> = ({
           <BatchList
             batches={batches}
             filter={filter}
-            selectedBatchId={selectedBatch?.id ?? null}
+            selectedBatchId={selectedBatchId}
             onSelect={onSelectBatch}
           />
         </div>
         <div className="replay-content-right">
-          <BattleLogPanel batch={selectedBatch} />
+          <BattleLogPanel selectedBatchId={selectedBatchId} batch={selectedBatchDetail} />
         </div>
       </div>
     </Modal>
