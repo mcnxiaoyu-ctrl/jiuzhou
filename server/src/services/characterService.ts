@@ -9,6 +9,7 @@ import {
 import { getCharacterComputedByUserId, invalidateCharacterComputedCache } from './characterComputedService.js';
 import { withUnlockedFeatures } from './featureUnlockService.js';
 import { createInventoryForCharacter } from './shared/inventoryPersistence.js';
+import { primeCharacterIdByUserIdCache } from './shared/characterId.js';
 import { guardSensitiveText } from './sensitiveWordService.js';
 
 export interface Character {
@@ -159,6 +160,7 @@ export const createCharacter = async (
   // 创建角色背包
   const characterId = result.rows[0].id;
   await createInventoryForCharacter(characterId);
+  await primeCharacterIdByUserIdCache(userId, Number(characterId));
 
   await initCharacterAchievements(characterId);
   await invalidateCharacterComputedCache(characterId);

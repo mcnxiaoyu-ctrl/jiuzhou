@@ -150,6 +150,54 @@ export const getInventoryItems = async (
 // ============================================
 
 /**
+ * 按已知容量查找空闲格子。
+ *
+ * 作用：
+ * - 复用“读取已占用槽位并推导空槽”的公共逻辑；
+ * - 让已提前拿到容量的调用链避免重复查询 `inventory` 表。
+ *
+ * 输入/输出：
+ * - 输入：角色 ID、位置、已解析出的容量、所需空格数。
+ * - 输出：按槽位升序返回最多 `count` 个空槽。
+ *
+ * 数据流：
+ * - 调用方负责先拿到容量；
+ * - 本函数只查询 `item_instance.location_slot`；
+ * - 依据容量线性扫描缺口，返回可用槽位。
+ *
+ * 关键边界条件与坑点：
+ * 1. `capacity <= 0` 时直接返回空数组，避免无意义 SQL。
+ * 2. 本函数不校验位置容量来源，调用方必须保证 `capacity` 与 `location` 对应。
+ */
+const findEmptySlotsByCapacity = async (
+  characterId: number,
+  location: SlottedInventoryLocation,
+  capacity: number,
+  count: number,
+): Promise<number[]> => {
+  if (capacity <= 0 || count <= 0) {
+    return [];
+  }
+
+  const sql = `
+    SELECT location_slot FROM item_instance
+    WHERE owner_character_id = $1 AND location = $2 AND location_slot IS NOT NULL
+    ORDER BY location_slot
+  `;
+  const result = await query(sql, [characterId, location]);
+  const usedSlots = new Set(result.rows.map((row) => row.location_slot));
+
+  const emptySlots: number[] = [];
+  for (let slot = 0; slot < capacity && emptySlots.length < count; slot += 1) {
+    if (!usedSlots.has(slot)) {
+      emptySlots.push(slot);
+    }
+  }
+
+  return emptySlots;
+};
+
+/**
  * 查找指定位置的空闲格子
  * 统一使用 query() 自动走事务连接
  */
@@ -160,23 +208,7 @@ export const findEmptySlots = async (
 ): Promise<number[]> => {
   const info = await getInventoryInfo(characterId);
   const capacity = getSlottedCapacity(info, location);
-
-  const sql = `
-    SELECT location_slot FROM item_instance
-    WHERE owner_character_id = $1 AND location = $2 AND location_slot IS NOT NULL
-    ORDER BY location_slot
-  `;
-  const result = await query(sql, [characterId, location]);
-  const usedSlots = new Set(result.rows.map((r) => r.location_slot));
-
-  const emptySlots: number[] = [];
-  for (let i = 0; i < capacity && emptySlots.length < count; i++) {
-    if (!usedSlots.has(i)) {
-      emptySlots.push(i);
-    }
-  }
-
-  return emptySlots;
+  return findEmptySlotsByCapacity(characterId, location, capacity, count);
 };
 
 // ============================================
@@ -286,9 +318,10 @@ export const addItemToInventory = async (
         ? 0
         : Math.ceil(remainingAfterStacks / Math.max(1, stack_max));
     if (neededSlots > 0) {
-      const emptySlots = await findEmptySlots(
+      const emptySlots = await findEmptySlotsByCapacity(
         characterId,
         location,
+        capacity,
         neededSlots,
       );
       if (emptySlots.length < neededSlots) {
@@ -320,9 +353,10 @@ export const addItemToInventory = async (
 
       while (insertedId === null && attempt < 6) {
         attempt += 1;
-        const emptySlots = await findEmptySlots(
+        const emptySlots = await findEmptySlotsByCapacity(
           characterId,
           location,
+          capacity,
           6,
         );
         if (emptySlots.length === 0) {
@@ -824,9 +858,10 @@ export const moveItem = async (
 
   let finalSlot = targetSlot;
   if (finalSlot === undefined) {
-    const emptySlots = await findEmptySlots(
+    const emptySlots = await findEmptySlotsByCapacity(
       characterId,
       targetLocation,
+      capacity,
       1,
     );
     if (emptySlots.length === 0) {
