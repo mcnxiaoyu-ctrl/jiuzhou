@@ -6,5 +6,4 @@ export type {
   DungeonType,
   DungeonCategoryDto,
   DungeonDefDto,
-  DungeonWeeklyTargetDto,
 } from '../../services/dungeon/types.js';

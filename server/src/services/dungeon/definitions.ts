@@ -13,7 +13,6 @@
  *
  * 边界条件：
  * 1) getDungeonPreview 是大函数（约 400 行），负责聚合关卡/波次/怪物/掉落预览信息。
- * 2) getDungeonWeeklyTargets 内部有 try/catch，失败返回标准 { success: false }。
  */
 
 import { query } from '../../config/database.js';
@@ -43,7 +42,6 @@ import type {
   DungeonType,
   DungeonCategoryDto,
   DungeonDefDto,
-  DungeonWeeklyTargetDto,
   DungeonDifficultyRow,
   DungeonStageRow,
   DungeonWaveRow,
@@ -79,138 +77,6 @@ export const getDungeonCategories = async (): Promise<DungeonCategoryDto[]> => {
   }
 
   return categories;
-};
-
-/** 获取秘境周目标进度 */
-export const getDungeonWeeklyTargets = async (
-  userId: number
-): Promise<
-  | {
-    success: true;
-    data: {
-      period: { weekStart: string; weekEnd: string };
-      summary: { totalClears: number; targetClears: number };
-      targets: DungeonWeeklyTargetDto[];
-    };
-  }
-  | { success: false; message: string }
-> => {
-  try {
-    const characterId = await getCharacterIdByUserId(userId);
-    if (!characterId) return { success: false, message: '角色不存在' };
-
-    const countRes = await query(
-      `
-        SELECT dungeon_id, is_first_clear
-        FROM dungeon_record
-        WHERE character_id = $1
-          AND result = 'cleared'
-          AND completed_at >= date_trunc('week', NOW())
-          AND completed_at < date_trunc('week', NOW()) + interval '7 day'
-      `,
-      [characterId]
-    );
-
-    const dungeonTypeById = new Map(getEnabledDungeonDefs().map((entry) => [entry.id, entry.type] as const));
-    let total = 0;
-    let trial = 0;
-    let material = 0;
-    let equipment = 0;
-    let firstClear = 0;
-
-    for (const row of countRes.rows as Array<Record<string, unknown>>) {
-      const dungeonId = typeof row.dungeon_id === 'string' ? row.dungeon_id : '';
-      const type = dungeonTypeById.get(dungeonId);
-      if (!type) continue;
-      total += 1;
-      if (row.is_first_clear === true) firstClear += 1;
-      if (type === 'trial') trial += 1;
-      if (type === 'material') material += 1;
-      if (type === 'equipment') equipment += 1;
-    }
-
-    const toProgress = (current: number, target: number): number => {
-      if (target <= 0) return 100;
-      return Math.max(0, Math.min(100, Math.floor((current / target) * 100)));
-    };
-
-    const targets: DungeonWeeklyTargetDto[] = [
-      {
-        id: 'weekly-clear-total',
-        title: '本周秘境历练',
-        description: '通关任意秘境',
-        target: 7,
-        current: total,
-        done: total >= 7,
-        progress: toProgress(total, 7),
-      },
-      {
-        id: 'weekly-clear-trial',
-        title: '试炼专项',
-        description: '通关试炼秘境',
-        target: 3,
-        current: trial,
-        done: trial >= 3,
-        progress: toProgress(trial, 3),
-      },
-      {
-        id: 'weekly-clear-material',
-        title: '材料储备',
-        description: '通关材料秘境',
-        target: 3,
-        current: material,
-        done: material >= 3,
-        progress: toProgress(material, 3),
-      },
-      {
-        id: 'weekly-clear-equipment',
-        title: '装备搜集',
-        description: '通关装备秘境',
-        target: 2,
-        current: equipment,
-        done: equipment >= 2,
-        progress: toProgress(equipment, 2),
-      },
-      {
-        id: 'weekly-first-clear',
-        title: '首通挑战',
-        description: '完成本周首通记录',
-        target: 1,
-        current: firstClear,
-        done: firstClear >= 1,
-        progress: toProgress(firstClear, 1),
-      },
-    ];
-
-    const weekRes = await query(
-      `
-        SELECT
-          date_trunc('week', NOW())::date AS week_start,
-          (date_trunc('week', NOW())::date + 6)::date AS week_end
-      `
-    );
-    const weekRow = (weekRes.rows?.[0] ?? {}) as Record<string, unknown>;
-    const weekStart =
-      weekRow.week_start instanceof Date
-        ? weekRow.week_start.toISOString().slice(0, 10)
-        : String(weekRow.week_start ?? '');
-    const weekEnd =
-      weekRow.week_end instanceof Date
-        ? weekRow.week_end.toISOString().slice(0, 10)
-        : String(weekRow.week_end ?? '');
-
-    return {
-      success: true,
-      data: {
-        period: { weekStart, weekEnd },
-        summary: { totalClears: total, targetClears: 7 },
-        targets,
-      },
-    };
-  } catch (error) {
-    console.error('获取秘境周目标失败:', error);
-    return { success: false, message: '获取秘境周目标失败' };
-  }
 };
 
 /** 获取秘境列表（支持按类型/关键词/境界筛选） */

@@ -14,7 +14,6 @@
 import { Transactional } from '../../decorators/transactional.js';
 import {
   getDungeonCategories,
-  getDungeonWeeklyTargets,
   getDungeonList,
   getDungeonPreview,
 } from './definitions.js';
@@ -31,10 +30,6 @@ import {
 class DungeonService {
   async getDungeonCategories() {
     return getDungeonCategories();
-  }
-
-  async getDungeonWeeklyTargets(userId: number) {
-    return getDungeonWeeklyTargets(userId);
   }
 
   async getDungeonList(params: Parameters<typeof getDungeonList>[0]) {

@@ -19,17 +19,6 @@ export type DungeonCategoryDto = {
   count: number;
 };
 
-/** 秘境周目标 DTO */
-export type DungeonWeeklyTargetDto = {
-  id: string;
-  title: string;
-  description: string;
-  target: number;
-  current: number;
-  done: boolean;
-  progress: number;
-};
-
 /** 秘境定义 DTO（对外输出格式） */
 export type DungeonDefDto = {
   id: string;

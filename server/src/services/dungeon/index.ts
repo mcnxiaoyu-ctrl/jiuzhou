@@ -18,7 +18,6 @@ export type {
   DungeonType,
   DungeonCategoryDto,
   DungeonDefDto,
-  DungeonWeeklyTargetDto,
   DungeonInstanceStatus,
   DungeonInstanceParticipant,
   DungeonRewardItem,
@@ -28,7 +27,6 @@ export type {
 /* 查询函数导出 */
 export {
   getDungeonCategories,
-  getDungeonWeeklyTargets,
   getDungeonList,
   getDungeonPreview,
   DUNGEON_TYPE_LABEL,

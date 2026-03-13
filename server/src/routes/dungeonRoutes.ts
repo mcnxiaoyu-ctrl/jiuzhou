@@ -46,12 +46,6 @@ router.get('/preview/:id', asyncHandler(async (req, res) => {
   sendSuccess(res, preview);
 }));
 
-router.get('/weekly-targets', requireAuth, asyncHandler(async (req, res) => {
-  const userId = req.userId!;
-  const result = await dungeonService.getDungeonWeeklyTargets(userId);
-  sendResult(res, result);
-}));
-
 router.post('/instance/create', requireAuth, asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const dungeonId = typeof req.body?.dungeonId === 'string' ? req.body.dungeonId : '';
