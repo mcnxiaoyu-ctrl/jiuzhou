@@ -50,14 +50,14 @@ const MarketPartnerBuyModal: React.FC<MarketPartnerBuyModalProps> = ({
       footer={null}
       title="伙伴详情"
       centered
-      width={720}
+      width={760}
       destroyOnHidden
       className="market-partner-buy-modal"
       styles={{
         body: { padding: '0 24px 24px 24px' }
       }}
     >
-      <div className="market-list-detail-card" style={{ padding: 0, border: 'none', background: 'transparent', maxHeight: '75vh', minHeight: '500px' }}>
+      <div className="market-list-detail-card" style={{ padding: 0, border: 'none', background: 'transparent' }}>
         <div className="market-list-detail-head" style={{ padding: '0 0 16px 0', borderBottom: '1px solid var(--border-color-soft)' }}>
           <div className="market-list-detail-head-main">
             <img className={`market-list-detail-icon market-partner-avatar--detail`} src={resolvePartnerAvatar(partner.avatar)} alt={partner.name} />
@@ -73,16 +73,16 @@ const MarketPartnerBuyModal: React.FC<MarketPartnerBuyModalProps> = ({
           </div>
         </div>
 
-        <div className="market-list-detail-scroll" style={{ padding: '16px 0', display: 'flex', flexDirection: 'row', gap: '24px', flex: 1, minHeight: 0 }}>
-          <div className="market-list-detail-section" style={{ flex: '0 0 280px', paddingRight: '8px' }}>
+        <div className="market-list-detail-scroll" style={{ padding: '16px 0', display: 'flex', flexDirection: 'row', gap: '24px' }}>
+          <div className="market-list-detail-section" style={{ flex: '0 0 300px', paddingRight: '8px' }}>
             <div className="market-list-detail-title">属性</div>
-            <div className="market-list-detail-attr-grid" style={{ gap: '4px 8px' }}>
+            <div className="market-list-detail-attr-grid" style={{ gap: '8px 12px' }}>
               {buildPartnerAllAttrsPreview(partner).map((line) => (
                 <div key={line} className="market-list-detail-line">{line}</div>
               ))}
             </div>
           </div>
-          <div className="market-list-detail-section" style={{ flex: 1, overflowY: 'auto', paddingRight: '8px', borderLeft: '1px solid var(--border-color-soft)', paddingLeft: '24px' }}>
+          <div className="market-list-detail-section" style={{ flex: 1, paddingRight: '8px', borderLeft: '1px solid var(--border-color-soft)', paddingLeft: '24px' }}>
             <div className="market-list-detail-title">功法</div>
             <div className="market-partner-technique-grid" style={{ gridTemplateColumns: '1fr' }}>
               {partner.techniques.length > 0 ? (
