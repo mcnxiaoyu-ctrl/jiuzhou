@@ -1932,6 +1932,13 @@
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
+        },
+        {
+          "item_def_id": "cons-monthcard-001",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
         }
       ],
       "common_pool_ids": [
