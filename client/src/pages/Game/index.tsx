@@ -37,7 +37,7 @@ import WarehouseModal from './modules/WarehouseModal';
 import SignInModal from './modules/SignInModal';
 import PartnerModal from './modules/PartnerModal';
 import { useIdleBattle, IdleBattlePanel, IdleBattleStatusBar } from './modules/IdleBattle';
-import { gameSocket, type CharacterData } from '../../services/gameSocket';
+import { gameSocket, type CharacterData, type SectIndicatorPayload } from '../../services/gameSocket';
 import {
   acceptTaskFromNpc,
   claimTaskReward,
@@ -49,11 +49,8 @@ import {
   npcTalk,
   getSignInOverview,
   getAchievementList,
-  getMySect,
-  getMySectApplications,
   getMailUnread,
   getTechniqueResearchStatus,
-  getSectApplications,
   nextDungeonInstance,
   startDungeonInstance,
   submitTaskToNpc,
@@ -1309,46 +1306,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     }
   }, [characterId]);
 
-  const refreshSectIndicator = useCallback(async () => {
-    if (!characterId) {
-      setSectPendingApplicationCount(0);
-      setSectMyApplicationCount(0);
-      return;
-    }
-
-    try {
-      const [mySectRes, myAppsRes] = await Promise.all([
-        getMySect(SILENT_REQUEST_CONFIG),
-        getMySectApplications(SILENT_REQUEST_CONFIG),
-      ]);
-      const mySectInfo = mySectRes.success ? (mySectRes.data ?? null) : null;
-      const myPendingApplications = myAppsRes.success && myAppsRes.data ? Math.max(0, Math.floor(myAppsRes.data.length)) : 0;
-      setSectMyApplicationCount(myPendingApplications);
-
-      if (!mySectInfo) {
-        setSectPendingApplicationCount(0);
-        return;
-      }
-
-      const myMember = mySectInfo.members.find((m) => m.characterId === characterId);
-      const canManageApplications =
-        myMember?.position === 'leader' || myMember?.position === 'vice_leader' || myMember?.position === 'elder';
-      if (!canManageApplications) {
-        setSectPendingApplicationCount(0);
-        return;
-      }
-
-      const appsRes = await getSectApplications(SILENT_REQUEST_CONFIG);
-      if (!appsRes.success || !appsRes.data) {
-        setSectPendingApplicationCount(0);
-        return;
-      }
-      setSectPendingApplicationCount(Math.max(0, Math.floor(appsRes.data.length)));
-    } catch {
-      setSectPendingApplicationCount(0);
-      setSectMyApplicationCount(0);
-    }
-  }, [characterId]);
+  const applySectIndicator = useCallback((payload: SectIndicatorPayload) => {
+    setSectMyApplicationCount(Math.max(0, Math.floor(payload.myPendingApplicationCount)));
+    setSectPendingApplicationCount(
+      payload.canManageApplications ? Math.max(0, Math.floor(payload.sectPendingApplicationCount)) : 0
+    );
+  }, []);
 
   useEffect(() => {
     if (!characterId) return;
@@ -1371,23 +1334,11 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       return;
     }
 
-    const runRefresh = () => {
-      void refreshSectIndicator();
-    };
-
-    const t = window.setTimeout(runRefresh, 0);
-    const pollTimer = window.setInterval(runRefresh, 30000);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') runRefresh();
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      window.clearTimeout(t);
-      window.clearInterval(pollTimer);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [characterId, refreshSectIndicator]);
+    const unsubscribe = gameSocket.onSectUpdate((payload) => {
+      applySectIndicator(payload);
+    });
+    return unsubscribe;
+  }, [applySectIndicator, characterId]);
 
   useEffect(() => {
     gameSocket.connect();
@@ -2581,15 +2532,9 @@ const Game: FC<GameProps> = ({ onLogout }) => {
           open={sectModalOpen}
           onClose={() => {
             setSectModalOpen(false);
-            window.setTimeout(() => {
-              void refreshSectIndicator();
-            }, 0);
           }}
           spiritStones={spiritStones}
           playerName={playerName}
-          onChanged={() => {
-            void refreshSectIndicator();
-          }}
         />
       )}
       {/* 挂机面板 Modal */}

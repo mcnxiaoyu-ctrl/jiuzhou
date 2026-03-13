@@ -24,7 +24,6 @@ export interface SectModalProps {
   onClose: () => void;
   spiritStones?: number;
   playerName?: string;
-  onChanged?: () => void;
 }
 
 export interface SectListItemVm {
@@ -103,7 +102,6 @@ export interface UseSectDataArgs {
   open: boolean;
   spiritStones: number;
   playerName: string;
-  onChanged?: () => void;
 }
 
 export interface UseSectDataState {

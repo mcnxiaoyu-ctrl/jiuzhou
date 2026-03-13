@@ -118,8 +118,15 @@ type CharacterListener = (character: CharacterData | null) => void;
 type ErrorListener = (error: { message: string }) => void;
 type KickedListener = (data: { message: string }) => void;
 type TeamUpdateListener = (data: unknown) => void;
+export interface SectIndicatorPayload {
+  joined: boolean;
+  myPendingApplicationCount: number;
+  sectPendingApplicationCount: number;
+  canManageApplications: boolean;
+}
 type BattleUpdateListener = (data: unknown) => void;
 type ArenaUpdateListener = (data: unknown) => void;
+type SectUpdateListener = (data: SectIndicatorPayload) => void;
 export type ChatChannel = "world" | "team" | "sect" | "private" | "battle";
 
 export interface ChatMessageDto {
@@ -221,6 +228,7 @@ class GameSocketService {
   private errorListeners: Set<ErrorListener> = new Set();
   private kickedListeners: Set<KickedListener> = new Set();
   private teamUpdateListeners: Set<TeamUpdateListener> = new Set();
+  private sectUpdateListeners: Set<SectUpdateListener> = new Set();
   private battleUpdateListeners: Set<BattleUpdateListener> = new Set();
   private arenaUpdateListeners: Set<ArenaUpdateListener> = new Set();
   private chatMessageListeners: Set<ChatMessageListener> = new Set();
@@ -231,6 +239,7 @@ class GameSocketService {
   private techniqueResearchResultListeners: Set<TechniqueResearchResultListener> = new Set();
   private partnerRecruitResultListeners: Set<PartnerRecruitResultListener> = new Set();
   private currentCharacter: CharacterData | null = null;
+  private currentSectIndicator: SectIndicatorPayload | null = null;
   private currentOnlinePlayers: OnlinePlayersPayloadDto | null = null;
   /** 本地在线玩家索引，用于增量合并 delta 消息 */
   private onlinePlayersMap: Map<number, OnlinePlayerDto> = new Map();
@@ -268,6 +277,7 @@ class GameSocketService {
     this.socket.on("disconnect", () => {
       console.log("游戏服务器已断开");
       this.isConnected = false;
+      this.currentSectIndicator = null;
       this.currentOnlinePlayers = null;
     });
 
@@ -303,6 +313,30 @@ class GameSocketService {
     this.socket.on("team:update", (data: unknown) => {
       this.notifyTeamUpdateListeners(data);
     });
+
+    this.socket.on(
+      "sect:update",
+      (data: {
+        joined?: boolean;
+        myPendingApplicationCount?: number;
+        sectPendingApplicationCount?: number;
+        canManageApplications?: boolean;
+      }) => {
+        const normalizeCount = (value: number | undefined): number => {
+          const next = Number(value);
+          if (!Number.isFinite(next)) return 0;
+          return Math.max(0, Math.floor(next));
+        };
+        const payload: SectIndicatorPayload = {
+          joined: Boolean(data.joined),
+          myPendingApplicationCount: normalizeCount(data.myPendingApplicationCount),
+          sectPendingApplicationCount: normalizeCount(data.sectPendingApplicationCount),
+          canManageApplications: Boolean(data.canManageApplications),
+        };
+        this.currentSectIndicator = payload;
+        this.notifySectUpdateListeners(payload);
+      },
+    );
 
     this.socket.on("battle:update", (data: unknown) => {
       this.notifyBattleUpdateListeners(data);
@@ -443,6 +477,7 @@ class GameSocketService {
       this.socket = null;
       this.isConnected = false;
       this.currentCharacter = null;
+      this.currentSectIndicator = null;
       this.currentOnlinePlayers = null;
       this.onlinePlayersMap.clear();
     }
@@ -487,6 +522,14 @@ class GameSocketService {
   onTeamUpdate(listener: TeamUpdateListener): () => void {
     this.teamUpdateListeners.add(listener);
     return () => this.teamUpdateListeners.delete(listener);
+  }
+
+  onSectUpdate(listener: SectUpdateListener): () => void {
+    this.sectUpdateListeners.add(listener);
+    if (this.currentSectIndicator) {
+      listener(this.currentSectIndicator);
+    }
+    return () => this.sectUpdateListeners.delete(listener);
   }
 
   onBattleUpdate(listener: BattleUpdateListener): () => void {
@@ -612,6 +655,10 @@ class GameSocketService {
 
   private notifyTeamUpdateListeners(data: unknown): void {
     this.teamUpdateListeners.forEach((listener) => listener(data));
+  }
+
+  private notifySectUpdateListeners(data: SectIndicatorPayload): void {
+    this.sectUpdateListeners.forEach((listener) => listener(data));
   }
 
   private notifyBattleUpdateListeners(data: unknown): void {

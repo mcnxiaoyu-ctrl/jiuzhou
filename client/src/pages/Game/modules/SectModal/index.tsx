@@ -21,13 +21,13 @@ import './index.scss';
 
 /**
  * 宗门弹窗容器组件。
- * 输入：开关状态、玩家信息、状态变更回调。
+ * 输入：开关状态、玩家信息。
  * 输出：完整宗门交互界面（入宗前大厅 + 入宗后管理）。
  * 关键点：
  * 1) 仅负责布局与面板编排；
  * 2) 业务状态与网络动作全部下沉到 useSectData。
  */
-const SectModal: React.FC<SectModalProps> = ({ open, onClose, spiritStones = 0, playerName = '我', onChanged }) => {
+const SectModal: React.FC<SectModalProps> = ({ open, onClose, spiritStones = 0, playerName = '我' }) => {
   const { modal } = App.useApp();
   const isMobile = useIsMobile();
 
@@ -35,7 +35,6 @@ const SectModal: React.FC<SectModalProps> = ({ open, onClose, spiritStones = 0, 
     open,
     spiritStones,
     playerName,
-    onChanged,
   });
 
   const menuItems = useMemo(() => {

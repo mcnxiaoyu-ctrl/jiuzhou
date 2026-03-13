@@ -17,6 +17,7 @@ import { withUnlockedFeatures } from "../services/featureUnlockService.js";
 import { getRemainingCooldown } from "../services/battle/cooldownManager.js";
 import { syncBattleStateOnReconnect } from "../services/battle/index.js";
 import { detectSensitiveWords } from "../services/sensitiveWordService.js";
+import { getSectIndicatorByCharacterId } from "../services/sect/indicator.js";
 import { AsyncShutdownGate } from "../utils/asyncShutdownGate.js";
 
 // 玩家会话
@@ -172,6 +173,14 @@ class GameServer {
 
           // 发送角色数据（全量）
           socket.emit("game:character", { type: "full", character });
+
+          if (character) {
+            try {
+              socket.emit("sect:update", await getSectIndicatorByCharacterId(character.id));
+            } catch (error) {
+              console.error("宗门指示器同步失败:", error);
+            }
+          }
 
           // 同步战斗冷却状态（重连时）
           if (character) {

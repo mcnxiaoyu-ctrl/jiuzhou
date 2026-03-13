@@ -32,6 +32,13 @@ import {
 import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
+import { getCharacterSectId } from '../services/sect/db.js';
+import { listSectMemberCharacterIds } from '../services/sect/indicator.js';
+import {
+  notifySectIndicatorByApplicationId,
+  notifySectIndicatorToCharacterIds,
+  notifySectIndicatorToSectManagers,
+} from '../services/sect/indicatorPush.js';
 
 const router = Router();
 
@@ -76,6 +83,7 @@ router.post('/create', asyncHandler(async (req, res) => {
   const result = await createSect(characterId, name, description);
   if (result.success) {
     await safePushCharacterUpdate(userId);
+    notifySectIndicatorToCharacterIds([characterId]);
   }
   return sendResult(res, result);
 }));
@@ -89,6 +97,12 @@ router.post('/apply', asyncHandler(async (req, res) => {
   const result = await applyToSect(characterId, sectId, message);
   if (result.success) {
     await safePushCharacterUpdate(userId);
+    const joinedSectId = await getCharacterSectId(characterId);
+    if (joinedSectId) {
+      notifySectIndicatorToCharacterIds([characterId]);
+    } else {
+      notifySectIndicatorToSectManagers(sectId, [characterId]);
+    }
   }
   return sendResult(res, result);
 }));
@@ -115,6 +129,7 @@ router.post('/applications/handle', asyncHandler(async (req, res) => {
   const result = await handleApplication(characterId, applicationId, approve);
   if (result.success) {
     await safePushCharacterUpdate(userId);
+    notifySectIndicatorByApplicationId(applicationId);
   }
   return sendResult(res, result);
 }));
@@ -125,6 +140,9 @@ router.post('/applications/cancel', asyncHandler(async (req, res) => {
   const applicationId = parseBodyNumber(body?.applicationId);
   if (!applicationId) throw new BusinessError('参数错误');
   const result = await cancelMyApplication(characterId, applicationId);
+  if (result.success) {
+    notifySectIndicatorByApplicationId(applicationId);
+  }
   return sendResult(res, result);
 }));
 
@@ -134,6 +152,7 @@ router.post('/leave', asyncHandler(async (req, res) => {
   const result = await leaveSect(characterId);
   if (result.success) {
     await safePushCharacterUpdate(userId);
+    notifySectIndicatorToCharacterIds([characterId]);
   }
   return sendResult(res, result);
 }));
@@ -147,6 +166,7 @@ router.post('/kick', asyncHandler(async (req, res) => {
   const result = await kickMember(characterId, targetId);
   if (result.success) {
     await safePushCharacterUpdate(userId);
+    notifySectIndicatorToCharacterIds([targetId]);
   }
   return sendResult(res, result);
 }));
@@ -158,6 +178,9 @@ router.post('/appoint', asyncHandler(async (req, res) => {
   const position = typeof body?.position === 'string' ? body.position : '';
   if (!targetId || !position) throw new BusinessError('参数错误');
   const result = await appointPosition(characterId, targetId, position);
+  if (result.success) {
+    notifySectIndicatorToCharacterIds([targetId]);
+  }
   return sendResult(res, result);
 }));
 
@@ -167,12 +190,20 @@ router.post('/transfer', asyncHandler(async (req, res) => {
   const newLeaderId = parseBodyNumber(body?.newLeaderId);
   if (!newLeaderId) throw new BusinessError('参数错误');
   const result = await transferLeader(characterId, newLeaderId);
+  if (result.success) {
+    notifySectIndicatorToCharacterIds([characterId, newLeaderId]);
+  }
   return sendResult(res, result);
 }));
 
 router.post('/disband', asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
+  const formerSectId = await getCharacterSectId(characterId);
+  const formerMemberIds = formerSectId ? await listSectMemberCharacterIds(formerSectId) : [characterId];
   const result = await disbandSect(characterId);
+  if (result.success) {
+    notifySectIndicatorToCharacterIds(formerMemberIds);
+  }
   return sendResult(res, result);
 }));
 

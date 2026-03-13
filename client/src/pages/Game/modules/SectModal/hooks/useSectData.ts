@@ -104,7 +104,7 @@ type SectListApiResponse<Row> = {
   data?: Row[] | null;
 };
 
-export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSectDataArgs): UseSectDataState => {
+export const useSectData = ({ open, spiritStones, playerName }: UseSectDataArgs): UseSectDataState => {
   const { message } = App.useApp();
 
   const [panel, setPanel] = useState<SectPanelKey>('hall');
@@ -143,10 +143,6 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
     target: null,
     appointPosition: 'disciple',
   });
-
-  const notifyChanged = useCallback(() => {
-    onChanged?.();
-  }, [onChanged]);
 
   const canAffordCreate = spiritStones >= CREATE_SECT_COST;
 
@@ -421,14 +417,13 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         if (!res.success) throw new Error(res.message || '申请失败');
         message.success(res.message || '申请成功');
         await Promise.all([refreshList(), refreshJoinContext(false)]);
-        notifyChanged();
       } catch (error) {
         void 0;
       } finally {
         setActionLoadingKey(null);
       }
     },
-    [joinState, message, notifyChanged, refreshJoinContext, refreshList]
+    [joinState, message, refreshJoinContext, refreshList]
   );
 
   const cancelMyApplication = useCallback(
@@ -440,14 +435,13 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         if (!res.success) throw new Error(res.message || '取消失败');
         message.success(res.message || '已取消申请');
         await Promise.all([refreshList(), refreshJoinContext(false)]);
-        notifyChanged();
       } catch (error) {
         void 0;
       } finally {
         setActionLoadingKey(null);
       }
     },
-    [message, notifyChanged, refreshJoinContext, refreshList]
+    [message, refreshJoinContext, refreshList]
   );
 
   const leaveSectAction = useCallback(async () => {
@@ -457,13 +451,12 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       if (!res.success) throw new Error(res.message || '退出失败');
       message.success(res.message || '已退出宗门');
       await Promise.all([refreshList(), refreshJoinContext(true)]);
-      notifyChanged();
     } catch (error) {
       void 0;
     } finally {
       setActionLoadingKey(null);
     }
-  }, [message, notifyChanged, refreshJoinContext, refreshList]);
+  }, [message, refreshJoinContext, refreshList]);
 
   const createSectAction = useCallback(async () => {
     const name = createName.trim();
@@ -485,13 +478,12 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       setCreateName('');
       setCreateNotice('');
       await Promise.all([refreshList(), refreshJoinContext(true)]);
-      notifyChanged();
     } catch (error) {
       void 0;
     } finally {
       setActionLoadingKey(null);
     }
-  }, [createName, createNotice, message, notifyChanged, refreshJoinContext, refreshList, spiritStones]);
+  }, [createName, createNotice, message, refreshJoinContext, refreshList, spiritStones]);
 
   const donateAction = useCallback(async () => {
     if (!donateSummary.canSubmit) {
@@ -508,13 +500,12 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       setDonateOpen(false);
       setDonateSpiritStonesInput('');
       await Promise.all([loadMySectInfo(), fetchLogs()]);
-      notifyChanged();
     } catch (error) {
       void 0;
     } finally {
       setActionLoadingKey(null);
     }
-  }, [donateSpiritStonesAmount, donateSummary, fetchLogs, loadMySectInfo, message, notifyChanged]);
+  }, [donateSpiritStonesAmount, donateSummary, fetchLogs, loadMySectInfo, message]);
 
   const upgradeBuildingAction = useCallback(
     async (buildingType: string) => {
@@ -616,14 +607,13 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         if (!res.success) throw new Error(res.message || '处理失败');
         message.success(res.message || '处理成功');
         await Promise.all([fetchApplications(), loadMySectInfo(), fetchLogs()]);
-        notifyChanged();
       } catch (error) {
         void 0;
       } finally {
         setActionLoadingKey(null);
       }
     },
-    [fetchApplications, fetchLogs, loadMySectInfo, message, notifyChanged]
+    [fetchApplications, fetchLogs, loadMySectInfo, message]
   );
 
   const updateAnnouncementAction = useCallback(async () => {
@@ -667,14 +657,13 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         message.success(res.message || '已踢出成员');
         setMemberActionOpen(false);
         await Promise.all([loadMySectInfo(), fetchApplications(), fetchLogs()]);
-        notifyChanged();
       } catch (error) {
         void 0;
       } finally {
         setActionLoadingKey(null);
       }
     },
-    [fetchApplications, fetchLogs, loadMySectInfo, message, notifyChanged]
+    [fetchApplications, fetchLogs, loadMySectInfo, message]
   );
 
   const transferLeaderAction = useCallback(
@@ -702,13 +691,12 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       if (!res.success) throw new Error(res.message || '解散失败');
       message.success(res.message || '宗门已解散');
       await Promise.all([refreshList(), refreshJoinContext(true)]);
-      notifyChanged();
     } catch (error) {
       void 0;
     } finally {
       setActionLoadingKey(null);
     }
-  }, [message, notifyChanged, refreshJoinContext, refreshList]);
+  }, [message, refreshJoinContext, refreshList]);
 
   const openMemberAction = useCallback((member: SectMemberVm) => {
     setMemberActionDraft({ target: member, appointPosition: getAppointDefault(member) });
