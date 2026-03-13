@@ -322,26 +322,16 @@ const getDropsByPoolId = async (
     .filter((entry) => entry.show_in_ui)
     .map((entry) => {
       const itemDefId = entry.item_def_id.trim();
-      const qtyMin = Math.max(1, Number(entry.qty_min) || 1);
-      const qtyMax = Math.max(qtyMin, Number(entry.qty_max) || qtyMin);
-      const qtyMinAddByMonsterRealm = Math.max(
-        0,
-        Math.floor(Number(entry.qty_min_add_by_monster_realm) || 0),
-      );
-      const qtyMaxAddByMonsterRealm = Math.max(
-        qtyMinAddByMonsterRealm,
-        Math.floor(Number(entry.qty_max_add_by_monster_realm) || qtyMinAddByMonsterRealm),
-      );
       return {
         mode,
         item_def_id: itemDefId,
         chance: Number(entry.chance) || 0,
         weight: Number(entry.weight) || 0,
         chance_add_by_monster_realm: Number(entry.chance_add_by_monster_realm) || 0,
-        qty_min: qtyMin,
-        qty_max: qtyMax,
-        qty_min_add_by_monster_realm: qtyMinAddByMonsterRealm,
-        qty_max_add_by_monster_realm: qtyMaxAddByMonsterRealm,
+        qty_min: entry.qty_min,
+        qty_max: entry.qty_max,
+        qty_min_add_by_monster_realm: entry.qty_min_add_by_monster_realm,
+        qty_max_add_by_monster_realm: entry.qty_max_add_by_monster_realm,
         qty_multiply_by_monster_realm: Number(entry.qty_multiply_by_monster_realm) || 1,
         sort_order: Math.max(0, Math.floor(Number(entry.sort_order) || 0)),
         bind_type: entry.bind_type,

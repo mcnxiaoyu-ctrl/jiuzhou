@@ -83,9 +83,40 @@ export const applyMonsterRealmDropQtyMultiplier = (
 };
 
 /**
+ * 统一解释“数量区间随怪物境界步进增长”的配置：
+ * 1. 允许使用小数步进，例如 0.5 表示每跨 2 个境界累计 +1
+ * 2. 只在最终数量区间落地时取整，避免入口层提前截断导致配置失效
+ * 3. 若 max 步进小于 min，统一按 min 对齐，保证区间始终合法
+ */
+export const normalizeMonsterRealmQuantityStepRange = (params: {
+  qtyMinAddByMonsterRealm?: number;
+  qtyMaxAddByMonsterRealm?: number;
+}): { qtyMinAddByMonsterRealm: number; qtyMaxAddByMonsterRealm: number } => {
+  const qtyMinAddByMonsterRealmRaw = Number(params.qtyMinAddByMonsterRealm);
+  const qtyMinAddByMonsterRealm =
+    Number.isFinite(qtyMinAddByMonsterRealmRaw) && qtyMinAddByMonsterRealmRaw >= 0
+      ? qtyMinAddByMonsterRealmRaw
+      : 0;
+  const qtyMaxAddByMonsterRealmRaw = Number(params.qtyMaxAddByMonsterRealm);
+  const qtyMaxAddByMonsterRealmCandidate =
+    Number.isFinite(qtyMaxAddByMonsterRealmRaw) && qtyMaxAddByMonsterRealmRaw >= 0
+      ? qtyMaxAddByMonsterRealmRaw
+      : qtyMinAddByMonsterRealm;
+
+  return {
+    qtyMinAddByMonsterRealm,
+    qtyMaxAddByMonsterRealm: Math.max(
+      qtyMinAddByMonsterRealm,
+      qtyMaxAddByMonsterRealmCandidate,
+    ),
+  };
+};
+
+/**
  * 解释掉落条目上的“数量区间随怪物境界步进增长”配置。
  * - 凡人（0阶追加）保持原始区间
  * - 每升 1 阶，分别给 qtyMin/qtyMax 累加一次对应增量
+ * - 允许小数步进，先累计再在最终数量上取整
  * - 若 max 的步进配置小于 min，统一按 min 对齐，保证最终区间合法
  */
 export const getMonsterRealmAdjustedBaseQuantityRange = (params: {
@@ -98,17 +129,14 @@ export const getMonsterRealmAdjustedBaseQuantityRange = (params: {
   const baseMin = Math.max(1, Math.floor(Number(params.qtyMin) || 1));
   const baseMax = Math.max(baseMin, Math.floor(Number(params.qtyMax) || baseMin));
   const realmRank = Math.max(0, getRealmRankZeroBased(params.monsterRealm));
-  const qtyMinAddByMonsterRealm = Math.max(
-    0,
-    Math.floor(Number(params.qtyMinAddByMonsterRealm) || 0),
-  );
-  const qtyMaxAddByMonsterRealm = Math.max(
-    qtyMinAddByMonsterRealm,
-    Math.floor(Number(params.qtyMaxAddByMonsterRealm) || qtyMinAddByMonsterRealm),
-  );
+  const { qtyMinAddByMonsterRealm, qtyMaxAddByMonsterRealm } =
+    normalizeMonsterRealmQuantityStepRange({
+      qtyMinAddByMonsterRealm: params.qtyMinAddByMonsterRealm,
+      qtyMaxAddByMonsterRealm: params.qtyMaxAddByMonsterRealm,
+    });
 
-  const adjustedMin = baseMin + realmRank * qtyMinAddByMonsterRealm;
-  const adjustedMax = baseMax + realmRank * qtyMaxAddByMonsterRealm;
+  const adjustedMin = Math.max(1, Math.floor(baseMin + realmRank * qtyMinAddByMonsterRealm));
+  const adjustedMax = Math.max(adjustedMin, Math.floor(baseMax + realmRank * qtyMaxAddByMonsterRealm));
 
   return {
     qtyMin: adjustedMin,

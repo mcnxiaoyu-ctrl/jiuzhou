@@ -24,6 +24,7 @@ import {
   type DropPoolDefConfig,
   type DropPoolEntryConfig,
 } from './staticConfigLoader.js';
+import { normalizeMonsterRealmQuantityStepRange } from './shared/dropQuantityMultiplier.js';
 
 type ResolvedDropPoolMode = 'prob' | 'weight';
 
@@ -83,14 +84,14 @@ const normalizeEntry = (entry: DropPoolEntryConfig): Omit<ResolvedDropPoolEntry,
   if (!itemDefId) return null;
 
   const { qtyMin, qtyMax } = normalizeQtyRange(entry);
-  const qtyMinAddByMonsterRealm = Math.max(
-    0,
-    Math.floor(toFiniteNumber(entry.qty_min_add_by_monster_realm, 0)),
-  );
-  const qtyMaxAddByMonsterRealm = Math.max(
-    qtyMinAddByMonsterRealm,
-    Math.floor(toFiniteNumber(entry.qty_max_add_by_monster_realm, qtyMinAddByMonsterRealm)),
-  );
+  const { qtyMinAddByMonsterRealm, qtyMaxAddByMonsterRealm } =
+    normalizeMonsterRealmQuantityStepRange({
+      qtyMinAddByMonsterRealm: toFiniteNumber(entry.qty_min_add_by_monster_realm, 0),
+      qtyMaxAddByMonsterRealm: toFiniteNumber(
+        entry.qty_max_add_by_monster_realm,
+        toFiniteNumber(entry.qty_min_add_by_monster_realm, 0),
+      ),
+    });
   const qtyMultiplyByMonsterRealmRaw = toFiniteNumber(entry.qty_multiply_by_monster_realm, 1);
   const qtyMultiplyByMonsterRealm = qtyMultiplyByMonsterRealmRaw > 0 ? qtyMultiplyByMonsterRealmRaw : 1;
   return {

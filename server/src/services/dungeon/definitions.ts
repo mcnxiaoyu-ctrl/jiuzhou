@@ -380,16 +380,6 @@ export const getDungeonPreview = async (
       if (!entry.show_in_ui) continue;
       const itemDefId = entry.item_def_id.trim();
       if (!itemDefId) continue;
-      const qtyMin = Math.max(1, Math.floor(asNumber(entry.qty_min, 1)));
-      const qtyMax = Math.max(qtyMin, Math.floor(asNumber(entry.qty_max, qtyMin)));
-      const qtyMinAddByMonsterRealm = Math.max(
-        0,
-        Math.floor(asNumber(entry.qty_min_add_by_monster_realm, 0)),
-      );
-      const qtyMaxAddByMonsterRealm = Math.max(
-        qtyMinAddByMonsterRealm,
-        Math.floor(asNumber(entry.qty_max_add_by_monster_realm, qtyMinAddByMonsterRealm)),
-      );
       dropPreviewRows.push({
         drop_pool_id: poolId,
         mode,
@@ -397,10 +387,10 @@ export const getDungeonPreview = async (
         chance: asNumber(entry.chance, 0),
         weight: asNumber(entry.weight, 0),
         chance_add_by_monster_realm: asNumber(entry.chance_add_by_monster_realm, 0),
-        qty_min: qtyMin,
-        qty_max: qtyMax,
-        qty_min_add_by_monster_realm: qtyMinAddByMonsterRealm,
-        qty_max_add_by_monster_realm: qtyMaxAddByMonsterRealm,
+        qty_min: entry.qty_min,
+        qty_max: entry.qty_max,
+        qty_min_add_by_monster_realm: entry.qty_min_add_by_monster_realm,
+        qty_max_add_by_monster_realm: entry.qty_max_add_by_monster_realm,
         qty_multiply_by_monster_realm: asNumber(entry.qty_multiply_by_monster_realm, 1),
         quality_weights: entry.quality_weights,
         bind_type: entry.bind_type,
