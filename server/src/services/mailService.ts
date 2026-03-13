@@ -103,6 +103,17 @@ const MAIL_HAS_ATTACHMENTS_SQL = '(attach_silver > 0 OR attach_spirit_stones > 0
 const MAIL_UNREAD_CACHE_REDIS_TTL_SEC = 30;
 const MAIL_UNREAD_CACHE_MEMORY_TTL_MS = 5_000;
 
+type MailScopedUnionSqlOptions = {
+  selectSql: string;
+  characterIdParamIndex: number;
+  userIdParamIndex: number;
+  commonWhereSql?: string[];
+  characterWhereSql?: string[];
+  userWhereSql?: string[];
+  orderBySql?: string;
+  limitParamIndex?: number;
+};
+
 type MailUnreadCounter = {
   unreadCount: number;
   unclaimedCount: number;
@@ -123,19 +134,87 @@ const parseMailUnreadCacheKey = (
   return { userId, characterId };
 };
 
+/**
+ * 生成“角色邮件 + 账号级邮件”双分支 UNION SQL。
+ *
+ * 作用：
+ * - 把原先多处重复的 `recipient_character_id OR recipient_user_id` 判定收敛成单一 SQL 生成入口；
+ * - 让 PostgreSQL 能分别命中角色分支、账号分支索引，避免大范围 OR 扫描拖慢列表/计数/一键领取。
+ *
+ * 输入/输出：
+ * - 输入：查询列、参数位序、公共过滤条件、分支附加条件，以及可选的分支排序/分支 limit。
+ * - 输出：可直接嵌入 `WITH scoped_mail AS (...)` 的 UNION ALL SQL 片段。
+ *
+ * 数据流：
+ * mailService 各查询 -> buildRecipientScopedMailUnionSql -> CTE/scoped_mail -> 列表/计数/领取逻辑
+ *
+ * 关键边界条件与坑点：
+ * 1. 账号级分支必须带 `recipient_character_id IS NULL`，否则角色邮件与账号邮件会重叠命中。
+ * 2. 分支内排序只负责帮助索引扫描；最终对外顺序仍需在外层查询统一 `ORDER BY`。
+ */
+const buildRecipientScopedMailUnionSql = ({
+  selectSql,
+  characterIdParamIndex,
+  userIdParamIndex,
+  commonWhereSql = [],
+  characterWhereSql = [],
+  userWhereSql = [],
+  orderBySql,
+  limitParamIndex,
+}: MailScopedUnionSqlOptions): string => {
+  const buildBranchSql = (
+    recipientSql: string,
+    branchWhereSql: string[],
+  ): string => {
+    const whereSql = [recipientSql, ...commonWhereSql, ...branchWhereSql].join('\n              AND ');
+    const suffixSql = [
+      orderBySql,
+      limitParamIndex === undefined ? undefined : `LIMIT $${limitParamIndex}`,
+    ]
+      .filter((segment): segment is string => typeof segment === 'string' && segment.length > 0)
+      .join('\n            ');
+
+    return `(
+            SELECT ${selectSql}
+            FROM mail
+            WHERE ${whereSql}
+            ${suffixSql}
+          )`;
+  };
+
+  return [
+    buildBranchSql(`recipient_character_id = $${characterIdParamIndex}`, characterWhereSql),
+    buildBranchSql(
+      `recipient_user_id = $${userIdParamIndex}
+              AND recipient_character_id IS NULL`,
+      userWhereSql,
+    ),
+  ].join('\n          UNION ALL\n');
+};
+
 const loadMailUnreadCounter = async (cacheKey: string): Promise<MailUnreadCounter | null> => {
   const parsedKey = parseMailUnreadCacheKey(cacheKey);
   if (!parsedKey) return null;
 
+  const scopedMailUnionSql = buildRecipientScopedMailUnionSql({
+    selectSql: 'read_at, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids',
+    characterIdParamIndex: 1,
+    userIdParamIndex: 2,
+    commonWhereSql: [
+      'deleted_at IS NULL',
+      '(expire_at IS NULL OR expire_at > NOW())',
+    ],
+  });
+
   const result = await query(
     `
+      WITH scoped_mail AS (
+        ${scopedMailUnionSql}
+      )
       SELECT
         COUNT(*) FILTER (WHERE read_at IS NULL) as unread_count,
         COUNT(*) FILTER (WHERE claimed_at IS NULL AND ${MAIL_HAS_ATTACHMENTS_SQL}) as unclaimed_count
-      FROM mail
-      WHERE (recipient_character_id = $1 OR (recipient_user_id = $2 AND recipient_character_id IS NULL))
-        AND deleted_at IS NULL
-        AND (expire_at IS NULL OR expire_at > NOW())
+      FROM scoped_mail
     `,
     [parsedKey.characterId, parsedKey.userId],
   );
@@ -642,6 +721,23 @@ class MailService {
     const offset = (page - 1) * pageSize;
     const recipientScopeSql = this.buildRecipientScopeSql(1, 2);
     const branchLimit = pageSize + offset;
+    const listScopedMailUnionSql = buildRecipientScopedMailUnionSql({
+      selectSql: `
+              id, sender_type, sender_name, mail_type, title, content,
+              attach_silver, attach_spirit_stones, attach_items, attach_instance_ids,
+              read_at, claimed_at, expire_at, created_at`,
+      characterIdParamIndex: 1,
+      userIdParamIndex: 2,
+      commonWhereSql: ['deleted_at IS NULL'],
+      orderBySql: 'ORDER BY created_at DESC, id DESC',
+      limitParamIndex: 5,
+    });
+    const statsScopedMailUnionSql = buildRecipientScopedMailUnionSql({
+      selectSql: 'read_at, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids',
+      characterIdParamIndex: 1,
+      userIdParamIndex: 2,
+      commonWhereSql: ['deleted_at IS NULL'],
+    });
 
     try {
       // 清理过期邮件（软删除）
@@ -656,49 +752,27 @@ class MailService {
       // 获取邮件列表
       const result = await query(`
         WITH scoped_mail AS (
-          (
-            SELECT
-              id, sender_type, sender_name, mail_type, title, content,
-              attach_silver, attach_spirit_stones, attach_items, attach_instance_ids,
-              read_at, claimed_at, expire_at, created_at
-            FROM mail
-            WHERE recipient_character_id = $1
-              AND deleted_at IS NULL
-            ORDER BY created_at DESC
-            LIMIT $5
-          )
-          UNION ALL
-          (
-            SELECT
-              id, sender_type, sender_name, mail_type, title, content,
-              attach_silver, attach_spirit_stones, attach_items, attach_instance_ids,
-              read_at, claimed_at, expire_at, created_at
-            FROM mail
-            WHERE recipient_user_id = $2
-              AND recipient_character_id IS NULL
-              AND deleted_at IS NULL
-            ORDER BY created_at DESC
-            LIMIT $5
-          )
+          ${listScopedMailUnionSql}
         )
         SELECT
           id, sender_type, sender_name, mail_type, title, content,
           attach_silver, attach_spirit_stones, attach_items, attach_instance_ids,
           read_at, claimed_at, expire_at, created_at
         FROM scoped_mail
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, id DESC
         LIMIT $3 OFFSET $4
       `, [characterId, userId, pageSize, offset, branchLimit]);
 
       // 获取统计
       const statsResult = await query(`
+        WITH scoped_mail AS (
+          ${statsScopedMailUnionSql}
+        )
         SELECT
           COUNT(*) as total,
           COUNT(*) FILTER (WHERE read_at IS NULL) as unread_count,
           COUNT(*) FILTER (WHERE claimed_at IS NULL AND ${MAIL_HAS_ATTACHMENTS_SQL}) as unclaimed_count
-        FROM mail
-        WHERE ${recipientScopeSql}
-          AND deleted_at IS NULL
+        FROM scoped_mail
       `, [characterId, userId]);
 
       const stats = statsResult.rows[0];
@@ -1027,15 +1101,25 @@ class MailService {
   }> {
     // 1. 获取所有可尝试领取的邮件（不做总量空间校验，改为逐封领取）
     // 说明：此方法不包裹单一大事务，避免批量领取时长时间持有 mail 行锁与背包互斥锁。
+    const claimableMailUnionSql = buildRecipientScopedMailUnionSql({
+      selectSql: 'id, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids, created_at',
+      characterIdParamIndex: 1,
+      userIdParamIndex: 2,
+      commonWhereSql: [
+        'deleted_at IS NULL',
+        'claimed_at IS NULL',
+        MAIL_HAS_ATTACHMENTS_SQL,
+        '(expire_at IS NULL OR expire_at > NOW())',
+      ],
+      orderBySql: 'ORDER BY created_at ASC, id ASC',
+    });
     const mailsResult = await query(
       `
+      WITH candidate_mail AS (
+        ${claimableMailUnionSql}
+      )
       SELECT id, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids
-      FROM mail
-      WHERE ${this.buildRecipientScopeSql(1, 2)}
-        AND deleted_at IS NULL
-        AND claimed_at IS NULL
-        AND ${MAIL_HAS_ATTACHMENTS_SQL}
-        AND (expire_at IS NULL OR expire_at > NOW())
+      FROM candidate_mail
       ORDER BY created_at ASC, id ASC
     `,
       [characterId, userId],
