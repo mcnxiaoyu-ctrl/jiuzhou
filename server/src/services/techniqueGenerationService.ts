@@ -214,10 +214,10 @@ const QUALITY_MAX_LAYER: Record<TechniqueQuality, number> = {
 };
 
 const QUALITY_RANDOM_WEIGHT: Array<{ quality: TechniqueQuality; weight: number }> = [
-  { quality: '黄', weight: 55 },
-  { quality: '玄', weight: 30 },
-  { quality: '地', weight: 12 },
-  { quality: '天', weight: 3 },
+  { quality: '黄', weight: 4 },
+  { quality: '玄', weight: 3 },
+  { quality: '地', weight: 2 },
+  { quality: '天', weight: 1 },
 ];
 
 const asString = (raw: unknown): string => (typeof raw === 'string' ? raw.trim() : '');

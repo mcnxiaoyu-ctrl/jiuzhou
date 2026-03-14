@@ -652,6 +652,8 @@
   border-radius: 10px;
   background: var(--panel-bg);
   padding: 10px;
+  display: flex;
+  flex-direction: column;
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease,
@@ -662,6 +664,10 @@
   border-color: color-mix(in srgb, var(--accent-color) 38%, var(--border-color-soft));
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
   transform: translateY(-1px);
+}
+
+.tech-research-skill-card > .skill-card-details {
+  flex: 1;
 }
 
 .skill-card-details {
@@ -695,6 +701,11 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
+}
+
+/* 光环等被动技能无消耗/冷却时，保持与有 meta-pill 的卡片等高 */
+.skill-card-meta--empty {
+  min-height: 24px;
 }
 
 .skill-card-meta-pill {
@@ -753,6 +764,7 @@
 .skill-card-summary {
   display: flex;
   flex-direction: column;
+  flex: 1;
   gap: 6px;
   padding-top: 8px;
   border-top: 1px solid var(--border-color-soft);

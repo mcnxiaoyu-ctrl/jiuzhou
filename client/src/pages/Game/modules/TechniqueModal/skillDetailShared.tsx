@@ -225,7 +225,9 @@ export const renderSkillCardDetails = (skill: TechniqueSkillDetailLike): ReactNo
               </span>
             ))}
           </div>
-        ) : null}
+        ) : (
+          <div className="skill-card-meta skill-card-meta--empty" />
+        )}
       </div>
 
       {sections.gridItems.length > 0 ? (
