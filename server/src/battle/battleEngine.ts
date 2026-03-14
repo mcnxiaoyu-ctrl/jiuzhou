@@ -103,7 +103,10 @@ export class BattleEngine {
     // 按速度排序队内单位
     this.sortUnitsBySpeed(this.state.teams.attacker.units);
     this.sortUnitsBySpeed(this.state.teams.defender.units);
-    
+
+    // 被动技能进场自动施放（光环等，在首回合开始前生效）
+    this.processPassiveSkills();
+
     // 处理回合开始
     this.processRoundStart();
   }
@@ -130,6 +133,30 @@ export class BattleEngine {
    */
   private sortUnitsBySpeed(units: BattleUnit[]): void {
     units.sort((a, b) => b.currentAttrs.sudu - a.currentAttrs.sudu);
+  }
+
+  /**
+   * 被动技能进场自动施放
+   *
+   * 作用：战斗开始时，遍历所有存活单位的技能，自动执行 triggerType=passive 的技能。
+   * 数据流：allUnits -> 过滤 passive 技能 -> executeSkill（消耗/冷却为 0，自然通过检查）。
+   *
+   * 坑点：
+   * 1) 被动技能要求 cost=0、cooldown=0，executeSkill 的消耗/冷却检查自然通过。
+   * 2) 被动技能的 targetType 应为 self（光环挂在自身），resolveTargets 返回施法者自身。
+   */
+  private processPassiveSkills(): void {
+    const allUnits = [
+      ...this.state.teams.attacker.units,
+      ...this.state.teams.defender.units,
+    ];
+    for (const unit of allUnits) {
+      if (!unit.isAlive) continue;
+      for (const skill of unit.skills) {
+        if (skill.triggerType !== 'passive') continue;
+        executeSkill(this.state, unit, skill);
+      }
+    }
   }
   
   /**

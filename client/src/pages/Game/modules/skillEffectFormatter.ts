@@ -51,6 +51,8 @@ const BUFF_KEY_NAME: Record<string, string> = {
   'buff-reflect-damage': '受击反震',
   'debuff-heal-forbid': '断脉',
   'buff-next-skill-chaos': '下一式异变',
+  'buff-aura': '光环',
+  'debuff-aura': '光环',
 };
 
 const PERCENT_BUFF_ATTR_SET = new Set([
@@ -316,6 +318,52 @@ const formatBurnExtraDetail = (effect: Record<string, unknown>): string => {
  * 1) `reflect_damage` 的 value 是比例，不能再走通用 `Math.floor`，否则 0.3 会错误显示成 0。
  * 2) 表里只收“已有明确展示语义”的 Buff，避免把普通属性 Buff 过度特殊化，反而增加维护成本。
  */
+const AURA_TARGET_LABEL: Record<string, string> = {
+  all_ally: '全体友方',
+  all_enemy: '全体敌方',
+  self: '自身',
+};
+
+/**
+ * 格式化光环子效果描述
+ *
+ * 作用：将光环的 auraEffects 子效果数组转为可读文案，复用已有的子效果格式化函数。
+ * 输入：effect 对象（含 auraTarget、auraEffects）。
+ * 输出：形如"光环·全体友方：物防提升（幅度 15%），持续1回合"的完整描述。
+ *
+ * 坑点：
+ * 1) 子效果可能包含 damage/heal/buff/debuff/resource/restore_lingqi 多种类型，需逐一分发。
+ * 2) 光环永久存在，不显示外层 duration。
+ */
+const formatAuraDetail = (effect: Record<string, unknown>): string => {
+  const auraTarget = toText(effect.auraTarget);
+  const targetLabel = AURA_TARGET_LABEL[auraTarget] || auraTarget || '范围';
+  const auraEffects = Array.isArray(effect.auraEffects) ? effect.auraEffects : [];
+
+  const subLines: string[] = [];
+  for (const sub of auraEffects) {
+    if (!sub || typeof sub !== 'object' || Array.isArray(sub)) continue;
+    const subEffect = sub as Record<string, unknown>;
+    const subType = toText(subEffect.type);
+    if (subType === 'damage') {
+      subLines.push(formatDamageEffect(subEffect, {}));
+    } else if (subType === 'heal') {
+      subLines.push(formatHealEffect(subEffect));
+    } else if (subType === 'buff') {
+      subLines.push(formatBuffEffect(subEffect, 'buff'));
+    } else if (subType === 'debuff') {
+      subLines.push(formatBuffEffect(subEffect, 'debuff'));
+    } else if (subType === 'resource') {
+      subLines.push(formatResourceEffect(subEffect));
+    } else if (subType === 'restore_lingqi') {
+      subLines.push(formatRestoreLingqiEffect(subEffect));
+    }
+  }
+
+  if (subLines.length === 0) return `光环·${targetLabel}`;
+  return `光环·${targetLabel}：${subLines.join('；')}`;
+};
+
 const BUFF_DETAIL_RESOLVER_BY_KIND: Record<string, BuffDetailResolver> = {
   reflect_damage: {
     override: formatReflectDamageDetail,
@@ -325,6 +373,9 @@ const BUFF_DETAIL_RESOLVER_BY_KIND: Record<string, BuffDetailResolver> = {
   },
   next_skill_bonus: {
     override: formatNextSkillBonusDetail,
+  },
+  aura: {
+    override: formatAuraDetail,
   },
 };
 
@@ -415,7 +466,8 @@ const formatBuffEffect = (effect: Record<string, unknown>, effectType: 'buff' | 
 
   let text = `${effectType === 'buff' ? '施加增益' : '施加减益'}：${name}`;
   if (valueText) text += `（${valueText}）`;
-  if (duration > 0) text += `，持续${duration}回合`;
+  // 光环永久存在，不显示外层 duration
+  if (duration > 0 && buffKind !== 'aura') text += `，持续${duration}回合`;
   return text;
 };
 

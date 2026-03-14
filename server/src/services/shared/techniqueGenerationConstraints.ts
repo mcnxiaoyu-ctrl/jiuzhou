@@ -24,6 +24,8 @@ import {
   TECHNIQUE_SKILL_DISPEL_TYPE_LIST,
   TECHNIQUE_SKILL_EFFECT_TYPE_LIST,
   TECHNIQUE_SKILL_FATE_SWAP_MODE_LIST,
+  TECHNIQUE_SKILL_AURA_TARGET_LIST,
+  TECHNIQUE_SKILL_AURA_SUB_EFFECT_TYPE_LIST,
   TECHNIQUE_SKILL_MARK_CONSUME_MODE_LIST,
   TECHNIQUE_SKILL_MARK_ID_LIST,
   TECHNIQUE_SKILL_MARK_OPERATION_LIST,
@@ -262,6 +264,8 @@ export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   '如果要调整效果，只能使用 changes.effects 全量替换，或 changes.addEffect 追加',
   '功法类型不会限制被动 key 搭配，layers.passives 可自由从 allowedPassiveKeys 中组合',
   '禁止输出 null/undefined 字段；可省略可选字段，不要输出空字符串占位',
+  'buffKind=aura 时必须提供 auraTarget 和 auraEffects，auraEffects 中每个子效果遵循对应 type 的标准校验规则，子效果不允许嵌套光环',
+  'buffKind=aura 的光环效果只能用于 triggerType=passive 的被动技能，costLingqi/costQixue/cooldown 必须为 0，进场自动生效，永久存在',
 ] as const;
 
 export const TECHNIQUE_PROMPT_TYPE_ENUM = GENERATED_TECHNIQUE_TYPE_LIST;
@@ -293,6 +297,9 @@ export const TECHNIQUE_PROMPT_MOMENTUM_OPERATION_ENUM = TECHNIQUE_SKILL_MOMENTUM
 export const TECHNIQUE_PROMPT_MOMENTUM_CONSUME_MODE_ENUM = TECHNIQUE_SKILL_MOMENTUM_CONSUME_MODE_LIST;
 export const TECHNIQUE_PROMPT_MOMENTUM_BONUS_TYPE_ENUM = TECHNIQUE_SKILL_MOMENTUM_BONUS_TYPE_LIST;
 export const TECHNIQUE_PROMPT_FATE_SWAP_MODE_ENUM = TECHNIQUE_SKILL_FATE_SWAP_MODE_LIST;
+
+export const TECHNIQUE_PROMPT_AURA_TARGET_ENUM = TECHNIQUE_SKILL_AURA_TARGET_LIST;
+export const TECHNIQUE_PROMPT_AURA_SUB_EFFECT_TYPE_ENUM = TECHNIQUE_SKILL_AURA_SUB_EFFECT_TYPE_LIST;
 
 const buildTechniquePromptBuffConfigRules = () => {
   const catalog = getTechniqueStructuredBuffCatalog();
@@ -332,6 +339,18 @@ const buildTechniquePromptBuffConfigRules = () => {
         required: ['value'],
         optional: [],
         notes: ['受击后按本次实际受击伤害的比例反弹真伤，value 使用 0~1 浮点比例'],
+      },
+      aura: {
+        required: ['auraTarget', 'auraEffects'],
+        optional: [],
+        notes: [
+          '光环效果：进场自动生效，永久存在直到施法者死亡，不可驱散',
+          '光环不需要 duration（运行时强制永久），只能用于 triggerType=passive 的被动技能',
+          'auraTarget 必须在 auraTargetEnum 中（all_ally/all_enemy/self）',
+          'auraEffects 必须是非空数组，长度 ≤ 4',
+          '子效果 type 必须在 auraSubEffectTypeEnum 中（damage/heal/buff/debuff/resource/restore_lingqi）',
+          '子效果中的 buff/debuff 不允许 buffKind=aura（禁止嵌套）',
+        ],
       },
     },
   } as const;
@@ -502,6 +521,8 @@ export const TECHNIQUE_PROMPT_EFFECT_COMMON_FIELDS = {
   gainStacks: '本次获得的势层数（整数，建议 1~99）',
   bonusType: '消耗势后加成的效果类别，必须在 momentumBonusTypeEnum 中',
   swapMode: '命运交换模式，必须在 fateSwapModeEnum 中',
+  auraTarget: '光环作用范围（all_ally/all_enemy/self），buffKind=aura 时必填',
+  auraEffects: '光环子效果数组，buffKind=aura 时必填，每个子效果遵循对应 type 的标准校验规则',
 } as const;
 
 export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
@@ -563,6 +584,8 @@ export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
       'buffKind=attr 时必须提供 attrKey，且 attrKey 必须在 allowedBuffConfigRules.attrKeyEnum 中',
       'applyType 如有填写，必须在 allowedBuffConfigRules.applyTypeEnum 中',
       'duration/stacks 建议为正整数（见 numericRanges.effect.duration / stacks）',
+      'buffKind=aura 时必须提供 auraTarget（all_ally/all_enemy/self）和 auraEffects（子效果数组，长度 ≤ 4）',
+      'buffKind=aura 时不需要 duration，光环永久存在直到施法者死亡',
     ],
     defaultTemplate: {
       type: 'buff',
@@ -584,6 +607,8 @@ export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
       'buffKey 必须在 allowedBuffConfigRules.buffKeyEnumByType.debuff 中',
       'buffKind=attr 时必须提供 attrKey，且 attrKey 必须在 allowedBuffConfigRules.attrKeyEnum 中',
       'applyType 如有填写，必须在 allowedBuffConfigRules.applyTypeEnum 中',
+      'buffKind=aura 时必须提供 auraTarget（all_ally/all_enemy/self）和 auraEffects（子效果数组，长度 ≤ 4）',
+      'buffKind=aura 时不需要 duration，光环永久存在直到施法者死亡',
     ],
     defaultTemplate: {
       type: 'debuff',
@@ -828,6 +853,7 @@ export const TECHNIQUE_PROMPT_OUTPUT_CHECKLIST = [
   'upgrades[*].changes 只能包含 upgradeAllowedChangeKeys 中的字段',
   'chance 必须在 0~1 且使用浮点比例表达',
   'layers.passives[].key 必须来自 allowedPassiveKeys，且 value 必须满足 passiveValueGuideByKey 的单层/累计上限',
+  'buffKind=aura 时必须提供 auraTarget 和 auraEffects，子效果不允许嵌套光环',
 ] as const;
 
 export const buildTechniqueGeneratorPromptInput = (params: {
@@ -869,6 +895,8 @@ export const buildTechniqueGeneratorPromptInput = (params: {
       momentumConsumeModeEnum: [...TECHNIQUE_PROMPT_MOMENTUM_CONSUME_MODE_ENUM],
       momentumBonusTypeEnum: [...TECHNIQUE_PROMPT_MOMENTUM_BONUS_TYPE_ENUM],
       fateSwapModeEnum: [...TECHNIQUE_PROMPT_FATE_SWAP_MODE_ENUM],
+      auraTargetEnum: [...TECHNIQUE_PROMPT_AURA_TARGET_ENUM],
+      auraSubEffectTypeEnum: [...TECHNIQUE_PROMPT_AURA_SUB_EFFECT_TYPE_ENUM],
       allowedBuffConfigRules: promptBuffConfigRules,
       attributeKeyEnum: [...TECHNIQUE_EFFECT_SCALE_ATTR_OPTIONS],
       numericRanges: TECHNIQUE_PROMPT_NUMERIC_RANGES,

@@ -2,12 +2,15 @@
  * 九州修仙录 - 技能执行模块
  */
 
-import type { 
-  BattleState, 
-  BattleUnit, 
-  BattleSkill, 
+import type {
+  BattleState,
+  BattleUnit,
+  BattleSkill,
   SkillEffect,
   AttrModifier,
+  AuraEffect,
+  AuraSubEffect,
+  AuraTargetType,
   DelayedBurstEffect,
   DotEffect,
   HotEffect,
@@ -85,6 +88,7 @@ type BuffRuntimeData = {
   delayedBurst?: DelayedBurstEffect;
   nextSkillBonus?: NextSkillBonusEffect;
   healForbidden?: boolean;
+  aura?: AuraEffect;
 };
 
 type SkillExecutionContext = {
@@ -104,6 +108,7 @@ function hasBuffRuntimeData(data: BuffRuntimeData): boolean {
     || data.delayedBurst
     || data.nextSkillBonus
     || data.healForbidden
+    || data.aura
     || (Array.isArray(data.attrModifiers) && data.attrModifiers.length > 0)
   );
 }
@@ -249,6 +254,93 @@ function resolveEffectValue(
   return Math.floor(value);
 }
 
+const AURA_TARGET_SET = new Set<string>(['all_ally', 'all_enemy', 'self']);
+
+function resolveAuraTarget(raw: string | undefined): AuraTargetType | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim().toLowerCase();
+  return AURA_TARGET_SET.has(trimmed) ? (trimmed as AuraTargetType) : null;
+}
+
+/**
+ * 解析光环子效果列表，按施法者属性快照计算数值。
+ *
+ * 作用：遍历光环的 auraEffects 配置，将每个子效果转换为运行时 AuraSubEffect。
+ * 输入：施法者、技能、子效果配置数组。
+ * 输出：已解析的 AuraSubEffect 数组（数值已快照）。
+ *
+ * 坑点：
+ * 1) buff/debuff 子效果会递归调用 buildBuffRuntimeData 构建子 Buff 运行时数据，但子效果不允许嵌套光环。
+ * 2) damage/heal 子效果使用 resolveEffectValue 按施法者当前属性快照计算。
+ */
+function resolveAuraSubEffects(
+  caster: BattleUnit,
+  skill: BattleSkill,
+  subEffects: SkillEffect[],
+): AuraSubEffect[] {
+  const results: AuraSubEffect[] = [];
+  for (const sub of subEffects) {
+    const subType = typeof sub.type === 'string' ? sub.type.trim() : '';
+    if (!subType) continue;
+
+    if (subType === 'damage') {
+      const scaleAttr = skill.damageType === 'magic' ? 'fagong' : 'wugong';
+      const resolvedValue = Math.max(1, resolveEffectValue(caster, skill, sub, scaleAttr));
+      results.push({
+        type: 'damage',
+        resolvedValue,
+        damageType: sub.damageType ?? (skill.damageType === 'magic' ? 'magic' : 'physical'),
+        element: sub.element ?? skill.element ?? 'none',
+      });
+      continue;
+    }
+
+    if (subType === 'heal') {
+      const resolvedValue = Math.max(1, resolveEffectValue(caster, skill, sub, 'fagong'));
+      results.push({ type: 'heal', resolvedValue });
+      continue;
+    }
+
+    if (subType === 'buff' || subType === 'debuff') {
+      // 禁止嵌套光环
+      if (normalizeBuffKind(sub.buffKind) === 'aura') continue;
+      const subRuntime = buildBuffRuntimeData(caster, caster, skill, sub as BuffOrDebuffEffect);
+      if (!hasBuffRuntimeData(subRuntime)) continue;
+      const buffDefId = resolveBuffEffectKey(sub as BuffOrDebuffEffect) || `aura-sub-${subType}`;
+      results.push({
+        type: subType,
+        resolvedValue: subRuntime.attrModifiers?.[0]?.value ?? 0,
+        buffDefId,
+        buffType: subType,
+        attrModifiers: subRuntime.attrModifiers,
+        dot: subRuntime.dot,
+        hot: subRuntime.hot,
+        healForbidden: subRuntime.healForbidden,
+      });
+      continue;
+    }
+
+    if (subType === 'resource') {
+      const value = toFiniteNumber(sub.value, 0);
+      if (value === 0) continue;
+      results.push({
+        type: 'resource',
+        resolvedValue: value,
+        resourceType: sub.resourceType ?? 'lingqi',
+      });
+      continue;
+    }
+
+    if (subType === 'restore_lingqi') {
+      const value = Math.max(0, Math.floor(toFiniteNumber(sub.value, 0)));
+      if (value <= 0) continue;
+      results.push({ type: 'restore_lingqi', resolvedValue: value });
+      continue;
+    }
+  }
+  return results;
+}
+
 function buildBuffRuntimeData(
   caster: BattleUnit,
   target: BattleUnit,
@@ -291,6 +383,23 @@ function buildBuffRuntimeData(
 
   if (buffKind === 'heal_forbid') {
     return { healForbidden: true };
+  }
+
+  if (buffKind === 'aura') {
+    const auraTarget = resolveAuraTarget(effect.auraTarget);
+    if (!auraTarget) return {};
+    const auraSubEffects = Array.isArray(effect.auraEffects) ? effect.auraEffects : [];
+    if (auraSubEffects.length === 0) return {};
+    const resolvedEffects = resolveAuraSubEffects(caster, skill, auraSubEffects);
+    if (resolvedEffects.length === 0) return {};
+    return {
+      aura: {
+        auraTarget,
+        effects: resolvedEffects,
+        damageType: skill.damageType === 'magic' ? 'magic' : skill.damageType === 'true' ? 'true' : 'physical',
+        element: skill.element || 'none',
+      },
+    };
   }
 
   if (buffKind === 'next_skill_bonus') {
@@ -949,10 +1058,12 @@ function executeBuffEffect(
   
   const buffType = effect.type === 'buff' ? 'buff' : 'debuff';
   const stacks = Math.max(1, Math.floor(toFiniteNumber(effect.stacks, 1)));
-  const duration = Math.max(1, Math.floor(toFiniteNumber(effect.duration, 1)));
+  const isAura = normalizeBuffKind(effect.buffKind) === 'aura';
+  // 光环永久存在（duration=-1），不可驱散
+  const duration = isAura ? -1 : Math.max(1, Math.floor(toFiniteNumber(effect.duration, 1)));
   const runtimeData = buildBuffRuntimeData(caster, target, skill, effect);
   if (!hasBuffRuntimeData(runtimeData)) return;
-  
+
   addBuff(target, {
     id: `${buffDefId}-${Date.now()}`,
     buffDefId,
@@ -968,8 +1079,9 @@ function executeBuffEffect(
     delayedBurst: runtimeData.delayedBurst,
     nextSkillBonus: runtimeData.nextSkillBonus,
     healForbidden: runtimeData.healForbidden,
+    aura: runtimeData.aura,
     tags: [],
-    dispellable: true,
+    dispellable: !isAura,
   }, duration, stacks);
   
   result.buffsApplied?.push(buffDefId);

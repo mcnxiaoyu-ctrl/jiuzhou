@@ -29,6 +29,7 @@ export const STRUCTURED_BUFF_KIND_LIST = [
   'reflect_damage',
   'heal_forbid',
   'next_skill_bonus',
+  'aura',
 ] as const;
 export type SupportedBuffKind = typeof STRUCTURED_BUFF_KIND_LIST[number];
 export type BuffKind = SupportedBuffKind | (string & {});

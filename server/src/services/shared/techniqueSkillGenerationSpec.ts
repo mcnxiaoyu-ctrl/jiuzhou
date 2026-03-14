@@ -118,6 +118,11 @@ export const TECHNIQUE_SKILL_MOMENTUM_CONSUME_MODE_LIST = MOMENTUM_CONSUME_MODE_
 export const TECHNIQUE_SKILL_MOMENTUM_BONUS_TYPE_LIST = MOMENTUM_BONUS_TYPE_LIST;
 export const TECHNIQUE_SKILL_FATE_SWAP_MODE_LIST = ['debuff_to_target', 'buff_to_self', 'shield_steal'] as const;
 
+export const TECHNIQUE_SKILL_AURA_TARGET_LIST = ['all_ally', 'all_enemy', 'self'] as const;
+export const TECHNIQUE_SKILL_AURA_SUB_EFFECT_TYPE_LIST = [
+  'damage', 'heal', 'buff', 'debuff', 'resource', 'restore_lingqi',
+] as const;
+
 export const TECHNIQUE_SKILL_UPGRADE_ALLOWED_CHANGE_KEYS = [
   'target_count',
   'cooldown',
@@ -153,6 +158,8 @@ const MOMENTUM_OPERATION_SET = new Set<string>(TECHNIQUE_SKILL_MOMENTUM_OPERATIO
 const MOMENTUM_CONSUME_MODE_SET = new Set<string>(TECHNIQUE_SKILL_MOMENTUM_CONSUME_MODE_LIST);
 const MOMENTUM_BONUS_TYPE_SET = new Set<string>(TECHNIQUE_SKILL_MOMENTUM_BONUS_TYPE_LIST);
 const FATE_SWAP_MODE_SET = new Set<string>(TECHNIQUE_SKILL_FATE_SWAP_MODE_LIST);
+const AURA_TARGET_SET = new Set<string>(TECHNIQUE_SKILL_AURA_TARGET_LIST);
+const AURA_SUB_EFFECT_TYPE_SET = new Set<string>(TECHNIQUE_SKILL_AURA_SUB_EFFECT_TYPE_LIST);
 const UPGRADE_ALLOWED_CHANGE_KEY_SET = new Set<string>(TECHNIQUE_SKILL_UPGRADE_ALLOWED_CHANGE_KEYS);
 
 const asString = (value: TechniqueJsonValue | undefined): string => {
@@ -292,6 +299,55 @@ const validateValueExpression = (effect: SkillEffect): TechniqueSkillGenerationV
   return validateRequiredNumberField('scaleRate', effect.scaleRate, 0, 5);
 };
 
+/**
+ * 校验光环效果配置
+ *
+ * 作用：校验 buffKind='aura' 时的 auraTarget 和 auraEffects 字段合法性。
+ * 输入：单个 SkillEffect（type 为 buff/debuff，buffKind 为 aura）。
+ * 输出：校验结果。
+ *
+ * 坑点：
+ * 1) auraEffects 中的子效果不允许 buffKind='aura'（禁止嵌套光环）。
+ * 2) 每个子效果递归调用 validateTechniqueSkillEffect 校验。
+ */
+const validateAuraEffect = (
+  effect: SkillEffect,
+): TechniqueSkillGenerationValidationResult => {
+  const auraTarget = typeof effect.auraTarget === 'string' ? effect.auraTarget.trim() : '';
+  if (!auraTarget || !AURA_TARGET_SET.has(auraTarget)) {
+    return { success: false, reason: 'auraTarget 缺失或不在允许枚举中' };
+  }
+
+  const auraEffects = (effect as unknown as Record<string, unknown>).auraEffects;
+  if (!Array.isArray(auraEffects) || auraEffects.length === 0) {
+    return { success: false, reason: 'auraEffects 缺失或为空数组' };
+  }
+  if (auraEffects.length > 4) {
+    return { success: false, reason: 'auraEffects 长度不能超过 4' };
+  }
+
+  for (const sub of auraEffects) {
+    if (!sub || typeof sub !== 'object' || Array.isArray(sub)) {
+      return { success: false, reason: 'auraEffects 子效果必须是对象' };
+    }
+    const subEffect = sub as SkillEffect;
+    const subType = typeof subEffect.type === 'string' ? subEffect.type.trim() : '';
+    if (!subType || !AURA_SUB_EFFECT_TYPE_SET.has(subType)) {
+      return { success: false, reason: `auraEffects 子效果 type 不在允许枚举中: ${subType}` };
+    }
+    // 禁止嵌套光环
+    if ((subType === 'buff' || subType === 'debuff') && typeof subEffect.buffKind === 'string' && subEffect.buffKind.trim() === 'aura') {
+      return { success: false, reason: 'auraEffects 子效果不允许嵌套光环（buffKind=aura）' };
+    }
+    const subValidation = validateTechniqueSkillEffect(subEffect);
+    if (!subValidation.success) {
+      return { success: false, reason: `auraEffects 子效果校验失败: ${subValidation.reason}` };
+    }
+  }
+
+  return { success: true };
+};
+
 export const validateTechniqueSkillEffect = (
   effect: SkillEffect,
 ): TechniqueSkillGenerationValidationResult => {
@@ -341,6 +397,9 @@ export const validateTechniqueSkillEffect = (
         return { success: false, reason: buffValidation.reason };
       }
       const buffKind = typeof effect.buffKind === 'string' ? effect.buffKind.trim() : '';
+      if (buffKind === 'aura') {
+        return validateAuraEffect(effect);
+      }
       if (buffKind === 'dodge_next' || buffKind === 'heal_forbid') {
         return { success: true };
       }

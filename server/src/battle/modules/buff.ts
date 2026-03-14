@@ -2,22 +2,27 @@
  * 九州修仙录 - Buff/Debuff 管理模块
  */
 
-import type { 
-  BattleState, 
-  BattleUnit, 
+import type {
+  BattleState,
+  BattleUnit,
   BattleAttrs,
-  ActiveBuff, 
+  ActiveBuff,
   DelayedBurstEffect,
   DotEffect,
   HotEffect,
   NextSkillBonusEffect,
   ReflectDamageEffect,
   Shield,
-  BattleLogEntry 
+  BattleLogEntry,
+  AuraSubEffect,
+  AuraLog,
+  AuraSubResult,
+  AuraTargetType,
 } from '../types.js';
 import { BATTLE_CONSTANTS } from '../types.js';
 import { applyDamage } from './damage.js';
 import { applyHealing } from './healing.js';
+import { applySoulShackleRecoveryReduction } from './mark.js';
 
 /**
  * 添加Buff到单位
@@ -54,6 +59,7 @@ export function addBuff(
     existing.delayedBurst = buff.delayedBurst;
     existing.nextSkillBonus = buff.nextSkillBonus;
     existing.healForbidden = buff.healForbidden;
+    existing.aura = buff.aura;
     existing.control = buff.control;
     existing.tags = [...buff.tags];
     existing.dispellable = buff.dispellable;
@@ -187,6 +193,14 @@ export function processRoundStartEffects(
         });
       }
     }
+
+    // 光环回合结算
+    if (buff.aura && unit.isAlive) {
+      const auraLog = processAuraEffect(state, unit, buff);
+      if (auraLog) {
+        logs.push(auraLog);
+      }
+    }
   }
   
   return logs;
@@ -201,10 +215,11 @@ export function processRoundEndBuffs(
 ): BattleLogEntry[] {
   const logs: BattleLogEntry[] = [];
   
-  // Buff持续时间递减
+  // Buff持续时间递减（remainingDuration === -1 为永久 buff，如光环，跳过递减）
   unit.buffs = unit.buffs.filter(buff => {
+    if (buff.remainingDuration === -1) return true;
     buff.remainingDuration--;
-    
+
     if (buff.remainingDuration <= 0) {
       logs.push({
         type: 'buff_expire',
@@ -261,6 +276,185 @@ function calculateHotHeal(hot: HotEffect, target: BattleUnit): number {
   heal *= (1 - healReduction);
   
   return Math.floor(Math.max(1, heal));
+}
+
+/**
+ * 解析光环目标列表
+ *
+ * 作用：根据光环持有者所在队伍和 auraTarget 类型，返回对应的存活单位列表。
+ * 输入：战斗状态、光环持有者、光环目标类型。
+ * 输出：符合条件的存活单位数组。
+ *
+ * 坑点：
+ * 1) 必须先确定光环持有者所在队伍（attacker/defender），再按 auraTarget 解析。
+ * 2) 'self' 只返回持有者自身（若存活）。
+ */
+function resolveAuraTargets(
+  state: BattleState,
+  auraOwner: BattleUnit,
+  auraTarget: AuraTargetType,
+): BattleUnit[] {
+  if (auraTarget === 'self') {
+    return auraOwner.isAlive ? [auraOwner] : [];
+  }
+
+  const isAttacker = state.teams.attacker.units.some(u => u.id === auraOwner.id);
+  const allyUnits = isAttacker ? state.teams.attacker.units : state.teams.defender.units;
+  const enemyUnits = isAttacker ? state.teams.defender.units : state.teams.attacker.units;
+
+  if (auraTarget === 'all_ally') {
+    return allyUnits.filter(u => u.isAlive);
+  }
+  if (auraTarget === 'all_enemy') {
+    return enemyUnits.filter(u => u.isAlive);
+  }
+  return [];
+}
+
+/**
+ * 处理光环回合结算
+ *
+ * 作用：每回合对光环范围内的目标施加子效果，生成 AuraLog。
+ * 输入：战斗状态、光环持有者、携带光环的 ActiveBuff。
+ * 输出：AuraLog（若有有效目标和结果）或 null。
+ *
+ * 坑点：
+ * 1) 子 Buff 的 buffDefId 加光环持有者 ID 前缀，避免不同光环源的子 Buff 互相刷新。
+ * 2) 子 Buff 的 duration 固定为 1 回合，保证光环消失后子效果在当回合结束时自然清除。
+ */
+function processAuraEffect(
+  state: BattleState,
+  auraOwner: BattleUnit,
+  buff: ActiveBuff,
+): AuraLog | null {
+  const aura = buff.aura;
+  if (!aura) return null;
+
+  const targets = resolveAuraTargets(state, auraOwner, aura.auraTarget);
+  if (targets.length === 0) return null;
+
+  const subResults: AuraSubResult[] = [];
+
+  for (const target of targets) {
+    if (!target.isAlive) continue;
+    const subResult: AuraSubResult = {
+      targetId: target.id,
+      targetName: target.name,
+    };
+
+    for (const sub of aura.effects) {
+      applyAuraSubEffect(state, auraOwner, target, sub, buff, subResult);
+    }
+
+    subResults.push(subResult);
+  }
+
+  if (subResults.length === 0) return null;
+
+  return {
+    type: 'aura',
+    round: state.roundCount,
+    unitId: auraOwner.id,
+    unitName: auraOwner.name,
+    buffName: buff.name,
+    auraTarget: aura.auraTarget,
+    subResults,
+  };
+}
+
+/**
+ * 对单个目标施加单个光环子效果
+ *
+ * 坑点：
+ * 1) damage 子效果使用 applyDamage，会触发护盾吸收和死亡判定。
+ * 2) restore_lingqi 受蚀心锁减益影响，需调用 applySoulShackleRecoveryReduction。
+ */
+function applyAuraSubEffect(
+  state: BattleState,
+  auraOwner: BattleUnit,
+  target: BattleUnit,
+  sub: AuraSubEffect,
+  auraBuff: ActiveBuff,
+  subResult: AuraSubResult,
+): void {
+  switch (sub.type) {
+    case 'damage': {
+      if (!target.isAlive) break;
+      const dmgType = sub.damageType ?? 'physical';
+      const { actualDamage } = applyDamage(state, target, sub.resolvedValue, dmgType);
+      subResult.damage = (subResult.damage ?? 0) + actualDamage;
+      if (!target.isAlive) {
+        state.logs.push({
+          type: 'death',
+          round: state.roundCount,
+          unitId: target.id,
+          unitName: target.name,
+          killerId: auraOwner.id,
+          killerName: auraOwner.name,
+        });
+      }
+      break;
+    }
+
+    case 'heal': {
+      if (!target.isAlive || isHealingForbidden(target)) break;
+      const actualHeal = applyHealing(target, sub.resolvedValue);
+      if (actualHeal > 0) {
+        subResult.heal = (subResult.heal ?? 0) + actualHeal;
+      }
+      break;
+    }
+
+    case 'buff':
+    case 'debuff': {
+      if (!target.isAlive || !sub.buffDefId) break;
+      // 加光环持有者 ID 前缀，避免不同光环源的子 Buff 互相刷新
+      const isolatedBuffDefId = `aura:${auraOwner.id}:${sub.buffDefId}`;
+      addBuff(target, {
+        id: `${isolatedBuffDefId}-${Date.now()}`,
+        buffDefId: isolatedBuffDefId,
+        name: sub.buffDefId,
+        type: sub.buffType ?? 'buff',
+        category: 'aura',
+        sourceUnitId: auraOwner.id,
+        maxStacks: 1,
+        attrModifiers: sub.attrModifiers,
+        dot: sub.dot,
+        hot: sub.hot,
+        healForbidden: sub.healForbidden,
+        tags: ['aura_sub'],
+        dispellable: true,
+      }, 1, 1);
+      if (!subResult.buffsApplied) subResult.buffsApplied = [];
+      subResult.buffsApplied.push(sub.buffDefId);
+      break;
+    }
+    case 'resource': {
+      if (!target.isAlive) break;
+      const resType = sub.resourceType ?? 'lingqi';
+      const value = sub.resolvedValue;
+      if (value === 0) break;
+      if (resType === 'lingqi') {
+        target.lingqi = Math.min(target.lingqi + value, target.currentAttrs.max_lingqi);
+      } else {
+        target.qixue = Math.min(target.qixue + value, target.currentAttrs.max_qixue);
+      }
+      if (!subResult.resources) subResult.resources = [];
+      subResult.resources.push({ type: resType, amount: Math.abs(Math.floor(value)) });
+      break;
+    }
+
+    case 'restore_lingqi': {
+      if (!target.isAlive) break;
+      const rawValue = sub.resolvedValue;
+      const value = applySoulShackleRecoveryReduction(rawValue, target);
+      if (value <= 0) break;
+      target.lingqi = Math.min(target.lingqi + value, target.currentAttrs.max_lingqi);
+      if (!subResult.resources) subResult.resources = [];
+      subResult.resources.push({ type: 'lingqi', amount: value });
+      break;
+    }
+  }
 }
 
 export function isHealingForbidden(unit: BattleUnit): boolean {

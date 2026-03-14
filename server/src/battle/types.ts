@@ -188,8 +188,9 @@ export interface ActiveBuff {
   delayedBurst?: DelayedBurstEffect;
   nextSkillBonus?: NextSkillBonusEffect;
   healForbidden?: boolean;
+  aura?: AuraEffect;
   control?: string;
-  
+
   tags: string[];
   dispellable: boolean;
 }
@@ -225,6 +226,45 @@ export interface DelayedBurstEffect {
 export interface NextSkillBonusEffect {
   rate: number;
   bonusType: 'damage' | 'heal' | 'shield' | 'resource' | 'all';
+}
+
+/** 光环作用范围 */
+export type AuraTargetType = 'all_ally' | 'all_enemy' | 'self';
+
+/**
+ * 光环子效果（数值已在创建时快照解析）
+ *
+ * 作用：描述光环每回合对范围目标施加的单个子效果，数值在光环创建时按施法者属性快照计算。
+ * 输入：由 skill.ts 的 resolveAuraSubEffects 构建。
+ * 输出：由 buff.ts 的 processAuraEffect 在每回合结算时消费。
+ *
+ * 坑点：
+ * 1) resolvedValue 是快照值，不随施法者后续属性变化而变化。
+ * 2) buff/debuff 子效果的 attrModifiers 等运行时数据也在创建时快照，子 Buff duration 固定 1 回合。
+ */
+export interface AuraSubEffect {
+  type: 'damage' | 'heal' | 'buff' | 'debuff' | 'resource' | 'restore_lingqi';
+  resolvedValue: number;
+  // damage 子效果
+  damageType?: 'physical' | 'magic' | 'true';
+  element?: string;
+  // buff/debuff 子效果
+  buffDefId?: string;
+  buffType?: 'buff' | 'debuff';
+  attrModifiers?: AttrModifier[];
+  dot?: DotEffect;
+  hot?: HotEffect;
+  healForbidden?: boolean;
+  // resource 子效果
+  resourceType?: 'lingqi' | 'qixue';
+}
+
+/** 光环运行时效果（挂在施法者的 ActiveBuff 上） */
+export interface AuraEffect {
+  auraTarget: AuraTargetType;
+  effects: AuraSubEffect[];
+  damageType?: 'physical' | 'magic' | 'true';
+  element?: string;
 }
 
 // ============================================
@@ -311,6 +351,9 @@ export interface SkillEffect {
   gainStacks?: number;
   bonusType?: 'damage' | 'heal' | 'shield' | 'resource' | 'all';
   swapMode?: 'debuff_to_target' | 'buff_to_self' | 'shield_steal';
+  // 光环子效果配置（buffKind='aura' 时使用）
+  auraTarget?: 'all_ally' | 'all_enemy' | 'self';
+  auraEffects?: SkillEffect[];
 }
 
 interface SkillConditions {
@@ -383,13 +426,14 @@ interface BattleTeam {
 // ============================================
 // 战斗日志
 // ============================================
-export type BattleLogEntry = 
-  | ActionLog 
-  | DotLog 
-  | HotLog 
-  | BuffExpireLog 
+export type BattleLogEntry =
+  | ActionLog
+  | DotLog
+  | HotLog
+  | BuffExpireLog
   | DeathLog
-  | RoundLog;
+  | RoundLog
+  | AuraLog;
 
 export interface ActionLog {
   type: 'action';
@@ -476,6 +520,35 @@ interface DeathLog {
 export interface RoundLog {
   type: 'round_start' | 'round_end';
   round: number;
+}
+
+/**
+ * 光环回合结算日志
+ *
+ * 作用：记录光环每回合对范围目标施加子效果的结果。
+ * 数据流：processAuraEffect -> AuraLog -> state.logs。
+ *
+ * 坑点：
+ * 1) subResults 可能为空（所有目标已死亡时光环仍在但无有效目标）。
+ * 2) unitId 是光环持有者，不是受影响目标。
+ */
+export interface AuraLog {
+  type: 'aura';
+  round: number;
+  unitId: string;
+  unitName: string;
+  buffName: string;
+  auraTarget: string;
+  subResults: AuraSubResult[];
+}
+
+export interface AuraSubResult {
+  targetId: string;
+  targetName: string;
+  damage?: number;
+  heal?: number;
+  buffsApplied?: string[];
+  resources?: TargetResourceResult[];
 }
 
 // ============================================

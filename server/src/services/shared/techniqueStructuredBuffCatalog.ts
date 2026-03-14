@@ -164,6 +164,16 @@ const collectBuiltInTechniqueBuffEntries = (): TechniqueBuffCatalogEntry[] => {
       buffKind: 'next_skill_bonus',
       buffKey: 'buff-next-skill-chaos',
     },
+    {
+      type: 'buff',
+      buffKind: 'aura',
+      buffKey: 'buff-aura',
+    },
+    {
+      type: 'debuff',
+      buffKind: 'aura',
+      buffKey: 'debuff-aura',
+    },
   ];
 };
 
