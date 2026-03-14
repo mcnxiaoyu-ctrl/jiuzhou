@@ -54,6 +54,7 @@ const buildAnthropicOutputConfig = (
   responseFormat?: TechniqueTextModelResponseFormat,
 ): Anthropic.Messages.OutputConfig | undefined => {
   if (!responseFormat) return undefined;
+  if (responseFormat.type !== 'json_schema') return undefined;
   return {
     format: {
       type: 'json_schema',

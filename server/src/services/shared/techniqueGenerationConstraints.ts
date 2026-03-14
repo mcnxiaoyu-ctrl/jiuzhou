@@ -56,6 +56,21 @@ import {
 export const GENERATED_TECHNIQUE_TYPE_LIST = ['武技', '心法', '法诀', '身法', '辅修'] as const;
 export type GeneratedTechniqueType = (typeof GENERATED_TECHNIQUE_TYPE_LIST)[number];
 export type GeneratedTechniqueQuality = '黄' | '玄' | '地' | '天';
+
+/** OpenAI response_format.name 只允许 [a-zA-Z0-9_-]，中文需映射为 ASCII */
+const TECHNIQUE_TYPE_ASCII: Record<GeneratedTechniqueType, string> = {
+  武技: 'wuji',
+  心法: 'xinfa',
+  法诀: 'fajue',
+  身法: 'shenfa',
+  辅修: 'fuxiu',
+};
+const TECHNIQUE_QUALITY_ASCII: Record<GeneratedTechniqueQuality, string> = {
+  黄: 'huang',
+  玄: 'xuan',
+  地: 'di',
+  天: 'tian',
+};
 export type TechniquePassiveMode = 'percent' | 'flat';
 export type TechniquePassivePoolEntry = { key: string; mode: TechniquePassiveMode };
 export type TechniquePassiveValueConstraint = {
@@ -966,7 +981,7 @@ export const buildTechniqueGenerationResponseFormat = (params: {
   const { techniqueType, quality, maxLayer } = params;
   const skillCountRange = TECHNIQUE_SKILL_COUNT_RANGE_BY_QUALITY[quality];
   return buildTechniqueTextModelJsonSchemaResponseFormat({
-    name: `technique_generation_${quality}_${techniqueType}`,
+    name: `technique_generation_${TECHNIQUE_QUALITY_ASCII[quality]}_${TECHNIQUE_TYPE_ASCII[techniqueType]}`,
     schema: {
       type: 'object',
       additionalProperties: false,

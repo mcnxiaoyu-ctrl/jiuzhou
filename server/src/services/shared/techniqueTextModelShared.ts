@@ -83,14 +83,18 @@ export type TechniqueTextModelJsonSchema =
   | TechniqueTextModelJsonSchemaObject
   | TechniqueTextModelJsonSchemaString;
 
-export type TechniqueTextModelResponseFormat = {
-  type: 'json_schema';
-  json_schema: {
-    name: string;
-    schema: TechniqueTextModelJsonSchemaObject;
-    strict: true;
-  };
-};
+export type TechniqueTextModelResponseFormat =
+  | {
+      type: 'json_schema';
+      json_schema: {
+        name: string;
+        schema: TechniqueTextModelJsonSchemaObject;
+        strict: true;
+      };
+    }
+  | {
+      type: 'json_object';
+    };
 
 export type TechniqueTextModelRequestPayload = {
   model: string;
@@ -149,16 +153,11 @@ export const resolveTechniqueTextModelEndpoint = (rawEndpoint: string): string =
 export const generateTechniqueTextModelSeed = (): number =>
   randomInt(TECHNIQUE_TEXT_MODEL_SEED_MIN, TECHNIQUE_TEXT_MODEL_SEED_MAX + 1);
 
-export const buildTechniqueTextModelJsonSchemaResponseFormat = (params: {
+export const buildTechniqueTextModelJsonSchemaResponseFormat = (_params: {
   name: string;
   schema: TechniqueTextModelJsonSchemaObject;
 }): TechniqueTextModelResponseFormat => ({
-  type: 'json_schema',
-  json_schema: {
-    name: params.name,
-    schema: params.schema,
-    strict: true,
-  },
+  type: 'json_object',
 });
 
 export const buildTechniqueTextModelPayload = (params: {
