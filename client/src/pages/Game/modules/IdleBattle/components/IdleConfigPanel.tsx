@@ -232,7 +232,7 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
 
   return (
     <div className="idle-config-panel">
-      {/* 第一区：地图 & 房间（同行双列） */}
+      {/* 第一区：地图、房间与队伍 */}
       <div className="idle-config-section">
         <div className="idle-config-grid">
           <div className="idle-config-field">
@@ -274,22 +274,20 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
               options={monsterOptions}
             />
           </div>
-        </div>
-      </div>
-
-      <div className="idle-config-section">
-        <div className="idle-config-toggle-row">
-          <div className="idle-config-toggle-main">
+          <div className="idle-config-field">
             <label className="idle-config-label">伙伴参战</label>
-            <span className="idle-config-toggle-description">
-              开启后，挂机会携带当前出战伙伴一同进入战斗。
-            </span>
+            <div className="idle-config-partner-toggle">
+              <span className="idle-config-partner-desc">
+                自动携带当前出战伙伴
+              </span>
+              <Switch
+                size="small"
+                checked={config.includePartnerInBattle}
+                onChange={handlePartnerToggleChange}
+                disabled={isActive || isStopping}
+              />
+            </div>
           </div>
-          <Switch
-            checked={config.includePartnerInBattle}
-            onChange={handlePartnerToggleChange}
-            disabled={isActive || isStopping}
-          />
         </div>
       </div>
 
