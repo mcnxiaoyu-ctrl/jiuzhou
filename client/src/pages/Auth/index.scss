@@ -1,10 +1,24 @@
 .auth-container {
+  --auth-shell-top: color-mix(in srgb, var(--panel-bg) 68%, var(--app-bg));
+  --auth-shell-bottom: color-mix(in srgb, var(--app-bg) 92%, #000000 8%);
+  --auth-orb-color: color-mix(in srgb, var(--text-color) 6%, transparent);
+  --auth-card-shadow: 0 20px 60px color-mix(in srgb, var(--text-color) 10%, transparent);
+  --auth-card-border: color-mix(in srgb, var(--border-color) 88%, transparent);
+  --auth-card-bg: color-mix(in srgb, var(--panel-bg) 94%, transparent);
+  --auth-input-bg: var(--panel-bg-soft);
+  --auth-control-height: 56px;
+  --auth-control-radius: 14px;
+  --auth-refresh-bg: color-mix(in srgb, var(--panel-bg-soft) 92%, var(--panel-bg));
+  --auth-refresh-border: color-mix(in srgb, var(--border-color) 92%, transparent);
   width: 100%;
   min-height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 50%, #f0f0f0 100%);
+  background:
+    radial-gradient(circle at 12% 18%, var(--auth-orb-color) 0%, transparent 14%),
+    radial-gradient(circle at 78% 74%, var(--auth-orb-color) 0%, transparent 12%),
+    linear-gradient(180deg, var(--auth-shell-top) 0%, var(--auth-shell-bottom) 100%);
   position: relative;
   overflow: hidden;
 }
@@ -16,7 +30,7 @@
 
   .cloud {
     position: absolute;
-    background: radial-gradient(ellipse, rgba(0, 0, 0, 0.03) 0%, transparent 70%);
+    background: radial-gradient(ellipse, var(--auth-orb-color) 0%, transparent 70%);
     border-radius: 50%;
     animation: float 20s ease-in-out infinite;
   }
@@ -68,11 +82,11 @@
   top: 0;
   left: 0;
   width: 100%;
-  background: #ffffff;
+  background: var(--auth-card-bg);
   border-radius: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--auth-card-border);
   padding: 32px 24px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--auth-card-shadow);
   transition: opacity 0.4s ease, transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
   backface-visibility: hidden;
 }
@@ -93,13 +107,12 @@
   margin-bottom: 24px;
 
   .logo {
-    width: 100px;
+    width: 256px;
     height: auto;
-    margin-bottom: 8px;
   }
 
   p {
-    color: #666666;
+    color: var(--text-tertiary);
     margin: 0;
     font-size: 14px;
   }
@@ -108,71 +121,156 @@
 .card-footer {
   text-align: center;
   margin-top: 12px;
-  color: #999999;
+  color: var(--text-secondary);
 
   .ant-btn-link {
-    color: #1a1a1a;
+    color: var(--text-color);
     padding: 0 4px;
     font-weight: 500;
 
     &:hover {
-      color: #333333;
+      color: var(--primary-color);
     }
   }
+}
+
+.auth-captcha {
+  margin-bottom: 12px;
+}
+
+.auth-captcha__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(132px, 42%, 168px);
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-captcha__input {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.auth-captcha__visual {
+  width: 100%;
+  min-width: 0;
+  display: block;
+}
+
+.auth-captcha__image-button {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: var(--auth-control-height);
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--auth-control-radius);
+  background: var(--auth-input-bg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--text-color) 24%, var(--border-color));
+  }
+
+  &:focus-visible {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--primary-bg-soft);
+  }
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.72;
+  }
+}
+
+.auth-captcha__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.auth-captcha__placeholder {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 // Ant Design 样式覆盖
 .auth-card {
   .ant-input-affix-wrapper,
   .ant-input {
-    background: #fafafa;
-    border-color: #e0e0e0;
-    color: #1a1a1a;
+    background: var(--auth-input-bg);
+    border-color: var(--border-color);
+    color: var(--text-color);
+    min-height: var(--auth-control-height);
+    border-radius: var(--auth-control-radius);
 
     &:hover {
-      border-color: #999999;
+      border-color: color-mix(in srgb, var(--text-color) 22%, var(--border-color));
     }
 
     &:focus {
-      border-color: #1a1a1a;
+      border-color: var(--primary-color);
     }
 
     .ant-input-prefix {
-      color: #999999;
+      color: var(--text-secondary);
     }
 
     input {
       background: transparent;
-      color: #1a1a1a;
+      color: var(--text-color);
 
       &::placeholder {
-        color: #bbbbbb;
+        color: var(--text-secondary);
       }
     }
   }
 
+  .ant-input-affix-wrapper {
+    padding-inline: 14px;
+  }
+
+  .ant-input-affix-wrapper > input.ant-input {
+    min-height: auto;
+  }
+
   .ant-input-affix-wrapper-focused {
-    border-color: #1a1a1a;
-    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--primary-bg-soft);
   }
 
   .ant-btn-primary {
-    background: #1a1a1a;
+    background: var(--text-color);
     border: none;
     height: 44px;
     font-size: 16px;
     letter-spacing: 2px;
+    color: var(--panel-bg);
 
     &:hover {
-      background: #333333 !important;
+      background: color-mix(in srgb, var(--text-color) 86%, var(--panel-bg)) !important;
+      color: var(--panel-bg) !important;
     }
   }
 
   .ant-input-password-icon {
-    color: #999999;
+    color: var(--text-secondary);
 
     &:hover {
-      color: #1a1a1a;
+      color: var(--text-color);
     }
   }
 }
@@ -180,6 +278,7 @@
 // 手机端适配
 @media screen and (max-width: 480px) {
   .auth-container {
+    --auth-control-height: 48px;
     padding: 20px 16px;
   }
 
@@ -197,7 +296,7 @@
     margin-bottom: 20px;
 
     .logo {
-      width: 80px;
+      width: 256px;
     }
 
     p {
@@ -214,6 +313,11 @@
     .ant-input-affix-wrapper {
       padding: 8px 11px;
     }
+  }
+
+  .auth-captcha__row {
+    grid-template-columns: minmax(0, 1fr) 124px;
+    gap: 10px;
   }
 
   .auth-background .cloud {

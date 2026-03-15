@@ -1,14 +1,42 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { register, login, verifyTokenAndSession } from '../services/authService.js';
+import { createCaptcha, verifyCaptcha } from '../services/captchaService.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
 
 const router = Router();
 
+type AuthPayload = {
+  username?: string;
+  password?: string;
+  captchaId?: string;
+  captchaCode?: string;
+};
+
+const assertCaptchaPayload = (payload: AuthPayload): { captchaId: string; captchaCode: string } => {
+  const captchaId = payload.captchaId?.trim() ?? '';
+  const captchaCode = payload.captchaCode?.trim() ?? '';
+
+  if (!captchaId || !captchaCode) {
+    throw new BusinessError('图片验证码不能为空');
+  }
+
+  return { captchaId, captchaCode };
+};
+
+// 获取图片验证码
+router.get('/captcha', asyncHandler(async (_req, res) => {
+  const result = await createCaptcha();
+  sendSuccess(res, result);
+}));
+
 // 注册接口
 router.post('/register', asyncHandler(async (req, res) => {
-  const { username, password } = req.body;
+  const payload = (req.body ?? {}) as AuthPayload;
+  const username = payload.username?.trim() ?? '';
+  const password = payload.password ?? '';
+  const { captchaId, captchaCode } = assertCaptchaPayload(payload);
 
   // 参数验证
   if (!username || !password) {
@@ -23,19 +51,24 @@ router.post('/register', asyncHandler(async (req, res) => {
     throw new BusinessError('密码长度至少6位');
   }
 
+  await verifyCaptcha(captchaId, captchaCode);
   const result = await register(username, password);
   sendResult(res, result);
 }));
 
 // 登录接口
 router.post('/login', asyncHandler(async (req, res) => {
-  const { username, password } = req.body;
+  const payload = (req.body ?? {}) as AuthPayload;
+  const username = payload.username?.trim() ?? '';
+  const password = payload.password ?? '';
+  const { captchaId, captchaCode } = assertCaptchaPayload(payload);
 
   // 参数验证
   if (!username || !password) {
     throw new BusinessError('用户名和密码不能为空');
   }
 
+  await verifyCaptcha(captchaId, captchaCode);
   const result = await login(username, password);
   sendResult(res, result);
 }));

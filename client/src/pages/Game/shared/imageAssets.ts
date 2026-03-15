@@ -3,15 +3,16 @@
  *
  * 作用：
  * - 集中管理所有 UI / 地图等固定图片的路径
- * - 通过 resolveAssetUrl 解析，自动适配 CDN（VITE_CDN_BASE）
- * - 替代原先散落在各模块中的 `import xxx from '...assets/images/...'`
+ * - 公共资源统一从这里导出，避免业务组件各自维护图片路径
+ * - `public/assets` 下的静态资源通过 resolveAssetUrl 解析，自动适配 CDN（VITE_CDN_BASE）
+ * - `src/assets` 下的构建资源通过 ESM import 导出，交由前端构建流程处理
  *
  * 数据流：
- *   路径常量 → resolveAssetUrl → CDN_BASE 或 SERVER_BASE 拼接完整 URL
+ *   资源路径常量 / ESM import → 业务组件引用 → 浏览器请求静态资源
  *
  * 边界条件：
- * - 所有图片必须存在于 public/assets/ 下，路径与此处一致
- * - 新增图片时在此文件添加常量，禁止在业务组件中直接写路径
+ * - `public/assets` 资源路径必须与此处声明一致
+ * - `src/assets` 资源必须通过 import 引入，避免业务组件直接散写路径
  *
  * 复用点：
  * - Auth/index.tsx, Game/index.tsx, MapModal, TaskModal, TechniqueModal,
@@ -19,11 +20,13 @@
  *   TeamModal, SectModal, SkillFloatButton 等
  */
 
+import favicon from "../../../assets/favicon.png";
 import { resolveAssetUrl } from "../../../services/api";
 
 /* ───────── 通用 UI ───────── */
 
-export const IMG_LOGO = resolveAssetUrl("/assets/logo.png");
+export const IMG_LOGO = resolveAssetUrl("/assets/logo2.png");
+export const IMG_GAME_HEADER_LOGO = favicon;
 export const IMG_COIN = resolveAssetUrl("/assets/ui/sh_icon_0006_jinbi_02.png");
 export const IMG_LINGSHI = resolveAssetUrl("/assets/ui/lingshi.png");
 export const IMG_TONGQIAN = resolveAssetUrl("/assets/ui/tongqian.png");

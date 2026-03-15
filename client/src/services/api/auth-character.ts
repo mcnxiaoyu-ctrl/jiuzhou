@@ -1,6 +1,22 @@
 import type { AxiosRequestConfig } from 'axios';
 import api, { API_BASE } from './core';
 
+export interface CaptchaChallenge {
+  captchaId: string;
+  imageData: string;
+  expiresAt: number;
+}
+
+export interface CaptchaVerifyPayload {
+  captchaId: string;
+  captchaCode: string;
+}
+
+export interface AuthRequestPayload extends CaptchaVerifyPayload {
+  username: string;
+  password: string;
+}
+
 export interface AuthResponse {
   success: boolean;
   message: string;
@@ -11,6 +27,12 @@ export interface AuthResponse {
     };
     token: string;
   };
+}
+
+export interface CaptchaResponse {
+  success: boolean;
+  message?: string;
+  data: CaptchaChallenge;
 }
 
 export interface CharacterResponse {
@@ -51,14 +73,20 @@ export interface AutoDisassembleRuleDto {
 
 export type AutoDisassembleRulesDto = AutoDisassembleRuleDto[];
 
+const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
+
+export const getCaptcha = (): Promise<CaptchaResponse> => {
+  return api.get('/auth/captcha', SILENT_REQUEST_CONFIG);
+};
+
 // 登录
-export const login = (username: string, password: string): Promise<AuthResponse> => {
-  return api.post('/auth/login', { username, password });
+export const login = (payload: AuthRequestPayload): Promise<AuthResponse> => {
+  return api.post('/auth/login', payload);
 };
 
 // 注册
-export const register = (username: string, password: string): Promise<AuthResponse> => {
-  return api.post('/auth/register', { username, password });
+export const register = (payload: AuthRequestPayload): Promise<AuthResponse> => {
+  return api.post('/auth/register', payload);
 };
 
 // 验证会话（持久登录检查）

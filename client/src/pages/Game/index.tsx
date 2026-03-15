@@ -66,7 +66,13 @@ import type { InventoryItemDto, NpcTalkResponse, NpcTalkTaskOption, TechniqueRes
 import { getMainQuestProgress, startDialogue, advanceDialogue, selectDialogueChoice, completeSection, type DialogueState } from '../../services/mainQuestApi';
 import { PARTNER_FEATURE_CODE } from '../../services/feature';
 import { getMyTeam, getTeamApplications, leaveTeam, type TeamInfo } from '../../services/teamApi';
-import { IMG_LOGO as logo, IMG_LINGSHI as lingshi, IMG_TONGQIAN as tongqian, IMG_EQUIP_MALE as equipMale, IMG_EQUIP_FEMALE as equipFemale } from './shared/imageAssets';
+import {
+  IMG_GAME_HEADER_LOGO as gameHeaderLogo,
+  IMG_LINGSHI as lingshi,
+  IMG_TONGQIAN as tongqian,
+  IMG_EQUIP_MALE as equipMale,
+  IMG_EQUIP_FEMALE as equipFemale,
+} from './shared/imageAssets';
 import { resolveIconUrl } from './shared/resolveIcon';
 import './index.scss';
 import { useIsMobile } from './shared/responsive';
@@ -1677,7 +1683,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       />
       <header className="game-header">
         <div className="game-header-left">
-          <img className="game-header-logo" src={logo} alt="九州修仙录" />
+          <img className="game-header-logo" src={gameHeaderLogo} alt="九州修仙录" />
           <div className="game-header-meta">
             <div className="game-header-title">九州修仙录</div>
             <div className="game-header-version">v{version}</div>

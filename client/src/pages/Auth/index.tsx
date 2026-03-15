@@ -1,21 +1,44 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Form, Input, Button, App } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
-import { login as apiLogin, register as apiRegister, checkCharacter } from '../../services/api';
+import { App, Button, Form, Input } from 'antd';
+import { LockOutlined, UserOutlined } from '@ant-design/icons';
+
 import CreateCharacter from '../../components/CreateCharacter';
+import { getUnifiedApiErrorMessage } from '../../services/api/error';
+import {
+  checkCharacter,
+  login as apiLogin,
+  register as apiRegister,
+  type CaptchaVerifyPayload,
+} from '../../services/api';
 import { IMG_LOGO as logo } from '../Game/shared/imageAssets';
+import AuthCaptchaField from './components/AuthCaptchaField';
 import './index.scss';
 
 interface AuthProps {
   onLoginSuccess: () => void;
 }
 
+type LoginFormValues = CaptchaVerifyPayload & {
+  username: string;
+  password: string;
+};
+
+type RegisterFormValues = CaptchaVerifyPayload & {
+  username: string;
+  password: string;
+  confirmPassword: string;
+};
+
 const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const { message } = App.useApp();
+  const [loginForm] = Form.useForm<LoginFormValues>();
+  const [registerForm] = Form.useForm<RegisterFormValues>();
   const [isFlipped, setIsFlipped] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showCreateCharacter, setShowCreateCharacter] = useState(false);
   const [cardHeight, setCardHeight] = useState<number>();
+  const [loginCaptchaRefreshNonce, setLoginCaptchaRefreshNonce] = useState(0);
+  const [registerCaptchaRefreshNonce, setRegisterCaptchaRefreshNonce] = useState(0);
   const loginCardRef = useRef<HTMLDivElement>(null);
   const registerCardRef = useRef<HTMLDivElement>(null);
 
@@ -41,46 +64,84 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     };
   }, [isFlipped]);
 
-  const handleLogin = async (values: { username: string; password: string }) => {
+  const refreshLoginCaptcha = () => {
+    setLoginCaptchaRefreshNonce((value) => value + 1);
+  };
+
+  const refreshRegisterCaptcha = () => {
+    setRegisterCaptchaRefreshNonce((value) => value + 1);
+  };
+
+  const syncLoginCaptcha = (values: CaptchaVerifyPayload) => {
+    loginForm.setFieldsValue(values);
+  };
+
+  const syncRegisterCaptcha = (values: CaptchaVerifyPayload) => {
+    registerForm.setFieldsValue(values);
+  };
+
+  const flipToRegister = () => {
+    setIsFlipped(true);
+    refreshRegisterCaptcha();
+  };
+
+  const flipToLogin = () => {
+    setIsFlipped(false);
+    refreshLoginCaptcha();
+  };
+
+  const handleLogin = async (values: LoginFormValues) => {
     setLoading(true);
     try {
-      const result = await apiLogin(values.username, values.password);
-      if (result.success && result.data) {
-        localStorage.setItem('token', result.data.token);
-        localStorage.setItem('user', JSON.stringify(result.data.user));
-        message.success('登录成功');
-        
-        // 检查是否有角色
+      const result = await apiLogin({
+        username: values.username,
+        password: values.password,
+        captchaId: values.captchaId,
+        captchaCode: values.captchaCode,
+      });
+
+      if (!result.data) {
+        throw new Error('登录响应缺少账号数据');
+      }
+
+      localStorage.setItem('token', result.data.token);
+      localStorage.setItem('user', JSON.stringify(result.data.user));
+      message.success('登录成功');
+
+      try {
         const charResult = await checkCharacter();
         if (charResult.success && charResult.data?.hasCharacter) {
-          // 有角色，直接进入游戏
           onLoginSuccess();
         } else {
-          // 没有角色，显示创建角色弹窗
           setShowCreateCharacter(true);
         }
-      } else {
-        void 0;
+      } catch (error) {
+        message.error(getUnifiedApiErrorMessage(error, '角色状态检查失败'));
       }
-    } catch (error: unknown) {
-      void 0;
+    } catch (error) {
+      message.error(getUnifiedApiErrorMessage(error, '登录失败'));
+      refreshLoginCaptcha();
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRegister = async (values: { username: string; password: string }) => {
+  const handleRegister = async (values: RegisterFormValues) => {
     setLoading(true);
     try {
-      const result = await apiRegister(values.username, values.password);
-      if (result.success) {
-        message.success('注册成功，请登录');
-        setIsFlipped(false);
-      } else {
-        void 0;
-      }
-    } catch (error: unknown) {
-      void 0;
+      await apiRegister({
+        username: values.username,
+        password: values.password,
+        captchaId: values.captchaId,
+        captchaCode: values.captchaCode,
+      });
+
+      message.success('注册成功，请登录');
+      refreshRegisterCaptcha();
+      flipToLogin();
+    } catch (error) {
+      message.error(getUnifiedApiErrorMessage(error, '注册失败'));
+      refreshRegisterCaptcha();
     } finally {
       setLoading(false);
     }
@@ -98,33 +159,37 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
         <div className="cloud cloud-2" />
         <div className="cloud cloud-3" />
       </div>
-      
+
       <div className={`auth-card ${isFlipped ? 'flipped' : ''}`} style={cardHeight ? { height: cardHeight } : undefined}>
         <div ref={loginCardRef} className="card-face card-front">
           <div className="card-header">
             <img src={logo} alt="九州修仙录" className="logo" />
-            <p>踏入仙途，逆天改命</p>
           </div>
-          
-          <Form name="login" onFinish={handleLogin} size="large">
+
+          <Form form={loginForm} name="login" onFinish={handleLogin} size="large">
             <Form.Item name="username" rules={[{ required: true, message: '请输入道号' }]}>
               <Input prefix={<UserOutlined />} placeholder="道号" />
             </Form.Item>
-            
+
             <Form.Item name="password" rules={[{ required: true, message: '请输入口令' }]}>
               <Input.Password prefix={<LockOutlined />} placeholder="口令" />
             </Form.Item>
-            
+
+            <AuthCaptchaField
+              onChange={syncLoginCaptcha}
+              refreshNonce={loginCaptchaRefreshNonce}
+            />
+
             <Form.Item>
               <Button type="primary" htmlType="submit" block loading={loading}>
                 踏入仙途
               </Button>
             </Form.Item>
           </Form>
-          
+
           <div className="card-footer">
             <span>初入修仙界？</span>
-            <Button type="link" onClick={() => setIsFlipped(true)}>
+            <Button type="link" onClick={flipToRegister}>
               开辟道途
             </Button>
           </div>
@@ -135,38 +200,47 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             <img src={logo} alt="九州修仙录" className="logo" />
             <p>注册成为修仙者</p>
           </div>
-          
-          <Form name="register" onFinish={handleRegister} size="large">
+
+          <Form form={registerForm} name="register" onFinish={handleRegister} size="large">
             <Form.Item name="username" rules={[{ required: true, message: '请输入道号' }]}>
               <Input prefix={<UserOutlined />} placeholder="道号" />
             </Form.Item>
-            
+
             <Form.Item name="password" rules={[{ required: true, min: 6, message: '口令至少6位' }]}>
               <Input.Password prefix={<LockOutlined />} placeholder="口令" />
             </Form.Item>
-            
-            <Form.Item name="confirmPassword" dependencies={['password']} rules={[
-              { required: true, message: '请确认口令' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue('password') === value) return Promise.resolve();
-                  return Promise.reject(new Error('两次口令不一致'));
-                },
-              }),
-            ]}>
+
+            <Form.Item
+              name="confirmPassword"
+              dependencies={['password']}
+              rules={[
+                { required: true, message: '请确认口令' },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!value || getFieldValue('password') === value) return Promise.resolve();
+                    return Promise.reject(new Error('两次口令不一致'));
+                  },
+                }),
+              ]}
+            >
               <Input.Password prefix={<LockOutlined />} placeholder="确认口令" />
             </Form.Item>
-            
+
+            <AuthCaptchaField
+              onChange={syncRegisterCaptcha}
+              refreshNonce={registerCaptchaRefreshNonce}
+            />
+
             <Form.Item>
               <Button type="primary" htmlType="submit" block loading={loading}>
                 立下道心
               </Button>
             </Form.Item>
           </Form>
-          
+
           <div className="card-footer">
             <span>已有道途？</span>
-            <Button type="link" onClick={() => setIsFlipped(false)}>
+            <Button type="link" onClick={flipToLogin}>
               返回登录
             </Button>
           </div>
