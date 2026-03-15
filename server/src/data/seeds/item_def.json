@@ -347,7 +347,7 @@
       "stack_max": 9999,
       "bind_type": "none",
       "tradeable": true,
-      "icon": "/assets/danyao/bing_yuan_dan.png",
+      "icon": "/assets/danyao/hui_yuan_san.webp",
       "description": "温养气海，随机恢复体力",
       "long_desc": "回元散以温补药材调和而成，服用后可恢复10~20点体力，适合秘境历练前随身备上一些。",
       "tags": [
