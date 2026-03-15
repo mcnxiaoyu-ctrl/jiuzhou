@@ -160,6 +160,9 @@ export function simulateIdleBattle(
     skillData,
     monsterResult.monsters,
     monsterResult.monsterSkillsMap,
+    session.sessionSnapshot.partnerBattleMember !== null
+      ? { partnerMember: session.sessionSnapshot.partnerBattleMember }
+      : undefined,
   );
 
   const engine = new BattleEngine(state);

@@ -21,6 +21,11 @@
  *   4. ParseResult<T> 使用判别联合（discriminated union），调用方必须先检查 success 字段再访问 value/errors
  */
 
+import type {
+  CharacterData,
+  SkillData,
+} from '../../battle/battleFactory.js';
+
 // 复用现有战斗类型，不重复定义
 export type {
   BattleAttrs,
@@ -46,6 +51,8 @@ export interface IdleConfigDto {
   autoSkillPolicy: AutoSkillPolicy;
   /** 目标怪物定义 ID（选择只打某一种怪） */
   targetMonsterDefId: string;
+  /** 是否让当前出战伙伴参与挂机战斗 */
+  includePartnerInBattle: boolean;
 }
 
 /**
@@ -87,6 +94,13 @@ export interface SessionSnapshot {
   autoSkillPolicy?: AutoSkillPolicy;
   /** 目标怪物定义 ID（旧会话可能缺失，缺失时走全怪物逻辑） */
   targetMonsterDefId?: string;
+  /** 挂机开始时的伙伴参战开关快照 */
+  includePartnerInBattle: boolean;
+  /** 挂机开始时冻结的伙伴战斗快照；关闭开关或无出战伙伴时为 null */
+  partnerBattleMember: {
+    data: CharacterData;
+    skills: SkillData[];
+  } | null;
 }
 
 // ============================================

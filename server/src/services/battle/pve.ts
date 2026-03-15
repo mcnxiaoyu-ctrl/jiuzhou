@@ -158,13 +158,11 @@ export async function startPVEBattle(
 
     const battleId = `battle-${userId}-${Date.now()}`;
 
-    const partnerMember =
-      validTeamMembers.length <= 0
-        ? await partnerService.buildActivePartnerBattleMember({
-            characterId,
-            userId,
-          })
-        : null;
+    const partnerMember = await partnerService.buildConfiguredPartnerBattleMember({
+      characterId,
+      userId,
+      enabled: validTeamMembers.length <= 0,
+    });
 
     const battleState = createPVEBattle(
       battleId,
@@ -276,13 +274,11 @@ export async function startDungeonPVEBattle(
     const monsterSkillsMap = monsterResolveResult.monsterSkillsMap;
 
     const battleId = `dungeon-battle-${userId}-${Date.now()}`;
-    const partnerMember =
-      validTeamMembers.length <= 0
-        ? await partnerService.buildActivePartnerBattleMember({
-            characterId,
-            userId,
-          })
-        : null;
+    const partnerMember = await partnerService.buildConfiguredPartnerBattleMember({
+      characterId,
+      userId,
+      enabled: validTeamMembers.length <= 0,
+    });
 
     const battleState = createPVEBattle(
       battleId,

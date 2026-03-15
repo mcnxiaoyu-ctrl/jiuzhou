@@ -32,6 +32,7 @@ import { query } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
 import { redis } from '../../config/redis.js';
 import { buildCharacterBattleSnapshot } from '../battle/index.js';
+import { partnerService } from '../partnerService.js';
 import type {
   IdleConfigDto,
   IdleSessionRow,
@@ -250,7 +251,7 @@ class IdleSessionService {
    */
   @Transactional
   async startIdleSession(params: StartIdleSessionParams): Promise<StartIdleSessionResult> {
-    const { characterId, config } = params;
+    const { characterId, userId, config } = params;
 
     // 0. 组队中禁止挂机：查询 team_members 表判断角色是否在队伍中
     const teamCheck = await query(
@@ -296,6 +297,12 @@ class IdleSessionService {
       return { success: false, error: '角色数据加载失败' };
     }
 
+    const partnerBattleMember = await partnerService.buildConfiguredPartnerBattleMember({
+      characterId,
+      userId,
+      enabled: config.includePartnerInBattle,
+    });
+
     const snapshot: SessionSnapshot = {
       characterId,
       nickname: snapshotData.nickname,
@@ -305,6 +312,8 @@ class IdleSessionService {
       setBonusEffects: snapshotData.setBonusEffects,
       autoSkillPolicy: config.autoSkillPolicy,
       targetMonsterDefId: config.targetMonsterDefId,
+      includePartnerInBattle: config.includePartnerInBattle,
+      partnerBattleMember,
     };
 
     try {

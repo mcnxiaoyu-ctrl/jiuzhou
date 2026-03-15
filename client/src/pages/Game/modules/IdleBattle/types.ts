@@ -50,6 +50,8 @@ export interface IdleConfigDto {
   autoSkillPolicy: AutoSkillPolicyDto;
   /** 目标怪物定义 ID（null 表示未选择） */
   targetMonsterDefId: string | null;
+  /** 是否让当前出战伙伴参与挂机战斗 */
+  includePartnerInBattle: boolean;
 }
 
 // ============================================
@@ -167,4 +169,5 @@ export interface IdleStartParams {
   maxDurationMs: number;
   autoSkillPolicy: AutoSkillPolicyDto;
   targetMonsterDefId: string;
+  includePartnerInBattle: boolean;
 }

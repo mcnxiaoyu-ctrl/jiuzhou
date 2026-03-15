@@ -34,6 +34,8 @@ const idleConfigArb: fc.Arbitrary<IdleConfigDto> = fc.record({
   // 时长范围：1min ~ 8h（与服务端校验范围一致）
   maxDurationMs: fc.integer({ min: 60_000, max: 28_800_000 }),
   autoSkillPolicy: autoSkillPolicyArb,
+  targetMonsterDefId: fc.oneof(fc.string({ minLength: 1, maxLength: 40 }), fc.constant(null)),
+  includePartnerInBattle: fc.boolean(),
 });
 
 // ============================================
@@ -76,6 +78,26 @@ describe('Property 4: Idle_Config 持久化往返', () => {
       fc.property(idleConfigArb, (config) => {
         const result = roundTrip(config);
         expect(result.autoSkillPolicy.slots).toHaveLength(config.autoSkillPolicy.slots.length);
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  it('JSON 序列化往返后 targetMonsterDefId 字段不变', () => {
+    fc.assert(
+      fc.property(idleConfigArb, (config) => {
+        const result = roundTrip(config);
+        expect(result.targetMonsterDefId).toBe(config.targetMonsterDefId);
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  it('JSON 序列化往返后 includePartnerInBattle 字段不变', () => {
+    fc.assert(
+      fc.property(idleConfigArb, (config) => {
+        const result = roundTrip(config);
+        expect(result.includePartnerInBattle).toBe(config.includePartnerInBattle);
       }),
       { numRuns: 100 },
     );

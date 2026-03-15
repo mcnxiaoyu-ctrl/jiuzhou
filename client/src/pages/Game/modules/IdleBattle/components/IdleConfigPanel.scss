@@ -47,6 +47,26 @@
   gap: 6px;
 }
 
+.idle-config-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.idle-config-toggle-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.idle-config-toggle-description {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-color-secondary, #888);
+}
+
 // ============================================
 // 标签
 // ============================================
@@ -237,6 +257,16 @@
   justify-content: flex-end;
   gap: 10px;
   padding-top: 4px;
+}
+
+@media (max-width: 768px) {
+  .idle-config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .idle-config-toggle-row {
+    align-items: flex-start;
+  }
 }
 
 // ============================================

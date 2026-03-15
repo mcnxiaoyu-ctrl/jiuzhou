@@ -2,7 +2,7 @@
  * IdleConfigPanel — 挂机配置面板
  *
  * 作用：
- *   提供地图/房间选择、最大挂机时长（1min~8h）、技能策略槽位（最多 6 个）的配置界面。
+ *   提供地图/房间选择、伙伴参战开关、最大挂机时长（1min~8h）、技能策略槽位（最多 6 个）的配置界面。
  *   Stamina 不足时禁用"开始挂机"按钮并显示提示。
  *   不包含任何状态管理逻辑，所有状态通过 props 传入。
  *
@@ -18,12 +18,12 @@
  *   用户操作 → onConfigChange → useIdleBattle.setConfig → 重新渲染
  *
  * 关键边界条件：
- *   1. isActive = true 时地图/房间/时长/技能策略均不可修改（只读展示）
+ *   1. isActive = true 时地图/房间/伙伴开关/时长/技能策略均不可修改（只读展示）
  *   3. 技能槽位最多 6 个，超出时"添加槽位"按钮 disabled
  */
 
 import React, { useEffect, useState } from 'react';
-import { Button, Select, Slider, Tag, Tooltip } from 'antd';
+import { Button, Select, Slider, Switch, Tag, Tooltip } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { getEnabledMaps, getMapDetail, type MapDefLite, type MapRoom } from '../../../../../services/api/world';
 import { getCharacterTechniqueStatus } from '../../../../../services/api/technique';
@@ -193,6 +193,10 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
     onConfigChange({ maxDurationMs: ms });
   };
 
+  const handlePartnerToggleChange = (checked: boolean) => {
+    onConfigChange({ includePartnerInBattle: checked });
+  };
+
   // 技能槽位操作（顺序即优先级，无需独立 priority 输入）
   const handleAddSlot = () => {
     if (config.autoSkillPolicy.slots.length >= MAX_SKILL_SLOTS) return;
@@ -270,6 +274,22 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
               options={monsterOptions}
             />
           </div>
+        </div>
+      </div>
+
+      <div className="idle-config-section">
+        <div className="idle-config-toggle-row">
+          <div className="idle-config-toggle-main">
+            <label className="idle-config-label">伙伴参战</label>
+            <span className="idle-config-toggle-description">
+              开启后，挂机会携带当前出战伙伴一同进入战斗。
+            </span>
+          </div>
+          <Switch
+            checked={config.includePartnerInBattle}
+            onChange={handlePartnerToggleChange}
+            disabled={isActive || isStopping}
+          />
         </div>
       </div>
 

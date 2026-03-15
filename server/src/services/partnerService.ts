@@ -1153,6 +1153,40 @@ class PartnerService {
     return { data, skills };
   }
 
+  /**
+   * 按开关构建伙伴战斗成员。
+   *
+   * 作用（做什么 / 不做什么）：
+   * 1) 做什么：把“开关关闭直接不带伙伴”和“开关开启时读取当前出战伙伴”收敛成单入口。
+   * 2) 做什么：供在线 PVE、秘境 PVE、挂机会话快照复用，避免三处重复写同样的启用判断。
+   * 3) 不做什么：不决定组队规则，调用方仍需在进入这里之前先决定当前是否允许带伙伴。
+   *
+   * 输入/输出：
+   * - 输入：角色 ID、用户 ID、是否启用伙伴参战。
+   * - 输出：启用且存在出战伙伴时返回伙伴战斗成员，否则返回 null。
+   *
+   * 数据流/状态流：
+   * battle / idle session -> buildConfiguredPartnerBattleMember -> buildActivePartnerBattleMember -> character_partner.
+   *
+   * 关键边界条件与坑点：
+   * 1) `enabled=false` 时必须直接返回 null，避免额外查库和隐式携带伙伴。
+   * 2) 这里只读取“当前出战伙伴”，不会替调用方兜底挑选其他伙伴。
+   */
+  async buildConfiguredPartnerBattleMember(params: {
+    characterId: number;
+    userId: number;
+    enabled: boolean;
+  }): Promise<PartnerBattleMember | null> {
+    if (!params.enabled) {
+      return null;
+    }
+
+    return this.buildActivePartnerBattleMember({
+      characterId: params.characterId,
+      userId: params.userId,
+    });
+  }
+
   async grantStarterPartner(params: {
     characterId: number;
     obtainedFrom: string;

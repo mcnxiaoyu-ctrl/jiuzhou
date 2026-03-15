@@ -52,6 +52,13 @@ const MAX_DURATION_MS = 28_800_000;   // 8 小时
 
 const router = Router();
 
+function parseIncludePartnerInBattle(value: unknown): boolean {
+  if (typeof value !== 'boolean') {
+    throw new BusinessError('缺少 includePartnerInBattle');
+  }
+  return value;
+}
+
 // ============================================
 // 序列化工具
 // ============================================
@@ -87,7 +94,14 @@ router.post('/start', requireCharacter, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
   const userId = req.userId!;
 
-  const { mapId, roomId, maxDurationMs, autoSkillPolicy, targetMonsterDefId } = req.body as Partial<IdleConfigDto>;
+  const {
+    mapId,
+    roomId,
+    maxDurationMs,
+    autoSkillPolicy,
+    targetMonsterDefId,
+    includePartnerInBattle,
+  } = req.body as Partial<IdleConfigDto>;
 
   if (!mapId || typeof mapId !== 'string') {
     throw new BusinessError('缺少 mapId');
@@ -98,6 +112,7 @@ router.post('/start', requireCharacter, asyncHandler(async (req, res) => {
   if (!targetMonsterDefId || typeof targetMonsterDefId !== 'string') {
     throw new BusinessError('缺少 targetMonsterDefId');
   }
+  const validatedIncludePartnerInBattle = parseIncludePartnerInBattle(includePartnerInBattle);
   const durationMs = Number(maxDurationMs);
   if (!Number.isFinite(durationMs) || durationMs < MIN_DURATION_MS || durationMs > MAX_DURATION_MS) {
     throw new BusinessError(`maxDurationMs 必须在 ${MIN_DURATION_MS} ~ ${MAX_DURATION_MS} 之间`);
@@ -126,6 +141,7 @@ router.post('/start', requireCharacter, asyncHandler(async (req, res) => {
     maxDurationMs: durationMs,
     autoSkillPolicy: policyValidation.value,
     targetMonsterDefId,
+    includePartnerInBattle: validatedIncludePartnerInBattle,
   };
 
   const result = await idleSessionService.startIdleSession({ characterId, userId, config });
@@ -270,7 +286,7 @@ router.get('/config', requireCharacter, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
 
   const res2 = await query(
-    `SELECT map_id, room_id, max_duration_ms, auto_skill_policy, target_monster_def_id
+    `SELECT map_id, room_id, max_duration_ms, auto_skill_policy, target_monster_def_id, include_partner_in_battle
      FROM idle_configs WHERE character_id = $1`,
     [characterId],
   );
@@ -284,6 +300,7 @@ router.get('/config', requireCharacter, asyncHandler(async (req, res) => {
         maxDurationMs: 3_600_000,
         autoSkillPolicy: { slots: [] },
         targetMonsterDefId: null,
+        includePartnerInBattle: true,
       },
     });
     return;
@@ -295,6 +312,7 @@ router.get('/config', requireCharacter, asyncHandler(async (req, res) => {
     max_duration_ms: string;
     auto_skill_policy: unknown;
     target_monster_def_id: string | null;
+    include_partner_in_battle: boolean;
   };
 
   sendSuccess(res, {
@@ -304,6 +322,7 @@ router.get('/config', requireCharacter, asyncHandler(async (req, res) => {
       maxDurationMs: Number(row.max_duration_ms),
       autoSkillPolicy: row.auto_skill_policy,
       targetMonsterDefId: row.target_monster_def_id,
+      includePartnerInBattle: row.include_partner_in_battle,
     },
   });
 }));
@@ -315,7 +334,15 @@ router.get('/config', requireCharacter, asyncHandler(async (req, res) => {
 router.put('/config', requireCharacter, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
 
-  const { mapId, roomId, maxDurationMs, autoSkillPolicy, targetMonsterDefId } = req.body as Partial<IdleConfigDto>;
+  const {
+    mapId,
+    roomId,
+    maxDurationMs,
+    autoSkillPolicy,
+    targetMonsterDefId,
+    includePartnerInBattle,
+  } = req.body as Partial<IdleConfigDto>;
+  const validatedIncludePartnerInBattle = parseIncludePartnerInBattle(includePartnerInBattle);
 
   // 校验 autoSkillPolicy（必填）
   const policyValidation = validateAutoSkillPolicy(autoSkillPolicy);
@@ -337,14 +364,15 @@ router.put('/config', requireCharacter, asyncHandler(async (req, res) => {
   const policyJson = serializeAutoSkillPolicy(policyValidation.value);
 
   await query(
-    `INSERT INTO idle_configs (character_id, map_id, room_id, max_duration_ms, auto_skill_policy, target_monster_def_id, updated_at)
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6, NOW())
+    `INSERT INTO idle_configs (character_id, map_id, room_id, max_duration_ms, auto_skill_policy, target_monster_def_id, include_partner_in_battle, updated_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, NOW())
      ON CONFLICT (character_id) DO UPDATE SET
        map_id                = EXCLUDED.map_id,
        room_id               = EXCLUDED.room_id,
        max_duration_ms       = EXCLUDED.max_duration_ms,
        auto_skill_policy     = EXCLUDED.auto_skill_policy,
        target_monster_def_id = EXCLUDED.target_monster_def_id,
+       include_partner_in_battle = EXCLUDED.include_partner_in_battle,
        updated_at            = NOW()`,
     [
       characterId,
@@ -353,6 +381,7 @@ router.put('/config', requireCharacter, asyncHandler(async (req, res) => {
       validatedDurationMs ?? 3_600_000,
       policyJson,
       targetMonsterDefId ?? null,
+      validatedIncludePartnerInBattle,
     ],
   );
 

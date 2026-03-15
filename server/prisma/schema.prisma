@@ -698,6 +698,7 @@ model idle_configs {
   max_duration_ms       BigInt     @default(3600000)
   auto_skill_policy     Json       @default("{\"slots\": []}")
   target_monster_def_id String?    @db.VarChar(100)
+  include_partner_in_battle Boolean @default(true)
   updated_at            DateTime   @default(now()) @db.Timestamptz(6)
   characters            characters @relation(fields: [character_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }

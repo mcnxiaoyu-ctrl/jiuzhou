@@ -62,6 +62,7 @@ const DEFAULT_CONFIG: IdleConfigDto = {
   maxDurationMs: 3_600_000,
   autoSkillPolicy: { slots: [] },
   targetMonsterDefId: null,
+  includePartnerInBattle: true,
 };
 
 // ============================================
@@ -331,6 +332,7 @@ export function useIdleBattle(): UseIdleBattleReturn {
         maxDurationMs: config.maxDurationMs,
         autoSkillPolicy: config.autoSkillPolicy,
         targetMonsterDefId: config.targetMonsterDefId,
+        includePartnerInBattle: config.includePartnerInBattle,
       });
       // 启动成功后重新拉取状态（获取完整 session 对象）
       await loadStatus();
