@@ -42,7 +42,7 @@ const PhoneBindingDialog: React.FC<PhoneBindingDialogProps> = ({
   onClose,
   onSuccess,
   title = '绑定手机号',
-  description = '绑定手机号后，可继续使用坊市相关功能。每个手机号只能绑定一个账号。',
+  description = '绑定手机号后，可继续使用坊市相关功能。每个手机号只能绑定一个账号，请务必填写真实手机号，后续可能会进行随机安全验证。',
 }) => {
   const { message } = App.useApp();
   const [phoneNumber, setPhoneNumber] = useState('');
