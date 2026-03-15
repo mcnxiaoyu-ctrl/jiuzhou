@@ -8,7 +8,7 @@ import {
   type AutoDisassembleRulesDto,
 } from '../../../../services/api';
 import { getUnifiedApiErrorMessage } from '../../../../services/api';
-import { emitThemeModeChange, getStoredThemeMode, persistThemeMode, type ThemeMode } from '../../../../constants/theme';
+import { commitThemeModeSelection, getStoredThemeMode, type ThemeMode } from '../../../../constants/theme';
 import {
   AUTO_DISASSEMBLE_CATEGORY_OPTIONS,
   buildAutoDisassembleSubCategoryOptionsByCategories,
@@ -236,8 +236,7 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   const toggleDarkTheme = (enabled: boolean) => {
     const nextMode: ThemeMode = enabled ? 'dark' : 'light';
     setThemeMode(nextMode);
-    persistThemeMode(nextMode);
-    emitThemeModeChange(nextMode);
+    commitThemeModeSelection(nextMode);
   };
 
   const saveDungeonNoStaminaCost = async (nextEnabled: boolean, rollback: () => void) => {

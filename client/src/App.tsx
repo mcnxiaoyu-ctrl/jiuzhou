@@ -4,7 +4,7 @@ import zhCN from 'antd/locale/zh_CN';
 import Auth from './pages/Auth';
 import { verifySession, checkCharacter, API_ERROR_TOAST_EVENT, type ApiErrorToastDetail } from './services/api';
 import { gameSocket } from './services/gameSocket';
-import { THEME_EVENT_NAME, getStoredThemeMode, persistThemeMode, type ThemeMode } from './constants/theme';
+import { THEME_EVENT_NAME, applyThemeModeToDocument, type ThemeMode } from './constants/theme';
 import './App.css';
 import './App.scss';
 
@@ -44,10 +44,14 @@ const clearAuthStorage = () => {
   localStorage.removeItem(USER_STORAGE_KEY);
 };
 
-function App() {
+interface AppProps {
+  initialThemeMode: ThemeMode;
+}
+
+function App({ initialThemeMode }: AppProps) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getStoredThemeMode());
+  const [themeMode, setThemeMode] = useState<ThemeMode>(initialThemeMode);
 
   // 持久登录检查
   useEffect(() => {
@@ -87,7 +91,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    document.body.classList.toggle('theme-dark', themeMode === 'dark');
+    applyThemeModeToDocument(themeMode);
   }, [themeMode]);
 
   useEffect(() => {
@@ -95,7 +99,6 @@ function App() {
       const ce = e as CustomEvent<{ mode?: ThemeMode }>;
       const mode = ce.detail?.mode;
       if (mode === 'dark' || mode === 'light') {
-        persistThemeMode(mode);
         setThemeMode(mode);
       }
     };
