@@ -2228,7 +2228,7 @@
       "stack_max": 9999,
       "bind_type": "none",
       "tradeable": true,
-      "icon": "/assets/items/xinmo_jinghua.png",
+      "icon": "/assets/items/shenhun-ningjing.webp",
       "description": "虚灵神殿中凝聚的高纯神识结晶，可稳固养神前后的功法运转。",
       "long_desc": "晶体内封存了极度有序的神魂波动，适合作为高层功法与养神突破仪式的核心媒介。",
       "tags": [
