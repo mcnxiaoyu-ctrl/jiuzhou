@@ -10,23 +10,25 @@
   --auth-control-radius: 14px;
   --auth-refresh-bg: color-mix(in srgb, var(--panel-bg-soft) 92%, var(--panel-bg));
   --auth-refresh-border: color-mix(in srgb, var(--border-color) 92%, transparent);
+  position: absolute;
+  inset: 0;
   width: 100%;
-  min-height: 100vh;
+  height: 100%;
   display: flex;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
   background:
     radial-gradient(circle at 12% 18%, var(--auth-orb-color) 0%, transparent 14%),
     radial-gradient(circle at 78% 74%, var(--auth-orb-color) 0%, transparent 12%),
     linear-gradient(180deg, var(--auth-shell-top) 0%, var(--auth-shell-bottom) 100%);
-  position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .auth-background {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  overflow: hidden;
 
   .cloud {
     position: absolute;
@@ -65,6 +67,7 @@
 }
 
 .auth-card {
+  margin: auto;
   width: 380px;
   position: relative;
   transform-style: preserve-3d;
@@ -72,8 +75,20 @@
   will-change: transform, height;
 
   &.flipped {
-    .card-front { opacity: 0; pointer-events: none; transform: rotateY(180deg); }
-    .card-back { opacity: 1; pointer-events: auto; transform: rotateY(0deg); }
+    .card-front { 
+      opacity: 0; 
+      pointer-events: none; 
+      transform: rotateY(180deg); 
+      max-height: 100%;
+      overflow: hidden;
+    }
+    .card-back { 
+      opacity: 1; 
+      pointer-events: auto; 
+      transform: rotateY(0deg); 
+      max-height: none;
+      overflow: visible;
+    }
   }
 }
 
@@ -94,12 +109,16 @@
 .card-front {
   opacity: 1;
   transform: rotateY(0deg);
+  max-height: none;
+  overflow: visible;
 }
 
 .card-back {
   opacity: 0;
   pointer-events: none;
   transform: rotateY(-180deg);
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .card-header {
@@ -300,7 +319,7 @@
     margin-bottom: 20px;
 
     .logo {
-      width: 256px;
+      width: 200px;
     }
 
     p {
