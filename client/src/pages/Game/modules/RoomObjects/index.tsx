@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Tag } from 'antd';
 import type { InfoTarget } from '../InfoModal';
-import { getGameTime, getRoomObjects, type GameTimeSnapshotDto } from '../../../../services/api';
+import { getRoomObjects } from '../../../../services/api';
 import { getUnifiedApiErrorMessage } from '../../../../services/api';
+import { gameSocket, type GameTimeSyncPayload } from '../../../../services/gameSocket';
 import './index.scss';
 
 interface RoomObjectsProps {
@@ -41,7 +42,7 @@ const calcShichen = (hour: number): string => {
 };
 
 const formatGameTime = (
-  sync: Pick<GameTimeSnapshotDto, 'era_name' | 'base_year' | 'weather' | 'scale' | 'server_now_ms' | 'game_elapsed_ms'>,
+  sync: Pick<GameTimeSyncPayload, 'era_name' | 'base_year' | 'weather' | 'scale' | 'server_now_ms' | 'game_elapsed_ms'>,
   nowMs: number,
 ): { left: string; center: string; right: string } => {
   const elapsedMs = sync.game_elapsed_ms + Math.max(0, nowMs - sync.server_now_ms) * Math.max(1, sync.scale || 1);
@@ -103,7 +104,7 @@ const RoomObjects: React.FC<RoomObjectsProps> = ({ mapId, roomId, onSelect }) =>
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [gameTime, setGameTime] = useState<GameTimeSnapshotDto | null>(null);
+  const [gameTime, setGameTime] = useState<GameTimeSyncPayload | null>(null);
   const lastAnnouncedRef = useRef<{ dateKey: string; weather: string } | null>(null);
 
   useEffect(() => {
@@ -112,40 +113,22 @@ const RoomObjects: React.FC<RoomObjectsProps> = ({ mapId, roomId, onSelect }) =>
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const fetchTime = () => {
-      getGameTime(SILENT_REQUEST_CONFIG)
-        .then((res) => {
-          if (cancelled) return;
-          if (!res?.success || !res.data) return;
-          const next = res.data;
-          const nextWeather = String(next.weather || '').trim();
-          const dateKey = `${next.year}-${next.month}-${next.day}`;
-          const last = lastAnnouncedRef.current;
-          if (!last) {
-            lastAnnouncedRef.current = { dateKey, weather: nextWeather };
-          } else if (dateKey !== last.dateKey) {
-            lastAnnouncedRef.current = { dateKey, weather: nextWeather };
-            appendSystemChat(
-              `进入了${next.month}月${next.day}日，${getSeasonDesc(next.month)}。${getWeatherDesc(nextWeather)}（${nextWeather || '未知'}）`,
-            );
-          } else {
-            lastAnnouncedRef.current = { dateKey, weather: nextWeather };
-          }
-          setGameTime(res.data);
-        })
-        .catch(() => {
-          if (cancelled) return;
-        });
-    };
-
-    fetchTime();
-    const timer = window.setInterval(fetchTime, 30_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
+    return gameSocket.onGameTimeSync((next) => {
+      const nextWeather = String(next.weather || '').trim();
+      const dateKey = `${next.year}-${next.month}-${next.day}`;
+      const last = lastAnnouncedRef.current;
+      if (!last) {
+        lastAnnouncedRef.current = { dateKey, weather: nextWeather };
+      } else if (dateKey !== last.dateKey) {
+        lastAnnouncedRef.current = { dateKey, weather: nextWeather };
+        appendSystemChat(
+          `进入了${next.month}月${next.day}日，${getSeasonDesc(next.month)}。${getWeatherDesc(nextWeather)}（${nextWeather || '未知'}）`,
+        );
+      } else {
+        lastAnnouncedRef.current = { dateKey, weather: nextWeather };
+      }
+      setGameTime(next);
+    });
   }, []);
 
   useEffect(() => {

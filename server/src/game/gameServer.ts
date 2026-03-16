@@ -24,6 +24,7 @@ import { notifyTechniqueResearchStatus } from "../services/techniqueResearchPush
 import { getMonthCardActiveMapByCharacterIds } from "../services/shared/monthCardBenefits.js";
 import { assertChatPhoneBindingReady } from "../services/marketPhoneBindingService.js";
 import { AsyncShutdownGate } from "../utils/asyncShutdownGate.js";
+import { emitLatestGameTimeSnapshot } from "../services/gameTimeService.js";
 
 // 玩家会话
 interface PlayerSession {
@@ -179,6 +180,9 @@ class GameServer {
 
           // 发送角色数据（全量）
           socket.emit("game:character", { type: "full", character });
+          emitLatestGameTimeSnapshot((event, snapshot) => {
+            socket.emit(event, snapshot);
+          });
 
           if (character) {
             try {

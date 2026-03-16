@@ -16,6 +16,9 @@ export type GameTimeSnapshot = {
   game_elapsed_ms: number;
 };
 
+type GameTimeSnapshotEvent = 'game:time-sync';
+type GameTimeSnapshotEmitter = (event: GameTimeSnapshotEvent, snapshot: GameTimeSnapshot) => void;
+
 type GameTimeStateRow = {
   id: number;
   era_name: string;
@@ -193,6 +196,13 @@ const updateWeatherIfNeeded = (state: GameTimeState, gameElapsedMs: number): voi
 let runtimeState: GameTimeState | null = null;
 let timer: NodeJS.Timeout | null = null;
 let saving = false;
+let broadcastGameTimeSnapshot: ((snapshot: GameTimeSnapshot) => void) | null = null;
+
+const getSnapshotBoundaryKey = (
+  snapshot: Pick<GameTimeSnapshot, 'year' | 'month' | 'day' | 'weather'>,
+): string => {
+  return `${snapshot.year}-${snapshot.month}-${snapshot.day}-${snapshot.weather}`;
+};
 
 const loadOrCreateState = async (): Promise<GameTimeState> => {
   const res = await query(`SELECT * FROM game_time WHERE id = 1 LIMIT 1`);
@@ -268,6 +278,11 @@ const tickAndPersist = async (): Promise<void> => {
   if (!state) return;
   if (saving) return;
 
+  const previousSnapshot = buildSnapshotFromElapsed(
+    state,
+    state.last_real_ms,
+    state.game_elapsed_ms,
+  );
   const nowMs = Date.now();
   const delta = nowMs - state.last_real_ms;
   const deltaRealMs = delta > 0 && delta < 60_000 ? delta : 1000;
@@ -291,6 +306,18 @@ const tickAndPersist = async (): Promise<void> => {
       `,
       [state.game_elapsed_ms, state.weather, state.scale, state.last_real_ms]
     );
+
+    const nextSnapshot = buildSnapshotFromElapsed(
+      state,
+      nowMs,
+      state.game_elapsed_ms,
+    );
+    if (
+      broadcastGameTimeSnapshot &&
+      getSnapshotBoundaryKey(previousSnapshot) !== getSnapshotBoundaryKey(nextSnapshot)
+    ) {
+      broadcastGameTimeSnapshot(nextSnapshot);
+    }
   } finally {
     saving = false;
   }
@@ -314,10 +341,57 @@ export const stopGameTimeService = async (): Promise<void> => {
   }
 };
 
+/**
+ * 作用：
+ * 1. 做什么：集中注册游戏时间快照广播器，让定时服务与 socket 推送共享同一份时间源。
+ * 2. 不做什么：不负责 socket 房间选择，也不在这里管理客户端订阅。
+ *
+ * 输入/输出：
+ * - 输入：一个接收最新 `GameTimeSnapshot` 的广播函数，或 `null` 用于清空。
+ * - 输出：无返回值；副作用是替换内存中的广播器引用。
+ *
+ * 数据流：
+ * app 初始化 -> 注册 broadcaster -> gameTimeService 在边界变化时调用 -> 外层统一发往 socket。
+ *
+ * 关键边界条件与坑点：
+ * 1. 这里只保存单一广播器引用，避免多个模块各自注册导致重复广播。
+ * 2. 允许在时间服务初始化前注册；真正广播仍以快照可用为前提。
+ */
+export const setGameTimeSnapshotBroadcaster = (
+  broadcaster: ((snapshot: GameTimeSnapshot) => void) | null,
+): void => {
+  broadcastGameTimeSnapshot = broadcaster;
+};
+
 export const getGameTimeSnapshot = (): GameTimeSnapshot | null => {
   const state = runtimeState;
   if (!state) return null;
   const serverNowMs = Date.now();
   const elapsedMs = state.game_elapsed_ms + Math.max(0, serverNowMs - state.last_real_ms) * state.scale;
   return buildSnapshotFromElapsed(state, serverNowMs, elapsedMs);
+};
+
+/**
+ * 作用：
+ * 1. 做什么：统一把“当前最新游戏时间快照”发给任意事件发送器，避免路由、socket 首连同步各自拼装 payload。
+ * 2. 不做什么：不负责判断是否应该广播，也不缓存发送结果。
+ *
+ * 输入/输出：
+ * - 输入：一个事件发送器，签名为 `(event, snapshot) => void`。
+ * - 输出：返回刚刚发送的快照；若时间服务尚未初始化则返回 `null`。
+ *
+ * 数据流：
+ * 外层调用 -> 读取当前运行时快照 -> 统一发送 `game:time-sync` -> 返回同一份快照给调用方。
+ *
+ * 关键边界条件与坑点：
+ * 1. 只复用 `getGameTimeSnapshot`，禁止在调用方重新组装字段，避免 HTTP 与 socket 口径漂移。
+ * 2. 若时间服务未初始化，必须返回 `null`，由调用方自行决定是否跳过发送。
+ */
+export const emitLatestGameTimeSnapshot = (
+  emit: GameTimeSnapshotEmitter,
+): GameTimeSnapshot | null => {
+  const snapshot = getGameTimeSnapshot();
+  if (!snapshot) return null;
+  emit('game:time-sync', snapshot);
+  return snapshot;
 };

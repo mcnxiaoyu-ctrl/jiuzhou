@@ -10,6 +10,7 @@ import { buildCorsOriginOption } from './bootstrap/cors.js';
 import { registerRoutes } from './bootstrap/registerRoutes.js';
 import { registerGracefulShutdown, startServerWithPipeline } from './bootstrap/startupPipeline.js';
 import { isTransactionRollbackOnlyError } from './config/database.js';
+import { setGameTimeSnapshotBroadcaster } from './services/gameTimeService.js';
 
 dotenv.config();
 
@@ -47,7 +48,11 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 initSocket(httpServer, corsOriginOption);
 
 // 初始化游戏服务器（boardgame.io）
-initGameServer(httpServer, corsOriginOption);
+const gameServer = initGameServer(httpServer, corsOriginOption);
+
+setGameTimeSnapshotBroadcaster((snapshot) => {
+  gameServer.getIO().to('chat:authed').emit('game:time-sync', snapshot);
+});
 
 registerRoutes(app);
 registerGracefulShutdown(httpServer);

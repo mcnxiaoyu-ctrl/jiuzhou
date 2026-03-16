@@ -4,6 +4,7 @@
 import { io, Socket } from "socket.io-client";
 import { SERVER_BASE } from "./api";
 import type {
+  GameTimeSnapshotDto,
   MailUnreadResponse,
   PartnerRecruitStatusResponse,
   TechniqueResearchStatusResponse,
@@ -182,6 +183,8 @@ type IdleUpdateListener = (data: IdleUpdatePayload) => void;
 type IdleFinishedListener = (data: IdleFinishedPayload) => void;
 export type MailIndicatorPayload = NonNullable<MailUnreadResponse["data"]>;
 type MailUpdateListener = (data: MailIndicatorPayload) => void;
+export type GameTimeSyncPayload = GameTimeSnapshotDto;
+type GameTimeSyncListener = (data: GameTimeSyncPayload) => void;
 
 export interface TechniqueResearchResultPayload {
   characterId: number;
@@ -259,6 +262,7 @@ class GameSocketService {
   private idleUpdateListeners: Set<IdleUpdateListener> = new Set();
   private idleFinishedListeners: Set<IdleFinishedListener> = new Set();
   private mailUpdateListeners: Set<MailUpdateListener> = new Set();
+  private gameTimeSyncListeners: Set<GameTimeSyncListener> = new Set();
   private techniqueResearchResultListeners: Set<TechniqueResearchResultListener> = new Set();
   private techniqueResearchStatusListeners: Set<TechniqueResearchStatusListener> =
     new Set();
@@ -269,6 +273,7 @@ class GameSocketService {
   private currentSectIndicator: SectIndicatorPayload | null = null;
   private currentOnlinePlayers: OnlinePlayersPayloadDto | null = null;
   private currentMailIndicator: MailIndicatorPayload | null = null;
+  private currentGameTimeSync: GameTimeSyncPayload | null = null;
   private currentTechniqueResearchStatus: TechniqueResearchStatusPayload | null =
     null;
   private currentPartnerRecruitStatus: PartnerRecruitStatusPayload | null = null;
@@ -311,6 +316,7 @@ class GameSocketService {
       this.currentSectIndicator = null;
       this.currentOnlinePlayers = null;
       this.currentMailIndicator = null;
+      this.currentGameTimeSync = null;
       this.currentTechniqueResearchStatus = null;
       this.currentPartnerRecruitStatus = null;
     });
@@ -391,6 +397,11 @@ class GameSocketService {
     this.socket.on("mail:update", (data: MailIndicatorPayload) => {
       this.currentMailIndicator = data;
       this.notifyMailUpdateListeners(data);
+    });
+
+    this.socket.on("game:time-sync", (data: GameTimeSyncPayload) => {
+      this.currentGameTimeSync = data;
+      this.notifyGameTimeSyncListeners(data);
     });
 
     this.socket.on("techniqueResearchResult", (data: TechniqueResearchResultPayload) => {
@@ -536,6 +547,7 @@ class GameSocketService {
       this.currentSectIndicator = null;
       this.currentOnlinePlayers = null;
       this.currentMailIndicator = null;
+      this.currentGameTimeSync = null;
       this.currentTechniqueResearchStatus = null;
       this.currentPartnerRecruitStatus = null;
       this.onlinePlayersMap.clear();
@@ -617,6 +629,14 @@ class GameSocketService {
       listener(this.currentMailIndicator);
     }
     return () => this.mailUpdateListeners.delete(listener);
+  }
+
+  onGameTimeSync(listener: GameTimeSyncListener): () => void {
+    this.gameTimeSyncListeners.add(listener);
+    if (this.currentGameTimeSync) {
+      listener(this.currentGameTimeSync);
+    }
+    return () => this.gameTimeSyncListeners.delete(listener);
   }
 
   onTechniqueResearchResult(listener: TechniqueResearchResultListener): () => void {
@@ -766,6 +786,10 @@ class GameSocketService {
 
   private notifyMailUpdateListeners(data: MailIndicatorPayload): void {
     this.mailUpdateListeners.forEach((listener) => listener(data));
+  }
+
+  private notifyGameTimeSyncListeners(data: GameTimeSyncPayload): void {
+    this.gameTimeSyncListeners.forEach((listener) => listener(data));
   }
 
   private notifyTechniqueResearchResultListeners(data: TechniqueResearchResultPayload): void {
