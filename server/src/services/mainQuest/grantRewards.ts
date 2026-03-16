@@ -12,12 +12,19 @@
  * 2) 任一物品创建失败会抛异常，由事务回滚保证一致性。
  */
 import { query } from '../../config/database.js';
+import {
+  grantRewardItemWithAutoDisassemble,
+  type AutoDisassembleSetting,
+} from '../autoDisassembleRewardService.js';
+import type { GenerateOptions } from '../equipmentService.js';
 import { itemService } from '../itemService.js';
 import { grantFeatureUnlocksWithSideEffects } from '../featureUnlockService.js';
 import {
+  getItemDefinitionsByIds,
   getTechniqueDefinitions,
 } from '../staticConfigLoader.js';
 import { assertServiceSuccess } from '../shared/assertServiceSuccess.js';
+import { resolveQualityRankFromName } from '../shared/itemQuality.js';
 import { resolveRewardItemDisplayMeta } from '../shared/rewardDisplay.js';
 import { asString, asNumber, asArray } from '../shared/typeCoercion.js';
 import type { RewardResult } from './types.js';
@@ -30,11 +37,13 @@ export const grantSectionRewards = async (
   options?: {
     obtainedFrom?: string;
     obtainedRefId?: string;
+    autoDisassembleSetting?: AutoDisassembleSetting;
   },
 ): Promise<RewardResult[]> => {
   const results: RewardResult[] = [];
   const obtainedFrom = asString(options?.obtainedFrom) || 'main_quest';
   const obtainedRefId = asString(options?.obtainedRefId) || undefined;
+  const autoDisassembleSetting = options?.autoDisassembleSetting;
 
   const exp = asNumber((rewards as { exp?: unknown }).exp, 0);
   if (exp > 0) {
@@ -58,11 +67,68 @@ export const grantSectionRewards = async (
   }
 
   const items = asArray<{ item_def_id?: unknown; quantity?: unknown }>((rewards as { items?: unknown }).items);
+  const itemDefs = getItemDefinitionsByIds(
+    items
+      .map((item) => asString(item.item_def_id))
+      .filter((itemDefId): itemDefId is string => itemDefId.length > 0),
+  );
   for (const item of items) {
     const itemDefId = asString(item.item_def_id);
     const quantity = Math.max(1, Math.floor(asNumber(item.quantity, 1)));
     if (!itemDefId || quantity <= 0) continue;
     const itemMeta = resolveRewardItemDisplayMeta(itemDefId);
+    const itemDef = itemDefs.get(itemDefId);
+
+    if (autoDisassembleSetting) {
+      const autoDisassembleResult = await grantRewardItemWithAutoDisassemble({
+        characterId,
+        itemDefId,
+        qty: quantity,
+        itemMeta: {
+          itemName: itemMeta.name,
+          category: String(itemDef?.category || ''),
+          subCategory: typeof itemDef?.sub_category === 'string' ? itemDef.sub_category : null,
+          effectDefs: itemDef?.effect_defs,
+          qualityRank: resolveQualityRankFromName(itemDef?.quality, 1),
+          disassemblable: typeof itemDef?.disassemblable === 'boolean' ? itemDef.disassemblable : null,
+        },
+        autoDisassembleSetting,
+        sourceObtainedFrom: obtainedFrom,
+        createItem: async (params) => {
+          return itemService.createItem(userId, characterId, params.itemDefId, params.qty, {
+            location: 'bag',
+            bindType: params.bindType,
+            obtainedFrom: params.obtainedFrom,
+            ...(params.equipOptions !== undefined
+              ? { equipOptions: params.equipOptions as GenerateOptions }
+              : {}),
+          });
+        },
+        addSilver: async (targetCharacterId, silverAmount) => {
+          await query(
+            `UPDATE characters SET silver = silver + $1, updated_at = NOW() WHERE id = $2`,
+            [silverAmount, targetCharacterId],
+          );
+          return { success: true, message: 'ok' };
+        },
+      });
+
+      for (const grantedItem of autoDisassembleResult.grantedItems) {
+        const grantedItemMeta = resolveRewardItemDisplayMeta(grantedItem.itemDefId);
+        results.push({
+          type: 'item',
+          itemDefId: grantedItem.itemDefId,
+          quantity: grantedItem.qty,
+          itemName: grantedItemMeta.name || undefined,
+          itemIcon: grantedItemMeta.icon || undefined,
+        });
+      }
+      if (autoDisassembleResult.gainedSilver > 0) {
+        results.push({ type: 'silver', amount: autoDisassembleResult.gainedSilver });
+      }
+      continue;
+    }
+
     const result = await itemService.createItem(userId, characterId, itemDefId, quantity, {
       location: 'bag',
       obtainedFrom,

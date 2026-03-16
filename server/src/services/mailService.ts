@@ -17,6 +17,7 @@
  */
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
+import type { GenerateOptions } from './equipmentService.js';
 import { itemService } from './itemService.js';
 import { getInventoryInfo, moveItemInstanceToBagWithStacking } from './inventory/index.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
@@ -34,6 +35,12 @@ import {
   type GrantedRewardPreviewResult,
 } from './shared/rewardPayload.js';
 import { getItemDefinitionsByIds } from './staticConfigLoader.js';
+import {
+  grantRewardItemWithAutoDisassemble,
+  type AutoDisassembleSetting,
+} from './autoDisassembleRewardService.js';
+import { normalizeAutoDisassembleSetting } from './autoDisassembleRules.js';
+import { resolveQualityRankFromName } from './shared/itemQuality.js';
 
 // ============================================
 // 类型定义
@@ -604,6 +611,32 @@ class MailService {
     );
   }
 
+  private async getMailClaimAutoDisassembleSetting(
+    characterId: number,
+    autoDisassemble: boolean,
+  ): Promise<AutoDisassembleSetting | null> {
+    if (!autoDisassemble) return null;
+
+    const result = await query<{ auto_disassemble_rules: unknown }>(
+      `
+        SELECT auto_disassemble_rules
+        FROM characters
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [characterId],
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return normalizeAutoDisassembleSetting({
+      enabled: true,
+      rules: result.rows[0].auto_disassemble_rules,
+    });
+  }
+
   /**
    * 判断是否为 PostgreSQL 行锁冲突（FOR UPDATE NOWAIT）
    */
@@ -953,6 +986,7 @@ class MailService {
     characterId: number,
     mailId: number,
     shouldInvalidateUnreadCounter: boolean = true,
+    autoDisassemble: boolean = false,
   ): Promise<{ success: boolean; message: string; rewards?: RewardResult[] }> {
     const collectCounts = new Map<string, number>();
 
@@ -1087,6 +1121,10 @@ class MailService {
 
     let rewards: RewardResult[] = [];
     let claimedInstanceIds: number[] = [];
+    const autoDisassembleSetting = await this.getMailClaimAutoDisassembleSetting(
+      characterId,
+      autoDisassemble,
+    );
 
     // 7. 发放奖励
     if (hasAttachRewards) {
@@ -1097,6 +1135,7 @@ class MailService {
         {
           obtainedFrom: 'mail',
           obtainedRefId: String(mailId),
+          autoDisassembleSetting: autoDisassembleSetting ?? undefined,
         },
       );
     } else if (hasItems || hasCurrency) {
@@ -1141,7 +1180,88 @@ class MailService {
           });
         }
       } else {
+        const attachItemDefIds = Array.from(
+          new Set(
+            attachItems
+              .map((attachItem) => String(attachItem.item_def_id || '').trim())
+              .filter((itemDefId) => itemDefId.length > 0),
+          ),
+        );
+        const attachItemDefs = getItemDefinitionsByIds(attachItemDefIds);
+
         for (const attachItem of attachItems) {
+          if (autoDisassembleSetting) {
+            const itemDefId = String(attachItem.item_def_id || '').trim();
+            const itemDef = attachItemDefs.get(itemDefId);
+            const autoDisassembleResult = await grantRewardItemWithAutoDisassemble({
+              characterId,
+              itemDefId,
+              qty: Math.max(1, Math.floor(Number(attachItem.qty) || 1)),
+              bindType: attachItem.options?.bindType,
+              itemMeta: {
+                itemName: String(attachItem.item_name || '').trim() || itemDefId,
+                category: String(itemDef?.category || ''),
+                subCategory: typeof itemDef?.sub_category === 'string' ? itemDef.sub_category : null,
+                effectDefs: itemDef?.effect_defs,
+                qualityRank: resolveQualityRankFromName(itemDef?.quality, 1),
+                disassemblable: typeof itemDef?.disassemblable === 'boolean' ? itemDef.disassemblable : null,
+              },
+              autoDisassembleSetting,
+              sourceObtainedFrom: 'mail',
+              createItem: async (params) => {
+                return itemService.createItem(
+                  userId,
+                  characterId,
+                  params.itemDefId,
+                  params.qty,
+                  {
+                    location: 'bag',
+                    bindType: params.bindType,
+                    obtainedFrom: params.obtainedFrom,
+                    ...(params.equipOptions !== undefined
+                      ? { equipOptions: params.equipOptions as GenerateOptions }
+                      : {}),
+                  },
+                );
+              },
+              addSilver: async (targetCharacterId, silverAmount) => {
+                await query(
+                  `
+                    UPDATE characters
+                    SET silver = silver + $1, updated_at = NOW()
+                    WHERE id = $2
+                  `,
+                  [silverAmount, targetCharacterId],
+                );
+                return { success: true, message: 'ok' };
+              },
+              sourceEquipOptions: attachItem.options?.equipOptions,
+            });
+
+            for (const grantedItem of autoDisassembleResult.grantedItems) {
+              if (grantedItem.itemIds.length > 0) {
+                claimedInstanceIds.push(...grantedItem.itemIds);
+              }
+              collectCounts.set(
+                grantedItem.itemDefId,
+                (collectCounts.get(grantedItem.itemDefId) || 0) + grantedItem.qty,
+              );
+              rewards.push({
+                type: 'item',
+                itemDefId: grantedItem.itemDefId,
+                quantity: grantedItem.qty,
+                itemName:
+                  typeof attachItemDefs.get(grantedItem.itemDefId)?.name === 'string'
+                    ? String(attachItemDefs.get(grantedItem.itemDefId)?.name).trim() || undefined
+                    : undefined,
+              });
+            }
+            if (autoDisassembleResult.gainedSilver > 0) {
+              rewards.push({ type: 'silver', amount: autoDisassembleResult.gainedSilver });
+            }
+            continue;
+          }
+
           const createResult = await itemService.createItem(
             userId,
             characterId,
@@ -1200,7 +1320,8 @@ class MailService {
 
   async claimAllAttachments(
     userId: number,
-    characterId: number
+    characterId: number,
+    autoDisassemble: boolean = false,
   ): Promise<{
     success: boolean;
     message: string;
@@ -1254,7 +1375,13 @@ class MailService {
       const hasItems = attachItems.length > 0 || attachInstanceIds.length > 0;
       if (!hasAttachRewards && !hasCurrency && !hasItems) continue;
 
-      const claimResult = await this.claimAttachments(userId, characterId, mailId, false);
+      const claimResult = await this.claimAttachments(
+        userId,
+        characterId,
+        mailId,
+        false,
+        autoDisassemble,
+      );
 
       if (!claimResult.success) {
         if (this.isBagCapacityMessage(claimResult.message)) {

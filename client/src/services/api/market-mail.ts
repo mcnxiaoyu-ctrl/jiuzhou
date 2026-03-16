@@ -309,14 +309,17 @@ export const readMail = (mailId: number): Promise<{ success: boolean; message: s
 // 领取附件
 export const claimMailAttachments = (
   mailId: number,
+  autoDisassemble: boolean = false,
   requestConfig?: AxiosRequestConfig,
 ): Promise<MailClaimResponse> => {
-  return api.post('/mail/claim', { mailId }, requestConfig);
+  return api.post('/mail/claim', { mailId, autoDisassemble }, requestConfig);
 };
 
 // 一键领取所有附件
-export const claimAllMailAttachments = (): Promise<MailClaimAllResponse> => {
-  return api.post('/mail/claim-all');
+export const claimAllMailAttachments = (
+  autoDisassemble: boolean = false,
+): Promise<MailClaimAllResponse> => {
+  return api.post('/mail/claim-all', { autoDisassemble });
 };
 
 // 删除邮件

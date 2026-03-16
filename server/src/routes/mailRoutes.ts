@@ -17,6 +17,12 @@ const parseMailId = (raw: unknown): number | null => {
   return n;
 };
 
+const parseAutoDisassemble = (raw: unknown): boolean => {
+  if (raw === undefined) return false;
+  if (typeof raw === 'boolean') return raw;
+  throw new BusinessError('参数错误');
+};
+
 router.use(requireCharacter);
 
 // ============================================
@@ -81,7 +87,8 @@ router.post('/claim', asyncHandler(async (req, res) => {
       throw new BusinessError('参数错误');
     }
 
-    const result = await mailService.claimAttachments(userId, characterId, parsedMailId);
+    const autoDisassemble = parseAutoDisassemble((req.body as { autoDisassemble?: unknown })?.autoDisassemble);
+    const result = await mailService.claimAttachments(userId, characterId, parsedMailId, true, autoDisassemble);
     return sendResult(res, result);
 }));
 
@@ -92,7 +99,8 @@ router.post('/claim-all', asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
-    const result = await mailService.claimAllAttachments(userId, characterId);
+    const autoDisassemble = parseAutoDisassemble((req.body as { autoDisassemble?: unknown })?.autoDisassemble);
+    const result = await mailService.claimAllAttachments(userId, characterId, autoDisassemble);
     return sendResult(res, result);
 }));
 

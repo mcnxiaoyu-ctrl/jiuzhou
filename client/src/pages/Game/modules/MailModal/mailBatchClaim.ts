@@ -43,6 +43,7 @@ export type MailBatchClaimResult =
 
 export interface RunMailBatchClaimArgs {
   initialUnclaimedCount: number;
+  autoDisassemble: boolean;
   signal: AbortSignal;
   onProgress?: (progress: MailBatchClaimProgress) => void;
 }
@@ -108,7 +109,7 @@ export const runMailBatchClaim = async (
           return { status: 'stopped', claimedCount, processedCount };
         }
 
-        await claimMailAttachments(mail.id, requestConfig);
+        await claimMailAttachments(mail.id, args.autoDisassemble, requestConfig);
         claimedCount += 1;
         processedCount += 1;
         emitProgress(args, processedCount, claimedCount);

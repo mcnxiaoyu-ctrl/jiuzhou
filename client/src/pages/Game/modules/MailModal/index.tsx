@@ -7,6 +7,7 @@ import {
   Progress,
   Space,
   Spin,
+  Switch,
   Tag,
   Tooltip,
   Typography,
@@ -61,6 +62,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
     current: number;
     claimedCount: number;
   } | null>(null);
+  const [claimAutoDisassemble, setClaimAutoDisassemble] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [unclaimedCount, setUnclaimedCount] = useState(0);
   const [showMobileDetail, setShowMobileDetail] = useState(false);
@@ -102,6 +104,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
   useEffect(() => {
     if (open) {
       setShowMobileDetail(false);
+      setClaimAutoDisassemble(false);
       void loadMails({ resetActive: true });
     }
   }, [open, loadMails]);
@@ -165,7 +168,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
 
     setClaiming(true);
     try {
-      const res = await claimMailAttachments(id);
+      const res = await claimMailAttachments(id, claimAutoDisassemble);
       if (res.success) {
         setMails((prev) =>
           prev.map((m) =>
@@ -208,6 +211,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
     try {
       const result = await runMailBatchClaim({
         initialUnclaimedCount: unclaimedCount,
+        autoDisassemble: claimAutoDisassemble,
         signal: controller.signal,
         onProgress: (progress) => {
           setClaimProgress(progress);
@@ -424,6 +428,18 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
                   />
                 </Tooltip>
               </Space>
+            </div>
+            <div className="mail-claim-setting">
+              <div className="mail-claim-setting-main">
+                <Typography.Text className="mail-claim-setting-title">
+                  套用自动分解规则
+                </Typography.Text>
+              </div>
+              <Switch
+                checked={claimAutoDisassemble}
+                disabled={claiming}
+                onChange={setClaimAutoDisassemble}
+              />
             </div>
             {claimProgress && (
               <div className="mail-claim-progress">
