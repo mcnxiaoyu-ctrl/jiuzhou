@@ -277,13 +277,6 @@
     line-height: 1.7;
   }
 
-  // 查看词条池按钮
-
-    &:disabled {
-      cursor: not-allowed;
-      opacity: 0.5;
-    }
-  }
 
   .bag-reroll-affix-list {
     display: flex;
