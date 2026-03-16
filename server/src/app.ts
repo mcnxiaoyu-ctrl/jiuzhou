@@ -19,6 +19,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
+// 线上由 Caddy 反代到容器，需信任 1 层代理后才能从 X-Forwarded-For 读取真实客户端 IP。
+app.set('trust proxy', 1);
+
 const HOST = String(process.env.HOST ?? '0.0.0.0').trim() || '0.0.0.0';
 const PORT = Number(process.env.PORT || 6011);
 const corsOriginOption = buildCorsOriginOption(process.env.CORS_ORIGIN);
