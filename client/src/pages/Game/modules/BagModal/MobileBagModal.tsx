@@ -22,7 +22,6 @@ import {
   refineInventoryItem,
   rerollInventoryAffixes,
   getRerollCostPreview,
-  getAffixPoolPreview,
   removeInventoryItemsBatch,
   setInventoryItemLock,
   socketInventoryGem,
@@ -30,7 +29,7 @@ import {
   unequipInventoryItem,
 } from '../../../../services/api';
 import { getUnifiedApiErrorMessage } from '../../../../services/api';
-import type { InventoryInfoData, AffixPoolPreviewResponse } from '../../../../services/api';
+import type { InventoryInfoData } from '../../../../services/api';
 import {
   attrLabel,
   attrOrder,
@@ -73,6 +72,7 @@ import GemSynthesisModal from './GemSynthesisModal';
 import { formatDisassembleSuccessMessage } from './disassembleRewardText';
 import { getEquipmentGrowthFailModeText, useEquipmentGrowthPreview } from './useEquipmentGrowthPreview';
 import { useTechniqueBookSkills } from './useTechniqueBookSkills';
+import { useAutoRerollController } from './useAutoRerollController';
 import { collectEquipmentUnbindCandidates } from './equipmentUnbind';
 import { TechniqueSkillSection } from '../../shared/TechniqueSkillSection';
 import { useCharacterRenameCardFlow } from '../../shared/useCharacterRenameCardFlow';
@@ -646,9 +646,6 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
     rerollScrollItemDefId: string;
     entries: Array<{ lockCount: number; rerollScrollQty: number; silverCost: number; spiritStoneCost: number }>;
   } | null>(null);
-  const [poolPreviewOpen, setPoolPreviewOpen] = useState(false);
-  const [poolPreviewLoading, setPoolPreviewLoading] = useState(false);
-  const [poolPreviewData, setPoolPreviewData] = useState<AffixPoolPreviewResponse['data'] | null>(null);
   const [socketSlot, setSocketSlot] = useState<number | undefined>(undefined);
   const [selectedGemItemId, setSelectedGemItemId] = useState<number | undefined>(undefined);
 
@@ -736,6 +733,36 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
       silverCost: costEntry?.silverCost ?? 0,
     };
   }, [item, bagItemCounts, rerollLockIndexes, rerollCostTable]);
+
+  const {
+    autoRerollTargetKeys,
+    setAutoRerollTargetKeys,
+    autoRerollMaxAttempts,
+    setAutoRerollMaxAttempts,
+    autoRerollSubmitting,
+    autoRerollOptions,
+    autoRerollDisabled,
+    poolPreviewOpen,
+    poolPreviewLoading,
+    poolPreviewData,
+    poolPreviewReady,
+    poolPreviewErrorMessage,
+    openPoolPreview,
+    closePoolPreview,
+    handleAutoReroll,
+  } = useAutoRerollController({
+    item,
+    rerollState,
+    enabled: mode === 'reroll',
+    playerSilver,
+    playerSpiritStones,
+    messageApi: message,
+    onLockIndexesChange: setRerollLockIndexes,
+    onRerollCommitted: onDone,
+    onInventoryChanged: () => {
+      window.dispatchEvent(new Event('inventory:changed'));
+    },
+  });
 
   const socketState = useMemo(() => {
     if (!item.equip) return null;
@@ -868,27 +895,6 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
     }
   }, [item.id, message, onDone, rerollState]);
 
-  const handleOpenPoolPreview = useCallback(async () => {
-    if (!item?.id || poolPreviewLoading) return;
-    setPoolPreviewOpen(true);
-    setPoolPreviewLoading(true);
-    setPoolPreviewData(null);
-    try {
-      const res = await getAffixPoolPreview(item.id);
-      if (res.success) {
-        setPoolPreviewData(res.data ?? null);
-      } else {
-        message.warning(res.message || '获取词条池失败');
-        setPoolPreviewOpen(false);
-      }
-    } catch {
-      message.error('获取词条池失败');
-      setPoolPreviewOpen(false);
-    } finally {
-      setPoolPreviewLoading(false);
-    }
-  }, [item, message, poolPreviewLoading]);
-
   const handleSocket = useCallback(async () => {
     if (!socketState) return;
     if (!socketState.selectedGem) return;
@@ -923,7 +929,7 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
 
   return (
     <>
-      <div className="mbag-sheet-mask" onClick={() => { if (!submitting) onClose(); }} />
+      <div className="mbag-sheet-mask" onClick={() => { if (!submitting && !autoRerollSubmitting) onClose(); }} />
       <div className="mbag-sheet">
         <div className="mbag-sheet-handle"><div className="mbag-sheet-bar" /></div>
 
@@ -1110,8 +1116,8 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
                     href="#"
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      if (!item.locked) {
-                        handleOpenPoolPreview();
+                      if (!item.locked && !autoRerollSubmitting) {
+                        void openPoolPreview();
                       }
                     }}
                     style={{
@@ -1143,7 +1149,7 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
                       <button
                         key={`${index}-${affix.key ?? 'affix'}`}
                         className={`mbag-sheet-reroll-lock${locked ? ' is-locked' : ''}`}
-                        disabled={submitting || item.locked}
+                        disabled={submitting || autoRerollSubmitting || item.locked}
                         onClick={() => handleToggleRerollLock(index)}
                       >
                         <span className="mbag-sheet-reroll-lock-index">#{index + 1}</span>
@@ -1166,6 +1172,54 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
                   })}
                 </div>
               </div>
+
+              <div className="mbag-sheet-section">
+                <div className="mbag-sheet-section-title">自动洗炼</div>
+                <div className="mbag-auto-reroll-controls">
+                  <select
+                    className="mbag-auto-reroll-select"
+                    multiple
+                    value={autoRerollTargetKeys}
+                    onChange={(event) => {
+                      const values = Array.from(event.currentTarget.selectedOptions).map((option) => option.value);
+                      setAutoRerollTargetKeys(values);
+                    }}
+                    disabled={submitting || autoRerollSubmitting || item.locked || !poolPreviewReady}
+                  >
+                    {poolPreviewLoading ? (
+                      <option value="" disabled>词条池加载中...</option>
+                    ) : null}
+                    {autoRerollOptions.map((option) => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                  <label className="mbag-auto-reroll-attempts">
+                    <span>最大次数</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={2000}
+                      value={autoRerollMaxAttempts}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (!Number.isFinite(value)) return;
+                        setAutoRerollMaxAttempts(Math.max(1, Math.min(2000, Math.floor(value))));
+                      }}
+                      disabled={submitting || autoRerollSubmitting || item.locked}
+                    />
+                  </label>
+                  {!poolPreviewReady && poolPreviewErrorMessage ? (
+                    <div className="mbag-sheet-hint">{poolPreviewErrorMessage}</div>
+                  ) : null}
+                  <button
+                    className="mbag-sheet-act-btn is-primary"
+                    disabled={autoRerollDisabled}
+                    onClick={() => void handleAutoReroll()}
+                  >
+                    {autoRerollSubmitting ? '自动洗炼中...' : '开启自动洗炼'}
+                  </button>
+                </div>
+              </div>
             </>
           ) : null}
 
@@ -1183,11 +1237,11 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
         </div>
 
         <div className="mbag-sheet-actions">
-          <button className="mbag-sheet-act-btn" onClick={onClose} disabled={submitting}>取消</button>
+          <button className="mbag-sheet-act-btn" onClick={onClose} disabled={submitting || autoRerollSubmitting}>取消</button>
           <button
             className="mbag-sheet-act-btn is-primary"
             disabled={
-              submitting || item.locked ||
+              submitting || autoRerollSubmitting || item.locked ||
               (mode === 'enhance' && enhanceState
                 ? enhanceState.owned < enhanceState.materialQty ||
                 playerSilver < enhanceState.silverCost || playerSpiritStones < enhanceState.spiritStoneCost
@@ -1236,10 +1290,10 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
 
       <AffixPoolPreviewModal
         open={poolPreviewOpen}
-        onClose={() => setPoolPreviewOpen(false)}
+        onClose={closePoolPreview}
         loading={poolPreviewLoading}
-        poolName={poolPreviewData?.poolName ?? ''}
-        affixes={poolPreviewData?.affixes ?? []}
+        poolName={poolPreviewReady && poolPreviewData ? poolPreviewData.poolName : ''}
+        affixes={poolPreviewReady && poolPreviewData ? poolPreviewData.affixes : []}
       />
     </>
   );

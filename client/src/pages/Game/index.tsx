@@ -47,6 +47,7 @@ import {
   claimTaskReward,
   createDungeonInstance,
   gatherRoomResource,
+  getBountyTaskOverview,
   getDungeonInstanceByBattleId,
   pickupRoomItem,
   getInventoryItems,
@@ -63,7 +64,13 @@ import {
   updateCharacterPositionKeepalive,
 } from '../../services/api';
 import { getUnifiedApiErrorMessage } from '../../services/api';
-import type { InventoryItemDto, NpcTalkResponse, NpcTalkTaskOption, TechniqueResearchResultStatusDto } from '../../services/api';
+import type {
+  BountyTaskOverviewRowDto,
+  InventoryItemDto,
+  NpcTalkResponse,
+  NpcTalkTaskOption,
+  TechniqueResearchResultStatusDto,
+} from '../../services/api';
 import { getMainQuestProgress, startDialogue, advanceDialogue, selectDialogueChoice, completeSection, type DialogueState } from '../../services/mainQuestApi';
 import { PARTNER_FEATURE_CODE } from '../../services/feature';
 import { getMyTeam, getTeamApplications, leaveTeam, type TeamInfo } from '../../services/teamApi';
@@ -95,6 +102,11 @@ import {
   matchesDungeonReconnectInstance,
   shouldRestoreDungeonBattleContext,
 } from './shared/dungeonBattleReconnect';
+import {
+  countCompletableBountyTaskOverviewRows,
+  countCompletableTaskOverviewRows,
+  getNextBountyTaskExpiryTs,
+} from './shared/taskIndicator';
 import { useRealtimeMemberPresence } from './shared/useRealtimeMemberPresence';
 
 interface GameProps {
@@ -675,6 +687,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [rankModalOpen, setRankModalOpen] = useState(false);
   const [achievementModalOpen, setAchievementModalOpen] = useState(false);
   const [achievementClaimableCount, setAchievementClaimableCount] = useState(0);
+  const [taskCompletableCount, setTaskCompletableCount] = useState(0);
   const [realmModalOpen, setRealmModalOpen] = useState(false);
   const [signInModalOpen, setSignInModalOpen] = useState(false);
   const [showSignInDot, setShowSignInDot] = useState(false);
@@ -730,6 +743,9 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const latestPositionRef = useRef<{ mapId: string; roomId: string } | null>(null);
   const lastKeepalivePositionKeyRef = useRef<string>('');
   const teamBattleAutoCloseTimerRef = useRef<number | null>(null);
+  const taskIndicatorQueuedRefreshTimerRef = useRef<number | null>(null);
+  const taskIndicatorExpiryTimerRef = useRef<number | null>(null);
+  const latestBountyOverviewTasksRef = useRef<BountyTaskOverviewRowDto[]>([]);
   const dungeonBattleIdRef = useRef<string | null>(null);
   const dungeonInstanceIdRef = useRef<string | null>(null);
   const pendingDungeonReconnectBattleIdRef = useRef<string | null>(null);
@@ -1635,6 +1651,86 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     return () => window.clearTimeout(t);
   }, [refreshAchievementIndicator]);
 
+  const clearTaskIndicatorQueuedRefreshTimer = useCallback(() => {
+    if (taskIndicatorQueuedRefreshTimerRef.current == null) return;
+    window.clearTimeout(taskIndicatorQueuedRefreshTimerRef.current);
+    taskIndicatorQueuedRefreshTimerRef.current = null;
+  }, []);
+
+  const clearTaskIndicatorExpiryTimer = useCallback(() => {
+    if (taskIndicatorExpiryTimerRef.current == null) return;
+    window.clearTimeout(taskIndicatorExpiryTimerRef.current);
+    taskIndicatorExpiryTimerRef.current = null;
+  }, []);
+
+  const refreshTaskIndicator = useCallback(async () => {
+    if (!characterId) {
+      latestBountyOverviewTasksRef.current = [];
+      clearTaskIndicatorExpiryTimer();
+      setTaskCompletableCount(0);
+      return;
+    }
+
+    const [taskResult, bountyResult] = await Promise.allSettled([
+      getTaskOverview(),
+      getBountyTaskOverview(),
+    ]);
+
+    const nowTs = Date.now();
+    const taskCount = taskResult.status === 'fulfilled' && taskResult.value.success && taskResult.value.data
+      ? countCompletableTaskOverviewRows(taskResult.value.data.tasks || [])
+      : 0;
+    const bountyTasks = bountyResult.status === 'fulfilled' && bountyResult.value.success && bountyResult.value.data
+      ? bountyResult.value.data.tasks || []
+      : [];
+    latestBountyOverviewTasksRef.current = bountyTasks;
+    const bountyCount = countCompletableBountyTaskOverviewRows(bountyTasks, nowTs);
+
+    clearTaskIndicatorExpiryTimer();
+    const nextExpiryTs = getNextBountyTaskExpiryTs(bountyTasks, nowTs);
+    if (nextExpiryTs != null) {
+      const delayMs = Math.max(0, nextExpiryTs - nowTs + 1000);
+      taskIndicatorExpiryTimerRef.current = window.setTimeout(() => {
+        taskIndicatorExpiryTimerRef.current = null;
+        void refreshTaskIndicator();
+      }, delayMs);
+    }
+
+    setTaskCompletableCount(taskCount + bountyCount);
+  }, [characterId, clearTaskIndicatorExpiryTimer]);
+
+  const queueTaskIndicatorRefresh = useCallback((delayMs: number = 240) => {
+    if (!characterId) return;
+    clearTaskIndicatorQueuedRefreshTimer();
+    taskIndicatorQueuedRefreshTimerRef.current = window.setTimeout(() => {
+      taskIndicatorQueuedRefreshTimerRef.current = null;
+      void refreshTaskIndicator();
+    }, Math.max(0, delayMs));
+  }, [characterId, clearTaskIndicatorQueuedRefreshTimer, refreshTaskIndicator]);
+
+  useEffect(() => {
+    if (!characterId) {
+      latestBountyOverviewTasksRef.current = [];
+      clearTaskIndicatorQueuedRefreshTimer();
+      clearTaskIndicatorExpiryTimer();
+      setTaskCompletableCount(0);
+      return;
+    }
+
+    queueTaskIndicatorRefresh(0);
+    return () => {
+      clearTaskIndicatorQueuedRefreshTimer();
+      clearTaskIndicatorExpiryTimer();
+    };
+  }, [characterId, clearTaskIndicatorExpiryTimer, clearTaskIndicatorQueuedRefreshTimer, queueTaskIndicatorRefresh]);
+
+  useEffect(() => {
+    if (!characterId) return;
+    return gameSocket.onCharacterUpdate(() => {
+      queueTaskIndicatorRefresh();
+    });
+  }, [characterId, queueTaskIndicatorRefresh]);
+
   const spiritStones = character?.spiritStones || 0;
   const silver = character?.silver || 0;
   const playerName = character?.nickname || '我';
@@ -1669,6 +1765,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         tooltip: `有${achievementClaimableCount}个成就奖励可领取`,
       };
     }
+    if (taskCompletableCount > 0) {
+      out.task = {
+        badgeCount: taskCompletableCount,
+        tooltip: `有${taskCompletableCount}个任务可完成`,
+      };
+    }
     if (techniqueIndicatorStatus) {
       out.technique = {
         badgeDot: true,
@@ -1676,7 +1778,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       };
     }
     return Object.keys(out).length > 0 ? out : undefined;
-  }, [achievementClaimableCount, isTeamLeader, sectMyApplicationCount, sectPendingApplicationCount, teamApplicationUnread, techniqueIndicatorStatus]);
+  }, [achievementClaimableCount, isTeamLeader, sectMyApplicationCount, sectPendingApplicationCount, taskCompletableCount, teamApplicationUnread, techniqueIndicatorStatus]);
 
   const functionItemStates = useMemo(
     () => ({
@@ -1996,7 +2098,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                 if (key === 'life') {
                   messageRef.current.info('百业玩法开发中，敬请期待');
                 }
-                if (key === 'task') setTaskModalOpen(true);
+                if (key === 'task') {
+                  setTaskModalOpen(true);
+                  void refreshTaskIndicator();
+                }
                 if (key === 'sect') setSectModalOpen(true);
                 if (key === 'market') setMarketModalOpen(true);
                 if (key === 'team') setTeamModalOpen(true);
@@ -2234,6 +2339,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                   const data = await refreshNpcTalk(npcTalkNpcId);
                   if (data?.lines) {
                     await refreshTrackedRoomIds();
+                    void refreshTaskIndicator();
                     window.dispatchEvent(new Event('room:objects:changed'));
                   }
                 } catch {
@@ -2253,6 +2359,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                   appendNpcDialogue('npc', '办得好。稍等，我为你结算。');
                   await refreshNpcTalk(npcTalkNpcId);
                   await refreshTrackedRoomIds();
+                  void refreshTaskIndicator();
                   window.dispatchEvent(new Event('room:objects:changed'));
                 } catch {
                   void 0;
@@ -2273,6 +2380,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                   gameSocket.refreshCharacter();
                   await refreshNpcTalk(npcTalkNpcId);
                   await refreshTrackedRoomIds();
+                  void refreshTaskIndicator();
                   window.dispatchEvent(new Event('room:objects:changed'));
                 } catch {
                   void 0;
@@ -2456,6 +2564,9 @@ const Game: FC<GameProps> = ({ onLogout }) => {
               await refreshTrackedRoomIds();
               window.dispatchEvent(new Event('room:objects:changed'));
             })();
+          }}
+          onTaskCompletedChange={() => {
+            void refreshTaskIndicator();
           }}
         />
       )}

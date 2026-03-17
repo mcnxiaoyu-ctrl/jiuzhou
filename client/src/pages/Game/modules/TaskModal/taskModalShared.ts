@@ -25,6 +25,7 @@ import type {
 } from '../../../../services/api';
 import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../shared/imageAssets';
 import { resolveIconUrl } from '../../shared/resolveIcon';
+import { isTaskIndicatorListCategory } from '../../shared/taskIndicator';
 
 export type TaskCategory = 'main' | 'side' | 'daily' | 'event' | 'bounty';
 
@@ -148,7 +149,7 @@ const mapTaskRewards = (taskId: string, rewards: TaskRewardDto[]): TaskReward[] 
 };
 
 const resolveTaskOverviewCategory = (category: TaskOverviewRowDto['category']): TaskListCategory | null => {
-  if (category === 'side' || category === 'daily' || category === 'event') {
+  if (isTaskIndicatorListCategory(category)) {
     return category;
   }
   return null;

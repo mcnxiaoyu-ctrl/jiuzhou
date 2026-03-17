@@ -14,7 +14,6 @@ import {
   refineInventoryItem,
   rerollInventoryAffixes,
   getRerollCostPreview,
-  getAffixPoolPreview,
   removeInventoryItemsBatch,
   setInventoryItemLock,
   socketInventoryGem,
@@ -23,7 +22,7 @@ import {
   inventoryUseItem,
 } from '../../../../services/api';
 import { getUnifiedApiErrorMessage } from '../../../../services/api';
-import type { InventoryInfoData, AffixPoolPreviewResponse } from '../../../../services/api';
+import type { InventoryInfoData } from '../../../../services/api';
 import {
   attrLabel,
   attrOrder,
@@ -67,6 +66,7 @@ import { SetBonusDisplay } from './SetBonusDisplay';
 import { formatDisassembleSuccessMessage } from './disassembleRewardText';
 import { getEquipmentGrowthFailModeText, useEquipmentGrowthPreview } from './useEquipmentGrowthPreview';
 import { useTechniqueBookSkills } from './useTechniqueBookSkills';
+import { useAutoRerollController } from './useAutoRerollController';
 import { collectEquipmentUnbindCandidates } from './equipmentUnbind';
 import { TechniqueSkillSection } from '../../shared/TechniqueSkillSection';
 import { useCharacterRenameCardFlow } from '../../shared/useCharacterRenameCardFlow';
@@ -104,9 +104,6 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     rerollScrollItemDefId: string;
     entries: Array<{ lockCount: number; rerollScrollQty: number; silverCost: number; spiritStoneCost: number }>;
   } | null>(null);
-  const [poolPreviewOpen, setPoolPreviewOpen] = useState(false);
-  const [poolPreviewLoading, setPoolPreviewLoading] = useState(false);
-  const [poolPreviewData, setPoolPreviewData] = useState<AffixPoolPreviewResponse['data'] | null>(null);
   const [socketSlot, setSocketSlot] = useState<number | undefined>(undefined);
   const [selectedGemItemId, setSelectedGemItemId] = useState<number | undefined>(undefined);
   const [batchOpen, setBatchOpen] = useState(false);
@@ -629,6 +626,36 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     };
   }, [activeItem, bagItemCounts, rerollLockIndexes, rerollCostTable]);
 
+  const {
+    autoRerollTargetKeys,
+    setAutoRerollTargetKeys,
+    autoRerollMaxAttempts,
+    setAutoRerollMaxAttempts,
+    autoRerollSubmitting,
+    autoRerollOptions,
+    autoRerollDisabled,
+    poolPreviewOpen,
+    poolPreviewLoading,
+    poolPreviewData,
+    poolPreviewReady,
+    poolPreviewErrorMessage,
+    openPoolPreview,
+    closePoolPreview,
+    handleAutoReroll,
+  } = useAutoRerollController({
+    item: activeItem,
+    rerollState,
+    enabled: enhanceOpen && growthMode === 'reroll',
+    playerSilver,
+    playerSpiritStones,
+    messageApi: message,
+    onLockIndexesChange: setRerollLockIndexes,
+    onRerollCommitted: refresh,
+    onInventoryChanged: () => {
+      window.dispatchEvent(new Event('inventory:changed'));
+    },
+  });
+
   const handleEnhance = useCallback(async () => {
     if (!activeItem) return;
     if (activeItem.category !== 'equipment') return;
@@ -759,27 +786,6 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       setRerollSubmitting(false);
     }
   }, [activeItem, message, refresh, rerollState]);
-
-  const handleOpenPoolPreview = useCallback(async () => {
-    if (!activeItem?.id || poolPreviewLoading) return;
-    setPoolPreviewOpen(true);
-    setPoolPreviewLoading(true);
-    setPoolPreviewData(null);
-    try {
-      const res = await getAffixPoolPreview(activeItem.id);
-      if (res.success) {
-        setPoolPreviewData(res.data ?? null);
-      } else {
-        message.warning(res.message || '获取词条池失败');
-        setPoolPreviewOpen(false);
-      }
-    } catch {
-      message.error('获取词条池失败');
-      setPoolPreviewOpen(false);
-    } finally {
-      setPoolPreviewLoading(false);
-    }
-  }, [activeItem, message, poolPreviewLoading]);
 
   const bagOnlyItems = useMemo(() => items.filter((i) => i.location === 'bag'), [items]);
 
@@ -1402,7 +1408,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       <Modal
         open={enhanceOpen}
         onCancel={() => {
-          if (enhanceSubmitting || refineSubmitting || socketSubmitting || rerollSubmitting) return;
+          if (enhanceSubmitting || refineSubmitting || socketSubmitting || rerollSubmitting || autoRerollSubmitting) return;
           setEnhanceOpen(false);
         }}
         footer={null}
@@ -1410,7 +1416,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
         destroyOnHidden
         title="装备成长"
         className="bag-enhance-modal"
-        maskClosable={!(enhanceSubmitting || refineSubmitting || socketSubmitting || rerollSubmitting)}
+        maskClosable={!(enhanceSubmitting || refineSubmitting || socketSubmitting || rerollSubmitting || autoRerollSubmitting)}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Tabs
@@ -1693,8 +1699,8 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                       href="#"
                       onMouseDown={(e) => {
                         e.preventDefault();
-                        if (!activeItem?.locked) {
-                          handleOpenPoolPreview();
+                        if (!activeItem?.locked && !autoRerollSubmitting) {
+                          void openPoolPreview();
                         }
                       }}
                       style={{
@@ -1739,7 +1745,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                         type="button"
                         className={'bag-reroll-affix-btn' + (locked ? ' is-locked' : '')}
                         onClick={() => handleToggleRerollLock(index)}
-                        disabled={rerollSubmitting || !!activeItem?.locked}
+                        disabled={rerollSubmitting || autoRerollSubmitting || !!activeItem?.locked}
                       >
                         <span className="bag-reroll-affix-index">#{index + 1}</span>
                         <span className="bag-reroll-affix-main">
@@ -1761,11 +1767,52 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                   })}
                 </div>
 
+                <div className="bag-reroll-auto-card">
+                  <div className="bag-reroll-auto-title">自动洗炼</div>
+                  <div className="bag-reroll-auto-controls">
+                    <Select
+                      mode="multiple"
+                      value={autoRerollTargetKeys}
+                      onChange={(values) => setAutoRerollTargetKeys(values)}
+                      placeholder={poolPreviewLoading ? '词条池加载中...' : '选择目标词条（命中全部后停止）'}
+                      options={autoRerollOptions.map((option) => ({ value: option.key, label: option.label }))}
+                      disabled={rerollSubmitting || autoRerollSubmitting || !!activeItem?.locked || !poolPreviewReady}
+                      loading={poolPreviewLoading}
+                      size="middle"
+                      showSearch
+                      optionFilterProp="label"
+                    />
+                    <InputNumber
+                      min={1}
+                      max={2000}
+                      value={autoRerollMaxAttempts}
+                      onChange={(value) => {
+                        if (typeof value !== 'number') return;
+                        setAutoRerollMaxAttempts(Math.max(1, Math.min(2000, Math.floor(value))));
+                      }}
+                      addonBefore="最大次数"
+                      disabled={rerollSubmitting || autoRerollSubmitting || !!activeItem?.locked}
+                    />
+                  </div>
+                  {!poolPreviewReady && poolPreviewErrorMessage ? (
+                    <div className="bag-growth-tip-muted">{poolPreviewErrorMessage}</div>
+                  ) : null}
+                  <Button
+                    block
+                    onClick={() => void handleAutoReroll()}
+                    loading={autoRerollSubmitting}
+                    disabled={autoRerollDisabled}
+                  >
+                    开启自动洗炼
+                  </Button>
+                </div>
+
                 <Button
                   block
                   type="primary"
                   disabled={
                     rerollSubmitting ||
+                    autoRerollSubmitting ||
                     !!activeItem?.locked ||
                     rerollState.rerollScrollOwned < rerollState.rerollScrollQty ||
                     playerSpiritStones < rerollState.spiritStoneCost ||
@@ -1788,10 +1835,10 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
 
       <AffixPoolPreviewModal
         open={poolPreviewOpen}
-        onClose={() => setPoolPreviewOpen(false)}
+        onClose={closePoolPreview}
         loading={poolPreviewLoading}
-        poolName={poolPreviewData?.poolName ?? ''}
-        affixes={poolPreviewData?.affixes ?? []}
+        poolName={poolPreviewReady && poolPreviewData ? poolPreviewData.poolName : ''}
+        affixes={poolPreviewReady && poolPreviewData ? poolPreviewData.affixes : []}
       />
 
       <Modal

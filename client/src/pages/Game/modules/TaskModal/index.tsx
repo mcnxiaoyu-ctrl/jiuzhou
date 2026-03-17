@@ -13,6 +13,11 @@ import {
 import { getMainQuestProgress, type MainQuestProgressDto } from '../../../../services/mainQuestApi';
 import { useIsMobile } from '../../shared/responsive';
 import { getRealmRankFromLiteral as getRealmRank } from '../../shared/realm';
+import {
+  getBountyTaskRemainingSeconds,
+  hasExpiredBountyTaskOverviewRow,
+  isActiveBountyTaskOverviewRow,
+} from '../../shared/taskIndicator';
 import { formatTaskRewardsToText } from '../../shared/taskRewardText';
 import MainQuestPanel from './MainQuestPanel';
 import {
@@ -46,9 +51,15 @@ interface TaskModalProps {
   open: boolean;
   onClose: () => void;
   onTrackedChange?: () => void;
+  onTaskCompletedChange?: () => void;
 }
 
-const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange }) => {
+const TaskModal: React.FC<TaskModalProps> = ({
+  open,
+  onClose,
+  onTrackedChange,
+  onTaskCompletedChange,
+}) => {
   const { message } = App.useApp();
   const taskCategoryKeys = useMemo(() => TASK_CATEGORY_KEYS, []);
   const taskCategoryOptions = useMemo(
@@ -93,10 +104,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
   }, []);
 
   const getRemainingSeconds = useCallback((expiresAt?: string | null): number | null => {
-    if (!expiresAt) return null;
-    const ms = Date.parse(expiresAt);
-    if (!Number.isFinite(ms)) return null;
-    return Math.max(0, Math.floor((ms - nowTs) / 1000));
+    return getBountyTaskRemainingSeconds(expiresAt, nowTs);
   }, [nowTs]);
 
   const formatCountdown = useCallback((seconds: number): string => {
@@ -256,18 +264,14 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
     if (category !== 'bounty') return;
     if (loadingByCategory.bounty) return;
 
-    const hasExpiredDaily = bountyTasks.some((t) => {
-      if (t.sourceType !== 'daily') return false;
-      if (!t.expiresAt) return false;
-      return (getRemainingSeconds(t.expiresAt) ?? 0) <= 0;
-    });
+    const hasExpiredDaily = bountyTasks.some((task) => hasExpiredBountyTaskOverviewRow(task, nowTs));
     if (!hasExpiredDaily) return;
 
     const now = Date.now();
     if (now - lastExpireRefreshAtRef.current < 5000) return;
     lastExpireRefreshAtRef.current = now;
     void refreshCategory('bounty');
-  }, [bountyTasks, category, getRemainingSeconds, loadingByCategory.bounty, open, refreshCategory]);
+  }, [bountyTasks, category, loadingByCategory.bounty, nowTs, open, refreshCategory]);
 
   const loading = loadingByCategory[category];
   const currentTasks = useMemo(() => {
@@ -279,18 +283,13 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = currentTasks
-      .filter((t) => {
-        if (category !== 'bounty') return true;
-        if (t.sourceType !== 'daily') return true;
-        if (!t.expiresAt) return true;
-        return (getRemainingSeconds(t.expiresAt) ?? 0) > 0;
-      });
+      .filter((task) => (category === 'bounty' ? isActiveBountyTaskOverviewRow(task, nowTs) : true));
     const searched = q ? list.filter((t) => t.title.toLowerCase().includes(q)) : list;
     const rank: Record<TaskStatus, number> = { claimable: 0, turnin: 1, ongoing: 2, completed: 3 };
     return [...searched].sort(
       (a, b) => rank[a.status] - rank[b.status] || getRealmRank(a.realm) - getRealmRank(b.realm) || a.id.localeCompare(b.id),
     );
-  }, [category, currentTasks, getRemainingSeconds, query]);
+  }, [category, currentTasks, nowTs, query]);
 
   const safeActiveId = useMemo(() => {
     if (activeId && filtered.some((t) => t.id === activeId)) return activeId;
@@ -326,10 +325,11 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
       const rewardText = formatTaskRewardsToText(res.data?.rewards);
       appendSystemChat(`【任务】领取奖励：${task.title}${rewardText ? `（${rewardText}）` : ''}`);
       await refreshCategory(task.category);
+      onTaskCompletedChange?.();
     } catch {
       void 0;
     }
-  }, [appendSystemChat, message, refreshCategory]);
+  }, [appendSystemChat, message, onTaskCompletedChange, refreshCategory]);
 
   const completeTask = useCallback(async (task: TaskItem | null) => {
     if (!task?.id) return;
@@ -351,16 +351,18 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
         message.success('完成成功');
         appendSystemChat(`【任务】已完成并领取奖励：${task.title}${rewardText ? `（${rewardText}）` : ''}`);
         await refreshCategory(task.category);
+        onTaskCompletedChange?.();
         return;
       }
 
       message.success('完成成功');
       appendSystemChat(`【任务】已完成：${task.title}`);
       await refreshCategory(task.category);
+      onTaskCompletedChange?.();
     } catch {
       void 0;
     }
-  }, [appendSystemChat, message, refreshCategory]);
+  }, [appendSystemChat, message, onTaskCompletedChange, refreshCategory]);
 
   const submitMaterials = useCallback(
     async (task: TaskItem | null) => {
@@ -371,13 +373,14 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
         message.success('提交成功');
         appendSystemChat(`【悬赏】已提交材料：${task.title}`);
         await refreshCategory('bounty');
+        onTaskCompletedChange?.();
       } catch {
         void 0;
       } finally {
         setSubmittingTaskId('');
       }
     },
-    [appendSystemChat, message, refreshCategory],
+    [appendSystemChat, message, onTaskCompletedChange, refreshCategory],
   );
 
   const refreshMainQuestProgress = useCallback(async () => {
