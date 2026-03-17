@@ -25,6 +25,7 @@ import {
   resolveLocalBattleMonsterIds,
   shouldAutoStartLocalBattle,
 } from './localStartResolver';
+import { resolveFinishedBattleAdvanceMode } from './autoNextPolicy';
 import './index.scss';
 
 export type BattleUnit = {
@@ -301,6 +302,13 @@ const BattleArea: React.FC<BattleAreaProps> = ({
   const { message } = App.useApp();
   const resolvedExternalBattleId = externalBattleId ?? null;
   const resolvedAllowAutoNext = allowAutoNext ?? true;
+  const finishedBattleAdvanceMode = useMemo(
+    () => resolveFinishedBattleAdvanceMode({
+      externalBattleId: resolvedExternalBattleId,
+      hasOnNext: typeof onNext === 'function',
+    }),
+    [onNext, resolvedExternalBattleId],
+  );
   const [battleState, setBattleState] = useState<BattleStateDto | null>(null);
   const [battleId, setBattleId] = useState<string | null>(null);
   const [selectedEnemyId, setSelectedEnemyId] = useState<string | null>(null);
@@ -795,7 +803,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
         setStartupStatus('none');
 
         // 自动触发下一场战斗
-        if (resolvedAllowAutoNext && !onNext && isFinishedWin) {
+        if (resolvedAllowAutoNext && finishedBattleAdvanceMode === 'use_local_retry' && isFinishedWin) {
           void startBattle(lastMonsterIdsRef.current, { retryOnCooldown: true, silentCooldown: true });
         }
       }
@@ -810,7 +818,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       if (customEvent.detail.characterId === myCharacterId && customEvent.detail.remainingMs > 0) {
         const remainingMs = Math.max(0, Math.floor(customEvent.detail.remainingMs));
         nextBattleAvailableAtRef.current = Date.now() + remainingMs;
-        if (resolvedAllowAutoNext && !onNext && isFinishedWin) {
+        if (resolvedAllowAutoNext && finishedBattleAdvanceMode === 'use_local_retry' && isFinishedWin) {
           scheduleBattleStartAfterCooldown(lastMonsterIdsRef.current, remainingMs, true);
           return;
         }
@@ -826,7 +834,13 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       window.removeEventListener('battle:cooldown-ready', handleCooldownReady);
       window.removeEventListener('battle:cooldown-sync', handleCooldownSync);
     };
-  }, [clearAutoNextTimer, onNext, resolvedAllowAutoNext, scheduleBattleStartAfterCooldown, startBattle]);
+  }, [
+    clearAutoNextTimer,
+    finishedBattleAdvanceMode,
+    resolvedAllowAutoNext,
+    scheduleBattleStartAfterCooldown,
+    startBattle,
+  ]);
 
   useEffect(() => {
     if (!resolvedExternalBattleId) return;
@@ -879,12 +893,17 @@ const BattleArea: React.FC<BattleAreaProps> = ({
     const currentBattleId = battleId;
     if (!currentBattleId) return;
 
+    if (finishedBattleAdvanceMode === 'wait_on_next') {
+      clearAutoNextTimer();
+      return;
+    }
+
     if (announcedAutoNextBattleIdRef.current === currentBattleId) return;
     announcedAutoNextBattleIdRef.current = currentBattleId;
     clearAutoNextTimer();
 
-    // 战斗结束后，设置等待服务端冷却推送状态
-    if (!onNext) {
+    // 普通地图自动连战：等待冷却结束后直接重开下一场。
+    if (finishedBattleAdvanceMode === 'use_local_retry') {
       const remainingCooldownMs = getRemainingBattleCooldownMs();
       if (remainingCooldownMs > 0) {
         scheduleBattleStartAfterCooldown(lastMonsterIdsRef.current, remainingCooldownMs, true);
@@ -895,33 +914,32 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       return;
     }
 
-    // 如果有 onNext 回调，仍使用前端定时器（非自动战斗场景）
+    // 外部战斗（如秘境）已具备 onNext：使用前端定时器推进下一波。
     const delayMs = getAutoNextDelayMs();
     const delaySec = (delayMs / 1000).toFixed(1);
     const shouldShowMessage = delayMs >= MINIMUM_MEANINGFUL_COOLDOWN_DISPLAY_MS;
 
-    if (onNext) {
-      if (shouldShowMessage) {
-        message.info(`战斗结束，等待${delaySec}秒后继续推进`, Math.max(1, Math.ceil(delayMs / 1000)));
-      }
-      autoNextTimerRef.current = window.setTimeout(() => {
-        if (battleIdRef.current !== currentBattleId) return;
-        if (nextingRef.current) return;
-        nextingRef.current = true;
-        setNexting(true);
-        Promise.resolve()
-          .then(() => onNext())
-          .finally(() => {
-            nextingRef.current = false;
-            setNexting(false);
-          });
-      }, delayMs);
-      return;
+    if (shouldShowMessage) {
+      message.info(`战斗结束，等待${delaySec}秒后继续推进`, Math.max(1, Math.ceil(delayMs / 1000)));
     }
+    autoNextTimerRef.current = window.setTimeout(() => {
+      if (battleIdRef.current !== currentBattleId) return;
+      if (nextingRef.current) return;
+      if (!onNext) return;
+      nextingRef.current = true;
+      setNexting(true);
+      Promise.resolve()
+        .then(() => onNext())
+        .finally(() => {
+          nextingRef.current = false;
+          setNexting(false);
+        });
+    }, delayMs);
   }, [
     battleId,
     battleState,
     clearAutoNextTimer,
+    finishedBattleAdvanceMode,
     getAutoNextDelayMs,
     message,
     onNext,
