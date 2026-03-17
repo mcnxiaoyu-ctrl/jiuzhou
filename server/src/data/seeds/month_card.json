@@ -10,6 +10,7 @@
       "cooldown_reduction_rate": 0.1,
       "stamina_recovery_rate": 0.1,
       "fuyuan_bonus": 20,
+      "idle_max_duration_hours": 12,
       "price_spirit_stones": 0,
       "enabled": true,
       "sort_weight": 0

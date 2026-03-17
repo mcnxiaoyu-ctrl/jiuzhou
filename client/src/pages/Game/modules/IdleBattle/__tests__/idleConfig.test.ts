@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import type { IdleConfigDto, AutoSkillSlotDto, AutoSkillPolicyDto } from '../types';
+import { MONTH_CARD_IDLE_MAX_DURATION_MS } from '../utils/idleDurationOptions';
 
 // ============================================
 // 模拟客户端侧的"持久化往返"：
@@ -31,8 +32,8 @@ const autoSkillPolicyArb: fc.Arbitrary<AutoSkillPolicyDto> = fc.record({
 const idleConfigArb: fc.Arbitrary<IdleConfigDto> = fc.record({
   mapId: fc.oneof(fc.string({ minLength: 1, maxLength: 40 }), fc.constant(null)),
   roomId: fc.oneof(fc.string({ minLength: 1, maxLength: 40 }), fc.constant(null)),
-  // 时长范围：1min ~ 8h（与服务端校验范围一致）
-  maxDurationMs: fc.integer({ min: 60_000, max: 28_800_000 }),
+  // 时长范围：1min ~ 12h（含月卡扩展上限）
+  maxDurationMs: fc.integer({ min: 60_000, max: MONTH_CARD_IDLE_MAX_DURATION_MS }),
   autoSkillPolicy: autoSkillPolicyArb,
   targetMonsterDefId: fc.oneof(fc.string({ minLength: 1, maxLength: 40 }), fc.constant(null)),
   includePartnerInBattle: fc.boolean(),
@@ -116,12 +117,12 @@ describe('Property 4: Idle_Config 持久化往返', () => {
     );
   });
 
-  it('maxDurationMs 始终在合法范围内（1min ~ 8h）', () => {
+  it('maxDurationMs 始终在合法范围内（1min ~ 12h）', () => {
     fc.assert(
       fc.property(idleConfigArb, (config) => {
         const result = roundTrip(config);
         expect(result.maxDurationMs).toBeGreaterThanOrEqual(60_000);
-        expect(result.maxDurationMs).toBeLessThanOrEqual(28_800_000);
+        expect(result.maxDurationMs).toBeLessThanOrEqual(MONTH_CARD_IDLE_MAX_DURATION_MS);
       }),
       { numRuns: 100 },
     );

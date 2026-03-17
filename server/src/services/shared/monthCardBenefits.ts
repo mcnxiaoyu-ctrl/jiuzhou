@@ -3,12 +3,12 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：集中维护月卡静态定义读取、激活态查询与数值权益提取，避免各业务服务分别手写月卡规则。
- * 2. 做什么：为冷却缩减、体力恢复、角色属性加成等入口提供统一权益配置，减少同一数值散落在服务层与前端。
+ * 2. 做什么：为冷却缩减、体力恢复、角色属性加成、挂机时长上限等入口提供统一权益配置，减少同一数值散落在服务层与前端。
  * 3. 不做什么：不处理月卡购买、续期、领取奖励，也不负责前端展示文案拼装。
  *
  * 输入/输出：
  * - 输入：月卡 ID、角色 ID、基础冷却秒数、基础福源、当前时间。
- * - 输出：月卡定义、共享权益快照、当前有效权益窗口，以及折算后的实际冷却秒数/福源值。
+ * - 输出：月卡定义、共享权益快照、当前有效权益窗口，以及折算后的实际冷却秒数/福源值/挂机时长上限小时数。
  *
  * 数据流/状态流：
  * month_card.json -> getMonthCardDefinitionById / getMonthCardBenefitValues；
@@ -36,6 +36,7 @@ export type MonthCardBenefitValues = {
   cooldownReductionRate: number;
   staminaRecoveryRate: number;
   fuyuanBonus: number;
+  idleMaxDurationHours: number;
 };
 
 export type MonthCardBenefitWindow = {
@@ -51,6 +52,7 @@ const EMPTY_MONTH_CARD_BENEFITS: MonthCardBenefitValues = Object.freeze({
   cooldownReductionRate: 0,
   staminaRecoveryRate: 0,
   fuyuanBonus: 0,
+  idleMaxDurationHours: 0,
 });
 
 const normalizeCharacterIds = (characterIds: number[]): number[] => {
@@ -105,6 +107,7 @@ export const getMonthCardBenefitValues = (
     cooldownReductionRate: clampReductionRate(normalizeNumber(definition.cooldown_reduction_rate)),
     staminaRecoveryRate: clampReductionRate(normalizeNumber(definition.stamina_recovery_rate)),
     fuyuanBonus: clampNonNegativeInteger(normalizeNumber(definition.fuyuan_bonus)),
+    idleMaxDurationHours: clampNonNegativeInteger(normalizeNumber(definition.idle_max_duration_hours)),
   };
 };
 
@@ -124,6 +127,12 @@ export const getMonthCardFuyuanBonus = (
   monthCardId: string = DEFAULT_MONTH_CARD_ID,
 ): number => {
   return getMonthCardBenefitValues(monthCardId).fuyuanBonus;
+};
+
+export const getMonthCardIdleMaxDurationHours = (
+  monthCardId: string = DEFAULT_MONTH_CARD_ID,
+): number => {
+  return getMonthCardBenefitValues(monthCardId).idleMaxDurationHours;
 };
 
 export const applyCooldownReductionSeconds = (

@@ -55,6 +55,7 @@ export interface MonthCardStatusResponse {
       cooldownReductionRate: number;
       staminaRecoveryRate: number;
       fuyuanBonus: number;
+      idleMaxDurationHours: number;
     };
     active: boolean;
     expireAt: string | null;

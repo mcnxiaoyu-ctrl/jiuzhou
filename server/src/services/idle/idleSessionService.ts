@@ -51,6 +51,7 @@ import {
   resolveOrphanStoppingSessionIds,
   type IdleSessionActivitySnapshot,
 } from './idleSessionActivity.js';
+import { resolveIdleMaxDurationMs } from '../shared/idleDurationLimits.js';
 
 // ============================================
 // 常量
@@ -65,8 +66,8 @@ const IDLE_LOCK_TTL_BUFFER_MS = 5 * 60 * 1000;
 /** 互斥锁 TTL 最小值（秒） */
 const IDLE_LOCK_TTL_MIN_SECONDS = 60;
 
-/** 互斥锁 TTL 最大值（秒，8h + 5min） */
-const IDLE_LOCK_TTL_MAX_SECONDS = (28_800_000 + IDLE_LOCK_TTL_BUFFER_MS) / 1000;
+/** 互斥锁 TTL 最大值（秒，按当前最高挂机上限 + 5min 计算） */
+const IDLE_LOCK_TTL_MAX_SECONDS = (resolveIdleMaxDurationMs(true) + IDLE_LOCK_TTL_BUFFER_MS) / 1000;
 
 /** 历史记录最大保留条数 */
 const MAX_HISTORY_COUNT = 30;

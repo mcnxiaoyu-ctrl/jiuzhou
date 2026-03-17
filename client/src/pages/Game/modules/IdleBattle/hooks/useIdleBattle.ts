@@ -47,6 +47,7 @@ import type {
   IdleConfigDto,
 } from '../types';
 import type { BattleLogEntryDto } from '../../../../../services/api/combat-realm';
+import { BASE_IDLE_MAX_DURATION_MS } from '../utils/idleDurationOptions';
 
 // ============================================
 // 常量
@@ -65,6 +66,8 @@ const DEFAULT_CONFIG: IdleConfigDto = {
   includePartnerInBattle: true,
 };
 
+type ConfigSyncMode = 'replace' | 'preserveDraft';
+
 // ============================================
 // 返回类型
 // ============================================
@@ -79,7 +82,10 @@ export interface UseIdleBattleReturn {
 
   // 挂机配置（本地草稿，未保存前不影响服务端）
   config: IdleConfigDto;
+  maxDurationLimitMs: number;
+  monthCardActive: boolean;
   setConfig: (patch: Partial<IdleConfigDto>) => void;
+  refreshConfig: () => Promise<void>;
   saveConfig: () => Promise<void>;
 
   // 操作
@@ -110,6 +116,8 @@ export function useIdleBattle(): UseIdleBattleReturn {
   const [error, setError] = useState<string | null>(null);
 
   const [config, setConfigState] = useState<IdleConfigDto>(DEFAULT_CONFIG);
+  const [maxDurationLimitMs, setMaxDurationLimitMs] = useState(BASE_IDLE_MAX_DURATION_MS);
+  const [monthCardActive, setMonthCardActive] = useState(false);
 
   const [history, setHistory] = useState<IdleSessionDto[]>([]);
 
@@ -123,6 +131,8 @@ export function useIdleBattle(): UseIdleBattleReturn {
   const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedSessionIdRef = useRef<string | null>(null);
   const selectedBatchIdRef = useRef<string | null>(null);
+  const monthCardActiveRef = useRef(monthCardActive);
+  const configSyncingRef = useRef(false);
 
   // ============================================
   // 初始化：加载当前状态和配置
@@ -138,10 +148,21 @@ export function useIdleBattle(): UseIdleBattleReturn {
     }
   }, []);
 
-  const loadConfig = useCallback(async () => {
+  const loadConfig = useCallback(async (mode: ConfigSyncMode = 'replace') => {
     try {
       const res = await getIdleConfig();
-      setConfigState(res.config);
+      setMaxDurationLimitMs(res.maxDurationLimitMs);
+      setMonthCardActive(res.monthCardActive);
+      monthCardActiveRef.current = res.monthCardActive;
+      setConfigState((prev) => {
+        if (mode === 'replace') {
+          return res.config;
+        }
+        return {
+          ...prev,
+          maxDurationMs: Math.min(prev.maxDurationMs, res.maxDurationLimitMs),
+        };
+      });
     } catch (err) {
       setError(getUnifiedApiErrorMessage(err, '加载挂机配置失败'));
     }
@@ -207,6 +228,10 @@ export function useIdleBattle(): UseIdleBattleReturn {
     setIsLoading(true);
     void Promise.all([loadStatus(), loadConfig()]).finally(() => setIsLoading(false));
   }, [loadConfig, loadStatus]);
+
+  useEffect(() => {
+    monthCardActiveRef.current = monthCardActive;
+  }, [monthCardActive]);
 
   // ============================================
   // Socket 事件：idle:update（每场战斗收益推送）
@@ -293,6 +318,20 @@ export function useIdleBattle(): UseIdleBattleReturn {
     return unsubscribeError;
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = gameSocket.onCharacterUpdate((character) => {
+      if (!character) return;
+      if (character.monthCardActive === monthCardActiveRef.current) return;
+      if (configSyncingRef.current) return;
+
+      configSyncingRef.current = true;
+      void loadConfig('preserveDraft').finally(() => {
+        configSyncingRef.current = false;
+      });
+    });
+    return unsubscribe;
+  }, [loadConfig]);
+
 
   // ============================================
   // 配置管理
@@ -301,6 +340,10 @@ export function useIdleBattle(): UseIdleBattleReturn {
   const setConfig = useCallback((patch: Partial<IdleConfigDto>) => {
     setConfigState((prev) => ({ ...prev, ...patch }));
   }, []);
+
+  const refreshConfig = useCallback(async () => {
+    await loadConfig('preserveDraft');
+  }, [loadConfig]);
 
   const saveConfig = useCallback(async () => {
     setError(null);
@@ -453,7 +496,10 @@ export function useIdleBattle(): UseIdleBattleReturn {
     error,
 
     config,
+    maxDurationLimitMs,
+    monthCardActive,
     setConfig,
+    refreshConfig,
     saveConfig,
 
     startIdle,

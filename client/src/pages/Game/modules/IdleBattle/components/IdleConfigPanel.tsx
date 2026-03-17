@@ -2,7 +2,7 @@
  * IdleConfigPanel — 挂机配置面板
  *
  * 作用：
- *   提供地图/房间选择、伙伴参战开关、最大挂机时长（1min~8h）、技能策略槽位（最多 6 个）的配置界面。
+ *   提供地图/房间选择、伙伴参战开关、最大挂机时长（基础 8 小时，月卡生效时可到 12 小时）、技能策略槽位（最多 6 个）的配置界面。
  *   Stamina 不足时禁用"开始挂机"按钮并显示提示。
  *   不包含任何状态管理逻辑，所有状态通过 props 传入。
  *
@@ -30,6 +30,11 @@ import { getCharacterTechniqueStatus } from '../../../../../services/api/techniq
 import { gameSocket } from '../../../../../services/gameSocket';
 import type { IdleConfigDto } from '../types';
 import { buildMonsterOptions, filterIdleMaps, filterRoomsWithMonsters } from '../utils/idleMapOptions';
+import {
+  BASE_IDLE_MAX_DURATION_MS,
+  getIdleDurationPresetOptions,
+  getIdleDurationSliderMaxMinutes,
+} from '../utils/idleDurationOptions';
 import './IdleConfigPanel.scss';
 
 /** 可选技能项（从角色功法状态 API 获取） */
@@ -44,16 +49,7 @@ interface AvailableSkillOption {
 // ============================================
 
 const MIN_DURATION_MS = 600_000;
-const MAX_DURATION_MS = 28_800_000;
 const MAX_SKILL_SLOTS = 6;
-
-/** 时长预设选项（ms） */
-const DURATION_PRESETS: Array<{ label: string; value: number }> = [
-  { label: '1小时', value: 3_600_000 },
-  { label: '2小时', value: 7_200_000 },
-  { label: '4小时', value: 14_400_000 },
-  { label: '8小时', value: 28_800_000 },
-];
 
 // ============================================
 // Props
@@ -61,6 +57,8 @@ const DURATION_PRESETS: Array<{ label: string; value: number }> = [
 
 interface IdleConfigPanelProps {
   config: IdleConfigDto;
+  maxDurationLimitMs: number;
+  monthCardActive: boolean;
   isActive: boolean;
   isStopping: boolean;
   isLoading: boolean;
@@ -76,6 +74,8 @@ interface IdleConfigPanelProps {
 
 const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
   config,
+  maxDurationLimitMs,
+  monthCardActive,
   isActive,
   isStopping,
   isLoading,
@@ -229,6 +229,9 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
 
   const canStart = !!config.mapId && !!config.roomId && !!config.targetMonsterDefId && !isActive;
   const durationMinutes = Math.round(config.maxDurationMs / 60_000);
+  const durationPresetOptions = getIdleDurationPresetOptions(maxDurationLimitMs);
+  const sliderMaxMinutes = getIdleDurationSliderMaxMinutes(maxDurationLimitMs);
+  const extendedDurationEnabled = maxDurationLimitMs > BASE_IDLE_MAX_DURATION_MS;
 
   return (
     <div className="idle-config-panel">
@@ -295,8 +298,13 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
       <div className="idle-config-section">
         <label className="idle-config-label">挂机时长</label>
         <div className="idle-config-duration">
+          {extendedDurationEnabled && monthCardActive && (
+            <div className="idle-config-partner-toggle">
+              <span className="idle-config-partner-desc">月卡生效中，当前离线挂机上限已提升至 12 小时</span>
+            </div>
+          )}
           <div className="idle-config-duration-tags">
-            {DURATION_PRESETS.map((p) => (
+            {durationPresetOptions.map((p) => (
               <Tag.CheckableTag
                 key={p.value}
                 checked={config.maxDurationMs === p.value}
@@ -309,7 +317,7 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
           <div className="idle-config-duration-slider">
             <Slider
               min={MIN_DURATION_MS / 60_000}
-              max={MAX_DURATION_MS / 60_000}
+              max={sliderMaxMinutes}
               step={10}
               value={durationMinutes}
               onChange={(v) => handleDurationChange(v * 60_000)}

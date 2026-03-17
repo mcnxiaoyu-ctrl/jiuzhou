@@ -13,12 +13,17 @@
  *   随机生成输入 → 调用被测函数 → 断言属性成立
  *
  * 关键边界条件：
- *   1. 属性 1 的边界值：60_000ms（1分钟）和 28_800_000ms（8小时）均为合法值
+ *   1. 属性 1 的边界值：60_000ms（1分钟）和基础上限 8 小时均为合法值
  *   2. 属性 7 的优先级排序：priority 相同时按 slots 原始顺序（稳定排序）
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {
+  BASE_IDLE_MAX_DURATION_MS,
+  isIdleDurationMsWithinLimit,
+  MIN_IDLE_DURATION_MS,
+} from '../shared/idleDurationLimits.js';
 
 // ============================================
 // 随机数生成工具（与 autoSkillPolicyCodec.test.ts 保持一致）
@@ -37,21 +42,9 @@ function makeLcgRng(seed: number): () => number {
 // 这里直接内联校验逻辑，避免在测试中引入未实现的服务依赖
 // ============================================
 
-const MIN_DURATION_MS = 60_000;       // 1 分钟
-const MAX_DURATION_MS = 28_800_000;   // 8 小时
-
-/**
- * 校验挂机时长是否合法
- * 合法范围：[60_000, 28_800_000]（闭区间）
- */
-function isValidDurationMs(durationMs: number): boolean {
-  return (
-    Number.isFinite(durationMs) &&
-    Number.isInteger(durationMs) &&
-    durationMs >= MIN_DURATION_MS &&
-    durationMs <= MAX_DURATION_MS
-  );
-}
+const isValidDurationMs = (durationMs: number): boolean => {
+  return isIdleDurationMsWithinLimit(durationMs, BASE_IDLE_MAX_DURATION_MS);
+};
 
 // ============================================
 // 属性 1：挂机时长校验范围
@@ -62,8 +55,8 @@ test('属性 1：挂机时长校验范围（numRuns: 100）', () => {
   // Feature: offline-idle-battle, Property 1: 挂机时长校验范围
   // 验证：需求 1.2
   // 属性：
-  //   - durationMs ∈ [60_000, 28_800_000] 时 isValidDurationMs 返回 true
-  //   - durationMs < 60_000 或 > 28_800_000 时返回 false
+  //   - durationMs ∈ [60_000, 基础 8 小时] 时 isValidDurationMs 返回 true
+  //   - durationMs < 60_000 或 > 基础 8 小时时返回 false
   //   - 非整数、非有限数时返回 false
 
   const numRuns = 100;
@@ -75,7 +68,7 @@ test('属性 1：挂机时长校验范围（numRuns: 100）', () => {
 
     // 测试合法范围内的随机值
     const validMs = Math.floor(
-      MIN_DURATION_MS + rng() * (MAX_DURATION_MS - MIN_DURATION_MS)
+      MIN_IDLE_DURATION_MS + rng() * (BASE_IDLE_MAX_DURATION_MS - MIN_IDLE_DURATION_MS)
     );
     if (!isValidDurationMs(validMs)) {
       failCount++;
@@ -85,21 +78,21 @@ test('属性 1：挂机时长校验范围（numRuns: 100）', () => {
     }
 
     // 测试边界值
-    if (!isValidDurationMs(MIN_DURATION_MS)) {
+    if (!isValidDurationMs(MIN_IDLE_DURATION_MS)) {
       failCount++;
       if (failures.length < 3) {
-        failures.push(`run=${run}: 最小值 ${MIN_DURATION_MS} 应合法`);
+        failures.push(`run=${run}: 最小值 ${MIN_IDLE_DURATION_MS} 应合法`);
       }
     }
-    if (!isValidDurationMs(MAX_DURATION_MS)) {
+    if (!isValidDurationMs(BASE_IDLE_MAX_DURATION_MS)) {
       failCount++;
       if (failures.length < 3) {
-        failures.push(`run=${run}: 最大值 ${MAX_DURATION_MS} 应合法`);
+        failures.push(`run=${run}: 最大值 ${BASE_IDLE_MAX_DURATION_MS} 应合法`);
       }
     }
 
     // 测试低于最小值的情况
-    const tooSmall = Math.floor(rng() * MIN_DURATION_MS); // 0 ~ 59_999
+    const tooSmall = Math.floor(rng() * MIN_IDLE_DURATION_MS); // 0 ~ 59_999
     if (isValidDurationMs(tooSmall)) {
       failCount++;
       if (failures.length < 3) {
@@ -108,7 +101,7 @@ test('属性 1：挂机时长校验范围（numRuns: 100）', () => {
     }
 
     // 测试超出最大值的情况
-    const tooLarge = MAX_DURATION_MS + Math.floor(rng() * 3_600_000) + 1;
+    const tooLarge = BASE_IDLE_MAX_DURATION_MS + Math.floor(rng() * 3_600_000) + 1;
     if (isValidDurationMs(tooLarge)) {
       failCount++;
       if (failures.length < 3) {
@@ -117,7 +110,7 @@ test('属性 1：挂机时长校验范围（numRuns: 100）', () => {
     }
 
     // 测试非整数
-    const nonInteger = MIN_DURATION_MS + rng() * (MAX_DURATION_MS - MIN_DURATION_MS);
+    const nonInteger = MIN_IDLE_DURATION_MS + rng() * (BASE_IDLE_MAX_DURATION_MS - MIN_IDLE_DURATION_MS);
     if (Number.isInteger(nonInteger)) {
       // 极少数情况下随机数恰好是整数，跳过
     } else if (isValidDurationMs(nonInteger)) {
@@ -135,8 +128,8 @@ test('属性 1：挂机时长校验范围（numRuns: 100）', () => {
     -Infinity,
     -1,
     0,
-    MIN_DURATION_MS - 1,
-    MAX_DURATION_MS + 1,
+    MIN_IDLE_DURATION_MS - 1,
+    BASE_IDLE_MAX_DURATION_MS + 1,
   ];
   for (const v of specialInvalidValues) {
     if (isValidDurationMs(v)) {

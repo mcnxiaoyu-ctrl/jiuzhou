@@ -15,7 +15,7 @@
  *   IdleBattleSummaryRow / IdleBattleDetailRow → 客户端回放展示
  *
  * 关键边界条件：
- *   1. maxDurationMs 合法范围为 [60_000, 28_800_000]（1 分钟 ~ 8 小时），超出范围应在路由层拒绝
+ *   1. maxDurationMs 最小值固定为 60_000，最大值由当前月卡权益决定（基础 8 小时，月卡生效时提升到 12 小时），超出范围应在路由层拒绝
  *   2. AutoSkillPolicy.slots 最多 6 个，超出时 validateAutoSkillPolicy 应返回字段路径错误
  *   3. IdleSessionRow.status 为联合字面量类型，禁止使用 string 替代，防止非法状态写入
  *   4. ParseResult<T> 使用判别联合（discriminated union），调用方必须先检查 success 字段再访问 value/errors
@@ -42,7 +42,7 @@ export type {
 /**
  * 挂机配置（客户端传入）
  * - mapId / roomId：目标地图与房间标识
- * - maxDurationMs：最大挂机时长，合法范围 [60_000, 28_800_000]
+ * - maxDurationMs：最大挂机时长，最小值 60_000，最大值由当前月卡权益决定
  * - autoSkillPolicy：自动技能释放策略
  */
 export interface IdleConfigDto {

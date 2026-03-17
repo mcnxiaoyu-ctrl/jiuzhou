@@ -24,7 +24,7 @@
  *      已处理 markIdleSessionViewed，无需在此重复调用
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Alert, Tabs } from 'antd';
 import { useIdleBattle, type UseIdleBattleReturn } from './hooks/useIdleBattle';
 import IdleConfigPanel from './components/IdleConfigPanel';
@@ -58,7 +58,10 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle }) => {
     isLoading,
     error,
     config,
+    maxDurationLimitMs,
+    monthCardActive,
     setConfig,
+    refreshConfig,
     saveConfig,
     startIdle,
     stopIdle,
@@ -80,6 +83,10 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle }) => {
       void loadHistory();
     }
   }, [loadHistory]);
+
+  useEffect(() => {
+    void refreshConfig();
+  }, [refreshConfig]);
 
   return (
     <div className="idle-battle-panel">
@@ -105,6 +112,8 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle }) => {
             children: (
               <IdleConfigPanel
                 config={config}
+                maxDurationLimitMs={maxDurationLimitMs}
+                monthCardActive={monthCardActive}
                 isActive={activeSession !== null && !isStopping}
                 isStopping={isStopping}
                 isLoading={isLoading}

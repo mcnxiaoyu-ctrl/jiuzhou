@@ -160,6 +160,8 @@ export interface IdleProgressResponse {
 
 export interface IdleConfigResponse {
   config: IdleConfigDto;
+  maxDurationLimitMs: number;
+  monthCardActive: boolean;
 }
 
 /** POST /start 请求体 */

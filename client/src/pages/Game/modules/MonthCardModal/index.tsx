@@ -1,5 +1,6 @@
 import {
   ClockCircleOutlined,
+  FieldTimeOutlined,
   GiftOutlined,
   StarOutlined,
   ThunderboltOutlined,
@@ -30,6 +31,7 @@ const privilegeIconMap: Record<MonthCardPrivilegeIconName, ComponentType> = {
   GiftOutlined,
   UsergroupAddOutlined,
   ClockCircleOutlined,
+  FieldTimeOutlined,
   ThunderboltOutlined,
   StarOutlined,
 };

@@ -23,7 +23,7 @@
  * 关键边界条件：
  *   1. 所有端点均使用 requireCharacter 中间件，确保 req.characterId 和 req.userId 已注入
  *   2. PUT /config 调用 validateAutoSkillPolicy 校验策略，非法时返回 400 + 字段路径错误
- *   3. maxDurationMs 合法范围 [60_000, 28_800_000]，超出时返回 400
+ *   3. maxDurationMs 最小值固定 60_000，最大值取决于当前月卡权益（基础 8 小时，月卡生效时可扩展到 12 小时）
  *   4. GET /progress 返回活跃会话 + 批次摘要列表，供断线重连后补全进度
  */
 
@@ -43,13 +43,15 @@ import { getMonsterDefinitions } from '../services/staticConfigLoader.js';
 import type { IdleConfigDto, IdleSessionRow } from '../services/idle/types.js';
 import { sendSuccess, sendOk } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
+import {
+  isIdleDurationMsWithinLimit,
+  MIN_IDLE_DURATION_MS,
+  resolveIdleDurationLimitByCharacter,
+} from '../services/shared/idleDurationLimits.js';
 
 // ============================================
 // 常量
 // ============================================
-
-const MIN_DURATION_MS = 60_000;       // 1 分钟
-const MAX_DURATION_MS = 28_800_000;   // 8 小时
 
 const router = Router();
 
@@ -114,9 +116,10 @@ router.post('/start', requireCharacter, asyncHandler(async (req, res) => {
     throw new BusinessError('缺少 targetMonsterDefId');
   }
   const validatedIncludePartnerInBattle = parseIncludePartnerInBattle(includePartnerInBattle);
+  const durationLimit = await resolveIdleDurationLimitByCharacter(characterId);
   const durationMs = Number(maxDurationMs);
-  if (!Number.isFinite(durationMs) || durationMs < MIN_DURATION_MS || durationMs > MAX_DURATION_MS) {
-    throw new BusinessError(`maxDurationMs 必须在 ${MIN_DURATION_MS} ~ ${MAX_DURATION_MS} 之间`);
+  if (!isIdleDurationMsWithinLimit(durationMs, durationLimit.maxDurationMs)) {
+    throw new BusinessError(`maxDurationMs 必须在 ${MIN_IDLE_DURATION_MS} ~ ${durationLimit.maxDurationMs} 之间`);
   }
 
   // 校验 autoSkillPolicy
@@ -286,6 +289,7 @@ router.get('/progress', requireCharacter, asyncHandler(async (req, res) => {
 
 router.get('/config', requireCharacter, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
+  const durationLimit = await resolveIdleDurationLimitByCharacter(characterId);
 
   const res2 = await query(
     `SELECT map_id, room_id, max_duration_ms, auto_skill_policy, target_monster_def_id, include_partner_in_battle
@@ -304,6 +308,8 @@ router.get('/config', requireCharacter, asyncHandler(async (req, res) => {
         targetMonsterDefId: null,
         includePartnerInBattle: true,
       },
+      maxDurationLimitMs: durationLimit.maxDurationMs,
+      monthCardActive: durationLimit.monthCardActive,
     });
     return;
   }
@@ -333,16 +339,24 @@ router.get('/config', requireCharacter, asyncHandler(async (req, res) => {
       [characterId, normalizedPolicyJson],
     );
   }
+  const persistedDurationMs = Number(row.max_duration_ms);
+  const normalizedDurationMs =
+    Number.isFinite(persistedDurationMs) && persistedDurationMs > durationLimit.maxDurationMs
+      ? durationLimit.maxDurationMs
+      : persistedDurationMs;
+  // 读取时只裁剪返回值，保留玩家原始偏好，避免月卡到期后永久丢失 12 小时配置。
 
   sendSuccess(res, {
     config: {
       mapId: row.map_id,
       roomId: row.room_id,
-      maxDurationMs: Number(row.max_duration_ms),
+      maxDurationMs: normalizedDurationMs,
       autoSkillPolicy: normalizedPolicy,
       targetMonsterDefId: row.target_monster_def_id,
       includePartnerInBattle: row.include_partner_in_battle,
     },
+    maxDurationLimitMs: durationLimit.maxDurationMs,
+    monthCardActive: durationLimit.monthCardActive,
   });
 }));
 
@@ -362,6 +376,7 @@ router.put('/config', requireCharacter, asyncHandler(async (req, res) => {
     includePartnerInBattle,
   } = req.body as Partial<IdleConfigDto>;
   const validatedIncludePartnerInBattle = parseIncludePartnerInBattle(includePartnerInBattle);
+  const durationLimit = await resolveIdleDurationLimitByCharacter(characterId);
 
   // 校验 autoSkillPolicy（必填）
   const policyValidation = validateAutoSkillPolicy(autoSkillPolicy);
@@ -375,8 +390,8 @@ router.put('/config', requireCharacter, asyncHandler(async (req, res) => {
   let validatedDurationMs: number | null = null;
   if (maxDurationMs !== undefined) {
     const durationMs = Number(maxDurationMs);
-    if (!Number.isFinite(durationMs) || durationMs < MIN_DURATION_MS || durationMs > MAX_DURATION_MS) {
-      throw new BusinessError(`maxDurationMs 必须在 ${MIN_DURATION_MS} ~ ${MAX_DURATION_MS} 之间`);
+    if (!isIdleDurationMsWithinLimit(durationMs, durationLimit.maxDurationMs)) {
+      throw new BusinessError(`maxDurationMs 必须在 ${MIN_IDLE_DURATION_MS} ~ ${durationLimit.maxDurationMs} 之间`);
     }
     validatedDurationMs = durationMs;
   }

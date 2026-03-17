@@ -87,12 +87,14 @@ describe('monthCardDisplay', () => {
       cooldownReductionRate: 0.1,
       staminaRecoveryRate: 0.1,
       fuyuanBonus: 20,
+      idleMaxDurationHours: 12,
     });
 
     expect(privileges.map((item) => item.description)).toEqual([
       '激活期间每日可领取灵石奖励',
-      '伙伴招募冷却时间缩短 10%',
-      '洞府研修冷却时间缩短 10%',
+      '伙伴招募冷却缩短 10%',
+      '洞府研修冷却缩短 10%',
+      '离线挂机时长延长至 12 小时',
       '体力恢复速度提升 10%',
       '福源提升 20',
     ]);

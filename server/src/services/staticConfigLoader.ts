@@ -106,6 +106,7 @@ export type MonthCardDef = {
   cooldown_reduction_rate?: number | string;
   stamina_recovery_rate?: number | string;
   fuyuan_bonus?: number | string;
+  idle_max_duration_hours?: number | string;
   enabled?: boolean;
   sort_weight?: number;
 };

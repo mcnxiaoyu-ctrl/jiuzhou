@@ -55,6 +55,7 @@ export type MonthCardBenefitDisplayInput = {
   cooldownReductionRate: number;
   staminaRecoveryRate: number;
   fuyuanBonus: number;
+  idleMaxDurationHours: number;
 };
 
 export type MonthCardPrivilegeIconName =
@@ -62,7 +63,8 @@ export type MonthCardPrivilegeIconName =
   | 'UsergroupAddOutlined'
   | 'ClockCircleOutlined'
   | 'ThunderboltOutlined'
-  | 'StarOutlined';
+  | 'StarOutlined'
+  | 'FieldTimeOutlined';
 
 export type MonthCardPrivilege = {
   id: string;
@@ -113,6 +115,15 @@ export const getMonthCardPrivileges = (
         iconName: 'ClockCircleOutlined',
       },
     );
+  }
+
+  if (benefits.idleMaxDurationHours > 0) {
+    privileges.push({
+      id: 'idle-duration',
+      name: '挂机延时',
+      description: `离线挂机时长延长`,
+      iconName: 'FieldTimeOutlined',
+    });
   }
 
   if (benefits.staminaRecoveryRate > 0) {
