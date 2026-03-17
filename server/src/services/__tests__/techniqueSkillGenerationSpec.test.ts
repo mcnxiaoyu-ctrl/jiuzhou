@@ -63,6 +63,18 @@ test('mark:consume 效果应支持引爆印记机制', () => {
   assert.deepEqual(validateTechniqueSkillEffect(effect), { success: true });
 });
 
+test('damage 效果应支持使用主战属性作为倍率来源', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'damage',
+    valueType: 'scale',
+    scaleAttr: 'wugong',
+    scaleRate: 1.2,
+    damageType: 'physical',
+  });
+
+  assert.deepEqual(validation, { success: true });
+});
+
 test('非法 controlType 应被共享校验拦截', () => {
   const validation = validateTechniqueSkillEffect({
     type: 'control',
@@ -92,7 +104,6 @@ test('升级项应支持 addEffect 追加控制效果', () => {
 
   assert.deepEqual(validation, { success: true });
 });
-
 test('升级项中的旧式 effectChanges 字段应被拒绝', () => {
   const validation = validateTechniqueSkillUpgrade(
     {

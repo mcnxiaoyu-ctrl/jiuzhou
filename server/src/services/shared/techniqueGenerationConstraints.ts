@@ -262,6 +262,7 @@ export const TECHNIQUE_SKILL_COUNT_RANGE_BY_QUALITY: Record<GeneratedTechniqueQu
 };
 
 export const TECHNIQUE_EFFECT_SCALE_ATTR_OPTIONS = TECHNIQUE_SKILL_SCALE_ATTR_LIST;
+export const TECHNIQUE_DAMAGE_EFFECT_FORBIDDEN_SCALE_ATTR_OPTIONS = ['sudu'] as const;
 
 export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   '仅输出单个 JSON 对象，不要输出代码块与解释文本',
@@ -275,6 +276,7 @@ export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   'chance 统一使用 0~1 浮点概率（0.1=10%），禁止使用 10/60 这类百分数整数',
   'valueType=combined 时必须同时提供 baseValue 与 scaleRate',
   'valueType=scale 时必须提供 scaleAttr 与 scaleRate',
+  `damage/delayed_burst/mark(resultType=damage) 使用倍率时，scaleAttr 禁止为 ${TECHNIQUE_DAMAGE_EFFECT_FORBIDDEN_SCALE_ATTR_OPTIONS.join('/')}`,
   'technique.type 必须等于 techniqueType，禁止自行改成其他功法类型',
   'technique.requiredRealm 必须来自 realmEnum',
   'buff/debuff 必须使用结构化 Buff 字段（buffKind/buffKey/attrKey/applyType），禁止使用 buffId，且 buffKey/attrKey 必须来自 allowedBuffConfigRules',
@@ -557,6 +559,7 @@ export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
     },
     notes: [
       'valueType=scale 时推荐给出 scaleAttr + scaleRate',
+      `伤害类倍率禁止使用 ${TECHNIQUE_DAMAGE_EFFECT_FORBIDDEN_SCALE_ATTR_OPTIONS.join('/')}，该属性成长过低会导致技能数值失衡偏废`,
       'damageType 缺失时会继承 skill.damageType；建议显式填写',
       'element 缺失时会继承 skill.element；建议显式填写',
     ],
@@ -768,6 +771,7 @@ export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
     rules: [
       'duration 必须是正整数，表示还需等待多少次回合开始后引爆',
       'damageType 必须在 damageTypeEnum 中',
+      `scaleAttr 禁止使用 ${TECHNIQUE_DAMAGE_EFFECT_FORBIDDEN_SCALE_ATTR_OPTIONS.join('/')}，避免低成长属性生成废技能`,
       '推荐使用 valueType=scale，并显式给出 scaleAttr + scaleRate',
     ],
     defaultTemplate: {
@@ -923,6 +927,7 @@ export const buildTechniqueGeneratorPromptInput = (params: {
       auraSubEffectTypeEnum: [...TECHNIQUE_PROMPT_AURA_SUB_EFFECT_TYPE_ENUM],
       allowedBuffConfigRules: promptBuffConfigRules,
       attributeKeyEnum: [...TECHNIQUE_EFFECT_SCALE_ATTR_OPTIONS],
+      damageForbiddenScaleAttrEnum: [...TECHNIQUE_DAMAGE_EFFECT_FORBIDDEN_SCALE_ATTR_OPTIONS],
       numericRanges: TECHNIQUE_PROMPT_NUMERIC_RANGES,
       effectCommonFields: TECHNIQUE_PROMPT_EFFECT_COMMON_FIELDS,
       effectSchemaByType: TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE,

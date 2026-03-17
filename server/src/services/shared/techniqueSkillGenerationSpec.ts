@@ -386,6 +386,8 @@ export const validateTechniqueSkillEffect = (
 
   switch (effectType) {
     case 'damage':
+      return validateValueExpression(effect);
+
     case 'heal':
     case 'shield':
       return validateValueExpression(effect);
