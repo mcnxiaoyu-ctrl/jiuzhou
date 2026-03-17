@@ -14,7 +14,9 @@ import { getMainQuestProgress, type MainQuestProgressDto } from '../../../../ser
 import { useIsMobile } from '../../shared/responsive';
 import { getRealmRankFromLiteral as getRealmRank } from '../../shared/realm';
 import {
+  buildTaskCategoryIndicatorMap,
   getBountyTaskRemainingSeconds,
+  hasPendingBountyTaskExpiry,
   hasExpiredBountyTaskOverviewRow,
   isActiveBountyTaskOverviewRow,
 } from '../../shared/taskIndicator';
@@ -28,9 +30,9 @@ import {
   TASK_STATUS_TEXT,
   createEmptyTaskLoadedState,
   createEmptyTaskRowsByCategory,
+  groupTaskOverviewRowsByCategory,
   isTaskListCategory,
   mapBountyTaskOverviewRows,
-  mapTaskOverviewRows,
   type TaskCategory,
   type TaskItem,
   type TaskListCategory,
@@ -62,10 +64,6 @@ const TaskModal: React.FC<TaskModalProps> = ({
 }) => {
   const { message } = App.useApp();
   const taskCategoryKeys = useMemo(() => TASK_CATEGORY_KEYS, []);
-  const taskCategoryOptions = useMemo(
-    () => taskCategoryKeys.map((k) => ({ label: TASK_CATEGORY_SHORT_LABELS[k], value: k })),
-    [taskCategoryKeys],
-  );
   const isMobile = useIsMobile();
   const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list');
   const [category, setCategory] = useState<TaskCategory>('main');
@@ -79,8 +77,9 @@ const TaskModal: React.FC<TaskModalProps> = ({
   const [nowTs, setNowTs] = useState<number>(() => Date.now());
   const lastExpireRefreshAtRef = useRef<number>(0);
   const loadedByCategoryRef = useRef<Record<TaskCategory, boolean>>(createEmptyTaskLoadedState());
-  const inflightRequestsRef = useRef<Record<TaskCategory, Promise<void> | null>>({
+  const inflightRequestsRef = useRef<Record<TaskCategory | 'taskList', Promise<void> | null>>({
     main: null,
+    taskList: null,
     side: null,
     daily: null,
     event: null,
@@ -131,7 +130,28 @@ const TaskModal: React.FC<TaskModalProps> = ({
     loadedByCategoryRef.current[targetCategory] = nextLoaded;
   }, []);
 
-  const runCategoryRequest = useCallback(async (targetCategory: TaskCategory, requestFactory: () => Promise<void>): Promise<void> => {
+  const setTaskListLoading = useCallback((nextLoading: boolean) => {
+    setLoadingByCategory((prev) => {
+      if (prev.side === nextLoading && prev.daily === nextLoading && prev.event === nextLoading) return prev;
+      return {
+        ...prev,
+        side: nextLoading,
+        daily: nextLoading,
+        event: nextLoading,
+      };
+    });
+  }, []);
+
+  const setTaskListLoaded = useCallback((nextLoaded: boolean) => {
+    loadedByCategoryRef.current.side = nextLoaded;
+    loadedByCategoryRef.current.daily = nextLoaded;
+    loadedByCategoryRef.current.event = nextLoaded;
+  }, []);
+
+  const runCategoryRequest = useCallback(async (
+    targetCategory: TaskCategory | 'taskList',
+    requestFactory: () => Promise<void>,
+  ): Promise<void> => {
     const inflightRequest = inflightRequestsRef.current[targetCategory];
     if (inflightRequest) return inflightRequest;
 
@@ -159,23 +179,29 @@ const TaskModal: React.FC<TaskModalProps> = ({
     });
   }, [runCategoryRequest, setCategoryLoaded, setCategoryLoading]);
 
-  const loadTaskCategory = useCallback(async (targetCategory: TaskListCategory, forceRefresh: boolean): Promise<void> => {
-    if (!forceRefresh && loadedByCategoryRef.current[targetCategory]) return;
+  const loadTaskOverview = useCallback(async (forceRefresh: boolean): Promise<void> => {
+    if (
+      !forceRefresh
+      && loadedByCategoryRef.current.side
+      && loadedByCategoryRef.current.daily
+      && loadedByCategoryRef.current.event
+    ) {
+      return;
+    }
 
-    await runCategoryRequest(targetCategory, async () => {
-      setCategoryLoading(targetCategory, true);
-      setCategoryLoaded(targetCategory, false);
+    await runCategoryRequest('taskList', async () => {
+      setTaskListLoading(true);
+      setTaskListLoaded(false);
       try {
-        const response = await getTaskOverview(targetCategory);
+        const response = await getTaskOverview();
         if (!response.success || !response.data) return;
-        const nextRows = mapTaskOverviewRows(response.data.tasks || []);
-        setTaskRowsByCategory((prev) => ({ ...prev, [targetCategory]: nextRows }));
-        setCategoryLoaded(targetCategory, true);
+        setTaskRowsByCategory(groupTaskOverviewRowsByCategory(response.data.tasks || []));
+        setTaskListLoaded(true);
       } finally {
-        setCategoryLoading(targetCategory, false);
+        setTaskListLoading(false);
       }
     });
-  }, [runCategoryRequest, setCategoryLoaded, setCategoryLoading]);
+  }, [runCategoryRequest, setTaskListLoaded, setTaskListLoading]);
 
   const loadBountyTaskOverview = useCallback(async (forceRefresh: boolean): Promise<void> => {
     if (!forceRefresh && loadedByCategoryRef.current.bounty) return;
@@ -203,8 +229,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
       await loadBountyTaskOverview(false);
       return;
     }
-    await loadTaskCategory(targetCategory, false);
-  }, [loadBountyTaskOverview, loadMainQuestProgress, loadTaskCategory]);
+    await loadTaskOverview(false);
+  }, [loadBountyTaskOverview, loadMainQuestProgress, loadTaskOverview]);
 
   const refreshCategory = useCallback(async (targetCategory: TaskCategory): Promise<void> => {
     if (targetCategory === 'main') {
@@ -215,8 +241,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
       await loadBountyTaskOverview(true);
       return;
     }
-    await loadTaskCategory(targetCategory, true);
-  }, [loadBountyTaskOverview, loadMainQuestProgress, loadTaskCategory]);
+    await loadTaskOverview(true);
+  }, [loadBountyTaskOverview, loadMainQuestProgress, loadTaskOverview]);
 
   const markCategoriesStale = useCallback((categories: TaskCategory[]) => {
     for (const targetCategory of categories) {
@@ -244,6 +270,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
     setActiveId('');
     setMobilePane('list');
     void refreshCategory('main');
+    void refreshCategory('side');
+    void refreshCategory('bounty');
   }, [markCategoriesStale, open, refreshCategory]);
 
   useEffect(() => {
@@ -253,11 +281,17 @@ const TaskModal: React.FC<TaskModalProps> = ({
 
   useEffect(() => {
     if (!open) return;
-    if (category !== 'bounty') return;
-    setNowTs(Date.now());
-    const timer = window.setInterval(() => setNowTs(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [category, open]);
+    if (category === 'bounty') {
+      setNowTs(Date.now());
+      const timer = window.setInterval(() => setNowTs(Date.now()), 1000);
+      return () => window.clearInterval(timer);
+    }
+    if (!hasPendingBountyTaskExpiry(bountyTasks, nowTs)) return;
+
+    // 非悬赏页签只需要驱动左侧红点过期，不需要维持详情区的秒级倒计时。
+    const timer = window.setTimeout(() => setNowTs(Date.now()), 1000);
+    return () => window.clearTimeout(timer);
+  }, [bountyTasks, category, nowTs, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -274,6 +308,28 @@ const TaskModal: React.FC<TaskModalProps> = ({
   }, [bountyTasks, category, loadingByCategory.bounty, nowTs, open, refreshCategory]);
 
   const loading = loadingByCategory[category];
+  const taskOverviewRows = useMemo(
+    () => [
+      ...taskRowsByCategory.side,
+      ...taskRowsByCategory.daily,
+      ...taskRowsByCategory.event,
+    ],
+    [taskRowsByCategory],
+  );
+  const taskCategoryIndicatorMap = useMemo(
+    () => buildTaskCategoryIndicatorMap(taskOverviewRows, bountyTasks, nowTs),
+    [bountyTasks, nowTs, taskOverviewRows],
+  );
+  const renderTaskCategoryLabel = useCallback((targetCategory: TaskCategory, label: string) => (
+    <span className="task-category-label">
+      <span className="task-category-label__text">{label}</span>
+      {taskCategoryIndicatorMap[targetCategory] ? <span className="task-category-label__dot" aria-hidden="true" /> : null}
+    </span>
+  ), [taskCategoryIndicatorMap]);
+  const taskCategoryOptions = useMemo(
+    () => taskCategoryKeys.map((k) => ({ label: renderTaskCategoryLabel(k, TASK_CATEGORY_SHORT_LABELS[k]), value: k })),
+    [renderTaskCategoryLabel, taskCategoryKeys],
+  );
   const currentTasks = useMemo(() => {
     if (category === 'bounty') return bountyTasks;
     if (!isTaskListCategory(category)) return [];
@@ -384,9 +440,11 @@ const TaskModal: React.FC<TaskModalProps> = ({
   );
 
   const refreshMainQuestProgress = useCallback(async () => {
-    await refreshCategory('main');
-    markCategoriesStale(['side', 'daily', 'event']);
-  }, [markCategoriesStale, refreshCategory]);
+    await Promise.all([
+      refreshCategory('main'),
+      refreshCategory('side'),
+    ]);
+  }, [refreshCategory]);
 
   return (
     <Modal
@@ -428,7 +486,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                   className="task-left-item"
                   onClick={() => handleCategoryChange(k)}
                 >
-                  {TASK_CATEGORY_LABELS[k]}
+                  {renderTaskCategoryLabel(k, TASK_CATEGORY_LABELS[k])}
                 </Button>
               ))}
             </div>

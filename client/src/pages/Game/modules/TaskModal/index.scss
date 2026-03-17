@@ -73,6 +73,27 @@
   font-weight: 800;
 }
 
+.task-category-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.task-category-label__text {
+  min-width: 0;
+}
+
+.task-category-label__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ff4d4f;
+  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.28);
+  flex: 0 0 auto;
+}
+
 .task-modal-right {
   flex: 1;
   min-width: 0;
@@ -412,6 +433,15 @@
     padding: 0 12px;
     border-radius: 10px;
     font-size: 12px;
+  }
+
+  .task-category-label {
+    gap: 6px;
+  }
+
+  .task-category-label__dot {
+    width: 7px;
+    height: 7px;
   }
 
   .task-left-segmented-wrap {

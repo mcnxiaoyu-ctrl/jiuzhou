@@ -3,12 +3,12 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：统一定义“哪些任务分类会出现在任务入口列表”和“哪些状态算可完成”，让 Game 页角标与 TaskModal 使用同一套口径。
- * 2. 做什么：分别提供普通任务与悬赏任务的可完成数量计算，避免页面层再次散落 `category/status` 判断。
+ * 2. 做什么：分别提供普通任务与悬赏任务的可完成数量计算，以及任务弹窗左侧分类红点映射，避免页面层再次散落 `category/status` 判断。
  * 3. 不做什么：不发起接口请求、不管理 React state，也不处理主线任务独立面板的进度口径。
  *
  * 输入/输出：
  * - 输入：普通任务 `TaskOverviewRowDto[]`、悬赏任务 `BountyTaskOverviewRowDto[]`，或单个任务状态/分类。
- * - 输出：分类布尔判断、状态布尔判断、可完成数量数字。
+ * - 输出：分类布尔判断、状态布尔判断、可完成数量数字、任务弹窗分类红点布尔映射。
  *
  * 数据流/状态流：
  * - `/task/overview` / `/task/bounty/overview` 响应 -> 本文件过滤分类与状态 -> Game 页功能角标 / TaskModal 保持一致。
@@ -29,6 +29,15 @@ export type TaskIndicatorListCategory = Extract<
   'side' | 'daily' | 'event'
 >;
 
+export type TaskIndicatorCategory = TaskOverviewRowDto['category'] | 'bounty';
+
+export type TaskCategoryIndicatorMap = Record<TaskIndicatorCategory, boolean>;
+
+type TaskIndicatorTaskRow = {
+  category: TaskIndicatorCategory;
+  status: TaskStatus;
+};
+
 type BountyTaskIndicatorRow = {
   status: TaskStatus;
   sourceType?: BountyTaskOverviewRowDto['sourceType'];
@@ -41,7 +50,7 @@ const TASK_INDICATOR_COMPLETABLE_STATUS: ReadonlySet<TaskStatus> = new Set([
 ]);
 
 export const isTaskIndicatorListCategory = (
-  category: TaskOverviewRowDto['category'],
+  category: TaskIndicatorCategory,
 ): category is TaskIndicatorListCategory => {
   return category === 'side' || category === 'daily' || category === 'event';
 };
@@ -83,7 +92,7 @@ export const isActiveBountyTaskOverviewRow = (
 };
 
 export const countCompletableTaskOverviewRows = (
-  tasks: TaskOverviewRowDto[],
+  tasks: TaskIndicatorTaskRow[],
 ): number => {
   return tasks.reduce((total, task) => {
     if (!isTaskIndicatorListCategory(task.category)) return total;
@@ -100,6 +109,35 @@ export const countCompletableBountyTaskOverviewRows = (
   ), 0);
 };
 
+export const buildTaskCategoryIndicatorMap = (
+  tasks: TaskIndicatorTaskRow[],
+  bountyTasks: BountyTaskIndicatorRow[],
+  nowTs: number = Date.now(),
+): TaskCategoryIndicatorMap => {
+  const indicators: TaskCategoryIndicatorMap = {
+    main: false,
+    side: false,
+    daily: false,
+    event: false,
+    bounty: false,
+  };
+
+  for (const task of tasks) {
+    if (!isTaskIndicatorListCategory(task.category)) continue;
+    if (!isTaskIndicatorCompletableStatus(task.status)) continue;
+    indicators[task.category] = true;
+  }
+
+  for (const task of bountyTasks) {
+    if (!isActiveBountyTaskOverviewRow(task, nowTs)) continue;
+    if (!isTaskIndicatorCompletableStatus(task.status)) continue;
+    indicators.bounty = true;
+    break;
+  }
+
+  return indicators;
+};
+
 export const getNextBountyTaskExpiryTs = (
   tasks: BountyTaskIndicatorRow[],
   nowTs: number = Date.now(),
@@ -114,4 +152,11 @@ export const getNextBountyTaskExpiryTs = (
     }
   }
   return nextExpiryTs;
+};
+
+export const hasPendingBountyTaskExpiry = (
+  tasks: BountyTaskIndicatorRow[],
+  nowTs: number = Date.now(),
+): boolean => {
+  return getNextBountyTaskExpiryTs(tasks, nowTs) != null;
 };

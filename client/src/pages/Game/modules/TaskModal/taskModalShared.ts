@@ -3,7 +3,7 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：统一任务弹窗的分类常量、展示文案、加载状态工厂和接口 DTO -> UI 数据映射，避免 `TaskModal` 内重复散落同类转换。
- * 2. 做什么：把“普通任务只按 side/daily/event 分类加载、悬赏单独加载”的边界集中到一个模块，减少后续新增刷新路径时复制判断。
+ * 2. 做什么：把“普通任务只按 side/daily/event 分类加载、悬赏单独加载”的边界集中到一个模块，并统一把总览结果分发回分类列表，减少后续新增刷新路径时复制判断。
  * 3. 不做什么：不发起接口请求，不管理 React state，不负责任何弹窗 UI 渲染与交互副作用。
  *
  * 输入/输出：
@@ -11,11 +11,12 @@
  * - 输出：任务弹窗使用的 `TaskItem`、分类标签、空状态工厂与类型守卫。
  *
  * 数据流/状态流：
- * `/task/overview` 或 `/task/bounty/overview` 响应 -> 本文件完成字段归一化与分类裁剪 -> `TaskModal` / `MainQuestPanel` 消费统一数据结构。
+ * `/task/overview` 或 `/task/bounty/overview` 响应 -> 本文件完成字段归一化、分类裁剪与列表分发 -> `TaskModal` / `MainQuestPanel` 消费统一数据结构。
  *
  * 关键边界条件与坑点：
  * 1. 主线页签由 `MainQuestPanel` 独占，普通任务 overview 即便返回 `main` 分类，也必须在这里统一丢弃，避免业务组件再写一遍过滤。
  * 2. 悬赏任务的剩余时间可能来自 `expiresAt` 或 `remainingSeconds`，需要在映射时统一补齐，避免详情区和列表区各自推算。
+ * 3. 左侧分类红点与右侧任务列表必须共用同一份分发结果，不能一边按总览算、一边按当前页签算，否则会出现切页前后状态漂移。
  */
 import type {
   BountyTaskOverviewRowDto,
@@ -178,6 +179,17 @@ export const mapTaskOverviewRows = (tasks: TaskOverviewRowDto[]): TaskItem[] => 
     const mapped = mapTaskOverviewRow(task);
     return mapped ? [mapped] : [];
   });
+};
+
+export const groupTaskOverviewRowsByCategory = (
+  tasks: TaskOverviewRowDto[],
+): Record<TaskListCategory, TaskItem[]> => {
+  const grouped = createEmptyTaskRowsByCategory();
+  for (const task of mapTaskOverviewRows(tasks)) {
+    if (!isTaskListCategory(task.category)) continue;
+    grouped[task.category].push(task);
+  }
+  return grouped;
 };
 
 export const mapBountyTaskOverviewRows = (tasks: BountyTaskOverviewRowDto[]): TaskItem[] => {
