@@ -411,7 +411,7 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
   const [characterId, setCharacterId] = useState<number | null>(() => gameSocket.getCharacter()?.id ?? null);
   const [skills, setSkills] = useState<SkillItem[]>(() => buildSkillItems([], [], []));
   const [isCasting, setIsCasting] = useState(false);
-  const [skillConfigLoadState, setSkillConfigLoadState] = useState<'idle' | 'ok' | 'failed'>('idle');
+  const [skillConfigLoadState, setSkillConfigLoadState] = useState<'idle' | 'loading' | 'ok' | 'failed'>('idle');
   const [skillResourceState, setSkillResourceState] = useState<SkillResourceState>({
     lingqi: initialLingqi,
     qixue: initialQixue,
@@ -524,6 +524,7 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
       return;
     }
     try {
+      setSkillConfigLoadState('loading');
       const res = await getCharacterTechniqueStatus(characterId);
       if (!res?.success || !res.data) {
         setSkillConfigLoadState('failed');
@@ -538,14 +539,8 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
   }, [characterId]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      void refreshSkillConfig();
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [refreshSkillConfig]);
-
-  useEffect(() => {
     if (!open) return;
+    // 技能栏改为按需加载，避免首页首屏在未打开面板、未进入战斗时也请求功法状态。
     const t = window.setTimeout(() => {
       void refreshSkillConfig();
     }, 0);
@@ -827,6 +822,7 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
     const attempt = async () => {
       if (cancelled) return;
       if (!autoRelease || !isBattleRunning || !isMyTurn || isCasting) return;
+      if (skillConfigLoadState === 'idle' || skillConfigLoadState === 'loading') return;
 
       const equipped = skillsRef.current.filter((s) => s.equipped);
       const resourceState = {
@@ -878,7 +874,7 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
         autoRetryTimerRef.current = null;
       }
     };
-  }, [actionKey, autoRelease, battlePhase, castSkill, isBattleRunning, isCasting, isMyTurn, localTurn, turn, turnSide]);
+  }, [actionKey, autoRelease, battlePhase, castSkill, isBattleRunning, isCasting, isMyTurn, localTurn, skillConfigLoadState, turn, turnSide]);
 
   const onMainPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     dragRef.current.pointerId = e.pointerId;

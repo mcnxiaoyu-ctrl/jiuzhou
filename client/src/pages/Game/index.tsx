@@ -50,7 +50,6 @@ import {
   getDungeonInstanceByBattleId,
   pickupRoomItem,
   getInventoryItems,
-  getTaskOverview,
   npcTalk,
   getSignInOverview,
   getAchievementList,
@@ -114,6 +113,7 @@ import {
   loadSharedTaskOverview,
 } from './shared/taskOverviewRequests';
 import { useRealtimeMemberPresence } from './shared/useRealtimeMemberPresence';
+import { useDeferredGameRequest } from './shared/useDeferredGameRequest';
 
 interface GameProps {
   onLogout?: () => void;
@@ -143,6 +143,7 @@ const EQUIP_QUALITY_COLOR: Record<string, string> = {
 };
 const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 const TECHNIQUE_RESEARCH_ENABLED = !import.meta.env.PROD;
+const HOMEPAGE_AUX_REQUEST_DELAY_MS = 1200;
 
 const EQUIP_QUALITY_TEXT: Record<string, string> = {
   天: '天品',
@@ -257,6 +258,29 @@ const parseRatioText = (text: string) => {
   const max = Number(m[2]);
   if (!Number.isFinite(cur) || !Number.isFinite(max)) return null;
   return { cur, max };
+};
+
+type CharacterWorldPosition = {
+  mapId: string;
+  roomId: string;
+};
+
+const readCharacterWorldPosition = (
+  character: Pick<CharacterData, 'currentMapId' | 'currentRoomId'> | null | undefined,
+): CharacterWorldPosition | null => {
+  const mapId = String(character?.currentMapId ?? '').trim();
+  const roomId = String(character?.currentRoomId ?? '').trim();
+  if (!mapId || !roomId) return null;
+  return { mapId, roomId };
+};
+
+const WorldPanelLoading: FC<{ title: string; detail: string }> = ({ title, detail }) => {
+  return (
+    <div className="game-position-loading">
+      <div className="game-position-loading-title">{title}</div>
+      <div className="game-position-loading-detail">{detail}</div>
+    </div>
+  );
 };
 
 const clampNum = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
@@ -534,6 +558,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const version = '1.0.0';
   const { message } = App.useApp();
   const messageRef = useRef(message);
+  const initialCharacterPosition = readCharacterWorldPosition(gameSocket.getCharacter());
 
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null);
@@ -541,8 +566,9 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [teamApplicationUnread, setTeamApplicationUnread] = useState(0);
   const [sectPendingApplicationCount, setSectPendingApplicationCount] = useState(0);
   const [sectMyApplicationCount, setSectMyApplicationCount] = useState(0);
-  const [currentMapId, setCurrentMapId] = useState<string>('map-qingyun-village');
-  const [currentRoomId, setCurrentRoomId] = useState<string>('room-village-center');
+  const [currentMapId, setCurrentMapId] = useState<string>(initialCharacterPosition?.mapId ?? '');
+  const [currentRoomId, setCurrentRoomId] = useState<string>(initialCharacterPosition?.roomId ?? '');
+  const [hasHydratedPosition, setHasHydratedPosition] = useState<boolean>(false);
   const [trackedRoomIds, setTrackedRoomIds] = useState<string[]>([]);
   const isMobile = useIsMobile();
   const [topTab, setTopTab] = useState<'map' | 'room'>('map');
@@ -632,6 +658,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const hasLocalBattleTargetsRef = useRef(false);
   const pendingDungeonReconnectBattleIdRef = useRef<string | null>(null);
   const inTeam = Boolean(teamInfo?.id);
+  const canRenderWorldPanels = hasHydratedPosition && currentMapId.length > 0 && currentRoomId.length > 0;
   const externalBattleId = arenaBattleId || dungeonBattleId || (inTeam && !isTeamLeader ? teamBattleId : null) || reconnectBattleId;
   const teamPresenceMembers = useMemo(
     () => (teamInfo?.members ?? []).map((member) => ({ characterId: member.characterId })),
@@ -888,9 +915,14 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   );
 
   const refreshTrackedRoomIds = useCallback(async () => {
+    if (!hasHydratedPosition || !currentMapId) {
+      setTrackedRoomIds([]);
+      return;
+    }
+
     try {
-      // 获取普通任务追踪的房间
-      const taskRes = await getTaskOverview();
+      // 复用首页任务总览共享请求层，避免地图追踪与任务角标首屏重复命中同一接口。
+      const taskRes = await loadSharedTaskOverview(taskOverviewRequestScopeKeyRef.current);
       const taskList = taskRes?.success && taskRes.data?.tasks ? taskRes.data.tasks : [];
       const taskRoomIds = taskList
         .filter((t) => t.tracked === true && t.status !== 'completed' && t.mapId === currentMapId && typeof t.roomId === 'string' && t.roomId)
@@ -913,7 +945,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     } catch {
       setTrackedRoomIds([]);
     }
-  }, [currentMapId]);
+  }, [currentMapId, hasHydratedPosition]);
 
   useEffect(() => {
     void refreshTrackedRoomIds();
@@ -1433,13 +1465,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
 
   useEffect(() => {
     if (!character || hydratedPositionRef.current) return;
-    const mapId = String(character.currentMapId || '').trim();
-    const roomId = String(character.currentRoomId || '').trim();
-    if (!hydratedPositionRef.current) {
-      if (mapId) setCurrentMapId(mapId);
-      if (roomId) setCurrentRoomId(roomId);
-      hydratedPositionRef.current = true;
-    }
+    const position = readCharacterWorldPosition(character);
+    if (!position) return;
+    setCurrentMapId(position.mapId);
+    setCurrentRoomId(position.roomId);
+    setHasHydratedPosition(true);
+    hydratedPositionRef.current = true;
   }, [character]);
 
   const savePosition = useCallback((mapId: string, roomId: string) => {
@@ -1518,12 +1549,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     }
   }, []);
 
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      void refreshSignInDot();
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [refreshSignInDot]);
+  useDeferredGameRequest(Boolean(characterId), refreshSignInDot, HOMEPAGE_AUX_REQUEST_DELAY_MS);
 
   useEffect(() => {
     if (!characterId) {
@@ -1566,12 +1592,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     }
   }, []);
 
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      void refreshAchievementIndicator();
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [refreshAchievementIndicator]);
+  useDeferredGameRequest(Boolean(characterId), refreshAchievementIndicator, HOMEPAGE_AUX_REQUEST_DELAY_MS);
 
   const clearTaskIndicatorQueuedRefreshTimer = useCallback(() => {
     if (taskIndicatorQueuedRefreshTimerRef.current == null) return;
@@ -1911,16 +1932,23 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                                 onTurnChange={handleBattleTurnChange}
                               />
                             ) : (
-                              <GameMap
-                                currentMapId={currentMapId}
-                                currentRoomId={currentRoomId}
-                                trackedRoomIds={trackedRoomIds}
-                                onMove={(next) => {
-                                  setCurrentMapId(next.mapId);
-                                  setCurrentRoomId(next.roomId);
-                                  scheduleSavePosition(next.mapId, next.roomId);
-                                }}
-                              />
+                              canRenderWorldPanels ? (
+                                <GameMap
+                                  currentMapId={currentMapId}
+                                  currentRoomId={currentRoomId}
+                                  trackedRoomIds={trackedRoomIds}
+                                  onMove={(next) => {
+                                    setCurrentMapId(next.mapId);
+                                    setCurrentRoomId(next.roomId);
+                                    scheduleSavePosition(next.mapId, next.roomId);
+                                  }}
+                                />
+                              ) : (
+                                <WorldPanelLoading
+                                  title="正在同步当前位置"
+                                  detail="等待角色实时数据后再加载地图，避免首屏先请求默认村庄再切换到真实位置。"
+                                />
+                              )
                             )}
                           </div>
                         ),
@@ -1930,7 +1958,14 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                         label: '房间',
                         children: (
                           <div className={`game-top-tab-panel${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
-                            <RoomObjects mapId={currentMapId} roomId={currentRoomId} onSelect={handleRoomObjectSelect} />
+                            {canRenderWorldPanels ? (
+                              <RoomObjects mapId={currentMapId} roomId={currentRoomId} onSelect={handleRoomObjectSelect} />
+                            ) : (
+                              <WorldPanelLoading
+                                title="正在同步房间信息"
+                                detail="当前位置尚未完成水合，房间对象会在拿到真实地图和房间后再请求。"
+                              />
+                            )}
                           </div>
                         ),
                       },
@@ -1960,20 +1995,34 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                       onTurnChange={handleBattleTurnChange}
                     />
                   ) : (
-                    <GameMap
-                      currentMapId={currentMapId}
-                      currentRoomId={currentRoomId}
-                      trackedRoomIds={trackedRoomIds}
-                      onMove={(next) => {
-                        setCurrentMapId(next.mapId);
-                        setCurrentRoomId(next.roomId);
-                        scheduleSavePosition(next.mapId, next.roomId);
-                      }}
-                    />
+                    canRenderWorldPanels ? (
+                      <GameMap
+                        currentMapId={currentMapId}
+                        currentRoomId={currentRoomId}
+                        trackedRoomIds={trackedRoomIds}
+                        onMove={(next) => {
+                          setCurrentMapId(next.mapId);
+                          setCurrentRoomId(next.roomId);
+                          scheduleSavePosition(next.mapId, next.roomId);
+                        }}
+                      />
+                    ) : (
+                      <WorldPanelLoading
+                        title="正在同步当前位置"
+                        detail="等待角色实时数据后再加载地图，避免首屏先请求默认村庄再切换到真实位置。"
+                      />
+                    )
                   )}
                 </section>
                 <aside className="game-room-pane">
-                  <RoomObjects mapId={currentMapId} roomId={currentRoomId} onSelect={handleRoomObjectSelect} />
+                  {canRenderWorldPanels ? (
+                    <RoomObjects mapId={currentMapId} roomId={currentRoomId} onSelect={handleRoomObjectSelect} />
+                  ) : (
+                    <WorldPanelLoading
+                      title="正在同步房间信息"
+                      detail="当前位置尚未完成水合，房间对象会在拿到真实地图和房间后再请求。"
+                    />
+                  )}
                 </aside>
               </div>
             )}

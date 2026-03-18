@@ -1,7 +1,7 @@
 import { App, Button, Progress, Tooltip, Upload } from 'antd';
 import type { UploadProps } from 'antd';
 import { UserOutlined, LoadingOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { gameSocket, type CharacterData } from '../../../../services/gameSocket';
 import {
   resolveAvatarUrl,
@@ -17,14 +17,17 @@ import { formatPercent, formatRecovery } from '../../shared/formatAttr';
 import PhoneBindingDialog from '../../shared/PhoneBindingDialog';
 import PlayerName from '../../shared/PlayerName';
 import { usePhoneBindingStatus } from '../../shared/usePhoneBindingStatus';
+import { useDeferredGameRequest } from '../../shared/useDeferredGameRequest';
 import './index.scss';
 
 const CHARACTER_REFRESH_INTERVAL_MS = 30_000;
+const PLAYER_INFO_AUX_REQUEST_DELAY_MS = 800;
 const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const PlayerInfo: React.FC = () => {
   const { message } = App.useApp();
   const messageRef = useRef(message);
+  const realmOverviewRequestSeqRef = useRef(0);
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [realmOverview, setRealmOverview] = useState<RealmOverviewDto | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -40,6 +43,12 @@ const PlayerInfo: React.FC = () => {
   useEffect(() => {
     messageRef.current = message;
   }, [message]);
+
+  useEffect(() => {
+    return () => {
+      realmOverviewRequestSeqRef.current += 1;
+    };
+  }, []);
 
   // 连接游戏服务器并订阅角色数据
   useEffect(() => {
@@ -66,26 +75,34 @@ const PlayerInfo: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (!character?.realm) return;
-    let cancelled = false;
-    getRealmOverview(SILENT_REQUEST_CONFIG)
-      .then((res) => {
-        if (cancelled) return;
-        if (res?.success && res.data) {
-          setRealmOverview(res.data);
-          return;
-        }
-        setRealmOverview(null);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setRealmOverview(null);
-      });
-    return () => {
-      cancelled = true;
-    };
+  const refreshRealmOverview = useCallback(async () => {
+    if (!character?.realm) {
+      setRealmOverview(null);
+      return;
+    }
+
+    const requestSeq = realmOverviewRequestSeqRef.current + 1;
+    realmOverviewRequestSeqRef.current = requestSeq;
+    try {
+      const res = await getRealmOverview(SILENT_REQUEST_CONFIG);
+      if (realmOverviewRequestSeqRef.current !== requestSeq) return;
+      if (res?.success && res.data) {
+        setRealmOverview(res.data);
+        return;
+      }
+      setRealmOverview(null);
+    } catch {
+      if (realmOverviewRequestSeqRef.current !== requestSeq) return;
+      setRealmOverview(null);
+    }
   }, [character?.realm]);
+
+  useEffect(() => {
+    if (character?.realm) return;
+    setRealmOverview(null);
+  }, [character?.realm]);
+
+  useDeferredGameRequest(Boolean(character?.realm), refreshRealmOverview, PLAYER_INFO_AUX_REQUEST_DELAY_MS);
 
   const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
 
