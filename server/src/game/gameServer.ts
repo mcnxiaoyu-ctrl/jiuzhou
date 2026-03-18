@@ -75,6 +75,7 @@ class GameServer {
   private io: SocketServer;
   private sessions: Map<string, PlayerSession> = new Map();
   private userSocketMap: Map<number, string> = new Map();
+  private characterSocketMap: Map<number, string> = new Map();
   private onlinePlayersEmitTimer: ReturnType<typeof setTimeout> | null = null;
   private onlinePlayersEmitQueued = false;
   private onlinePlayersLastEmitAt = 0;
@@ -142,6 +143,7 @@ class GameServer {
             if (this.userSocketMap.get(userId) === oldSocketId) {
               this.userSocketMap.delete(userId);
             }
+            this.clearCharacterSocketBinding(oldSocketId);
             this.sessions.delete(oldSocketId);
             const oldSocket = this.io.sockets.sockets.get(oldSocketId);
             if (oldSocket) {
@@ -165,6 +167,7 @@ class GameServer {
             lastUpdate: Date.now(),
           });
           this.userSocketMap.set(userId, socket.id);
+          this.syncCharacterSocketBinding(socket.id, null, character);
 
           socket.join("chat:authed");
           socket.join(`chat:user:${userId}`);
@@ -395,6 +398,7 @@ class GameServer {
           if (success) {
             // 重新加载角色数据
             const updatedCharacter = await this.loadCharacter(session.userId);
+            this.syncCharacterSocketBinding(socket.id, session.character, updatedCharacter);
             session.character = updatedCharacter;
             session.lastUpdate = Date.now();
 
@@ -418,6 +422,7 @@ class GameServer {
         }
 
         const character = await this.loadCharacter(session.userId);
+        this.syncCharacterSocketBinding(socket.id, session.character, character);
         session.character = character;
         session.lastUpdate = Date.now();
         socket.emit("game:character", { type: "full", character });
@@ -433,6 +438,7 @@ class GameServer {
             });
           }
           this.cancelQueuedCharacterPush(session.userId);
+          this.clearCharacterSocketBinding(socket.id);
           this.userSocketMap.delete(session.userId);
           this.sessions.delete(socket.id);
           if (!this.shutdownGate.isShuttingDown()) {
@@ -684,10 +690,43 @@ class GameServer {
   }
 
   private getSocketIdByCharacterId(characterId: number): string | null {
-    for (const session of this.sessions.values()) {
-      if (session.character?.id === characterId) return session.socketId;
+    if (!Number.isFinite(characterId) || characterId <= 0) return null;
+    const socketId = this.characterSocketMap.get(characterId);
+    if (!socketId) return null;
+    if (!this.sessions.has(socketId)) {
+      this.characterSocketMap.delete(characterId);
+      return null;
     }
-    return null;
+    return socketId;
+  }
+
+  private syncCharacterSocketBinding(
+    socketId: string,
+    previousCharacter: CharacterAttributes | null,
+    nextCharacter: CharacterAttributes | null,
+  ): void {
+    const previousCharacterId = previousCharacter?.id ?? null;
+    if (previousCharacterId !== null) {
+      const currentSocketId = this.characterSocketMap.get(previousCharacterId);
+      if (currentSocketId === socketId) {
+        this.characterSocketMap.delete(previousCharacterId);
+      }
+    }
+
+    const nextCharacterId = nextCharacter?.id ?? null;
+    if (nextCharacterId !== null) {
+      this.characterSocketMap.set(nextCharacterId, socketId);
+    }
+  }
+
+  private clearCharacterSocketBinding(socketId: string): void {
+    const session = this.sessions.get(socketId);
+    const characterId = session?.character?.id ?? null;
+    if (characterId === null) return;
+    const currentSocketId = this.characterSocketMap.get(characterId);
+    if (currentSocketId === socketId) {
+      this.characterSocketMap.delete(characterId);
+    }
   }
 
   // 保存加点
@@ -809,6 +848,7 @@ class GameServer {
         const prevCharacter = session?.character ?? null;
         const character = await this.loadCharacter(userId);
         if (session) {
+          this.syncCharacterSocketBinding(socketId, prevCharacter, character);
           session.character = character;
           session.lastUpdate = Date.now();
         }
@@ -905,14 +945,9 @@ class GameServer {
     data: T,
   ): boolean {
     if (this.shutdownGate.isShuttingDown()) return false;
-    // 查找角色对应的 session
-    const session = Array.from(this.sessions.values()).find(
-      (s) => s.character?.id === characterId,
-    );
-
-    if (!session) return false;
-
-    const socket = this.io.sockets.sockets.get(session.socketId);
+    const socketId = this.getSocketIdByCharacterId(characterId);
+    if (!socketId) return false;
+    const socket = this.io.sockets.sockets.get(socketId);
     if (!socket) return false;
 
     socket.emit(event, data);
@@ -929,6 +964,7 @@ class GameServer {
     if (!socketId) return;
     void this.touchCharacterLastOfflineAt(userId);
     this.cancelQueuedCharacterPush(userId);
+    this.clearCharacterSocketBinding(socketId);
 
     const socket = this.io.sockets.sockets.get(socketId);
     if (socket) {
@@ -972,6 +1008,7 @@ class GameServer {
       await this.shutdownGate.waitForIdle();
 
       this.characterPushInFlight.clear();
+      this.characterSocketMap.clear();
       this.lastBroadcastedPlayers.clear();
       this.userSocketMap.clear();
       this.sessions.clear();

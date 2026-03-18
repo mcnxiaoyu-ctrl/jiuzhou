@@ -38,6 +38,12 @@ export const activeBattles = new Map<string, BattleEngine>();
 /** 战斗参与者映射（battleId -> userId[]） */
 export const battleParticipants = new Map<string, number[]>();
 
+/** 角色参战索引（characterId -> battleId） */
+export const activeBattleIdByCharacterId = new Map<number, string>();
+
+/** 用户参战索引（userId -> battleId 集合） */
+export const activeBattleIdsByUserId = new Map<number, Set<string>>();
+
 /** 已结束战斗结果缓存 */
 export const finishedBattleResults = new Map<
   string,
@@ -47,8 +53,8 @@ export const finishedBattleResults = new Map<
 /** 正在结算中的 Promise（去重） */
 export const finishingBattleResults = new Map<string, Promise<BattleResult>>();
 
-/** 战斗 tick 定时器 */
-export const battleTickers = new Map<string, ReturnType<typeof setInterval>>();
+/** 战斗 tick 注册表（battleId -> true，由共享调度器统一驱动） */
+export const battleTickers = new Map<string, true>();
 
 /** 战斗 tick 锁（防止并发 tick） */
 export const battleTickLocks = new Set<string>();
@@ -194,6 +200,19 @@ export function findActiveBattleByCharacterId(
   if (!Number.isFinite(normalizedCharacterId) || normalizedCharacterId <= 0)
     return null;
 
+  const indexedBattleId = activeBattleIdByCharacterId.get(normalizedCharacterId);
+  if (indexedBattleId) {
+    const indexedEngine = activeBattles.get(indexedBattleId);
+    const indexedParticipants = battleParticipants.get(indexedBattleId) || [];
+    if (indexedEngine && indexedParticipants.length > 0) {
+      const indexedState = indexedEngine.getState();
+      if (indexedState.phase !== "finished") {
+        return { battleId: indexedBattleId, state: indexedState };
+      }
+    }
+    activeBattleIdByCharacterId.delete(normalizedCharacterId);
+  }
+
   for (const [battleId, engine] of activeBattles.entries()) {
     const participants = battleParticipants.get(battleId) || [];
     if (participants.length === 0) continue;
@@ -208,6 +227,7 @@ export function findActiveBattleByCharacterId(
     for (const unit of units) {
       if (unit.type !== "player") continue;
       if (Number(unit.sourceId) !== normalizedCharacterId) continue;
+      activeBattleIdByCharacterId.set(normalizedCharacterId, battleId);
       return { battleId, state };
     }
   }
@@ -267,6 +287,25 @@ export function collectPlayerCharacterIdsFromBattleState(
   ]);
 }
 
+export function syncBattleCharacterIndex(
+  battleId: string,
+  state: BattleState,
+): void {
+  removeBattleCharacterIndex(battleId);
+  const playerCharacterIds = collectPlayerCharacterIdsFromBattleState(state);
+  for (const characterId of playerCharacterIds) {
+    activeBattleIdByCharacterId.set(characterId, battleId);
+  }
+}
+
+export function removeBattleCharacterIndex(battleId: string): void {
+  for (const [characterId, indexedBattleId] of activeBattleIdByCharacterId.entries()) {
+    if (indexedBattleId === battleId) {
+      activeBattleIdByCharacterId.delete(characterId);
+    }
+  }
+}
+
 export function normalizeBattleParticipantUserIds(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [];
   const ids = new Set<number>();
@@ -289,14 +328,69 @@ export function collectBattleOwnerUserIds(state: BattleState): number[] {
   return [...ownerIds];
 }
 
-export function listActiveBattleIdsByUserId(userId: number): string[] {
-  const ids: string[] = [];
-  if (!Number.isFinite(userId) || userId <= 0) return ids;
-  for (const [battleId, participants] of battleParticipants.entries()) {
-    if (!Array.isArray(participants)) continue;
-    if (participants.includes(userId)) ids.push(battleId);
+export function syncBattleParticipantIndex(
+  battleId: string,
+  participantUserIds: number[],
+): void {
+  removeBattleParticipantIndex(battleId);
+  const normalizedParticipantUserIds = normalizeBattleParticipantUserIds(participantUserIds);
+  for (const userId of normalizedParticipantUserIds) {
+    const indexedBattleIds = activeBattleIdsByUserId.get(userId) ?? new Set<string>();
+    indexedBattleIds.add(battleId);
+    activeBattleIdsByUserId.set(userId, indexedBattleIds);
   }
-  return ids;
+}
+
+export function setBattleParticipantsForBattle(
+  battleId: string,
+  participantUserIds: number[],
+): void {
+  const normalizedParticipantUserIds = normalizeBattleParticipantUserIds(participantUserIds);
+  battleParticipants.set(battleId, normalizedParticipantUserIds);
+  syncBattleParticipantIndex(battleId, normalizedParticipantUserIds);
+}
+
+export function removeBattleParticipantIndex(battleId: string): void {
+  for (const [userId, indexedBattleIds] of activeBattleIdsByUserId.entries()) {
+    if (!indexedBattleIds.has(battleId)) continue;
+    indexedBattleIds.delete(battleId);
+    if (indexedBattleIds.size === 0) {
+      activeBattleIdsByUserId.delete(userId);
+    }
+  }
+}
+
+export function listActiveBattleIdsByUserId(userId: number): string[] {
+  const normalizedUserId = Math.floor(Number(userId));
+  if (!Number.isFinite(normalizedUserId) || normalizedUserId <= 0) return [];
+
+  const indexedBattleIds = activeBattleIdsByUserId.get(normalizedUserId);
+  if (!indexedBattleIds || indexedBattleIds.size === 0) {
+    return [];
+  }
+
+  const activeIds: string[] = [];
+  for (const battleId of indexedBattleIds) {
+    const participants = battleParticipants.get(battleId) || [];
+    if (!participants.includes(normalizedUserId)) continue;
+    if (!activeBattles.has(battleId)) continue;
+    activeIds.push(battleId);
+  }
+
+  if (activeIds.length !== indexedBattleIds.size) {
+    syncBattleParticipantIndexForUser(normalizedUserId, activeIds);
+  }
+
+  return activeIds;
+}
+
+function syncBattleParticipantIndexForUser(userId: number, battleIds: string[]): void {
+  const normalizedBattleIds = [...new Set(battleIds.filter((battleId) => typeof battleId === "string" && battleId.length > 0))];
+  if (normalizedBattleIds.length === 0) {
+    activeBattleIdsByUserId.delete(userId);
+    return;
+  }
+  activeBattleIdsByUserId.set(userId, new Set(normalizedBattleIds));
 }
 
 export function getAttackerPlayerCount(state: BattleState): number {
@@ -367,7 +461,8 @@ export function registerStartedBattle(
 ): void {
   engine.startBattle();
   activeBattles.set(battleId, engine);
-  battleParticipants.set(battleId, participantUserIds);
+  setBattleParticipantsForBattle(battleId, participantUserIds);
+  syncBattleCharacterIndex(battleId, engine.getState());
   // 延迟导入避免循环依赖：state.ts <-> ticker.ts
   import("./ticker.js").then(({ emitBattleUpdate, startBattleTicker }) => {
     emitBattleUpdate(battleId, {

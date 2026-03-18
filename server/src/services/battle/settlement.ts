@@ -43,6 +43,8 @@ import {
   BATTLE_START_COOLDOWN_MS,
   collectPlayerCharacterIdsFromBattleState,
   getFinishedBattleResultIfFresh,
+  removeBattleCharacterIndex,
+  removeBattleParticipantIndex,
   setBattleStartCooldownByCharacterIds,
 } from "./runtime/state.js";
 import { stopBattleTicker } from "./runtime/ticker.js";
@@ -313,6 +315,8 @@ async function finishBattleCore(
 
   activeBattles.delete(state.battleId);
   battleParticipants.delete(state.battleId);
+  removeBattleCharacterIndex(state.battleId);
+  removeBattleParticipantIndex(state.battleId);
   stopBattleTicker(state.battleId);
   finishedBattleResults.set(state.battleId, {
     result: battleResult,

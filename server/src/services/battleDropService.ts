@@ -85,6 +85,15 @@ type DistributeBattleRewardsOptions = {
   isDungeonBattle?: boolean;
 };
 
+type RewardItemMeta = {
+  name: string;
+  category: string;
+  subCategory: string | null;
+  effectDefs: unknown;
+  qualityRank: number;
+  disassemblable: boolean | null;
+};
+
 // 掉落结果
 export interface DropResult {
   itemDefId: string;
@@ -155,6 +164,10 @@ export interface BattleParticipant {
  *   4. 装备掉落支持品质权重和自动分解规则
  */
 class BattleDropService {
+  private dropPoolCache = new Map<string, DropPool | null>();
+  private rewardMonsterDataCache = new Map<string, MonsterData | null>();
+  private rewardItemMetaCache = new Map<string, RewardItemMeta>();
+
   private clamp01(value: number): number {
     return Math.max(0, Math.min(1, value));
   }
@@ -223,9 +236,17 @@ class BattleDropService {
    * 获取掉落池及其条目
    */
   async getDropPool(poolId: string): Promise<DropPool | null> {
+    if (this.dropPoolCache.has(poolId)) {
+      return this.dropPoolCache.get(poolId) ?? null;
+    }
+
     const resolvedPool = resolveDropPoolById(poolId);
-    if (!resolvedPool) return null;
-    return {
+    if (!resolvedPool) {
+      this.dropPoolCache.set(poolId, null);
+      return null;
+    }
+
+    const dropPool: DropPool = {
       id: resolvedPool.id,
       name: resolvedPool.name,
       mode: resolvedPool.mode,
@@ -246,6 +267,84 @@ class BattleDropService {
         sourcePoolId: entry.sourcePoolId,
       })),
     };
+    this.dropPoolCache.set(poolId, dropPool);
+    return dropPool;
+  }
+
+  /**
+   * 解析奖励结算所需的怪物快照（按输入顺序保留重复怪物）。
+   *
+   * 作用：
+   * - 统一承接 quickDistributeRewards 的怪物配置读取；
+   * - 使用实例级缓存避免每场战斗都全量扫描 monster_def；
+   * - 严格保留 monsterIds 中的重复项，确保多只同种怪会累计多份奖励。
+   *
+   * 边界条件：
+   * 1. 未启用或不存在的怪物会被跳过，不制造占位数据。
+   * 2. 返回值只读静态配置字段，不在后续流程中修改，适合做长生命周期缓存。
+   */
+  private resolveRewardMonsters(monsterIds: string[]): MonsterData[] {
+    const monsters: MonsterData[] = [];
+
+    for (const monsterId of monsterIds) {
+      const normalizedMonsterId = String(monsterId || '').trim();
+      if (!normalizedMonsterId) continue;
+
+      if (!this.rewardMonsterDataCache.has(normalizedMonsterId)) {
+        const definition = getMonsterDefinitions().find(
+          (entry) => entry.enabled !== false && entry.id === normalizedMonsterId,
+        );
+        const rewardMonsterData = definition
+          ? ({
+              id: definition.id,
+              name: definition.name,
+              realm: definition.realm ?? '凡人',
+              element: definition.element ?? 'none',
+              base_attrs: definition.base_attrs ?? {},
+              exp_reward: Number(definition.exp_reward ?? 0),
+              silver_reward_min: Number(definition.silver_reward_min ?? 0),
+              silver_reward_max: Number(definition.silver_reward_max ?? 0),
+              kind: definition.kind,
+              drop_pool_id: definition.drop_pool_id ?? null,
+            } as MonsterData)
+          : null;
+        this.rewardMonsterDataCache.set(normalizedMonsterId, rewardMonsterData);
+      }
+
+      const rewardMonsterData = this.rewardMonsterDataCache.get(normalizedMonsterId);
+      if (rewardMonsterData) {
+        monsters.push(rewardMonsterData);
+      }
+    }
+
+    return monsters;
+  }
+
+  /**
+   * 获取奖励物品元数据缓存。
+   *
+   * 作用：
+   * - 把物品名称、品质、自动分解判定字段收敛到统一缓存入口；
+   * - 避免高频奖励结算反复读取同一份 item_def 静态配置。
+   */
+  private getRewardItemMeta(itemDefId: string): RewardItemMeta {
+    const cachedMeta = this.rewardItemMetaCache.get(itemDefId);
+    if (cachedMeta) {
+      return cachedMeta;
+    }
+
+    const def = getItemDefinitionById(itemDefId);
+    const meta: RewardItemMeta = {
+      name: def?.name || itemDefId,
+      category: typeof def?.category === 'string' ? def.category : '',
+      subCategory: def?.sub_category ?? null,
+      effectDefs: def?.effect_defs ?? null,
+      qualityRank: resolveQualityRankFromName(def?.quality, 1),
+      disassemblable:
+        typeof def?.disassemblable === 'boolean' ? def.disassemblable : null,
+    };
+    this.rewardItemMetaCache.set(itemDefId, meta);
+    return meta;
   }
 
   /**
@@ -600,17 +699,6 @@ class BattleDropService {
     
     // 4. 分发物品（组队按“每个战利品条目独立ROLL点”分配，单人全部获得）
     const allItems: DistributeResult['rewards']['items'] = [];
-    const itemMetaCache = new Map<
-      string,
-      {
-        name: string;
-        category: string;
-        subCategory: string | null;
-        effectDefs: unknown;
-        qualityRank: number;
-        disassemblable: boolean | null;
-      }
-    >();
     const autoDisassembleSettings = new Map<number, AutoDisassembleSetting>();
 
     if (requiresInventoryMutation && participantCharacterIds.length > 0) {
@@ -687,30 +775,6 @@ class BattleDropService {
       pendingMailByReceiver.set(receiverCharacterId, existing);
     };
 
-    const getItemMeta = async (itemDefId: string): Promise<{
-      name: string;
-      category: string;
-      subCategory: string | null;
-      effectDefs: unknown;
-      qualityRank: number;
-      disassemblable: boolean | null;
-    }> => {
-      const cached = itemMetaCache.get(itemDefId);
-      if (cached) return cached;
-      const def = getItemDefinitionById(itemDefId);
-      const meta = {
-        name: def?.name || itemDefId,
-        category: typeof def?.category === 'string' ? def.category : '',
-        subCategory: def?.sub_category ?? null,
-        effectDefs: def?.effect_defs ?? null,
-        qualityRank: resolveQualityRankFromName(def?.quality, 1),
-        disassemblable:
-          typeof def?.disassemblable === 'boolean' ? def.disassemblable : null,
-      };
-      itemMetaCache.set(itemDefId, meta);
-      return meta;
-    };
-
     for (const entry of mergedDropsByReceiver.values()) {
       const drop = entry.drop;
       const receiver = entry.receiver;
@@ -720,7 +784,7 @@ class BattleDropService {
         continue;
       }
 
-      const sourceMeta = await getItemMeta(drop.itemDefId);
+      const sourceMeta = this.getRewardItemMeta(drop.itemDefId);
       const createOptions: CreateItemOptions = {
         location: 'bag',
         bindType: drop.bindType,
@@ -789,7 +853,9 @@ class BattleDropService {
 
       for (const granted of grantResult.grantedItems) {
         const grantedMeta =
-          granted.itemDefId === drop.itemDefId ? sourceMeta : await getItemMeta(granted.itemDefId);
+          granted.itemDefId === drop.itemDefId
+            ? sourceMeta
+            : this.getRewardItemMeta(granted.itemDefId);
         appendCollectCount(receiverCharacterId, granted.itemDefId, granted.qty);
         appendRewardRecord(receiverCharacterId, granted.itemDefId, grantedMeta.name, granted.qty, granted.itemIds);
       }
@@ -848,23 +914,14 @@ class BattleDropService {
       };
     }
 
-    // 获取怪物数据
-    const idSet = new Set(monsterIds);
-    const monsters = getMonsterDefinitions()
-      .filter((entry) => entry.enabled !== false)
-      .filter((entry) => idSet.has(entry.id))
-      .map((entry) => ({
-        id: entry.id,
-        name: entry.name,
-        realm: entry.realm ?? '凡人',
-        element: entry.element ?? 'none',
-        base_attrs: entry.base_attrs ?? {},
-        exp_reward: Number(entry.exp_reward ?? 0),
-        silver_reward_min: Number(entry.silver_reward_min ?? 0),
-        silver_reward_max: Number(entry.silver_reward_max ?? 0),
-        kind: entry.kind,
-        drop_pool_id: entry.drop_pool_id ?? null,
-      })) as MonsterData[];
+    const monsters = this.resolveRewardMonsters(monsterIds);
+    if (monsters.length === 0) {
+      return {
+        success: true,
+        message: '无奖励',
+        rewards: { exp: 0, silver: 0, items: [] },
+      };
+    }
 
     return this.distributeBattleRewards(monsters, participants, isVictory);
   }

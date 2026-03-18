@@ -27,6 +27,8 @@ import {
   BATTLE_START_COOLDOWN_MS,
   collectPlayerCharacterIdsFromBattleState,
   getUserIdByCharacterId,
+  removeBattleCharacterIndex,
+  removeBattleParticipantIndex,
   setBattleStartCooldownByCharacterIds,
 } from "./runtime/state.js";
 import { stopBattleTicker, emitBattleUpdate } from "./runtime/ticker.js";
@@ -202,6 +204,8 @@ export async function abandonBattle(
 
   activeBattles.delete(battleId);
   battleParticipants.delete(battleId);
+  removeBattleCharacterIndex(battleId);
+  removeBattleParticipantIndex(battleId);
   stopBattleTicker(battleId);
   finishedBattleResults.set(battleId, {
     result: { success: true, message: "已放弃战斗" },

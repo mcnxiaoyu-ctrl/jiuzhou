@@ -20,6 +20,8 @@ import {
   getAttackerPlayerCount,
   getUserIdByCharacterId,
   listActiveBattleIdsByUserId,
+  setBattleParticipantsForBattle,
+  syncBattleCharacterIndex,
 } from "./runtime/state.js";
 import { abandonBattle } from "./action.js";
 
@@ -45,10 +47,11 @@ async function removeUserFromTeamBattle(
   }
 
   engine.removeAttackerUnits(ownedAttackerUnitIds);
+  syncBattleCharacterIndex(battleId, engine.getState());
 
   const participants = battleParticipants.get(battleId) || [];
   const nextParticipants = participants.filter((id) => id !== userId);
-  battleParticipants.set(battleId, nextParticipants);
+  setBattleParticipantsForBattle(battleId, nextParticipants);
 }
 
 export async function onUserJoinTeam(userId: number): Promise<void> {

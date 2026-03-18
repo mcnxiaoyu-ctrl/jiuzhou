@@ -24,7 +24,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { query } from '../../config/database.js';
+import { query, withTransactionAuto } from '../../config/database.js';
 import { BATTLE_TICK_MS, BATTLE_START_COOLDOWN_MS } from '../battle/index.js';
 import { getGameServer } from '../../game/gameServer.js';
 import { getRoomInMap } from '../mapService.js';
@@ -35,6 +35,13 @@ import { toPgTextArrayLiteral } from './pgTextArrayLiteral.js';
 import { rowToIdleSessionRow } from './rowMappers.js';
 import { idleSessionService } from './idleSessionService.js';
 import type { IdleRoomMonsterSlot } from './idleBattleSimulationCore.js';
+import {
+  appendBattleResultToIdleSessionSummary,
+  createIdleSessionSummaryState,
+  getIdleSessionSummaryFlushPayload,
+  resetIdleSessionSummaryDelta,
+  type IdleSessionSummaryState,
+} from './idleSessionSummary.js';
 import {
   clearIdleExecutionLoopRegistry,
   registerIdleExecutionLoop,
@@ -76,6 +83,7 @@ type BatchBuffer = {
     battleLog: unknown[];
     monsterIds: string[];
   }>;
+  summaryState: IdleSessionSummaryState;
   lastFlushAt: number;
 };
 
@@ -88,6 +96,9 @@ const FLUSH_BATCH_SIZE = 10;
 
 /** 批量写入时间阈值：距上次 flush 超过多少毫秒后触发 */
 const FLUSH_INTERVAL_MS = 5_000;
+
+/** 会话状态查库间隔：仅用于开战前预检查，避免每轮都重复查询 idle_sessions */
+const SESSION_STATUS_CHECK_INTERVAL_MS = 15_000;
 
 // ============================================
 // 内部状态
@@ -103,15 +114,24 @@ const activeBuffers = new Map<string, { characterId: number; buffer: BatchBuffer
 const loopWakeHandlers = new Map<string, () => void>();
 
 /** 循环运行态（避免 stop 请求期间并发调度） */
-const loopRuntimeStates = new Map<string, { running: boolean; wakeRequested: boolean }>();
+const loopRuntimeStates = new Map<
+  string,
+  {
+    running: boolean;
+    wakeRequested: boolean;
+    stopRequested: boolean;
+    lastSessionStatusCheckAt: number;
+  }
+>();
 
 // ============================================
 // 缓冲区管理
 // ============================================
 
-function createBuffer(): BatchBuffer {
+function createBuffer(session: Pick<IdleSessionRow, 'rewardItems' | 'bagFullFlag'>): BatchBuffer {
   return {
     batches: [],
+    summaryState: createIdleSessionSummaryState(session),
     lastFlushAt: Date.now(),
   };
 }
@@ -134,57 +154,47 @@ async function flushBuffer(
   if (buffer.batches.length === 0) return;
 
   const batches = buffer.batches.splice(0);
+  const summaryPayload = getIdleSessionSummaryFlushPayload(buffer.summaryState);
   buffer.lastFlushAt = Date.now();
 
   try {
-    // 1. 批量 INSERT idle_battle_batches
-    const values = batches
-      .map(
-        (b, i) =>
-          `($${i * 11 + 1}, $${i * 11 + 2}, $${i * 11 + 3}, $${i * 11 + 4}, $${i * 11 + 5}, $${i * 11 + 6}, $${i * 11 + 7}, $${i * 11 + 8}, $${i * 11 + 9}, $${i * 11 + 10}, $${i * 11 + 11}, NOW())`,
-      )
-      .join(', ');
-    const params = batches.flatMap((b) => [
-      b.id,
-      b.sessionId,
-      b.batchIndex,
-      b.result,
-      b.roundCount,
-      b.randomSeed,
-      b.expGained,
-      b.silverGained,
-      JSON.stringify(b.battleLog),
-      JSON.stringify(b.itemsGained),
-      toPgTextArrayLiteral(b.monsterIds),
-    ]);
+    await withTransactionAuto(async () => {
+      const values = batches
+        .map(
+          (b, i) =>
+            `($${i * 11 + 1}, $${i * 11 + 2}, $${i * 11 + 3}, $${i * 11 + 4}, $${i * 11 + 5}, $${i * 11 + 6}, $${i * 11 + 7}, $${i * 11 + 8}, $${i * 11 + 9}, $${i * 11 + 10}, $${i * 11 + 11}, NOW())`,
+        )
+        .join(', ');
+      const params = batches.flatMap((b) => [
+        b.id,
+        b.sessionId,
+        b.batchIndex,
+        b.result,
+        b.roundCount,
+        b.randomSeed,
+        b.expGained,
+        b.silverGained,
+        JSON.stringify(b.battleLog),
+        JSON.stringify(b.itemsGained),
+        toPgTextArrayLiteral(b.monsterIds),
+      ]);
 
-    await query(
-      `INSERT INTO idle_battle_batches (
-        id, session_id, batch_index, result, round_count, random_seed,
-        exp_gained, silver_gained, battle_log, items_gained, monster_ids, executed_at
-      )
-       VALUES ${values}`,
-      params,
-    );
+      await query(
+        `INSERT INTO idle_battle_batches (
+          id, session_id, batch_index, result, round_count, random_seed,
+          exp_gained, silver_gained, battle_log, items_gained, monster_ids, executed_at
+        )
+         VALUES ${values}`,
+        params,
+      );
 
-    // 2. 累加汇总数据
-    const totalBattlesDelta = batches.length;
-    const winDelta = batches.filter((b) => b.result === 'attacker_win').length;
-    const loseDelta = batches.filter((b) => b.result === 'defender_win').length;
-    const expDelta = batches.reduce((sum, b) => sum + b.expGained, 0);
-    const silverDelta = batches.reduce((sum, b) => sum + b.silverGained, 0);
-    const newItems = batches.flatMap((b) => b.itemsGained);
-    const bagFullFlag = batches.some((b) => b.bagFullFlag);
-
-    await idleSessionService.updateSessionSummary(sessionId, {
-      totalBattlesDelta,
-      winDelta,
-      loseDelta,
-      expDelta,
-      silverDelta,
-      newItems,
-      bagFullFlag,
+      await idleSessionService.updateSessionSummary(
+        sessionId,
+        summaryPayload.delta,
+        summaryPayload.snapshot,
+      );
     });
+    resetIdleSessionSummaryDelta(buffer.summaryState);
   } catch (err) {
     console.error(`[IdleBattleExecutor] flush 失败:`, err);
     // flush 失败时将 batches 放回缓冲区（下次重试）
@@ -235,8 +245,13 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
   if (activeLoops.has(session.id)) return;
 
   let batchIndex = session.totalBattles + 1;
-  const buffer = createBuffer();
-  const runtime = { running: false, wakeRequested: false };
+  const buffer = createBuffer(session);
+  const runtime = {
+    running: false,
+    wakeRequested: false,
+    stopRequested: false,
+    lastSessionStatusCheckAt: 0,
+  };
   let cachedRoomMonsters: IdleRoomMonsterSlot[] | null = null;
 
   registerIdleExecutionLoop(session.id);
@@ -306,7 +321,7 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
     runtime.running = true;
     try {
       // 先检查终止条件，确保 stop 能在下一轮立即生效。
-      const shouldStopBeforeBattle = await checkTerminationConditions(session);
+      const shouldStopBeforeBattle = await checkTerminationConditions(session, runtime);
       if (shouldStopBeforeBattle.terminate) {
         await finalizeTermination(shouldStopBeforeBattle);
         return;
@@ -357,6 +372,7 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
         battleLog: batchResult.battleLog,
         monsterIds: batchResult.monsterIds,
       });
+      appendBattleResultToIdleSessionSummary(buffer.summaryState, batchResult);
       batchIndex++;
 
       // 5. 实时推送本场摘要
@@ -374,7 +390,9 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
         // 忽略推送错误
       }
 
-      const shouldStopAfterBattle = await checkTerminationConditions(session);
+      const shouldStopAfterBattle = await checkTerminationConditions(session, runtime, {
+        forceDbStatusCheck: true,
+      });
       if (shouldFlush(buffer) || shouldStopAfterBattle.terminate) {
         await flushBuffer(session.characterId, session.id, buffer);
       }
@@ -413,6 +431,11 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
  *   3. 不直接改 DB 状态，状态持久化由 stopIdleSession 负责
  */
 export function requestImmediateStop(sessionId: string): void {
+  const runtime = loopRuntimeStates.get(sessionId);
+  if (runtime) {
+    runtime.stopRequested = true;
+    runtime.wakeRequested = true;
+  }
   const wakeNow = loopWakeHandlers.get(sessionId);
   if (wakeNow) {
     wakeNow();
@@ -461,26 +484,60 @@ type TerminationCheckResult =
   | { terminate: false }
   | { terminate: true; status: 'completed' | 'interrupted'; reason: string };
 
+function checkTerminationConditionsWithoutDb(
+  session: IdleSessionRow,
+  runtime: {
+    stopRequested: boolean;
+  },
+): TerminationCheckResult {
+  if (runtime.stopRequested) {
+    return { terminate: true, status: 'interrupted', reason: '会话已停止' };
+  }
+
+  const elapsed = Date.now() - new Date(session.startedAt).getTime();
+  if (elapsed >= session.maxDurationMs) {
+    return { terminate: true, status: 'completed', reason: '达到时长上限' };
+  }
+
+  return { terminate: false };
+}
+
 async function checkTerminationConditions(
   session: IdleSessionRow,
+  runtime: {
+    stopRequested: boolean;
+    lastSessionStatusCheckAt: number;
+  },
+  options: {
+    forceDbStatusCheck?: boolean;
+  } = {},
 ): Promise<TerminationCheckResult> {
-  // 1. 检查会话状态（是否被手动停止）
+  const localTermination = checkTerminationConditionsWithoutDb(session, runtime);
+  if (localTermination.terminate) {
+    return localTermination;
+  }
+
+  const now = Date.now();
+  const shouldSkipDbStatusCheck =
+    options.forceDbStatusCheck !== true &&
+    now - runtime.lastSessionStatusCheckAt < SESSION_STATUS_CHECK_INTERVAL_MS;
+  if (shouldSkipDbStatusCheck) {
+    return { terminate: false };
+  }
+
+  // 低频检查会话状态（兜住跨进程/重启恢复后的状态漂移）
   const currentSession = await idleSessionService.getIdleSessionById(session.id);
   if (!currentSession) {
     return { terminate: true, status: 'completed', reason: 'session_not_found' };
   }
   if (currentSession.status === 'stopping') {
+    runtime.stopRequested = true;
     return { terminate: true, status: 'interrupted', reason: '会话已停止' };
   }
   if (currentSession.status !== 'active') {
     return { terminate: true, status: 'completed', reason: '会话已结束' };
   }
-
-  // 2. 检查时长限制
-  const elapsed = Date.now() - new Date(session.startedAt).getTime();
-  if (elapsed >= session.maxDurationMs) {
-    return { terminate: true, status: 'completed', reason: '达到时长上限' };
-  }
+  runtime.lastSessionStatusCheckAt = now;
 
   // 3. 检查体力（简化版，实际应查询 DB）
   // TODO: 从 DB 查询当前体力，判断是否足够继续战斗

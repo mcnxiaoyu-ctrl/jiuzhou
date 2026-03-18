@@ -32,7 +32,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { query } from '../../config/database.js';
+import { query, withTransactionAuto } from '../../config/database.js';
 import { BATTLE_TICK_MS, BATTLE_START_COOLDOWN_MS } from '../battle/index.js';
 import { getGameServer } from '../../game/gameServer.js';
 import { getRoomInMap } from '../mapService.js';
@@ -44,6 +44,13 @@ import { simulateIdleBattle } from './idleBattleSimulationCore.js';
 import type { BattleLogEntry } from '../../battle/types.js';
 import { rowToIdleSessionRow } from './rowMappers.js';
 import { idleSessionService } from './idleSessionService.js';
+import {
+  appendBattleResultToIdleSessionSummary,
+  createIdleSessionSummaryState,
+  getIdleSessionSummaryFlushPayload,
+  resetIdleSessionSummaryDelta,
+  type IdleSessionSummaryState,
+} from './idleSessionSummary.js';
 import {
   clearIdleExecutionLoopRegistry,
   registerIdleExecutionLoop,
@@ -109,7 +116,7 @@ export interface SingleBatchResult {
  *
  * 字段说明：
  *   - batches：待写入 idle_battle_batches 的行数据
- *   - summaryDelta：待更新 idle_sessions 的汇总增量
+ *   - summaryState：待更新 idle_sessions 的汇总状态（增量 + reward_items 快照）
  *   - lastFlushAt：上次 flush 时间戳，用于时间阈值判断
  */
 interface BatchBuffer {
@@ -126,31 +133,15 @@ interface BatchBuffer {
     battleLog: BattleLogEntry[];
     monsterIds: string[];
   }>;
-  summaryDelta: {
-    totalBattlesDelta: number;
-    winDelta: number;
-    loseDelta: number;
-    expDelta: number;
-    silverDelta: number;
-    newItems: RewardItemEntry[];
-    bagFullFlag: boolean;
-  };
+  summaryState: IdleSessionSummaryState;
   lastFlushAt: number;
 }
 
 /** 创建空缓冲区 */
-function createBuffer(): BatchBuffer {
+function createBuffer(session: Pick<IdleSessionRow, 'rewardItems' | 'bagFullFlag'>): BatchBuffer {
   return {
     batches: [],
-    summaryDelta: {
-      totalBattlesDelta: 0,
-      winDelta: 0,
-      loseDelta: 0,
-      expDelta: 0,
-      silverDelta: 0,
-      newItems: [],
-      bagFullFlag: false,
-    },
+    summaryState: createIdleSessionSummaryState(session),
     lastFlushAt: Date.now(),
   };
 }
@@ -218,9 +209,8 @@ export async function executeSingleBatch(
  *
  * 关键边界：
  *   - 缓冲区为空时直接返回，不发起任何 DB 请求
- *   - flush 完成后重置缓冲区内容（保留 lastFlushAt 更新）
- *   - 两步操作不在同一事务中（性能优先），极端崩溃场景下可能有轻微数据不一致
- *     （可接受：挂机战斗结果允许最终一致）
+ *   - flush 完成后重置本轮 summary delta，累计 reward_items 快照继续复用
+ *   - idle_battle_batches 插入与 idle_sessions 汇总更新放在同一事务内，避免部分成功后的重复重试
  */
 async function flushBuffer(
   _characterId: number,
@@ -230,51 +220,50 @@ async function flushBuffer(
   if (buffer.batches.length === 0) return;
 
   const batchesToFlush = buffer.batches.splice(0);
-
-  const summaryDelta = { ...buffer.summaryDelta };
-  buffer.summaryDelta = {
-    totalBattlesDelta: 0,
-    winDelta: 0,
-    loseDelta: 0,
-    expDelta: 0,
-    silverDelta: 0,
-    newItems: [],
-    bagFullFlag: false,
-  };
+  const summaryPayload = getIdleSessionSummaryFlushPayload(buffer.summaryState);
   buffer.lastFlushAt = Date.now();
 
-  // 1. 批量 INSERT idle_battle_batches
-  // 构造多行 VALUES：($1,$2,...),($11,$12,...) 每行 11 个参数
-  const COLS_PER_ROW = 11;
-  const values: (string | number)[] = [];
-  const placeholders = batchesToFlush.map((b, i) => {
-    const base = i * COLS_PER_ROW;
-    values.push(
-      b.id,
-      b.sessionId,
-      b.batchIndex,
-      b.result,
-      b.roundCount,
-      b.randomSeed,
-      b.expGained,
-      b.silverGained,
-      JSON.stringify(b.itemsGained),
-      JSON.stringify(b.battleLog),
-      toPgTextArrayLiteral(b.monsterIds),
-    );
-    return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8},$${base + 9},$${base + 10},$${base + 11},NOW())`;
-  });
+  try {
+    await withTransactionAuto(async () => {
+      const COLS_PER_ROW = 11;
+      const values: (string | number)[] = [];
+      const placeholders = batchesToFlush.map((b, i) => {
+        const base = i * COLS_PER_ROW;
+        values.push(
+          b.id,
+          b.sessionId,
+          b.batchIndex,
+          b.result,
+          b.roundCount,
+          b.randomSeed,
+          b.expGained,
+          b.silverGained,
+          JSON.stringify(b.itemsGained),
+          JSON.stringify(b.battleLog),
+          toPgTextArrayLiteral(b.monsterIds),
+        );
+        return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8},$${base + 9},$${base + 10},$${base + 11},NOW())`;
+      });
 
-  await query(
-    `INSERT INTO idle_battle_batches (
-      id, session_id, batch_index, result, round_count, random_seed,
-      exp_gained, silver_gained, items_gained, battle_log, monster_ids, executed_at
-    ) VALUES ${placeholders.join(',')}`,
-    values,
-  );
+      await query(
+        `INSERT INTO idle_battle_batches (
+          id, session_id, batch_index, result, round_count, random_seed,
+          exp_gained, silver_gained, items_gained, battle_log, monster_ids, executed_at
+        ) VALUES ${placeholders.join(',')}`,
+        values,
+      );
 
-  // 2. 更新会话汇总
-  await idleSessionService.updateSessionSummary(sessionId, summaryDelta);
+      await idleSessionService.updateSessionSummary(
+        sessionId,
+        summaryPayload.delta,
+        summaryPayload.snapshot,
+      );
+    });
+    resetIdleSessionSummaryDelta(buffer.summaryState);
+  } catch (error) {
+    console.error(`[IdleBattleExecutor] flush 失败:`, error);
+    buffer.batches.unshift(...batchesToFlush);
+  }
 }
 
 /**
@@ -304,26 +293,7 @@ async function appendToBuffer(
     monsterIds: batchResult.monsterIds,
   });
 
-  // 累加汇总增量
-  buffer.summaryDelta.totalBattlesDelta += 1;
-  if (batchResult.result === 'attacker_win') buffer.summaryDelta.winDelta += 1;
-  if (batchResult.result === 'defender_win') buffer.summaryDelta.loseDelta += 1;
-  buffer.summaryDelta.expDelta += batchResult.expGained;
-  buffer.summaryDelta.silverDelta += batchResult.silverGained;
-
-  // 合并物品（同 itemDefId 累加数量）
-  for (const item of batchResult.itemsGained) {
-    const existing = buffer.summaryDelta.newItems.find((i) => i.itemDefId === item.itemDefId);
-    if (existing) {
-      existing.quantity += item.quantity;
-    } else {
-      buffer.summaryDelta.newItems.push({ ...item });
-    }
-  }
-
-  if (batchResult.bagFullFlag) {
-    buffer.summaryDelta.bagFullFlag = true;
-  }
+  appendBattleResultToIdleSessionSummary(buffer.summaryState, batchResult);
 }
 
 /**
@@ -365,7 +335,7 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
   if (activeLoops.has(session.id)) return;
 
   let batchIndex = session.totalBattles + 1;
-  const buffer = createBuffer();
+  const buffer = createBuffer(session);
   const runtime = { running: false, wakeRequested: false };
 
   registerIdleExecutionLoop(session.id);

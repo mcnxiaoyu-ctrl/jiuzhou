@@ -44,6 +44,7 @@ const BATTLE_REDIS_SAVE_INTERVAL_MS = 2000;
 const MAX_BATTLE_LOG_DELTA = 80;
 const PLAYER_ACTION_TIMEOUT_MS = 30_000;
 const lastWaitingPlayerTurnKeyByBattleId = new Map<string, string>();
+let battleTickerScheduler: ReturnType<typeof setInterval> | null = null;
 
 type PlayerTurnTimeoutState = {
   turnKey: string;
@@ -412,22 +413,51 @@ async function tickBattle(battleId: string): Promise<void> {
   }
 }
 
+function ensureBattleTickerScheduler(): void {
+  if (battleTickerScheduler) {
+    return;
+  }
+
+  battleTickerScheduler = setInterval(() => {
+    const battleIds = Array.from(battleTickers.keys());
+    for (const battleId of battleIds) {
+      void tickBattle(battleId);
+    }
+  }, BATTLE_TICK_MS);
+}
+
+function stopBattleTickerSchedulerIfIdle(): void {
+  if (battleTickers.size > 0) {
+    return;
+  }
+  if (!battleTickerScheduler) {
+    return;
+  }
+  clearInterval(battleTickerScheduler);
+  battleTickerScheduler = null;
+}
+
 export function startBattleTicker(battleId: string): void {
   if (battleTickers.has(battleId)) return;
-  const timer = setInterval(() => {
-    void tickBattle(battleId);
-  }, BATTLE_TICK_MS);
-  battleTickers.set(battleId, timer);
+  battleTickers.set(battleId, true);
+  ensureBattleTickerScheduler();
   void tickBattle(battleId);
 }
 
 export function stopBattleTicker(battleId: string): void {
   clearPlayerTurnTimeoutState(battleId);
   clearWaitingPlayerTurnState(battleId);
-  const t = battleTickers.get(battleId);
-  if (t) clearInterval(t);
   battleTickers.delete(battleId);
+  stopBattleTickerSchedulerIfIdle();
   battleTickLocks.delete(battleId);
   battleLastEmittedLogLen.delete(battleId);
   battleLastRedisSavedAt.delete(battleId);
+}
+
+export function stopAllBattleTickers(): void {
+  battleTickers.clear();
+  if (battleTickerScheduler) {
+    clearInterval(battleTickerScheduler);
+    battleTickerScheduler = null;
+  }
 }

@@ -28,7 +28,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { query } from '../../config/database.js';
+import { query, withTransactionAuto } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
 import { redis } from '../../config/redis.js';
 import { buildCharacterBattleSnapshot } from '../battle/index.js';
@@ -52,6 +52,11 @@ import {
   type IdleSessionActivitySnapshot,
 } from './idleSessionActivity.js';
 import { resolveIdleMaxDurationMs } from '../shared/idleDurationLimits.js';
+import {
+  mergeRewardItems as mergeIdleRewardItems,
+  type IdleSessionSummaryDelta,
+  type IdleSessionSummarySnapshot,
+} from './idleSessionSummary.js';
 
 // ============================================
 // 常量
@@ -613,20 +618,76 @@ class IdleSessionService {
    */
   async updateSessionSummary(
     sessionId: string,
-    delta: {
-      totalBattlesDelta: number;
-      winDelta: number;
-      loseDelta: number;
-      expDelta: number;
-      silverDelta: number;
-      newItems: RewardItemEntry[];
-      bagFullFlag?: boolean;
-    }
+    delta: IdleSessionSummaryDelta,
+    snapshot?: IdleSessionSummarySnapshot,
   ): Promise<void> {
-    const { totalBattlesDelta, winDelta, loseDelta, expDelta, silverDelta, newItems, bagFullFlag } = delta;
+    const {
+      totalBattlesDelta,
+      winDelta,
+      loseDelta,
+      expDelta,
+      silverDelta,
+      newItems,
+      bagFullFlag,
+    } = delta;
 
-    if (newItems.length === 0 && bagFullFlag === undefined) {
-      // 无物品更新，直接用原子加法
+    await withTransactionAuto(async () => {
+      if (snapshot) {
+        await query(
+          `UPDATE idle_sessions
+           SET total_battles = total_battles + $2,
+               win_count     = win_count + $3,
+               lose_count    = lose_count + $4,
+               total_exp     = total_exp + $5,
+               total_silver  = total_silver + $6,
+               reward_items  = $7,
+               bag_full_flag = $8,
+               updated_at    = NOW()
+           WHERE id = $1`,
+          [
+            sessionId,
+            totalBattlesDelta,
+            winDelta,
+            loseDelta,
+            expDelta,
+            silverDelta,
+            JSON.stringify(snapshot.rewardItems),
+            snapshot.bagFullFlag,
+          ],
+        );
+        return;
+      }
+
+      if (newItems.length === 0) {
+        await query(
+          `UPDATE idle_sessions
+           SET total_battles = total_battles + $2,
+               win_count     = win_count + $3,
+               lose_count    = lose_count + $4,
+               total_exp     = total_exp + $5,
+               total_silver  = total_silver + $6,
+               bag_full_flag = CASE WHEN $7 THEN true ELSE bag_full_flag END,
+               updated_at    = NOW()
+           WHERE id = $1`,
+          [sessionId, totalBattlesDelta, winDelta, loseDelta, expDelta, silverDelta, bagFullFlag],
+        );
+        return;
+      }
+
+      const res = await query(
+        `SELECT reward_items
+         FROM idle_sessions
+         WHERE id = $1
+         FOR UPDATE`,
+        [sessionId],
+      );
+      if (res.rows.length === 0) {
+        return;
+      }
+
+      const existing = (res.rows[0].reward_items as RewardItemEntry[]) ?? [];
+      const merged = mergeIdleRewardItems(existing, newItems);
+
       await query(
         `UPDATE idle_sessions
          SET total_battles = total_battles + $2,
@@ -634,45 +695,22 @@ class IdleSessionService {
              lose_count    = lose_count + $4,
              total_exp     = total_exp + $5,
              total_silver  = total_silver + $6,
+             reward_items  = $7,
+             bag_full_flag = CASE WHEN $8 THEN true ELSE bag_full_flag END,
              updated_at    = NOW()
          WHERE id = $1`,
-        [sessionId, totalBattlesDelta, winDelta, loseDelta, expDelta, silverDelta]
+        [
+          sessionId,
+          totalBattlesDelta,
+          winDelta,
+          loseDelta,
+          expDelta,
+          silverDelta,
+          JSON.stringify(merged),
+          bagFullFlag,
+        ],
       );
-      return;
-    }
-
-    // 有物品更新：先读取现有 reward_items，合并后写回
-    const res = await query(
-      `SELECT reward_items, bag_full_flag FROM idle_sessions WHERE id = $1`,
-      [sessionId]
-    );
-    if (res.rows.length === 0) return;
-
-    const existing = (res.rows[0].reward_items as RewardItemEntry[]) ?? [];
-    const merged = mergeRewardItems(existing, newItems);
-
-    await query(
-      `UPDATE idle_sessions
-       SET total_battles = total_battles + $2,
-           win_count     = win_count + $3,
-           lose_count    = lose_count + $4,
-           total_exp     = total_exp + $5,
-           total_silver  = total_silver + $6,
-           reward_items  = $7,
-           bag_full_flag = CASE WHEN $8 THEN true ELSE bag_full_flag END,
-           updated_at    = NOW()
-       WHERE id = $1`,
-      [
-        sessionId,
-        totalBattlesDelta,
-        winDelta,
-        loseDelta,
-        expDelta,
-        silverDelta,
-        JSON.stringify(merged),
-        bagFullFlag ?? false,
-      ]
-    );
+    });
   }
 }
 
@@ -684,19 +722,7 @@ export function mergeRewardItems(
   existing: RewardItemEntry[],
   newItems: RewardItemEntry[]
 ): RewardItemEntry[] {
-  const map = new Map<string, RewardItemEntry>();
-  for (const item of existing) {
-    map.set(item.itemDefId, { ...item });
-  }
-  for (const item of newItems) {
-    const prev = map.get(item.itemDefId);
-    if (prev) {
-      prev.quantity += item.quantity;
-    } else {
-      map.set(item.itemDefId, { ...item });
-    }
-  }
-  return Array.from(map.values());
+  return mergeIdleRewardItems(existing, newItems);
 }
 
 // ============================================

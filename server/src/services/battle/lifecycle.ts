@@ -18,11 +18,18 @@ import { BattleEngine } from "../../battle/battleEngine.js";
 import type { BattleState } from "../../battle/types.js";
 import {
   activeBattles,
+  setBattleParticipantsForBattle,
+  syncBattleCharacterIndex,
   battleParticipants,
   finishedBattleResults,
-  battleTickers,
+  removeBattleCharacterIndex,
+  removeBattleParticipantIndex,
 } from "./runtime/state.js";
-import { startBattleTicker, stopBattleTicker } from "./runtime/ticker.js";
+import {
+  startBattleTicker,
+  stopAllBattleTickers,
+  stopBattleTicker,
+} from "./runtime/ticker.js";
 import {
   REDIS_BATTLE_KEY_PREFIX,
   REDIS_BATTLE_PARTICIPANTS_PREFIX,
@@ -78,7 +85,8 @@ export async function recoverBattlesFromRedis(): Promise<number> {
 
         const engine = new BattleEngine(state);
         activeBattles.set(battleId, engine);
-        battleParticipants.set(battleId, participants);
+        setBattleParticipantsForBattle(battleId, participants);
+        syncBattleCharacterIndex(battleId, state);
         startBattleTicker(battleId);
 
         recoveredCount++;
@@ -117,6 +125,8 @@ export function cleanupExpiredBattles(): void {
     if (now - battleTime > maxAge) {
       activeBattles.delete(battleId);
       battleParticipants.delete(battleId);
+      removeBattleCharacterIndex(battleId);
+      removeBattleParticipantIndex(battleId);
       stopBattleTicker(battleId);
       void removeBattleFromRedis(battleId);
     }
@@ -130,8 +140,5 @@ export function cleanupExpiredBattles(): void {
 }
 
 export function stopBattleService(): void {
-  for (const timer of battleTickers.values()) {
-    clearInterval(timer);
-  }
-  battleTickers.clear();
+  stopAllBattleTickers();
 }
