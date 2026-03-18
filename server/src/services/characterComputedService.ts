@@ -1116,6 +1116,8 @@ export const invalidateCharacterComputedCache = async (characterId: number): Pro
     return;
   }
   await upsertCharacterRankSnapshot(computed);
+  const { scheduleCharacterBattleLoadoutRefreshByCharacterId } = await import('./battle/shared/profileCache.js');
+  await scheduleCharacterBattleLoadoutRefreshByCharacterId(cid);
 };
 
 export const invalidateCharacterComputedCacheByUserId = async (userId: number): Promise<void> => {

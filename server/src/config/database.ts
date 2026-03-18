@@ -57,9 +57,12 @@ export const pool = new Pool({
 
 type TransactionContext = {
   client: PoolClient;
+  afterCommitCallbacks: TransactionAfterCommitCallback[];
 };
 
 type QueryCallable = (...queryArgs: unknown[]) => unknown;
+
+type TransactionAfterCommitCallback = () => Promise<void> | void;
 
 const transactionContextStorage = new AsyncLocalStorage<TransactionContext | null>();
 
@@ -594,6 +597,26 @@ const throwIfRollbackOnly = (client: PoolClient): void => {
   );
 };
 
+const runAfterCommitCallbacks = async (
+  callbacks: TransactionAfterCommitCallback[],
+): Promise<void> => {
+  for (const callback of callbacks) {
+    await callback();
+  }
+};
+
+export const afterTransactionCommit = async (
+  callback: TransactionAfterCommitCallback,
+): Promise<void> => {
+  const context = getUsableTransactionContext();
+  if (!context) {
+    await callback();
+    return;
+  }
+
+  context.afterCommitCallbacks.push(callback);
+};
+
 /**
  * 自动事务执行器。
  *
@@ -619,27 +642,35 @@ export const withTransaction = async <T>(
   }
 
   const client = await pool.connect();
-  const rootContext: TransactionContext = { client };
+  const rootContext: TransactionContext = {
+    client,
+    afterCommitCallbacks: [],
+  };
+  let committed = false;
 
   try {
     await client.query('BEGIN');
     const result = await transactionContextStorage.run(rootContext, async () => callback(client));
     throwIfRollbackOnly(client);
     await client.query('COMMIT');
+    committed = true;
+    await runAfterCommitCallbacks(rootContext.afterCommitCallbacks);
     return result;
   } catch (error) {
-    console.error('错误：根事务执行失败，准备回滚并释放连接', {
+    console.error(`错误：根事务执行失败，准备${committed ? '释放连接' : '回滚并释放连接'}`, {
       errorChain: buildErrorChain(error),
       callStack: captureCallStack('withTransaction 根事务异常调用栈'),
     });
-    try {
-      await client.query('ROLLBACK');
-    } catch (rollbackError) {
-      console.error('错误：根事务回滚失败', {
-        errorChain: buildErrorChain(rollbackError),
-        callStack: captureCallStack('withTransaction 根事务回滚失败调用栈'),
-      });
-      // 根事务回滚失败不覆盖主异常，主异常继续上抛。
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('错误：根事务回滚失败', {
+          errorChain: buildErrorChain(rollbackError),
+          callStack: captureCallStack('withTransaction 根事务回滚失败调用栈'),
+        });
+        // 根事务回滚失败不覆盖主异常，主异常继续上抛。
+      }
     }
     throw error;
   } finally {

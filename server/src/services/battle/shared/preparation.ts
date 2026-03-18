@@ -30,8 +30,7 @@ import { idleSessionService } from "../../idle/idleSessionService.js";
 import type { BattleResult } from "../battleTypes.js";
 import { isCharacterInBattle } from "../runtime/state.js";
 import { getBattleStartCooldownRemainingMs } from "../runtime/state.js";
-import { attachSetBonusEffectsToCharacterData } from "./effects.js";
-import { getCharacterBattleSkillData } from "./skills.js";
+import { getCharacterBattleLoadoutByCharacterId } from "./profileCache.js";
 
 // ------ 类型 ------
 
@@ -178,10 +177,13 @@ export async function getTeamMembersData(
     orderedMemberCharacterIds.map(async (memberCharacterId) => {
       const base = computedMemberMap.get(memberCharacterId);
       if (!base) return null;
-      const [data, skills] = await Promise.all([
-        attachSetBonusEffectsToCharacterData(memberCharacterId, base),
-        getCharacterBattleSkillData(memberCharacterId),
-      ]);
+      const battleLoadout = await getCharacterBattleLoadoutByCharacterId(memberCharacterId);
+      if (!battleLoadout) return null;
+      const data: CharacterData = {
+        ...base,
+        setBonusEffects: battleLoadout.setBonusEffects,
+      };
+      const skills = battleLoadout.skills;
       const teamMember: TeamBattleMember = { data, skills };
       return teamMember;
     }),

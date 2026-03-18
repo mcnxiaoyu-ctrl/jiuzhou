@@ -9,6 +9,7 @@ import { updateAchievementProgress } from './achievementService.js';
 import { isCharacterInBattle } from './battle/index.js';
 import { getRealmRankZeroBased } from './shared/realmRules.js';
 import { shouldValidateTechniqueLearnRealm } from './shared/techniqueLearnRule.js';
+import { scheduleCharacterBattleLoadoutRefreshByCharacterId } from './battle/shared/profileCache.js';
 import { invalidateCharacterComputedCache } from './characterComputedService.js';
 import { getItemDefinitionById } from './staticConfigLoader.js';
 import {
@@ -789,6 +790,7 @@ class CharacterTechniqueService {
       VALUES ($1, $2, $3)
       ON CONFLICT (character_id, slot_index) DO UPDATE SET skill_id = $3, updated_at = NOW()
     `, [characterId, slotIndex, skillId]);
+    await scheduleCharacterBattleLoadoutRefreshByCharacterId(characterId);
     return { success: true, message: '装备成功' };
   }
 
@@ -808,6 +810,7 @@ class CharacterTechniqueService {
       return { success: false, message: '该槽位无技能' };
     }
 
+    await scheduleCharacterBattleLoadoutRefreshByCharacterId(characterId);
     return { success: true, message: '卸下成功' };
   }
 

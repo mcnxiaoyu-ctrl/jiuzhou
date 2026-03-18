@@ -34,8 +34,7 @@ import {
   validateBattleStartCooldown,
   buildBattleStartCooldownResult,
 } from "./runtime/state.js";
-import { attachSetBonusEffectsToCharacterData } from "./shared/effects.js";
-import { getCharacterBattleSkillData } from "./shared/skills.js";
+import { getCharacterBattleLoadoutByCharacterId } from "./shared/profileCache.js";
 import {
   rejectIfIdling,
   isCharacterIdling,
@@ -121,17 +120,24 @@ export async function startPVPBattle(
       }
     }
 
-    const [
-      challenger,
-      opponent,
-      challengerSkills,
-      opponentSkills,
-    ] = await Promise.all([
-      attachSetBonusEffectsToCharacterData(challengerCharacterId, challengerBase),
-      attachSetBonusEffectsToCharacterData(oppId, opponentBase),
-      getCharacterBattleSkillData(challengerCharacterId),
-      getCharacterBattleSkillData(oppId),
+    const [challengerLoadout, opponentLoadout] = await Promise.all([
+      getCharacterBattleLoadoutByCharacterId(challengerCharacterId),
+      getCharacterBattleLoadoutByCharacterId(oppId),
     ]);
+    if (!challengerLoadout) {
+      return { success: false, message: "角色战斗资料不存在" };
+    }
+    if (!opponentLoadout) {
+      return { success: false, message: "对手战斗资料不存在" };
+    }
+    const challenger = {
+      ...challengerBase,
+      setBonusEffects: challengerLoadout.setBonusEffects,
+    };
+    const opponent = {
+      ...opponentBase,
+      setBonusEffects: opponentLoadout.setBonusEffects,
+    };
     const recoveredChallenger = withBattleStartResources(challenger);
     const recoveredOpponent = withBattleStartResources(opponent);
 
@@ -146,9 +152,9 @@ export async function startPVPBattle(
     const battleState = createPVPBattle(
       finalBattleId,
       recoveredChallenger,
-      challengerSkills,
+      challengerLoadout.skills,
       recoveredOpponent,
-      opponentSkills,
+      opponentLoadout.skills,
       isArenaBattle ? { defenderUnitType: "npc" } : undefined,
     );
 

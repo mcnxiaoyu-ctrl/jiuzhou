@@ -23,8 +23,8 @@ import {
   getCharacterComputedByCharacterId,
 } from "../characterComputedService.js";
 import { normalizeRealmKeepingUnknown } from "../shared/realmRules.js";
-import { attachSetBonusEffectsToCharacterData } from "./shared/effects.js";
-import { getCharacterBattleSkillData, toBattleSkill } from "./shared/skills.js";
+import { getCharacterBattleLoadoutByCharacterId } from "./shared/profileCache.js";
+import { toBattleSkill } from "./shared/skills.js";
 
 export async function buildCharacterBattleSnapshot(
   characterId: number,
@@ -38,11 +38,12 @@ export async function buildCharacterBattleSnapshot(
   const base = await getCharacterComputedByCharacterId(characterId);
   if (!base) return null;
 
-  const characterData = await attachSetBonusEffectsToCharacterData(
-    characterId,
-    base as CharacterData,
-  );
-  const skillDataList = await getCharacterBattleSkillData(characterId);
+  const battleLoadout = await getCharacterBattleLoadoutByCharacterId(characterId);
+  if (!battleLoadout) return null;
+  const characterData: CharacterData = {
+    ...base,
+    setBonusEffects: battleLoadout.setBonusEffects,
+  };
 
   const baseAttrs: BattleAttrs = {
     max_qixue: characterData.max_qixue,
@@ -77,7 +78,7 @@ export async function buildCharacterBattleSnapshot(
     element: characterData.attribute_element,
   };
 
-  const skills: BattleSkill[] = skillDataList.map((data) => toBattleSkill(data));
+  const skills: BattleSkill[] = battleLoadout.skills.map((data) => toBattleSkill(data));
 
   return {
     baseAttrs,

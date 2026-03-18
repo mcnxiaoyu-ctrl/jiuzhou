@@ -28,14 +28,12 @@ import {
   getPartnerDefinitions,
   getPartnerGrowthConfig,
   getItemDefinitionById,
-  getSkillDefinitions,
   type PartnerDefConfig,
 } from './staticConfigLoader.js';
-import type {
-  CharacterData,
-  SkillData,
-} from '../battle/battleFactory.js';
-import { toBattleSkillData } from './battle/shared/skills.js';
+import {
+  getActivePartnerBattleMemberByCharacterId,
+  scheduleActivePartnerBattleCacheRefreshByCharacterId,
+} from './battle/shared/profileCache.js';
 import { resolveGeneratedTechniqueBookDisplay } from './shared/generatedTechniqueBookView.js';
 import {
   PARTNER_GROWTH_KEYS,
@@ -48,7 +46,6 @@ import { setCharacterPartnerActivation } from './shared/partnerActivation.js';
 import {
   attachPartnerTradeState,
   buildEffectivePartnerTechniqueEntries,
-  buildPartnerEffectiveSkillEntries,
   buildPartnerDisplay,
   buildPartnerDetails,
   buildPartnerTechniqueDto,
@@ -73,13 +70,12 @@ import {
 } from './shared/partnerView.js';
 import { loadPartnerMarketTradeStateMap, loadActivePartnerMarketListing } from './shared/partnerMarketState.js';
 import {
-  buildPartnerBattleSkillPolicy,
   buildPartnerSkillPolicyDto,
-  loadPartnerSkillPolicyRows,
   normalizePartnerSkillPolicySlotsForSave,
   type PartnerSkillPolicyDto,
   type PartnerSkillPolicySlotDto,
 } from './shared/partnerSkillPolicy.js';
+import { loadPartnerBattleSkillPolicyState, type PartnerBattleMember } from './shared/partnerBattleMember.js';
 import { resolveTechniqueBookLearning } from './shared/techniqueBookRules.js';
 import {
   getItemMetaMap,
@@ -101,6 +97,7 @@ export type {
   PartnerSkillPolicyDto,
   PartnerSkillPolicySlotDto,
 } from './shared/partnerSkillPolicy.js';
+export type { PartnerBattleMember } from './shared/partnerBattleMember.js';
 
 const STARTER_PARTNER_DEF_ID = 'partner-qingmu-xiaoou';
 
@@ -178,12 +175,6 @@ export interface PartnerResult<T = undefined> {
   success: boolean;
   message: string;
   data?: T;
-}
-
-export interface PartnerBattleMember {
-  data: CharacterData;
-  skills: SkillData[];
-  skillPolicy: { slots: PartnerSkillPolicySlotDto[] };
 }
 
 const randomIntInclusive = (min: number, max: number): number => {
@@ -306,26 +297,6 @@ const buildTechniqueStateList = (
     techniqueId: entry.techniqueId,
     isInnate: entry.isInnate,
   }));
-};
-
-const loadPartnerSkillPolicyState = async (params: {
-  partnerId: number;
-  definition: PartnerDefConfig;
-  techniqueRows: PartnerTechniqueRow[];
-  forUpdate: boolean;
-}) => {
-  const availableSkills = buildPartnerEffectiveSkillEntries(
-    params.definition,
-    params.techniqueRows,
-  );
-  const persistedRows = await loadPartnerSkillPolicyRows(
-    params.partnerId,
-    params.forUpdate,
-  );
-  return {
-    availableSkills,
-    persistedRows,
-  };
 };
 
 const assertPartnerSystemUnlocked = async (
@@ -549,7 +520,7 @@ class PartnerService {
 
       const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
       const techniqueRows = techniqueMap.get(partnerId) ?? [];
-      const skillPolicyState = await loadPartnerSkillPolicyState({
+      const skillPolicyState = await loadPartnerBattleSkillPolicyState({
         partnerId,
         definition: partnerDef,
         techniqueRows,
@@ -595,7 +566,7 @@ class PartnerService {
 
       const techniqueMap = await loadPartnerTechniqueRows([partnerId], true);
       const techniqueRows = techniqueMap.get(partnerId) ?? [];
-      const skillPolicyState = await loadPartnerSkillPolicyState({
+      const skillPolicyState = await loadPartnerBattleSkillPolicyState({
         partnerId,
         definition: partnerDef,
         techniqueRows,
@@ -633,6 +604,7 @@ class PartnerService {
           [partnerId, slot.skillId, slot.priority, slot.enabled],
         );
       }
+      await scheduleActivePartnerBattleCacheRefreshByCharacterId(characterId);
 
       return {
         success: true,
@@ -700,6 +672,7 @@ class PartnerService {
         definition: partnerDef,
         techniqueRows: techniqueMap.get(partnerId) ?? [],
       });
+      await scheduleActivePartnerBattleCacheRefreshByCharacterId(characterId);
 
       return {
         success: true,
@@ -733,6 +706,7 @@ class PartnerService {
         partnerId: null,
         execute: query,
       });
+      await scheduleActivePartnerBattleCacheRefreshByCharacterId(characterId);
 
       return {
         success: true,
@@ -820,6 +794,7 @@ class PartnerService {
       });
 
       await invalidateCharacterComputedCache(characterId);
+      await scheduleActivePartnerBattleCacheRefreshByCharacterId(characterId);
 
       return {
         success: true,
@@ -1059,6 +1034,7 @@ class PartnerService {
       }
 
       await invalidateCharacterComputedCache(characterId);
+      await scheduleActivePartnerBattleCacheRefreshByCharacterId(characterId);
 
       return {
         success: true,
@@ -1190,6 +1166,7 @@ class PartnerService {
         if (!learnedTechnique) {
           return { success: false, message: '伙伴功法刷新失败' };
         }
+        await scheduleActivePartnerBattleCacheRefreshByCharacterId(params.characterId);
 
         return {
           success: true,
@@ -1215,6 +1192,7 @@ class PartnerService {
       if (!learnedTechnique) {
         return { success: false, message: '伙伴功法刷新失败' };
       }
+      await scheduleActivePartnerBattleCacheRefreshByCharacterId(params.characterId);
 
       return {
         success: true,
@@ -1234,97 +1212,8 @@ class PartnerService {
 
   async buildActivePartnerBattleMember(params: {
     characterId: number;
-    userId: number;
   }): Promise<PartnerBattleMember | null> {
-    const rows = await query(
-      `
-        SELECT *
-        FROM character_partner
-        WHERE character_id = $1 AND is_active = TRUE
-        LIMIT 1
-      `,
-      [params.characterId],
-    );
-    if (rows.rows.length <= 0) return null;
-    const partnerRow = rows.rows[0] as PartnerRow;
-    const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
-    if (!partnerDef) {
-      throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
-    }
-
-    const techniqueMap = await loadPartnerTechniqueRows([partnerRow.id], false);
-    const techniqueRows = techniqueMap.get(partnerRow.id) ?? [];
-    const partnerDisplay = buildPartnerDisplay({
-      row: partnerRow,
-      definition: partnerDef,
-      techniqueRows,
-    });
-    const skillPolicyState = await loadPartnerSkillPolicyState({
-      partnerId: partnerRow.id,
-      definition: partnerDef,
-      techniqueRows,
-      forUpdate: false,
-    });
-
-    const skillDefinitionMap = new Map(
-      getSkillDefinitions()
-        .filter((entry) => entry.enabled !== false)
-        .map((entry) => [entry.id, entry] as const),
-    );
-    const skills = skillPolicyState.availableSkills
-      .map((entry) => skillDefinitionMap.get(entry.skillId))
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
-      .map((entry) => toBattleSkillData(entry));
-
-    const attributeElement = normalizeText(partnerDef.attribute_element) || 'none';
-    const data: CharacterData = {
-      user_id: params.userId,
-      id: partnerRow.id,
-      nickname: partnerDisplay.nickname,
-      realm: '',
-      sub_realm: null,
-      attribute_element: attributeElement,
-      qixue: partnerDisplay.computedAttrs.qixue,
-      max_qixue: partnerDisplay.computedAttrs.max_qixue,
-      lingqi: partnerDisplay.computedAttrs.lingqi,
-      max_lingqi: partnerDisplay.computedAttrs.max_lingqi,
-      wugong: partnerDisplay.computedAttrs.wugong,
-      fagong: partnerDisplay.computedAttrs.fagong,
-      wufang: partnerDisplay.computedAttrs.wufang,
-      fafang: partnerDisplay.computedAttrs.fafang,
-      sudu: partnerDisplay.computedAttrs.sudu,
-      mingzhong: partnerDisplay.computedAttrs.mingzhong,
-      shanbi: partnerDisplay.computedAttrs.shanbi,
-      zhaojia: partnerDisplay.computedAttrs.zhaojia,
-      baoji: partnerDisplay.computedAttrs.baoji,
-      baoshang: partnerDisplay.computedAttrs.baoshang,
-      jianbaoshang: partnerDisplay.computedAttrs.jianbaoshang,
-      jianfantan: partnerDisplay.computedAttrs.jianfantan,
-      kangbao: partnerDisplay.computedAttrs.kangbao,
-      zengshang: partnerDisplay.computedAttrs.zengshang,
-      zhiliao: partnerDisplay.computedAttrs.zhiliao,
-      jianliao: partnerDisplay.computedAttrs.jianliao,
-      xixue: partnerDisplay.computedAttrs.xixue,
-      lengque: partnerDisplay.computedAttrs.lengque,
-      kongzhi_kangxing: partnerDisplay.computedAttrs.kongzhi_kangxing,
-      jin_kangxing: partnerDisplay.computedAttrs.jin_kangxing,
-      mu_kangxing: partnerDisplay.computedAttrs.mu_kangxing,
-      shui_kangxing: partnerDisplay.computedAttrs.shui_kangxing,
-      huo_kangxing: partnerDisplay.computedAttrs.huo_kangxing,
-      tu_kangxing: partnerDisplay.computedAttrs.tu_kangxing,
-      qixue_huifu: partnerDisplay.computedAttrs.qixue_huifu,
-      lingqi_huifu: partnerDisplay.computedAttrs.lingqi_huifu,
-      setBonusEffects: [],
-    };
-
-    return {
-      data,
-      skills,
-      skillPolicy: buildPartnerBattleSkillPolicy({
-        availableSkills: skillPolicyState.availableSkills,
-        persistedRows: skillPolicyState.persistedRows,
-      }),
-    };
+    return getActivePartnerBattleMemberByCharacterId(params.characterId);
   }
 
   /**
@@ -1336,7 +1225,7 @@ class PartnerService {
    * 3) 不做什么：不决定组队规则，调用方仍需在进入这里之前先决定当前是否允许带伙伴。
    *
    * 输入/输出：
-   * - 输入：角色 ID、用户 ID、是否启用伙伴参战。
+   * - 输入：角色 ID、是否启用伙伴参战。
    * - 输出：启用且存在出战伙伴时返回伙伴战斗成员，否则返回 null。
    *
    * 数据流/状态流：
@@ -1348,7 +1237,6 @@ class PartnerService {
    */
   async buildConfiguredPartnerBattleMember(params: {
     characterId: number;
-    userId: number;
     enabled: boolean;
   }): Promise<PartnerBattleMember | null> {
     if (!params.enabled) {
@@ -1357,7 +1245,6 @@ class PartnerService {
 
     return this.buildActivePartnerBattleMember({
       characterId: params.characterId,
-      userId: params.userId,
     });
   }
 

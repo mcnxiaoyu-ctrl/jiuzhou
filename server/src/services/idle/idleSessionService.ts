@@ -305,7 +305,6 @@ class IdleSessionService {
 
     const partnerBattleMember = await partnerService.buildConfiguredPartnerBattleMember({
       characterId,
-      userId,
       enabled: config.includePartnerInBattle,
     });
 

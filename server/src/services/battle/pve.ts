@@ -33,8 +33,7 @@ import {
   buildBattleStartCooldownResult,
 } from "./runtime/state.js";
 import { resolveOrderedMonsters } from "./shared/monsters.js";
-import { getCharacterBattleSkillData } from "./shared/skills.js";
-import { attachSetBonusEffectsToCharacterData } from "./shared/effects.js";
+import { getCharacterBattleLoadoutByCharacterId } from "./shared/profileCache.js";
 import {
   rejectIfIdling,
   withBattleStartResources,
@@ -57,10 +56,14 @@ export async function startPVEBattle(
     const idleReject = await rejectIfIdling(characterId);
     if (idleReject) return idleReject;
 
-    const characterWithSetBonus = await attachSetBonusEffectsToCharacterData(
-      characterId,
-      characterBase as CharacterData,
-    );
+    const characterBattleLoadout = await getCharacterBattleLoadoutByCharacterId(characterId);
+    if (!characterBattleLoadout) {
+      return { success: false, message: "角色战斗资料不存在" };
+    }
+    const characterWithSetBonus: CharacterData = {
+      ...characterBase,
+      setBonusEffects: characterBattleLoadout.setBonusEffects,
+    };
 
     if (characterWithSetBonus.qixue <= 0) {
       return { success: false, message: "气血不足，无法战斗" };
@@ -95,7 +98,6 @@ export async function startPVEBattle(
     }
 
     const roomPromise = getRoomInMap(mapId, roomId);
-    const playerSkillsPromise = getCharacterBattleSkillData(characterId);
     const preparedTeamPromise = prepareTeamBattleParticipants(
       userId,
       character.id,
@@ -120,17 +122,13 @@ export async function startPVEBattle(
       }
     }
 
-    const [playerSkills, preparedTeam] = await Promise.all([
-      playerSkillsPromise,
-      preparedTeamPromise,
-    ]);
+    const preparedTeam = await preparedTeamPromise;
     if (!preparedTeam.success) return preparedTeam.result;
     const { validTeamMembers, participantUserIds } = preparedTeam;
 
     const partnerMemberPromise =
       partnerService.buildConfiguredPartnerBattleMember({
         characterId,
-        userId,
         enabled: validTeamMembers.length <= 0,
       });
     await syncBattleStartResourcesForUsers(participantUserIds, {
@@ -174,7 +172,7 @@ export async function startPVEBattle(
     const battleState = createPVEBattle(
       battleId,
       character,
-      playerSkills,
+      characterBattleLoadout.skills,
       monsters,
       monsterSkillsMap,
       {
@@ -220,10 +218,14 @@ export async function startDungeonPVEBattle(
     const idleReject = await rejectIfIdling(characterId);
     if (idleReject) return idleReject;
 
-    const characterWithSetBonus = await attachSetBonusEffectsToCharacterData(
-      characterId,
-      baseCharacter as CharacterData,
-    );
+    const characterBattleLoadout = await getCharacterBattleLoadoutByCharacterId(characterId);
+    if (!characterBattleLoadout) {
+      return { success: false, message: "角色战斗资料不存在" };
+    }
+    const characterWithSetBonus: CharacterData = {
+      ...baseCharacter,
+      setBonusEffects: characterBattleLoadout.setBonusEffects,
+    };
     if (characterWithSetBonus.qixue <= 0) {
       return { success: false, message: "气血不足，无法战斗" };
     }
@@ -251,21 +253,17 @@ export async function startDungeonPVEBattle(
       return { success: false, message: "请指定战斗目标" };
     }
 
-    const [playerSkills, preparedTeam] = await Promise.all([
-      getCharacterBattleSkillData(characterId),
-      prepareTeamBattleParticipants(
-        userId,
-        character.id,
-        { ignoreMemberCooldown: Boolean(options?.skipCooldown) },
-      ),
-    ]);
+    const preparedTeam = await prepareTeamBattleParticipants(
+      userId,
+      character.id,
+      { ignoreMemberCooldown: Boolean(options?.skipCooldown) },
+    );
     if (!preparedTeam.success) return preparedTeam.result;
     const { validTeamMembers, participantUserIds } = preparedTeam;
 
     const partnerMemberPromise =
       partnerService.buildConfiguredPartnerBattleMember({
         characterId,
-        userId,
         enabled: validTeamMembers.length <= 0,
       });
     await syncBattleStartResourcesForUsers(participantUserIds, {
@@ -293,7 +291,7 @@ export async function startDungeonPVEBattle(
     const battleState = createPVEBattle(
       battleId,
       character,
-      playerSkills,
+      characterBattleLoadout.skills,
       monsters,
       monsterSkillsMap,
       {
