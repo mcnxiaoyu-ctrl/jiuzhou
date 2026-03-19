@@ -122,7 +122,27 @@ export async function onUserLeaveTeam(userId: number): Promise<void> {
   // 战斗已结算但 session 仍停在 waiting_transition 时，上面的活跃战斗循环
   // 无法覆盖（activeBattles 已清理），需要补充清理残留会话，避免离队后
   // 玩家仍被 getCurrentBattleSession 拉回该 session。
-  cleanupUserWaitingTransitionSessions(userId);
+  const waitingTransitionCleanupResults = cleanupUserWaitingTransitionSessions(userId);
+  if (waitingTransitionCleanupResults.length === 0) {
+    return;
+  }
+
+  try {
+    const gameServer = getGameServer();
+    for (const result of waitingTransitionCleanupResults) {
+      for (const targetUserId of result.removedUserIds) {
+        if (!Number.isFinite(targetUserId)) continue;
+        gameServer.emitToUser(targetUserId, "battle:update", {
+          kind: "battle_abandoned",
+          battleId: result.battleId,
+          success: true,
+          message: "队伍已变更，退出队伍战斗",
+        });
+      }
+    }
+  } catch (error) {
+    console.warn(`[battle] onUserLeaveTeam 推送 waiting_transition 退出失败`, error);
+  }
 }
 
 export async function syncBattleStateOnReconnect(

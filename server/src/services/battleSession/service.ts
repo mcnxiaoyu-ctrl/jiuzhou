@@ -643,14 +643,32 @@ export const canReceiveBattleSessionRealtime = (params: {
  */
 export const cleanupUserWaitingTransitionSessions = (
   userId: number,
-): void => {
+): Array<{
+  battleId: string;
+  removedUserIds: number[];
+}> => {
   const sessions = listBattleSessionRecords()
     .filter((s) => s.status === 'waiting_transition')
     .filter((s) => ensureSessionAccess(userId, s));
+  const results: Array<{
+    battleId: string;
+    removedUserIds: number[];
+  }> = [];
 
   for (const session of sessions) {
     const battleId = session.currentBattleId;
     if (!battleId) continue;
+    if (session.ownerUserId === userId) {
+      const removedUserIds = normalizeParticipantUserIds(
+        session.participantUserIds,
+        session.ownerUserId,
+      );
+      markBattleSessionAbandoned(battleId);
+      results.push({ battleId, removedUserIds });
+      continue;
+    }
     removeBattleSessionParticipantUser(battleId, userId);
+    results.push({ battleId, removedUserIds: [userId] });
   }
+  return results;
 };

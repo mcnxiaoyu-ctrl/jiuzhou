@@ -1213,9 +1213,22 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       if (latestSessionId !== session.sessionId) {
         return;
       }
+      if (isBattleSessionMissingError(errorText)) {
+        clearSessionAutoAdvanceTimer();
+        lastAutoAdvanceSessionKeyRef.current = '';
+        setActiveBattleSession(null);
+        setTeamBattleId(null);
+        setReconnectBattleId(null);
+        setViewMode('map');
+        setTopTab('map');
+        setBattleTurn(0);
+        setBattlePhase(null);
+        setBattleActiveUnitId(null);
+        return;
+      }
       messageRef.current.error(errorText);
     }
-  }, [activeBattleSession, clearBattleAutoCloseTimer]);
+  }, [activeBattleSession, clearBattleAutoCloseTimer, clearSessionAutoAdvanceTimer]);
 
   useEffect(() => {
     const session = activeBattleSession;
