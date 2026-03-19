@@ -33,6 +33,7 @@ import {
   buildBattleSnapshotState,
 } from "./runtime/realtime.js";
 import {
+  canReceiveBattleSessionRealtime,
   getAttachedBattleSessionSnapshot,
   removeBattleSessionParticipantUser,
   cleanupUserWaitingTransitionSessions,
@@ -186,15 +187,31 @@ export async function syncBattleSnapshotToUser(
   if (!gameServer) return false;
 
   const engine = activeBattles.get(normalizedBattleId);
+  const hasStaleCachedSession = (battleRes: Awaited<ReturnType<typeof getBattleState>>): boolean => {
+    const cachedSession = battleRes.data?.session;
+    return Boolean(cachedSession && !getAttachedBattleSessionSnapshot(normalizedBattleId));
+  };
   if (engine) {
+    const attachedSession = getAttachedBattleSessionSnapshot(normalizedBattleId);
+    if (
+      attachedSession
+      && !canReceiveBattleSessionRealtime({
+        battleId: normalizedBattleId,
+        userId,
+        fallbackUserIds: attachedSession.participantUserIds,
+      })
+    ) {
+      return false;
+    }
     const state = engine.getState();
     if (state.phase === "finished") {
       const battleRes = await getBattleState(normalizedBattleId);
       if (!battleRes.success) return false;
+      if (hasStaleCachedSession(battleRes)) return false;
       const payload = buildBattleFinishedRealtimePayload({
         battleId: normalizedBattleId,
         battleResult: battleRes,
-        session: getAttachedBattleSessionSnapshot(normalizedBattleId),
+        session: attachedSession,
       });
       if (!payload) return false;
       gameServer.emitToUser(userId, "battle:update", payload);
@@ -211,8 +228,8 @@ export async function syncBattleSnapshotToUser(
       logs: logSnapshot.logs,
       extras: {
         authoritative: true,
-        ...(getAttachedBattleSessionSnapshot(normalizedBattleId)
-          ? { session: getAttachedBattleSessionSnapshot(normalizedBattleId) }
+        ...(attachedSession
+          ? { session: attachedSession }
           : {}),
         logStart: logSnapshot.logStart,
         logDelta: logSnapshot.logDelta,
@@ -221,12 +238,25 @@ export async function syncBattleSnapshotToUser(
     return true;
   }
 
+  const attachedSession = getAttachedBattleSessionSnapshot(normalizedBattleId);
+  if (
+    attachedSession
+    && !canReceiveBattleSessionRealtime({
+      battleId: normalizedBattleId,
+      userId,
+      fallbackUserIds: attachedSession.participantUserIds,
+    })
+  ) {
+    return false;
+  }
+
   const battleRes = await getBattleState(normalizedBattleId);
   if (!battleRes.success) return false;
+  if (hasStaleCachedSession(battleRes)) return false;
   const payload = buildBattleFinishedRealtimePayload({
     battleId: normalizedBattleId,
     battleResult: battleRes,
-    session: getAttachedBattleSessionSnapshot(normalizedBattleId),
+    session: attachedSession,
   });
   if (!payload) return false;
   gameServer.emitToUser(userId, "battle:update", payload);

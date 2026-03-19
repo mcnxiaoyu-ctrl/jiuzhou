@@ -26,6 +26,7 @@ import {
   finishedBattleResults,
   BATTLE_START_COOLDOWN_MS,
   collectPlayerCharacterIdsFromBattleState,
+  getFinishedBattleResultIfFresh,
   normalizeBattleParticipantUserIds,
   removeBattleCharacterIndex,
   removeBattleParticipantIndex,
@@ -37,6 +38,7 @@ import { buildBattleAbandonedRealtimePayload } from "./runtime/realtime.js";
 import { finishBattle, getBattleMonsters } from "./settlement.js";
 import { settleArenaBattleIfNeeded } from "./pvp.js";
 import {
+  abandonWaitingTransitionBattleSession,
   getAttachedBattleSessionSnapshot,
   markBattleSessionAbandoned,
 } from "../battleSession/index.js";
@@ -111,7 +113,51 @@ export async function abandonBattle(
   const engine = activeBattles.get(battleId);
 
   if (!engine) {
-    return { success: false, message: "战斗不存在" };
+    const waitingTransitionRes = abandonWaitingTransitionBattleSession({
+      battleId,
+      userId,
+    });
+    if (!waitingTransitionRes.success) {
+      return { success: false, message: waitingTransitionRes.message };
+    }
+
+    const cachedResult = getFinishedBattleResultIfFresh(battleId);
+    const nextBattleAvailableAtRaw = cachedResult?.data?.nextBattleAvailableAt;
+    const nextBattleAvailableAt =
+      typeof nextBattleAvailableAtRaw === "number" && Number.isFinite(nextBattleAvailableAtRaw)
+        ? nextBattleAvailableAtRaw
+        : undefined;
+
+    try {
+      const gameServer = getGameServer();
+      for (const participantUserId of waitingTransitionRes.data.participantUserIds) {
+        if (!Number.isFinite(participantUserId)) continue;
+        gameServer.emitToUser(
+          participantUserId,
+          "battle:update",
+          buildBattleAbandonedRealtimePayload({
+            battleId,
+            success: true,
+            message: "已退出战斗",
+            session: waitingTransitionRes.data.session,
+            ...(typeof nextBattleAvailableAt === "number"
+              ? { nextBattleAvailableAt }
+              : {}),
+          }),
+        );
+        void gameServer.pushCharacterUpdate(participantUserId);
+      }
+    } catch (error) {
+      console.warn(`[battle] 推送 waiting_transition 退出事件失败: ${battleId}`, error);
+    }
+
+    return {
+      success: true,
+      message: "已退出战斗",
+      data: typeof nextBattleAvailableAt === "number"
+        ? { nextBattleAvailableAt }
+        : undefined,
+    };
   }
 
   const state = engine.getState();

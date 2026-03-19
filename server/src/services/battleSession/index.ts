@@ -13,6 +13,7 @@ export type {
 } from './types.js';
 
 export {
+  abandonWaitingTransitionBattleSession,
   advanceBattleSession,
   canReceiveBattleSessionRealtime,
   cleanupUserWaitingTransitionSessions,

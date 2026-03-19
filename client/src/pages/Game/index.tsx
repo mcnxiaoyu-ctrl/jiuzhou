@@ -108,6 +108,10 @@ import { shouldActivateBattleSessionView } from './shared/battleSessionRestore';
 import { formatTaskRewardsToText } from './shared/taskRewardText';
 import { resolveRealtimeBattleViewSyncMode } from './shared/battleViewSync';
 import {
+  shouldResetTeamBattleReplayContext,
+  type TeamBattleReplayIdentity,
+} from './shared/teamBattleReplayContext';
+import {
   countCompletableBountyTaskOverviewRows,
   countCompletableTaskOverviewRows,
   getNextBountyTaskExpiryTs,
@@ -748,6 +752,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const viewModeRef = useRef<'map' | 'battle'>('map');
   const hasLocalBattleTargetsRef = useRef(false);
   const pendingBattleSessionRestoreBattleIdRef = useRef<string | null>(null);
+  const lastTeamBattleReplayIdentityRef = useRef<TeamBattleReplayIdentity | null>(null);
   const homeOverviewLoadingRef = useRef(false);
   const homeOverviewRequestSeqRef = useRef(0);
   const pendingHomeTaskSnapshotRef = useRef<GameHomeOverviewDto['task'] | null>(null);
@@ -783,6 +788,45 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   useEffect(() => {
     reconnectBattleIdRef.current = reconnectBattleId;
   }, [reconnectBattleId]);
+
+  useEffect(() => {
+    const currentIdentity: TeamBattleReplayIdentity = {
+      teamId: teamInfo?.id ?? null,
+      leaderId: Number.isFinite(Number(teamInfo?.leaderId))
+        ? Number(teamInfo?.leaderId)
+        : null,
+      role: !teamInfo ? null : isTeamLeader ? 'leader' : 'member',
+    };
+    const previousIdentity = lastTeamBattleReplayIdentityRef.current;
+    lastTeamBattleReplayIdentityRef.current = currentIdentity;
+
+    if (!shouldResetTeamBattleReplayContext({
+      battleId: teamBattleId,
+      previous: previousIdentity,
+      current: currentIdentity,
+    })) {
+      return;
+    }
+
+    clearBattleAutoCloseTimer();
+    setTeamBattleId(null);
+
+    if (activeBattleSessionRef.current?.currentBattleId || reconnectBattleIdRef.current) {
+      return;
+    }
+
+    setViewMode('map');
+    setTopTab('map');
+    setInfoTarget(null);
+    setBattleTurn(0);
+    setBattlePhase(null);
+    setBattleActiveUnitId(null);
+  }, [
+    clearBattleAutoCloseTimer,
+    isTeamLeader,
+    teamBattleId,
+    teamInfo,
+  ]);
 
   useEffect(() => {
     return gameSocket.onBattleCooldown(() => {

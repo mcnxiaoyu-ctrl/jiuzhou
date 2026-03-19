@@ -180,6 +180,49 @@ test('onUserLeaveTeam: 队长离开队伍战斗时应整场放弃，并让队员
 
   assert.equal(battleRuntimeState.activeBattles.has(battleId), false);
   assert.equal(battleRuntimeState.battleParticipants.has(battleId), false);
+  assert.equal(battleSessionById.has(sessionId), false);
+  assert.equal(battleSessionIdByBattleId.has(battleId), false);
+
+  const leaderSession = await getCurrentBattleSessionDetail(1);
+  assert.equal(leaderSession.success, true);
+  if (!leaderSession.success) {
+    assert.fail('队长查询当前战斗会话应成功返回空结果');
+  }
+  assert.equal(leaderSession.data.session ?? null, null);
+
+  const memberSession = await getCurrentBattleSessionDetail(2);
+  assert.equal(memberSession.success, true);
+  if (!memberSession.success) {
+    assert.fail('队员查询当前战斗会话应成功返回空结果');
+  }
+  assert.equal(memberSession.data.session ?? null, null);
+});
+
+test('onUserLeaveTeam: 战斗结束后队长退队应清理 waiting_transition 会话，并让其他成员不再看到旧会话', async (t) => {
+  const battleId = 'battle-team-leader-finished-leave-test';
+  const sessionId = 'battle-team-leader-finished-leave-session';
+
+  createBattleSessionRecord({
+    sessionId,
+    type: 'pve',
+    ownerUserId: 1,
+    participantUserIds: [1, 2, 3],
+    currentBattleId: battleId,
+    status: 'waiting_transition',
+    nextAction: 'advance',
+    canAdvance: true,
+    lastResult: 'attacker_win',
+    context: { monsterIds: ['monster-1'] },
+  });
+
+  t.after(() => {
+    battleSessionById.delete(sessionId);
+    battleSessionIdByBattleId.delete(battleId);
+  });
+
+  await onUserLeaveTeam(1);
+
+  assert.equal(battleSessionById.has(sessionId), false);
   assert.equal(battleSessionIdByBattleId.has(battleId), false);
 
   const leaderSession = await getCurrentBattleSessionDetail(1);

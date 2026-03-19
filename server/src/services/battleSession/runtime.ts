@@ -120,6 +120,17 @@ export const clearBattleFromSession = (
   return updateBattleSessionRecord(sessionId, { currentBattleId: null });
 };
 
+export const deleteBattleSessionRecord = (
+  sessionId: string,
+): boolean => {
+  const current = battleSessionById.get(sessionId);
+  if (!current) return false;
+  if (current.currentBattleId) {
+    battleSessionIdByBattleId.delete(current.currentBattleId);
+  }
+  return battleSessionById.delete(sessionId);
+};
+
 export const listBattleSessionRecords = (): BattleSessionRecord[] => {
   return [...battleSessionById.values()];
 };

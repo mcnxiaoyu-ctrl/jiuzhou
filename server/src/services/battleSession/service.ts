@@ -33,6 +33,7 @@ import type { BattleState } from '../../battle/types.js';
 import type { BattleResult } from '../battle/battleTypes.js';
 import {
   createBattleSessionRecord,
+  deleteBattleSessionRecord,
   getBattleSessionRecord,
   getBattleSessionSnapshotByBattleId,
   listBattleSessionRecords,
@@ -108,17 +109,21 @@ const createRunningSession = (params: {
 };
 
 const buildSessionSuccess = (
-  session: BattleSessionRecord,
+  session: BattleSessionRecord | BattleSessionSnapshot,
   state?: unknown,
   finished?: boolean,
-): BattleSessionResponse => ({
-  success: true,
-  data: {
-    session: toBattleSessionSnapshot(session),
-    ...(state === undefined ? {} : { state }),
-    ...(finished === undefined ? {} : { finished }),
-  },
-});
+): BattleSessionResponse => {
+  const sessionSnapshot =
+    'createdAt' in session ? toBattleSessionSnapshot(session) : session;
+  return {
+    success: true,
+    data: {
+      session: sessionSnapshot,
+      ...(state === undefined ? {} : { state }),
+      ...(finished === undefined ? {} : { finished }),
+    },
+  };
+};
 
 const getSessionFinalStatus = (
   type: BattleSessionType,
@@ -189,6 +194,18 @@ const getBattleStatePayload = async (battleId: string): Promise<{
     result,
     state: battleRes.data?.state as BattleState | undefined,
   };
+};
+
+const finalizeBattleSession = (params: {
+  sessionId: string;
+  patch: Pick<BattleSessionRecord, 'status' | 'currentBattleId' | 'nextAction' | 'canAdvance'>
+    & Partial<Pick<BattleSessionRecord, 'lastResult'>>;
+}): BattleSessionSnapshot | null => {
+  const updated = updateBattleSessionRecord(params.sessionId, params.patch);
+  if (!updated) return null;
+  const snapshot = toBattleSessionSnapshot(updated);
+  deleteBattleSessionRecord(params.sessionId);
+  return snapshot;
 };
 
 export const startPVEBattleSession = async (
@@ -316,16 +333,19 @@ const completeSessionReturnToMap = (
   session: BattleSessionRecord,
 ): BattleSessionResponse => {
   const nextStatus = getSessionFinalStatus(session.type, session.lastResult);
-  const updated = updateBattleSessionRecord(session.sessionId, {
-    status: nextStatus,
-    currentBattleId: null,
-    nextAction: 'none',
-    canAdvance: false,
+  const snapshot = finalizeBattleSession({
+    sessionId: session.sessionId,
+    patch: {
+      status: nextStatus,
+      currentBattleId: null,
+      nextAction: 'none',
+      canAdvance: false,
+    },
   });
-  if (!updated) {
+  if (!snapshot) {
     return { success: false, message: '战斗会话不存在' };
   }
-  return buildSessionSuccess(updated, undefined, true);
+  return buildSessionSuccess(snapshot, undefined, true);
 };
 
 export const advanceBattleSession = async (
@@ -378,16 +398,19 @@ export const advanceBattleSession = async (
     if (dungeonRes.data.finished || !dungeonRes.data.battleId) {
       const nextStatus: BattleSessionStatus =
         dungeonRes.data.status === 'cleared' ? 'completed' : 'failed';
-      const updated = updateBattleSessionRecord(session.sessionId, {
-        currentBattleId: null,
-        status: nextStatus,
-        nextAction: 'none',
-        canAdvance: false,
+      const snapshot = finalizeBattleSession({
+        sessionId: session.sessionId,
+        patch: {
+          currentBattleId: null,
+          status: nextStatus,
+          nextAction: 'none',
+          canAdvance: false,
+        },
       });
-      if (!updated) {
+      if (!snapshot) {
         return { success: false, message: '战斗会话不存在' };
       }
-      return buildSessionSuccess(updated, undefined, true);
+      return buildSessionSuccess(snapshot, undefined, true);
     }
     const updated = updateBattleSessionRecord(session.sessionId, {
       currentBattleId: String(dungeonRes.data.battleId),
@@ -433,13 +456,15 @@ export const markBattleSessionAbandoned = (
 ): BattleSessionSnapshot | null => {
   const snapshot = getBattleSessionSnapshotByBattleId(battleId);
   if (!snapshot) return null;
-  const updated = updateBattleSessionRecord(snapshot.sessionId, {
-    currentBattleId: null,
-    status: 'abandoned',
-    nextAction: 'none',
-    canAdvance: false,
+  return finalizeBattleSession({
+    sessionId: snapshot.sessionId,
+    patch: {
+      currentBattleId: null,
+      status: 'abandoned',
+      nextAction: 'none',
+      canAdvance: false,
+    },
   });
-  return updated ? toBattleSessionSnapshot(updated) : null;
 };
 
 /**
@@ -494,6 +519,69 @@ export const getAttachedBattleSessionSnapshot = (
   battleId: string,
 ): BattleSessionSnapshot | null => {
   return getBattleSessionSnapshotByBattleId(battleId);
+};
+
+/**
+ * 在 waiting_transition 中主动放弃整条 BattleSession。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把“战斗已结算、仍在中间态时由 owner 主动退出”的权限校验与 session 收尾集中到单一入口，避免 action/teamHooks 各自重复判断 waiting_transition。
+ * 2. 做什么：返回需要广播的参与用户集合，保证 owner 放弃中间态后，其余队员也能收到统一退出事件。
+ * 3. 不做什么：不直接发 socket，也不操作 activeBattles/finishedBattleResults。
+ *
+ * 输入/输出：
+ * - 输入：battleId、userId。
+ * - 输出：成功时返回 abandoned 后的 session 快照与广播用户列表；失败时返回错误信息。
+ *
+ * 数据流/状态流：
+ * action / 其他中间态退出入口 -> 本函数校验 owner 与 waiting_transition
+ * -> markBattleSessionAbandoned -> 调用方按 participantUserIds 广播 `battle_abandoned`。
+ *
+ * 关键边界条件与坑点：
+ * 1. 只有 owner 才能终止 waiting_transition；普通队员即使还在 session.participantUserIds 里，也不能单方面结束整条会话。
+ * 2. 广播名单必须在 abandoned 前拍下，否则 session 删除后就拿不到参与者了。
+ */
+export const abandonWaitingTransitionBattleSession = (params: {
+  battleId: string;
+  userId: number;
+}): { success: true; data: { session: BattleSessionSnapshot; participantUserIds: number[] } } | { success: false; message: string } => {
+  const snapshot = getBattleSessionSnapshotByBattleId(params.battleId);
+  if (!snapshot) {
+    return { success: false, message: '战斗不存在' };
+  }
+
+  const session = getBattleSessionRecord(snapshot.sessionId);
+  if (!session || session.currentBattleId !== params.battleId) {
+    return { success: false, message: '战斗不存在' };
+  }
+
+  if (session.status !== 'waiting_transition') {
+    return { success: false, message: '战斗不存在' };
+  }
+
+  if (session.ownerUserId !== params.userId) {
+    return {
+      success: false,
+      message: session.participantUserIds.includes(params.userId) ? '组队战斗只有队长可以逃跑' : '无权操作此战斗',
+    };
+  }
+
+  const participantUserIds = normalizeParticipantUserIds(
+    session.participantUserIds,
+    session.ownerUserId,
+  );
+  const abandonedSnapshot = markBattleSessionAbandoned(params.battleId);
+  if (!abandonedSnapshot) {
+    return { success: false, message: '战斗不存在' };
+  }
+
+  return {
+    success: true,
+    data: {
+      session: abandonedSnapshot,
+      participantUserIds,
+    },
+  };
 };
 
 /**

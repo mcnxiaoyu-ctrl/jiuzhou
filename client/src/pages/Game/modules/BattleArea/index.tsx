@@ -1248,32 +1248,41 @@ const BattleArea: React.FC<BattleAreaProps> = ({
   const allyEmptyText = isPreparingView ? '正在同步我方单位...' : '暂无我方单位';
 
   const handleEscape = useCallback(() => {
+    const exitBattleLocally = (battleId: string | null) => {
+      if (battleId && announcedBattleEndIdRef.current !== battleId) {
+        announcedBattleEndIdRef.current = battleId;
+        pushBattleLines([FAST_BATTLE_LOG_SYSTEM_LINES.escaped]);
+      }
+      resetBattlePresentationState();
+      resetBattleRuntimeState(battleId);
+      onEscape?.();
+    };
+
     const id = battleIdRef.current;
-    if (id) {
-      void abandonBattle(id, SILENT_API_REQUEST_CONFIG)
-        .then((res) => {
-          if (!res?.success) {
-            if (!isBattleMissingError(res?.message)) {
-              message.error(res?.message || '逃跑失败');
-            }
+    if (!id) {
+      exitBattleLocally(null);
+      return;
+    }
+
+    void abandonBattle(id, SILENT_API_REQUEST_CONFIG)
+      .then((res) => {
+        if (!res?.success) {
+          if (!isBattleMissingError(res?.message)) {
+            message.error(res?.message || '逃跑失败');
             return;
           }
-          syncBattleCooldownMeta(res.data);
-        })
-        .catch((error) => {
-          const errorText = getUnifiedApiErrorMessage(error, '逃跑失败');
-          if (!isBattleMissingError(errorText)) {
-            message.error(errorText);
-          }
-        });
-    }
-    if (id && announcedBattleEndIdRef.current !== id) {
-      announcedBattleEndIdRef.current = id;
-      pushBattleLines([FAST_BATTLE_LOG_SYSTEM_LINES.escaped]);
-    }
-    resetBattlePresentationState();
-    resetBattleRuntimeState(id);
-    onEscape?.();
+        }
+        syncBattleCooldownMeta(res.data);
+        exitBattleLocally(id);
+      })
+      .catch((error) => {
+        const errorText = getUnifiedApiErrorMessage(error, '逃跑失败');
+        if (!isBattleMissingError(errorText)) {
+          message.error(errorText);
+          return;
+        }
+        exitBattleLocally(id);
+      });
   }, [message, onEscape, pushBattleLines, resetBattlePresentationState, resetBattleRuntimeState, syncBattleCooldownMeta]);
 
   const handleNext = useCallback(async () => {
