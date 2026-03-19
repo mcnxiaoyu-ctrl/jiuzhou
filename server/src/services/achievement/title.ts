@@ -7,7 +7,7 @@ import {
 } from './shared.js';
 import type { ServiceResult, TitleInfo, TitleListResult } from './types.js';
 import { invalidateCharacterComputedCache } from '../characterComputedService.js';
-import { getTitleDefinitions } from '../staticConfigLoader.js';
+import { listTitleDefinitionsByIds, getTitleDefinitionById } from '../titleDefinitionService.js';
 
 /**
  * 称号管理服务
@@ -65,11 +65,10 @@ class TitleService {
       [cid],
     );
 
-    const titleDefMap = new Map(
-      getTitleDefinitions()
-        .filter((row) => row.enabled !== false)
-        .map((row) => [row.id, row]),
-    );
+    const titleIds = (res.rows as Array<Record<string, string | boolean | Date | null>>)
+      .map((row) => asNonEmptyString(row.title_id))
+      .filter((titleId): titleId is string => titleId !== null);
+    const titleDefMap = await listTitleDefinitionsByIds(titleIds);
 
     const titles: TitleInfo[] = [];
     let equipped = '';
@@ -105,7 +104,7 @@ class TitleService {
     if (!cid) return { success: false, message: '角色不存在' };
     if (!tid) return { success: false, message: '称号ID不能为空' };
 
-    const targetDef = getTitleDefinitions().find((row) => row.id === tid && row.enabled !== false);
+    const targetDef = await getTitleDefinitionById(tid);
     if (!targetDef) {
       return { success: false, message: '未拥有该称号' };
     }
@@ -145,9 +144,7 @@ class TitleService {
 
     const currentRow = (currentRes.rows?.[0] ?? null) as Record<string, unknown> | null;
     const currentTitleId = currentRow ? asNonEmptyString(currentRow.title_id) : null;
-    const currentDef = currentTitleId
-      ? getTitleDefinitions().find((row) => row.id === currentTitleId && row.enabled !== false)
-      : null;
+    const currentDef = currentTitleId ? await getTitleDefinitionById(currentTitleId) : null;
     const currentEffects = currentDef ? normalizeTitleEffects(currentDef.effects) : {};
 
     if (currentTitleId === tid) {

@@ -381,6 +381,52 @@ model character_title {
   @@index([character_id, is_equipped], map: "idx_character_title_equipped")
 }
 
+model character_wander_story {
+  id              String                         @id @db.VarChar(64)
+  character_id    Int
+  status          String                         @default("active") @db.VarChar(16)
+  story_theme     String                         @db.VarChar(64)
+  story_premise   String                         @db.VarChar(200)
+  story_summary   String                         @db.Text
+  episode_count   Int                            @default(0)
+  story_seed      Int
+  reward_title_id String?                        @db.VarChar(64)
+  finished_at     DateTime?                      @db.Timestamptz(6)
+  created_at      DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime                       @default(now()) @db.Timestamptz(6)
+  characters      characters                     @relation(fields: [character_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  episodes        character_wander_story_episode[]
+
+  @@index([character_id, status, updated_at(sort: Desc)], map: "idx_character_wander_story_character_status")
+  @@index([character_id, created_at(sort: Desc)], map: "idx_character_wander_story_character_created")
+}
+
+model character_wander_story_episode {
+  id                  String                 @id @db.VarChar(64)
+  story_id            String                 @db.VarChar(64)
+  character_id        Int
+  day_key             DateTime               @db.Date
+  day_index           Int
+  episode_title       String                 @db.VarChar(128)
+  opening             String                 @db.Text
+  option_texts        Json
+  chosen_option_index Int?
+  chosen_option_text  String?                @db.VarChar(200)
+  episode_summary     String                 @db.Text
+  is_ending           Boolean                @default(false)
+  ending_type         String                 @default("none") @db.VarChar(16)
+  reward_title_name   String?                @db.VarChar(32)
+  reward_title_desc   String?                @db.VarChar(80)
+  created_at          DateTime               @default(now()) @db.Timestamptz(6)
+  chosen_at           DateTime?              @db.Timestamptz(6)
+  characters          characters             @relation(fields: [character_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  story               character_wander_story @relation(fields: [story_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([character_id, day_key])
+  @@index([story_id, day_index(sort: Desc)], map: "idx_character_wander_story_episode_story")
+  @@index([character_id, created_at(sort: Desc)], map: "idx_character_wander_story_episode_character")
+}
+
 model character_rank_snapshot {
   character_id Int        @id
   nickname     String     @default("") @db.VarChar(50)
@@ -455,6 +501,8 @@ model characters {
   character_task_progress                                                           character_task_progress[]
   character_technique                                                               character_technique[]
   character_title                                                                   character_title[]
+  character_wander_story                                                            character_wander_story[]
+  character_wander_story_episode                                                    character_wander_story_episode[]
   users                                                                             users                           @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   dungeon_entry_count                                                               dungeon_entry_count[]
   dungeon_instance                                                                  dungeon_instance[]
@@ -627,6 +675,23 @@ model generated_partner_def {
 
   @@index([created_by_character_id, created_at(sort: Desc)], map: "idx_generated_partner_def_creator")
   @@index([enabled, created_at(sort: Desc)], map: "idx_generated_partner_def_enabled")
+}
+
+model generated_title_def {
+  id          String   @id @db.VarChar(64)
+  name        String   @db.VarChar(32)
+  description String   @db.VarChar(80)
+  color       String?  @db.VarChar(16)
+  icon        String?  @db.VarChar(255)
+  effects     Json     @default("{}")
+  source_type String   @db.VarChar(32)
+  source_id   String   @db.VarChar(64)
+  enabled     Boolean  @default(true)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([source_type, source_id])
+  @@index([enabled, created_at(sort: Desc)], map: "idx_generated_title_def_enabled_created")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

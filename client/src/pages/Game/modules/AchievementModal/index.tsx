@@ -1,5 +1,4 @@
 import { App, Button, Modal, Progress, Segmented, Tag } from 'antd';
-import { formatSignedNumber, formatSignedPercent } from '../../shared/formatAttr';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   claimAchievementPointsReward,
@@ -17,6 +16,7 @@ import { gameSocket } from '../../../../services/gameSocket';
 import { resolveIconUrl, DEFAULT_ICON as coin01 } from '../../shared/resolveIcon';
 import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon, IMG_EXP as expIcon } from '../../shared/imageAssets';
 import { useIsMobile } from '../../shared/responsive';
+import { formatTitleEffectsText } from '../../shared/titleEffectText';
 import './index.scss';
 
 interface AchievementModalProps {
@@ -71,126 +71,6 @@ const tabs: Array<{ key: AchievementTab; label: string }> = [
   { key: 'social', label: '社交成就' },
   { key: 'collection', label: '收集成就' },
 ];
-
-const titleEffectLabel: Record<string, string> = {
-  qixue: '气血',
-  max_qixue: '气血上限',
-  lingqi: '灵气',
-  max_lingqi: '灵气上限',
-  wugong: '物攻',
-  fagong: '法攻',
-  wufang: '物防',
-  fafang: '法防',
-  mingzhong: '命中',
-  shanbi: '闪避',
-  zhaojia: '招架',
-  baoji: '暴击',
-  baoshang: '暴伤',
-  jianbaoshang: '暴伤减免',
-  jianfantan: '反伤减免',
-  kangbao: '抗暴',
-  zengshang: '增伤',
-  zhiliao: '治疗',
-  jianliao: '减疗',
-  xixue: '吸血',
-  lengque: '冷却',
-  sudu: '速度',
-  qixue_huifu: '气血恢复',
-  lingqi_huifu: '灵气恢复',
-  kongzhi_kangxing: '控制抗性',
-  jin_kangxing: '金抗性',
-  mu_kangxing: '木抗性',
-  shui_kangxing: '水抗性',
-  huo_kangxing: '火抗性',
-  tu_kangxing: '土抗性',
-};
-
-const titleEffectOrder: Record<string, number> = Object.fromEntries(
-  [
-    'qixue',
-    'max_qixue',
-    'lingqi',
-    'max_lingqi',
-    'wugong',
-    'fagong',
-    'wufang',
-    'fafang',
-    'mingzhong',
-    'shanbi',
-    'zhaojia',
-    'baoji',
-    'baoshang',
-    'jianbaoshang',
-    'jianfantan',
-    'kangbao',
-    'zengshang',
-    'zhiliao',
-    'jianliao',
-    'xixue',
-    'lengque',
-    'sudu',
-    'qixue_huifu',
-    'lingqi_huifu',
-    'kongzhi_kangxing',
-    'jin_kangxing',
-    'mu_kangxing',
-    'shui_kangxing',
-    'huo_kangxing',
-    'tu_kangxing',
-  ].map((key, idx) => [key, idx]),
-);
-
-const titlePercentEffectKeys = new Set<string>([
-  'mingzhong',
-  'shanbi',
-  'zhaojia',
-  'baoji',
-  'baoshang',
-  'jianbaoshang',
-  'jianfantan',
-  'kangbao',
-  'zengshang',
-  'zhiliao',
-  'jianliao',
-  'xixue',
-  'lengque',
-  'kongzhi_kangxing',
-  'jin_kangxing',
-  'mu_kangxing',
-  'shui_kangxing',
-  'huo_kangxing',
-  'tu_kangxing',
-]);
-
-const normalizeEffectKey = (key: string): string => {
-  return key.trim().replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
-};
-
-const formatEffectValue = (key: string, value: number): string | null => {
-  if (!Number.isFinite(value) || value === 0) return null;
-  if (titlePercentEffectKeys.has(key)) return formatSignedPercent(value);
-  return formatSignedNumber(value);
-};
-
-const formatTitleEffects = (effects: Record<string, number>): string => {
-  const rows = Object.entries(effects || {})
-    .map(([rawKey, rawValue]) => {
-      const key = normalizeEffectKey(rawKey);
-      const value = Number(rawValue);
-      const valueText = formatEffectValue(key, value);
-      if (!valueText) return null;
-      const label = titleEffectLabel[key] ?? titleEffectLabel[rawKey] ?? rawKey;
-      return { key, text: `${label}${valueText}` };
-    })
-    .filter((item): item is { key: string; text: string } => item !== null)
-    .sort((a, b) => {
-      const oa = titleEffectOrder[a.key] ?? 999;
-      const ob = titleEffectOrder[b.key] ?? 999;
-      return oa - ob || a.key.localeCompare(b.key);
-    });
-
-  return rows.map((item) => item.text).join('，');
-};
 
 const pad2 = (value: number): string => String(value).padStart(2, '0');
 
@@ -598,7 +478,7 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
               <div className="achievement-section-title">称号</div>
               <div className="achievement-title-list">
                 {sortedTitles.map((title) => {
-                  const effectsText = formatTitleEffects(title.effects || {});
+                  const effectsText = formatTitleEffectsText(title.effects || {});
                   return (
                     <div key={title.id} className="achievement-title-item">
                       <div className="achievement-title-main">

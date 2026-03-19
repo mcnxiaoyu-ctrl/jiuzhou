@@ -35,6 +35,7 @@ import RealmModal from './modules/RealmModal';
 import WarehouseModal from './modules/WarehouseModal';
 import SignInModal from './modules/SignInModal';
 import PartnerModal from './modules/PartnerModal';
+import WanderModal from './modules/WanderModal';
 import { useIdleBattle, IdleBattlePanel, IdleBattleStatusBar } from './modules/IdleBattle';
 import type { IdleSessionDto } from './modules/IdleBattle/types';
 import {
@@ -670,6 +671,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [techniqueModalOpen, setTechniqueModalOpen] = useState(false);
   const [partnerModalOpen, setPartnerModalOpen] = useState(false);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [wanderModalOpen, setWanderModalOpen] = useState(false);
   const [sectModalOpen, setSectModalOpen] = useState(false);
   const [marketModalOpen, setMarketModalOpen] = useState(false);
   const [teamModalOpen, setTeamModalOpen] = useState(false);
@@ -2434,9 +2436,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                 }
                 if (key === 'technique') setTechniqueModalOpen(true);
                 if (key === 'realm') setRealmModalOpen(true);
-                if (key === 'life') {
-                  messageRef.current.info('百业玩法开发中，敬请期待');
-                }
+                if (key === 'life') setWanderModalOpen(true);
                 if (key === 'task') {
                   setTaskModalOpen(true);
                 }
@@ -2885,6 +2885,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       />
       <BagModal open={bagModalOpen} onClose={() => setBagModalOpen(false)} />
       <PartnerModal open={partnerModalOpen} onClose={() => setPartnerModalOpen(false)} />
+      <WanderModal open={wanderModalOpen} onClose={() => setWanderModalOpen(false)} />
       {warehouseModalOpen && (
         <WarehouseModal open={warehouseModalOpen} onClose={() => setWarehouseModalOpen(false)} />
       )}

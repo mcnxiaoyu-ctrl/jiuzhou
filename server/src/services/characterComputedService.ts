@@ -23,8 +23,8 @@ import {
   getItemDefinitionsByIds,
   getItemSetDefinitions,
   getTechniqueLayerDefinitions,
-  getTitleDefinitions,
 } from './staticConfigLoader.js';
+import { getTitleDefinitionById } from './titleDefinitionService.js';
 import { extractFlatAffixDeltas, extractPercentAffixDeltas } from './shared/affixModifier.js';
 import {
   createCharacterPrimaryAttrs,
@@ -735,7 +735,7 @@ const loadEquippedTitleEffects = async (characterId: number): Promise<Record<str
 
   const titleId = String(result.rows[0]?.title_id || '').trim();
   if (!titleId) return {};
-  const titleDef = getTitleDefinitions().find((row) => row.id === titleId && row.enabled !== false);
+  const titleDef = await getTitleDefinitionById(titleId);
   if (!titleDef) return {};
   return parseTitleEffects(titleDef.effects);
 };
