@@ -24,6 +24,7 @@
  */
 
 import crypto from 'crypto';
+import { getGameServer } from '../../game/gameServer.js';
 import { battleParticipants } from '../battle/runtime/state.js';
 import { getBattleState } from '../battle/queries.js';
 import { startPVEBattle } from '../battle/pve.js';
@@ -31,6 +32,7 @@ import { startPVPBattle } from '../battle/pvp.js';
 import { dungeonService } from '../dungeon/service.js';
 import type { BattleState } from '../../battle/types.js';
 import type { BattleResult } from '../battle/battleTypes.js';
+import { buildBattleAbandonedRealtimePayload } from '../battle/runtime/realtime.js';
 import {
   createBattleSessionRecord,
   deleteBattleSessionRecord,
@@ -208,6 +210,54 @@ const finalizeBattleSession = (params: {
   return snapshot;
 };
 
+/**
+ * 广播“会话已终止，其他参与者应退出旧战斗页”。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把 BattleSession 终态收尾后，通知其余参与者清理旧战斗视图的广播逻辑收口到单一入口，避免普通战斗/秘境各自补一套 socket 推送。
+ * 2. 做什么：只通知“当前触发推进的人以外”的参与者，推进发起者继续以 HTTP 返回为准，避免同一客户端同时吃到本地返回和额外广播。
+ * 3. 不做什么：不改 session/runtime 状态；调用方必须先完成 finalize，再调用本函数。
+ *
+ * 输入/输出：
+ * - 输入：已进入终态前的 session、当前触发推进的 actorUserId，以及给前端清场用的 battleId。
+ * - 输出：无返回值；仅向其余参与者发送 `battle_abandoned` 作为统一退出信号。
+ *
+ * 数据流/状态流：
+ * - advanceBattleSession 完成终态收尾 -> 本函数读取 session 参与者 -> 其余参与者收到 `battle_abandoned` -> 前端退出旧战斗页。
+ *
+ * 关键边界条件与坑点：
+ * 1. 广播名单必须基于 finalize 前的 session 拍快照；session 删除后再读就拿不到参与者了。
+ * 2. battleId 必须沿用刚结束的那场 battle；前端是按 battleId 对齐当前视图的，不能传 null。
+ */
+const notifyPeerUsersSessionEnded = (params: {
+  session: BattleSessionRecord;
+  actorUserId: number;
+  battleId: string;
+}): void => {
+  const targetUserIds = normalizeSessionAudienceUserIds([
+    params.session.ownerUserId,
+    ...params.session.participantUserIds,
+  ]).filter((userId) => userId !== params.actorUserId);
+  if (targetUserIds.length === 0) {
+    return;
+  }
+
+  try {
+    const gameServer = getGameServer();
+    const payload = buildBattleAbandonedRealtimePayload({
+      battleId: params.battleId,
+      success: true,
+      message: '战斗已结束',
+      authoritative: true,
+    });
+    for (const userId of targetUserIds) {
+      gameServer.emitToUser(userId, 'battle:update', payload);
+    }
+  } catch (error) {
+    console.warn('[battleSession] 推送会话终态退出事件失败:', error);
+  }
+};
+
 export const startPVEBattleSession = async (
   userId: number,
   monsterIds: string[],
@@ -330,9 +380,11 @@ export const getCurrentBattleSessionDetail = async (
 };
 
 const completeSessionReturnToMap = (
+  userId: number,
   session: BattleSessionRecord,
 ): BattleSessionResponse => {
   const nextStatus = getSessionFinalStatus(session.type, session.lastResult);
+  const settledBattleId = session.currentBattleId;
   const snapshot = finalizeBattleSession({
     sessionId: session.sessionId,
     patch: {
@@ -344,6 +396,13 @@ const completeSessionReturnToMap = (
   });
   if (!snapshot) {
     return { success: false, message: '战斗会话不存在' };
+  }
+  if (settledBattleId) {
+    notifyPeerUsersSessionEnded({
+      session,
+      actorUserId: userId,
+      battleId: settledBattleId,
+    });
   }
   return buildSessionSuccess(snapshot, undefined, true);
 };
@@ -362,7 +421,7 @@ export const advanceBattleSession = async (
 
   if (session.type === 'pve') {
     if (session.nextAction === 'return_to_map') {
-      return completeSessionReturnToMap(session);
+      return completeSessionReturnToMap(userId, session);
     }
     const context = session.context as { monsterIds: string[] };
     const battleRes = await startPVEBattle(userId, context.monsterIds);
@@ -396,6 +455,7 @@ export const advanceBattleSession = async (
       };
     }
     if (dungeonRes.data.finished || !dungeonRes.data.battleId) {
+      const settledBattleId = session.currentBattleId;
       const nextStatus: BattleSessionStatus =
         dungeonRes.data.status === 'cleared' ? 'completed' : 'failed';
       const snapshot = finalizeBattleSession({
@@ -409,6 +469,13 @@ export const advanceBattleSession = async (
       });
       if (!snapshot) {
         return { success: false, message: '战斗会话不存在' };
+      }
+      if (settledBattleId) {
+        notifyPeerUsersSessionEnded({
+          session,
+          actorUserId: userId,
+          battleId: settledBattleId,
+        });
       }
       return buildSessionSuccess(snapshot, undefined, true);
     }
@@ -429,7 +496,7 @@ export const advanceBattleSession = async (
     return buildSessionSuccess(updated, dungeonRes.data.state, false);
   }
 
-  return completeSessionReturnToMap(session);
+  return completeSessionReturnToMap(userId, session);
 };
 
 export const markBattleSessionFinished = (
