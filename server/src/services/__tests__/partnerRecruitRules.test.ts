@@ -246,6 +246,74 @@ test('buildPartnerRecruitPromptInput: 应支持注入随机扰动 hash 且禁止
   );
 });
 
+test('buildPartnerRecruitPromptInput: 应支持注入三魂归契素材参考信息', () => {
+  const promptInput = buildPartnerRecruitPromptInput('地', {
+    baseModel: DEFAULT_BASE_MODEL,
+    fusionReferencePartners: [
+      {
+        templateName: '青木小偶',
+        description: '青云村木匠启灵而成的小木偶，胆子不大，却总会抢在主人前面挡下第一击。',
+        role: '护卫',
+        quality: '黄',
+        attributeElement: 'mu',
+      },
+      {
+        templateName: '赤砂行者',
+        description: '常年走在荒漠商路的砂灵旅者，言语不多，却能从风沙里辨出前路吉凶。',
+        role: '游侠',
+        quality: '玄',
+        attributeElement: 'huo',
+      },
+      {
+        templateName: '玄潮书灵',
+        description: '久居旧阁的书卷之灵，性子温润，却会在危急时化字成阵护住同伴。',
+        role: '术士',
+        quality: '地',
+        attributeElement: 'shui',
+      },
+    ],
+  }) as {
+    fusionReferencePartners?: Array<{
+      templateName?: string;
+      description?: string;
+      role?: string;
+      quality?: string;
+      attributeElement?: string;
+    }>;
+    constraints?: string[];
+  };
+
+  assert.deepEqual(promptInput.fusionReferencePartners, [
+    {
+      templateName: '青木小偶',
+      description: '青云村木匠启灵而成的小木偶，胆子不大，却总会抢在主人前面挡下第一击。',
+      role: '护卫',
+      quality: '黄',
+      attributeElement: 'mu',
+    },
+    {
+      templateName: '赤砂行者',
+      description: '常年走在荒漠商路的砂灵旅者，言语不多，却能从风沙里辨出前路吉凶。',
+      role: '游侠',
+      quality: '玄',
+      attributeElement: 'huo',
+    },
+    {
+      templateName: '玄潮书灵',
+      description: '久居旧阁的书卷之灵，性子温润，却会在危急时化字成阵护住同伴。',
+      role: '术士',
+      quality: '地',
+      attributeElement: 'shui',
+    },
+  ]);
+  assert.equal(
+    promptInput.constraints?.includes(
+      '若提供 fusionReferencePartners，则表示本次为三魂归契生成；每项 templateName、description、role、quality、attributeElement 都是素材伙伴的基础描述与种类参考。新伙伴必须综合吸收这些素材的共同特征与互补气质进行重组创作，可以融合演化，但禁止直接照抄任一素材的 templateName、完整 description 或 role',
+    ),
+    true,
+  );
+});
+
 test('buildPartnerRecruitResponseFormat: 不应要求模型输出服务端自动补齐的功法槽位', () => {
   const responseFormat = buildPartnerRecruitResponseFormat('天');
   const schema = responseFormat.type === 'json_schema' ? responseFormat.json_schema.schema : null;

@@ -86,6 +86,14 @@ export type PartnerRecruitDraft = {
   }>;
 };
 
+export type PartnerRecruitFusionReferencePartner = {
+  templateName: string;
+  description: string;
+  role: string;
+  quality: PartnerRecruitQuality;
+  attributeElement: PartnerRecruitElement;
+};
+
 type TextLengthRange = {
   min: number;
   max: number;
@@ -94,6 +102,7 @@ type TextLengthRange = {
 export type PartnerRecruitPromptInputOptions = {
   baseModel: string;
   promptNoiseHash?: string;
+  fusionReferencePartners?: PartnerRecruitFusionReferencePartner[];
 };
 
 const SECOND_MS = 1_000;
@@ -585,6 +594,15 @@ export const buildPartnerRecruitPromptInput = (
   const referencePartnerExample = buildPartnerRecruitReferenceExample();
   const promptNoiseHash = normalizeTextModelPromptNoiseHash(options.promptNoiseHash);
   const techniqueSlotCount = resolvePartnerRecruitTechniqueSlotCount(quality);
+  const fusionReferencePartners = options.fusionReferencePartners && options.fusionReferencePartners.length > 0
+    ? options.fusionReferencePartners.map((entry) => ({
+      templateName: entry.templateName,
+      description: entry.description,
+      role: entry.role,
+      quality: entry.quality,
+      attributeElement: entry.attributeElement,
+    }))
+    : undefined;
 
   return {
     worldview: '中国仙侠世界《九州修仙录》',
@@ -605,6 +623,7 @@ export const buildPartnerRecruitPromptInput = (
     integerAttrKeys: [...PARTNER_INTEGER_ATTR_KEYS],
     percentAttrKeys,
     referencePartnerExample,
+    fusionReferencePartners,
     passiveValueGuideByKey,
     promptNoiseHash,
     constraints: [
@@ -626,6 +645,7 @@ export const buildPartnerRecruitPromptInput = (
       'percentAttrKeys 中的属性必须使用非负数字，小数表示百分比，例如 0.18 表示 18%',
       '品质高低顺序固定为 黄 < 玄 < 地 < 天；referencePartnerExample 中青木小偶的 quality=黄，表示它是最低品质参考模板，最终强度与风格仍必须以当前 quality 字段为准',
       'referencePartnerExample 是现有伙伴模板示例，只用于参考数值量级、字段完整度与成长写法，禁止照抄名字、描述或功法列表',
+      '若提供 fusionReferencePartners，则表示本次为三魂归契生成；每项 templateName、description、role、quality、attributeElement 都是素材伙伴的基础描述与种类参考。新伙伴必须综合吸收这些素材的共同特征与互补气质进行重组创作，可以融合演化，但禁止直接照抄任一素材的 templateName、完整 description 或 role',
       TEXT_MODEL_PROMPT_NOISE_CONSTRAINT,
     ],
   };

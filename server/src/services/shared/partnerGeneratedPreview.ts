@@ -41,6 +41,7 @@ import {
   type PartnerRecruitBaseAttrs,
   type PartnerRecruitCombatStyle,
   type PartnerRecruitDraft,
+  type PartnerRecruitFusionReferencePartner,
   type PartnerRecruitQuality,
   validatePartnerRecruitDraft,
 } from './partnerRecruitRules.js';
@@ -326,6 +327,7 @@ export const buildGeneratedPartnerTextModelRequest = (params: {
   quality: PartnerRecruitQuality;
   seed?: number;
   requestedBaseModel?: string | null;
+  fusionReferencePartners?: PartnerRecruitFusionReferencePartner[];
 }): {
   responseFormat: ReturnType<typeof buildPartnerRecruitResponseFormat>;
   systemMessage: string;
@@ -350,6 +352,7 @@ export const buildGeneratedPartnerTextModelRequest = (params: {
     userMessage: JSON.stringify(buildPartnerRecruitPromptInput(params.quality, {
       baseModel: baseModelSelection.baseModel,
       promptNoiseHash,
+      fusionReferencePartners: params.fusionReferencePartners,
     })),
     seed,
     timeoutMs,
@@ -362,6 +365,7 @@ export const buildGeneratedPartnerTextModelRequest = (params: {
 export const tryCallGeneratedPartnerTextModel = async (params: {
   quality: PartnerRecruitQuality;
   requestedBaseModel?: string | null;
+  fusionReferencePartners?: PartnerRecruitFusionReferencePartner[];
 }): Promise<GeneratedPartnerTextAttemptResult> => {
   const requestedBaseModelValidation: PartnerRecruitRequestedBaseModelValidationResult =
     await guardPartnerRecruitRequestedBaseModel(params.requestedBaseModel);

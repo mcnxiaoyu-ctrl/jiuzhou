@@ -50,7 +50,10 @@ import {
   PARTNER_FUSION_MATERIAL_COUNT,
   rollPartnerFusionResultQuality,
 } from './shared/partnerFusionRules.js';
-import type { PartnerRecruitDraft } from './shared/partnerRecruitRules.js';
+import type {
+  PartnerRecruitDraft,
+  PartnerRecruitFusionReferencePartner,
+} from './shared/partnerRecruitRules.js';
 import {
   loadPartnerTechniqueRows,
   normalizeText,
@@ -119,6 +122,9 @@ type PartnerFusionMaterialSnapshot = {
 };
 
 type PartnerFusionMaterialStaticMeta = {
+  templateName: string;
+  description: string;
+  role: string;
   quality: QualityName;
   element: string;
 };
@@ -146,14 +152,14 @@ const toIsoString = (raw: Date | string | null | undefined): string | null => {
 
 const buildMaterialSnapshot = (
   row: PartnerRow,
-  quality: QualityName,
+  materialStaticMeta: PartnerFusionMaterialStaticMeta,
   techniqueRows: PartnerTechniqueRow[],
 ): PartnerFusionMaterialSnapshot => {
   return {
     partnerId: Number(row.id),
     partnerDefId: normalizeText(row.partner_def_id),
     nickname: normalizeText(row.nickname),
-    quality,
+    quality: materialStaticMeta.quality,
     level: Number(row.level),
     techniqueIds: techniqueRows.map((entry) => normalizeText(entry.technique_id)).filter(Boolean),
   };
@@ -170,9 +176,24 @@ const getPartnerFusionMaterialStaticMeta = (
     return null;
   }
   return {
+    templateName: normalizeText(definition.name),
+    description: normalizeText(definition.description),
+    role: normalizeText(definition.role),
     quality: definition.quality,
     element: normalizeText(definition.attribute_element) || 'none',
   };
+};
+
+const buildPartnerFusionReferencePartners = (
+  materialStaticMetas: readonly PartnerFusionMaterialStaticMeta[],
+): PartnerRecruitFusionReferencePartner[] => {
+  return materialStaticMetas.map((entry) => ({
+    templateName: entry.templateName,
+    description: entry.description,
+    role: entry.role,
+    quality: entry.quality,
+    attributeElement: entry.element as PartnerRecruitFusionReferencePartner['attributeElement'],
+  }));
 };
 
 const loadCharacterExists = async (
@@ -435,7 +456,7 @@ class PartnerFusionService {
       }
       const snapshot = buildMaterialSnapshot(
         row,
-        materialStaticMeta.quality,
+        materialStaticMeta,
         techniqueMap.get(Number(row.id)) ?? [],
       );
       await query(
@@ -629,6 +650,76 @@ class PartnerFusionService {
       };
     }
 
+    const materialRows = await loadFusionMaterialRows(args.fusionId, false);
+    if (materialRows.length !== PARTNER_FUSION_MATERIAL_COUNT) {
+      const reason = '归契素材数据异常';
+      await this.markFusionJobFailedTx(args.characterId, args.fusionId, reason);
+      return {
+        success: true,
+        message: reason,
+        data: {
+          status: 'failed',
+          preview: null,
+          errorMessage: reason,
+        },
+      };
+    }
+    const materialPartnerIds = materialRows.map((row) => Number(row.partner_id));
+    const materialPartnerRows = await loadCharacterPartnersByIds(
+      args.characterId,
+      materialPartnerIds,
+      false,
+    );
+    if (materialPartnerRows.length !== PARTNER_FUSION_MATERIAL_COUNT) {
+      const reason = '归契素材伙伴已失效';
+      await this.markFusionJobFailedTx(args.characterId, args.fusionId, reason);
+      return {
+        success: true,
+        message: reason,
+        data: {
+          status: 'failed',
+          preview: null,
+          errorMessage: reason,
+        },
+      };
+    }
+    const materialPartnerRowById = new Map<number, PartnerRow>(
+      materialPartnerRows.map((row) => [Number(row.id), row]),
+    );
+    const materialStaticMetas: PartnerFusionMaterialStaticMeta[] = [];
+    for (const materialRow of materialRows) {
+      const partnerRow = materialPartnerRowById.get(Number(materialRow.partner_id));
+      if (!partnerRow) {
+        const reason = '归契素材伙伴已失效';
+        await this.markFusionJobFailedTx(args.characterId, args.fusionId, reason);
+        return {
+          success: true,
+          message: reason,
+          data: {
+            status: 'failed',
+            preview: null,
+            errorMessage: reason,
+          },
+        };
+      }
+      const materialStaticMeta = getPartnerFusionMaterialStaticMeta(partnerRow);
+      if (!materialStaticMeta) {
+        const reason = '归契素材伙伴配置非法';
+        await this.markFusionJobFailedTx(args.characterId, args.fusionId, reason);
+        return {
+          success: true,
+          message: reason,
+          data: {
+            status: 'failed',
+            preview: null,
+            errorMessage: reason,
+          },
+        };
+      }
+      materialStaticMetas.push(materialStaticMeta);
+    }
+    const fusionReferencePartners = buildPartnerFusionReferencePartners(materialStaticMetas);
+
     const maxAttempts = 3;
     let lastFailure = '伙伴生成失败';
     let lastModelName = '';
@@ -636,6 +727,7 @@ class PartnerFusionService {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const result = await tryCallGeneratedPartnerTextModel({
         quality: jobRow.result_quality,
+        fusionReferencePartners,
       });
       if (!result.success) {
         lastFailure = result.reason;
