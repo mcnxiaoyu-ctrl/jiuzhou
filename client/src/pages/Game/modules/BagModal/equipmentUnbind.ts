@@ -19,6 +19,7 @@
  * 2) 装备解绑候选列表只保留“已绑定装备且未锁定”的实例，避免 UI 与后端校验口径不一致。
  */
 import type { ItemDefLite, InventoryLocation } from '../../../../services/api';
+import { isRenameCardItemDefinitionLike } from '../../shared/renameCard';
 
 export type BagItemUseTargetType = 'none' | 'boundEquipment' | 'characterRename';
 
@@ -53,9 +54,7 @@ export const resolveBagItemUseTargetType = (
   if (!def) return 'none';
   const effectDefs = coerceEffectDefs(def.effect_defs);
 
-  for (const effect of effectDefs) {
-    if (String(effect.trigger || '').trim() !== 'use') continue;
-    if (String(effect.effect_type || '').trim() !== 'rename_character') continue;
+  if (isRenameCardItemDefinitionLike(def)) {
     return 'characterRename';
   }
 

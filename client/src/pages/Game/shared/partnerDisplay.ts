@@ -78,6 +78,12 @@ export const formatPartnerElementLabel = (element: string): string => {
   return formatElementLabel(element, '无属性');
 };
 
+export const getPartnerDisplayName = (
+  partner: Pick<PartnerDisplayDto, 'nickname' | 'name'>,
+): string => {
+  return String(partner.nickname || '').trim() || partner.name;
+};
+
 export const resolvePartnerAvatar = (avatar: string | null): string => {
   return resolveIconUrl(avatar, DEFAULT_ICON);
 };

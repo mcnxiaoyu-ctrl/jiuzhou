@@ -1,3 +1,5 @@
+import type { AxiosRequestConfig } from 'axios';
+
 import api from './core';
 
 export type InventoryLocation = 'bag' | 'warehouse' | 'equipped';
@@ -99,16 +101,29 @@ export const getInventoryInfo = (): Promise<InventoryInfoResponse> => {
   return api.get('/inventory/info');
 };
 
-export const getBagInventorySnapshot = (): Promise<InventoryBagSnapshotResponse> => {
-  return api.get('/inventory/bag/snapshot');
+export const getBagInventorySnapshot = (
+  requestConfig?: AxiosRequestConfig,
+): Promise<InventoryBagSnapshotResponse> => {
+  return api.get('/inventory/bag/snapshot', requestConfig);
 };
 
 export const getInventoryItems = (
   location: InventoryLocation = 'bag',
   page: number = 1,
-  pageSize: number = INVENTORY_ITEMS_PAGE_SIZE_MAX
+  pageSize: number = INVENTORY_ITEMS_PAGE_SIZE_MAX,
+  requestConfig?: AxiosRequestConfig,
 ): Promise<InventoryItemsResponse> => {
-  return api.get('/inventory/items', { params: { location, page, pageSize } });
+  return api.get('/inventory/items', {
+    ...requestConfig,
+    params: {
+      ...(requestConfig?.params && typeof requestConfig.params === 'object' && !Array.isArray(requestConfig.params)
+        ? requestConfig.params
+        : {}),
+      location,
+      page,
+      pageSize,
+    },
+  });
 };
 
 export interface InventoryMoveResponse {

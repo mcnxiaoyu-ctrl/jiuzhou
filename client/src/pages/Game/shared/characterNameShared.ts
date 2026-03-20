@@ -19,43 +19,67 @@
  */
 import type { Rule } from 'antd/es/form';
 
-export const CHARACTER_NAME_MIN_LENGTH = 2;
-export const CHARACTER_NAME_MAX_LENGTH = 12;
+export const NAME_MIN_LENGTH = 2;
+export const NAME_MAX_LENGTH = 12;
 export const CHARACTER_NAME_REQUIRED_MESSAGE = '请输入道号';
-export const CHARACTER_NAME_LENGTH_MESSAGE = '道号需2-12个字符';
+export const buildNameLengthMessage = (label: string): string => {
+  return `${label}需${NAME_MIN_LENGTH}-${NAME_MAX_LENGTH}个字符`;
+};
+
+export const CHARACTER_NAME_MIN_LENGTH = NAME_MIN_LENGTH;
+export const CHARACTER_NAME_MAX_LENGTH = NAME_MAX_LENGTH;
+export const CHARACTER_NAME_LENGTH_MESSAGE = buildNameLengthMessage('道号');
 
 export const normalizeCharacterNameInput = (value: string): string => {
   return String(value || '').trim();
 };
 
-export const getCharacterNameLengthError = (value: string): string | null => {
+export const getNameLengthError = (value: string, label: string): string | null => {
   const normalizedValue = normalizeCharacterNameInput(value);
   const length = normalizedValue.length;
-  if (length < CHARACTER_NAME_MIN_LENGTH || length > CHARACTER_NAME_MAX_LENGTH) {
-    return CHARACTER_NAME_LENGTH_MESSAGE;
+  if (length < NAME_MIN_LENGTH || length > NAME_MAX_LENGTH) {
+    return buildNameLengthMessage(label);
   }
   return null;
 };
 
-const createCharacterNameLengthValidator = () => {
+export const getCharacterNameLengthError = (value: string): string | null => {
+  return getNameLengthError(value, '道号');
+};
+
+const createNameLengthValidator = (fieldLabel: string) => {
   return async (_rule: Rule, value: string | undefined): Promise<void> => {
     const normalizedValue = normalizeCharacterNameInput(String(value || ''));
     if (!normalizedValue) {
       return;
     }
 
-    const lengthError = getCharacterNameLengthError(normalizedValue);
+    const lengthError = getNameLengthError(normalizedValue, fieldLabel);
     if (lengthError) {
       throw new Error(lengthError);
     }
   };
 };
 
+export const buildNameFormRules = (
+  options?: {
+    requiredMessage?: string;
+    fieldLabel?: string;
+  },
+): Rule[] => {
+  const requiredMessage = options?.requiredMessage ?? CHARACTER_NAME_REQUIRED_MESSAGE;
+  const fieldLabel = options?.fieldLabel ?? '道号';
+  return [
+    { required: true, whitespace: true, message: requiredMessage },
+    { validator: createNameLengthValidator(fieldLabel) },
+  ];
+};
+
 export const buildCharacterNameFormRules = (
   requiredMessage: string = CHARACTER_NAME_REQUIRED_MESSAGE,
 ): Rule[] => {
-  return [
-    { required: true, whitespace: true, message: requiredMessage },
-    { validator: createCharacterNameLengthValidator() },
-  ];
+  return buildNameFormRules({
+    requiredMessage,
+    fieldLabel: '道号',
+  });
 };

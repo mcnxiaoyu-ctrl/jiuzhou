@@ -30,6 +30,7 @@ import { notifyPartnerRecruitStatus } from '../services/partnerRecruitPush.js';
 import { partnerRecruitService } from '../services/partnerRecruitService.js';
 import { partnerService } from '../services/partnerService.js';
 import { getItemDefinitionById } from '../services/staticConfigLoader.js';
+import { normalizePartnerNameInput } from '../services/shared/partnerNameRules.js';
 import { getSingleParam, getSingleQueryValue, parseNonEmptyText, parsePositiveInt } from '../services/shared/httpParam.js';
 import { resolveTechniqueBookLearning } from '../services/shared/techniqueBookRules.js';
 
@@ -282,6 +283,29 @@ router.post('/activate', asyncHandler(async (req, res) => {
 router.post('/dismiss', asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
   const result = await partnerService.dismiss(characterId);
+  return sendResult(res, result);
+}));
+
+router.post('/renameWithCard', asyncHandler(async (req, res) => {
+  const userId = req.userId!;
+  const characterId = req.characterId!;
+  const partnerId = parsePositiveInt(req.body?.partnerId);
+  const itemInstanceId = parsePositiveInt(req.body?.itemInstanceId ?? req.body?.itemId);
+  const nickname = normalizePartnerNameInput(String(req.body?.nickname || ''));
+  if (!partnerId) {
+    return sendResult(res, { success: false, message: 'partnerId 参数无效' });
+  }
+  if (!itemInstanceId) {
+    return sendResult(res, { success: false, message: 'itemInstanceId 参数无效' });
+  }
+  if (!nickname) {
+    return sendResult(res, { success: false, message: '伙伴名不能为空' });
+  }
+
+  const result = await partnerService.renameWithCard(characterId, partnerId, itemInstanceId, nickname);
+  if (result.success) {
+    await safePushCharacterUpdate(userId);
+  }
   return sendResult(res, result);
 }));
 

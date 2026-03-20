@@ -19,9 +19,8 @@ import {
   normalizeCharacterNicknameInput,
   validateCharacterNickname,
 } from './shared/characterNameRules.js';
-import { isCharacterRenameCardItemDefinition } from './shared/characterRenameCard.js';
+import { consumeRenameCardItemInstance } from './shared/characterRenameCard.js';
 import { broadcastWorldSystemMessage } from './shared/worldChatBroadcast.js';
-import { getItemDefinitionById } from './staticConfigLoader.js';
 
 export type Character = CharacterComputedRow & {
   feature_unlocks: string[];
@@ -164,29 +163,9 @@ export const renameCharacterWithCard = async (
       return { success: false, message: nicknameValidation.message, broadcastContent: null };
     }
 
-    const itemResult = await query(
-      `
-        SELECT id, qty, item_def_id
-        FROM item_instance
-        WHERE id = $1 AND owner_character_id = $2
-        FOR UPDATE
-      `,
-      [itemInstanceId, characterId],
-    );
-    if (itemResult.rows.length === 0) {
-      return { success: false, message: '易名符不存在', broadcastContent: null };
-    }
-
-    const itemRow = itemResult.rows[0] as { id?: number; qty?: number; item_def_id?: string };
-    const itemDefId = String(itemRow.item_def_id || '').trim();
-    const itemDef = getItemDefinitionById(itemDefId);
-    if (!isCharacterRenameCardItemDefinition(itemDef)) {
-      return { success: false, message: '该物品不能用于改名', broadcastContent: null };
-    }
-
-    const itemQty = Math.max(0, Math.floor(Number(itemRow.qty) || 0));
-    if (itemQty <= 0) {
-      return { success: false, message: '易名符数量不足', broadcastContent: null };
+    const consumeResult = await consumeRenameCardItemInstance(characterId, itemInstanceId);
+    if (!consumeResult.success) {
+      return { success: false, message: consumeResult.message, broadcastContent: null };
     }
 
     await query(
@@ -198,15 +177,6 @@ export const renameCharacterWithCard = async (
       `,
       [nicknameValidation.nickname, characterId],
     );
-
-    if (itemQty === 1) {
-      await query('DELETE FROM item_instance WHERE id = $1', [itemInstanceId]);
-    } else {
-      await query(
-        'UPDATE item_instance SET qty = qty - 1, updated_at = NOW() WHERE id = $1',
-        [itemInstanceId],
-      );
-    }
 
     await characterServiceSideEffects.invalidateCharacterComputedCacheByCharacterId(characterId);
 

@@ -35,6 +35,7 @@ export {
   buildPartnerCombatAttrRows,
   formatPartnerAttrValue,
   formatPartnerElementLabel,
+  getPartnerDisplayName,
   getPartnerAttrLabel,
   getPartnerVisibleBaseAttrs,
   getPartnerVisibleCombatAttrs,

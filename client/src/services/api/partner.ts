@@ -1,5 +1,6 @@
 import api from './core';
 import type { CharacterFeatureCode } from '../feature';
+import type { AxiosRequestConfig } from 'axios';
 
 export type PartnerGrowthDto = {
   max_qixue: number;
@@ -329,6 +330,14 @@ export interface PartnerLearnTechniqueResponse {
   };
 }
 
+export interface PartnerRenameResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    partner: PartnerDetailDto;
+  };
+}
+
 export interface PartnerTechniqueUpgradeCostResponse {
   success: boolean;
   message: string;
@@ -440,6 +449,15 @@ export const injectPartnerExp = (
   exp: number,
 ): Promise<PartnerInjectExpResponse> => {
   return api.post('/partner/inject-exp', { partnerId, exp });
+};
+
+export const renamePartnerWithCard = (
+  partnerId: number,
+  itemInstanceId: number,
+  nickname: string,
+  requestConfig?: AxiosRequestConfig,
+): Promise<PartnerRenameResponse> => {
+  return api.post('/partner/renameWithCard', { partnerId, itemInstanceId, nickname }, requestConfig);
 };
 
 export const learnPartnerTechnique = (

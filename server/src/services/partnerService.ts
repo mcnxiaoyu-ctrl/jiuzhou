@@ -81,6 +81,8 @@ import {
 } from './shared/partnerSkillPolicy.js';
 import { loadPartnerBattleSkillPolicyState, type PartnerBattleMember } from './shared/partnerBattleMember.js';
 import { resolveTechniqueBookLearning } from './shared/techniqueBookRules.js';
+import { consumeRenameCardItemInstance } from './shared/characterRenameCard.js';
+import { validatePartnerName } from './shared/partnerNameRules.js';
 import {
   getItemMetaMap,
   getTechniqueLayerByTechniqueAndLayerStatic,
@@ -161,6 +163,10 @@ export interface PartnerLearnTechniqueResultDto {
   learnedTechnique: PartnerTechniqueDto;
   replacedTechnique: PartnerTechniqueDto | null;
   remainingBooks: PartnerBookDto[];
+}
+
+export interface PartnerRenameResultDto {
+  partner: PartnerDetailDto;
 }
 
 export interface PartnerRewardDto {
@@ -576,8 +582,9 @@ class PartnerService {
         return { success: false, message: unlockState.message };
       }
 
-      const character = await loadCharacterPartnerContext(characterId, true);
-      if (!character) return { success: false, message: '角色不存在' };
+      if (!await loadCharacterPartnerContext(characterId, true)) {
+        return { success: false, message: '角色不存在' };
+      }
 
       const partnerRow = await loadSinglePartnerRow(characterId, partnerId, true);
       if (!partnerRow) return { success: false, message: '伙伴不存在' };
@@ -666,8 +673,9 @@ class PartnerService {
         return { success: false, message: unlockState.message };
       }
 
-      const character = await loadCharacterPartnerContext(characterId, true);
-      if (!character) return { success: false, message: '角色不存在' };
+      if (!await loadCharacterPartnerContext(characterId, true)) {
+        return { success: false, message: '角色不存在' };
+      }
 
       const targetPartner = await loadSinglePartnerRow(characterId, partnerId, true);
       if (!targetPartner) return { success: false, message: '伙伴不存在' };
@@ -843,6 +851,82 @@ class PartnerService {
     } catch (error) {
       const reason = error instanceof Error ? error.message : '未知错误';
       return { success: false, message: `伙伴灌注失败：${reason}` };
+    }
+  }
+
+  @Transactional
+  async renameWithCard(
+    characterId: number,
+    partnerId: number,
+    itemInstanceId: number,
+    nickname: string,
+  ): Promise<PartnerResult<PartnerRenameResultDto>> {
+    try {
+      const unlockState = await assertPartnerSystemUnlocked(characterId);
+      if (!unlockState.success) {
+        return { success: false, message: unlockState.message };
+      }
+
+      const character = await loadCharacterPartnerContext(characterId, true);
+      if (!character) return { success: false, message: '角色不存在' };
+
+      const partnerRow = await loadSinglePartnerRow(characterId, partnerId, true);
+      if (!partnerRow) return { success: false, message: '伙伴不存在' };
+      if (await loadActivePartnerMarketListing(partnerId, true)) {
+        return { success: false, message: '已在坊市挂单的伙伴不可改名' };
+      }
+      const fusionBlockedMessage = await getPartnerFusionBlockedMessage(partnerId, true, '改名');
+      if (fusionBlockedMessage) {
+        return { success: false, message: fusionBlockedMessage };
+      }
+
+      const nicknameValidation = await validatePartnerName(nickname);
+      if (!nicknameValidation.success) {
+        return { success: false, message: nicknameValidation.message };
+      }
+
+      const consumeResult = await consumeRenameCardItemInstance(characterId, itemInstanceId);
+      if (!consumeResult.success) {
+        return { success: false, message: consumeResult.message };
+      }
+
+      await query(
+        `
+          UPDATE character_partner
+          SET nickname = $2,
+              updated_at = NOW()
+          WHERE id = $1
+        `,
+        [partnerId, nicknameValidation.nickname],
+      );
+
+      const refreshedPartner = await loadSinglePartnerRow(characterId, partnerId, false);
+      if (!refreshedPartner) {
+        return { success: false, message: '伙伴刷新失败' };
+      }
+      const partnerDef = getPartnerDefinitionById(refreshedPartner.partner_def_id);
+      if (!partnerDef) {
+        throw new Error(`伙伴模板不存在: ${refreshedPartner.partner_def_id}`);
+      }
+      const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
+      const partner = await buildPartnerDetailWithTradeState({
+        row: refreshedPartner,
+        definition: partnerDef,
+        techniqueRows: techniqueMap.get(partnerId) ?? [],
+      });
+
+      await scheduleActivePartnerBattleCacheRefreshByCharacterId(characterId);
+
+      return {
+        success: true,
+        message: '伙伴改名成功',
+        data: {
+          partner,
+        },
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '未知错误';
+      return { success: false, message: `伙伴改名失败：${reason}` };
     }
   }
 

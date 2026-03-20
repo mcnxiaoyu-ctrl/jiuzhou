@@ -1,4 +1,4 @@
-import { ArrowDownOutlined, ArrowUpOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
+import { ArrowDownOutlined, ArrowUpOutlined, CheckCircleOutlined, EditOutlined, StopOutlined } from '@ant-design/icons';
 import { App, Button, Drawer, Empty, Input, InputNumber, Modal, Progress, Segmented, Skeleton, Switch, Tag, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
@@ -8,6 +8,7 @@ import {
   dismissPartner,
   discardPartnerRecruitDraft,
   generatePartnerRecruitDraft,
+  getBagInventorySnapshot,
   getPartnerFusionStatus,
   getPartnerOverview,
   getPartnerRecruitStatus,
@@ -28,6 +29,7 @@ import {
   type PartnerSkillPolicyEntryDto,
   type PartnerTechniqueDto,
   type PartnerTechniqueUpgradeCostDto,
+  SILENT_API_REQUEST_CONFIG,
   updatePartnerSkillPolicy,
   upgradePartnerTechnique,
 } from '../../../../services/api';
@@ -36,6 +38,7 @@ import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import { DEFAULT_ICON as partnerIcon } from '../../shared/resolveIcon';
 import { dispatchPartnerChangedEvent, PARTNER_CHANGED_EVENT } from '../../shared/partnerTradeEvents';
 import { useIsMobile } from '../../shared/responsive';
+import { findRenameCardInventoryItem } from '../../shared/renameCard';
 import { getSkillCardSections, renderSkillTooltip } from '../TechniqueModal/skillDetailShared';
 import {
   buildPartnerCombatAttrRows,
@@ -48,6 +51,7 @@ import {
   formatPartnerLearnResult,
   formatPartnerTechniquePassiveLines,
   getPartnerAttrLabel,
+  getPartnerDisplayName,
   getPartnerEmptySlotCount,
   getPartnerVisibleBaseAttrs,
   groupPartnerSkillPolicyEntries,
@@ -71,6 +75,7 @@ import {
   resolvePartnerRecruitPanelView,
   resolvePartnerRecruitSubmitState,
 } from './partnerRecruitShared';
+import { usePartnerRenameCardFlow } from './usePartnerRenameCardFlow';
 import {
   buildPartnerFusionIndicator,
   groupPartnersByFusionQuality,
@@ -273,6 +278,18 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   }, [overview, selectedPartnerId]);
   const selectedPartnerActionLocked = selectedPartner?.tradeStatus === 'market_listed'
     || selectedPartner?.fusionStatus === 'fusion_locked';
+  const {
+    canRenamePartner,
+    renameSubmitting,
+    openPartnerRename,
+    renameModalNode,
+  } = usePartnerRenameCardFlow({
+    partner: selectedPartner,
+    refresh: refreshOverview,
+    onAfterSuccess: () => {
+      gameSocket.refreshCharacter();
+    },
+  });
   const skillPolicyChanged = useMemo(() => {
     if (!skillPolicy) return false;
     const baseEntries = skillPolicy.entries;
@@ -506,6 +523,35 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       setActionKey('');
     }
   }, [message, refreshOverview]);
+
+  const handleOpenPartnerRename = useCallback(async () => {
+    if (!selectedPartner || !canRenamePartner) {
+      return;
+    }
+
+    setActionKey(`rename-open-${selectedPartner.id}`);
+    try {
+      const res = await getBagInventorySnapshot(SILENT_API_REQUEST_CONFIG);
+      if (!res.success || !res.data) {
+        throw new Error(getUnifiedApiErrorMessage(res, '读取背包失败'));
+      }
+
+      const renameCardItem = findRenameCardInventoryItem(res.data.bagItems);
+      if (!renameCardItem) {
+        message.warning('背包中暂无易名符');
+        return;
+      }
+
+      openPartnerRename({
+        itemInstanceId: renameCardItem.id,
+        itemName: renameCardItem.def?.name ?? '易名符',
+      });
+    } catch (error) {
+      message.error(getUnifiedApiErrorMessage(error, '读取易名符失败'));
+    } finally {
+      setActionKey('');
+    }
+  }, [canRenamePartner, message, openPartnerRename, selectedPartner]);
 
   const handleInjectExp = useCallback(async () => {
     if (!selectedPartner) return;
@@ -788,7 +834,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
               <img className="partner-list-thumb" src={resolvePartnerAvatar(partner.avatar)} alt={partner.name} />
               <div className="partner-list-main">
                 <div className="partner-list-info">
-                  <div className="partner-list-name">{partner.nickname || partner.name}</div>
+                  <div className="partner-list-name">{getPartnerDisplayName(partner)}</div>
                   <div className="partner-list-desc">
                     等级 {partner.level} · <span className={getElementTextClassName(partner.element)}>{formatPartnerElementLabel(partner.element)}</span> · {partner.role}
                   </div>
@@ -838,7 +884,21 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
         <div className="partner-current-top">
           <img className="partner-avatar" src={resolvePartnerAvatar(selectedPartner.avatar)} alt={selectedPartner.name} />
           <div className="partner-current-main">
-            <div className="partner-name">{selectedPartner.nickname || selectedPartner.name}</div>
+            <div className="partner-name-row">
+              <div className="partner-name">{getPartnerDisplayName(selectedPartner)}</div>
+              <button
+                type="button"
+                className="partner-name-edit"
+                aria-label="伙伴改名"
+                title="伙伴改名"
+                disabled={!canRenamePartner || selectedPartnerActionLocked || renameSubmitting || actionKey === `rename-open-${selectedPartner.id}`}
+                onClick={() => {
+                  void handleOpenPartnerRename();
+                }}
+              >
+                <EditOutlined />
+              </button>
+            </div>
             <div className="partner-tag-row">
               <Tag color={selectedPartner.isActive ? 'green' : 'default'}>{selectedPartner.isActive ? '当前出战' : '未出战'}</Tag>
               <Tag color="blue">等级 {selectedPartner.level}</Tag>
@@ -1497,7 +1557,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
                               alt={partner.name}
                             />
                             <div className="partner-fusion-material-main">
-                              <div className="partner-fusion-material-name">{partner.nickname || partner.name}</div>
+                              <div className="partner-fusion-material-name">{getPartnerDisplayName(partner)}</div>
                               <div className="partner-fusion-material-meta">
                                 等级 {partner.level} · {partner.role}
                               </div>
@@ -1799,6 +1859,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
         >
           {renderBody()}
         </Drawer>
+        {renameModalNode}
       </>
     );
   }
@@ -1819,6 +1880,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       >
         {renderBody()}
       </Modal>
+      {renameModalNode}
     </>
   );
 };

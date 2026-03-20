@@ -17,21 +17,11 @@
  * 1. 同一次提交流程内不能重复点击提交，否则会产生重复请求与重复扣卡风险。
  * 2. 成功后必须同时刷新背包和派发 `inventory:changed`，否则道具数量与外层角标会不同步。
  */
-import { App } from 'antd';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
-import {
-  notifyUnifiedApiError,
-  renameCharacterWithCard,
-  SILENT_API_REQUEST_CONFIG,
-} from '../../../services/api';
+import { renameCharacterWithCard } from '../../../services/api';
 import { gameSocket } from '../../../services/gameSocket';
-import CharacterRenameModal from './CharacterRenameModal';
-
-interface CharacterRenameCardContext {
-  itemInstanceId: number;
-  itemName: string;
-}
+import { useRenameCardFlow, type RenameCardContext } from './useRenameCardFlow';
 
 interface UseCharacterRenameCardFlowOptions {
   refresh: () => Promise<void>;
@@ -43,64 +33,30 @@ export const useCharacterRenameCardFlow = ({
   onAfterSuccess,
 }: UseCharacterRenameCardFlowOptions): {
   renameSubmitting: boolean;
-  openCharacterRename: (context: CharacterRenameCardContext) => void;
+  openCharacterRename: (context: RenameCardContext) => void;
   renameModalNode: ReactNode;
 } => {
-  const { message } = App.useApp();
-  const [renameContext, setRenameContext] = useState<CharacterRenameCardContext | null>(null);
-  const [renameSubmitting, setRenameSubmitting] = useState(false);
-
-  const closeCharacterRename = useCallback(() => {
-    if (renameSubmitting) {
-      return;
-    }
-    setRenameContext(null);
-  }, [renameSubmitting]);
-
-  const openCharacterRename = useCallback((context: CharacterRenameCardContext) => {
-    setRenameContext(context);
-  }, []);
-
-  const handleSubmitCharacterRename = useCallback(async (nickname: string) => {
-    if (!renameContext || renameSubmitting) {
-      return;
-    }
-
-    setRenameSubmitting(true);
-    try {
-      const result = await renameCharacterWithCard(
-        renameContext.itemInstanceId,
-        nickname,
-        SILENT_API_REQUEST_CONFIG,
-      );
-      message.success(result.message || '改名成功');
-      await refresh();
-      window.dispatchEvent(new Event('inventory:changed'));
-      setRenameContext(null);
-      onAfterSuccess?.();
-    } catch (error) {
-      notifyUnifiedApiError(message, error, '改名失败');
-    } finally {
-      setRenameSubmitting(false);
-    }
-  }, [message, onAfterSuccess, refresh, renameContext, renameSubmitting]);
-
-  const renameModalNode = useMemo(() => {
-    return (
-      <CharacterRenameModal
-        open={renameContext !== null}
-        itemName={renameContext?.itemName ?? '易名符'}
-        initialNickname={gameSocket.getCharacter()?.nickname ?? ''}
-        submitting={renameSubmitting}
-        onCancel={closeCharacterRename}
-        onSubmit={handleSubmitCharacterRename}
-      />
-    );
-  }, [closeCharacterRename, handleSubmitCharacterRename, renameContext, renameSubmitting]);
+  const { renameSubmitting, openRename, renameModalNode } = useRenameCardFlow({
+    currentName: gameSocket.getCharacter()?.nickname ?? '',
+    copy: {
+      title: '使用易名符',
+      inputLabel: '新道号',
+      inputPlaceholder: '请输入新的道号',
+      submitText: '确认改名',
+      buildDescription: (itemName) => `消耗 1 张【${itemName}】后，立即将当前角色道号改为新的名称。`,
+      successFallbackMessage: '改名成功',
+      failureFallbackMessage: '改名失败',
+    },
+    refresh,
+    requestRename: (context: RenameCardContext, name, requestConfig) => {
+      return renameCharacterWithCard(context.itemInstanceId, name, requestConfig);
+    },
+    onAfterSuccess,
+  });
 
   return {
     renameSubmitting,
-    openCharacterRename,
+    openCharacterRename: openRename,
     renameModalNode,
   };
 };

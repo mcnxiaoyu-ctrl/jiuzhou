@@ -20,10 +20,16 @@
 import { query } from '../../config/database.js';
 import { guardSensitiveText } from '../sensitiveWordService.js';
 
-export const CHARACTER_NICKNAME_MIN_LENGTH = 2;
-export const CHARACTER_NICKNAME_MAX_LENGTH = 12;
+export const NAME_MIN_LENGTH = 2;
+export const NAME_MAX_LENGTH = 12;
 export const CHARACTER_NICKNAME_REQUIRED_MESSAGE = '道号不能为空';
-export const CHARACTER_NICKNAME_LENGTH_MESSAGE = '道号需2-12个字符';
+export const buildNameLengthMessage = (label: string): string => {
+  return `${label}需${NAME_MIN_LENGTH}-${NAME_MAX_LENGTH}个字符`;
+};
+
+export const CHARACTER_NICKNAME_MIN_LENGTH = NAME_MIN_LENGTH;
+export const CHARACTER_NICKNAME_MAX_LENGTH = NAME_MAX_LENGTH;
+export const CHARACTER_NICKNAME_LENGTH_MESSAGE = buildNameLengthMessage('道号');
 export const CHARACTER_NICKNAME_DUPLICATE_MESSAGE = '该道号已被使用';
 export const CHARACTER_NICKNAME_SENSITIVE_MESSAGE = '道号包含敏感词，请重新输入';
 export const CHARACTER_NICKNAME_SENSITIVE_UNAVAILABLE_MESSAGE = '敏感词检测服务暂不可用，请稍后重试';
@@ -42,16 +48,20 @@ export const normalizeCharacterNicknameInput = (nickname: string): string => {
   return String(nickname || '').trim();
 };
 
-export const getCharacterNicknameLengthError = (nickname: string): string | null => {
+export const getNameLengthError = (nickname: string, label: string): string | null => {
   const normalizedNickname = normalizeCharacterNicknameInput(nickname);
   const nicknameLength = normalizedNickname.length;
   if (
-    nicknameLength < CHARACTER_NICKNAME_MIN_LENGTH ||
-    nicknameLength > CHARACTER_NICKNAME_MAX_LENGTH
+    nicknameLength < NAME_MIN_LENGTH ||
+    nicknameLength > NAME_MAX_LENGTH
   ) {
-    return CHARACTER_NICKNAME_LENGTH_MESSAGE;
+    return buildNameLengthMessage(label);
   }
   return null;
+};
+
+export const getCharacterNicknameLengthError = (nickname: string): string | null => {
+  return getNameLengthError(nickname, '道号');
 };
 
 export const validateCharacterNickname = async (
