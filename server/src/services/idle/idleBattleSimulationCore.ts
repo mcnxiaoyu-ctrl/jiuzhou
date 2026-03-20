@@ -231,6 +231,8 @@ export function simulateIdleBattle(
   const replaySnapshot = createIdleBattleReplaySnapshot(initialState, session);
   const engine = new BattleEngine(initialState, () => {});
   const playerSelector = resolveIdleBattlePlayerSelector(replaySnapshot);
+  // 先启动战斗以触发被动技能（包括光环）进场生效，再执行自动战斗
+  engine.startBattle();
   engine.autoExecute(playerSelector);
 
   const finalState = engine.getState();
