@@ -41,6 +41,13 @@ type ActivePartnerBattleCacheValue = {
   member: PartnerBattleMember | null;
 };
 
+const hasOwnAvatarField = (
+  member: PartnerBattleMember | null,
+): boolean => {
+  if (!member) return true;
+  return Object.prototype.hasOwnProperty.call(member.data, 'avatar');
+};
+
 const buildCharacterBattleLoadout = async (
   characterId: number,
 ): Promise<CharacterBattleLoadout | null> => {
@@ -91,7 +98,7 @@ const characterBattleLoadoutCache = createCacheLayer<number, CharacterBattleLoad
 });
 
 const activePartnerBattleMemberCache = createCacheLayer<number, ActivePartnerBattleCacheValue>({
-  keyPrefix: 'battle:profile:active-partner:v1:',
+  keyPrefix: 'battle:profile:active-partner:v2:',
   redisTtlSec: BATTLE_PROFILE_REDIS_TTL_SEC,
   memoryTtlMs: BATTLE_PROFILE_MEMORY_TTL_MS,
   loader: buildActivePartnerBattleCacheValue,
@@ -129,6 +136,15 @@ export const getActivePartnerBattleMemberByCharacterId = async (
   const cached = await activePartnerBattleMemberCache.get(characterId);
   if (!cached) {
     return null;
+  }
+  if (!hasOwnAvatarField(cached.member)) {
+    const nextValue = await buildActivePartnerBattleCacheValue(characterId);
+    if (!nextValue) {
+      await activePartnerBattleMemberCache.invalidate(characterId);
+      return null;
+    }
+    await activePartnerBattleMemberCache.set(characterId, nextValue);
+    return nextValue.member;
   }
   return cached.member;
 };

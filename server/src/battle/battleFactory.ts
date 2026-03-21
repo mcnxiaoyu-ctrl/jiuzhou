@@ -24,6 +24,7 @@ export interface CharacterData {
   id: number;
   nickname: string;
   monthCardActive?: boolean;
+  avatar?: string | null;
   realm: string;
   sub_realm?: string | null;
   attribute_element: string;
@@ -361,6 +362,7 @@ function createCharacterUnit(
     name: data.nickname,
     type,
     monthCardActive: data.monthCardActive,
+    avatar: type === 'player' || type === 'partner' ? data.avatar ?? null : undefined,
     sourceId: data.id,
     baseAttrs: { ...attrs },
     currentAttrs: attrs,

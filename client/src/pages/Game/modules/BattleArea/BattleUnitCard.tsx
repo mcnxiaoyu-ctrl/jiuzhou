@@ -22,6 +22,7 @@
 
 import { type CSSProperties } from 'react';
 import PlayerName from '../../shared/PlayerName';
+import { resolveBattleUnitBackgroundImage } from './battleUnitBackground';
 import type { BattleFieldCardSize } from './battleFieldLayout';
 import { resolveBattleUnitStatusTags } from './battleUnitStatusTags';
 import type { BattleFloatText, BattleUnit } from './types';
@@ -55,19 +56,15 @@ const StatBar: React.FC<{
   const percent = toPercent(value, total);
   return (
     <div className={`battle-bar battle-bar-${tone}`}>
-      <div className="battle-bar-meta">
-        <span className="battle-bar-value">
-          {Math.max(0, Math.floor(value))}/{Math.max(0, Math.floor(total))}
-        </span>
-      </div>
       <div className="battle-bar-track">
         <div className="battle-bar-fill" style={{ width: `${percent}%` }} />
+        <span className="battle-bar-value battle-bar-value-overlay">
+          {Math.max(0, Math.floor(value))}
+        </span>
       </div>
     </div>
   );
 };
-
-const buildUnitStateText = (hp: number): string => ((Number(hp) || 0) > 0 ? '应战中' : '已倒下');
 
 export const BattleUnitCard: React.FC<BattleUnitCardProps> = ({
   unit,
@@ -81,13 +78,14 @@ export const BattleUnitCard: React.FC<BattleUnitCardProps> = ({
   onClick,
 }) => {
   const dead = (Number(unit.hp) || 0) <= 0;
-  const hpPercent = Math.round(toPercent(unit.hp, unit.maxHp));
   const statusTags = resolveBattleUnitStatusTags(unit.buffs, statusTagLimit);
+  const backgroundImage = resolveBattleUnitBackgroundImage(unit);
 
   return (
     <div
-      className={`battle-unit-card size-${size} ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${dead ? 'dead' : ''}`}
+      className={`battle-unit-card size-${size} ${backgroundImage ? 'has-avatar-background' : ''} ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${dead ? 'dead' : ''}`}
       data-team={team}
+      data-unit-type={unit.unitType}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
@@ -98,6 +96,12 @@ export const BattleUnitCard: React.FC<BattleUnitCardProps> = ({
         onClick();
       }}
     >
+      {backgroundImage ? (
+        <div className="battle-unit-avatar-background" aria-hidden="true">
+          <img className="battle-unit-avatar-image" src={backgroundImage} alt="" />
+        </div>
+      ) : null}
+
       <div className="battle-floats">
         {(floats ?? []).map((floatText) => (
           <div
@@ -121,16 +125,6 @@ export const BattleUnitCard: React.FC<BattleUnitCardProps> = ({
               />
             </div>
           </div>
-
-          <div className="battle-unit-vitals">
-            <div className="battle-unit-hp-ratio">{hpPercent}%</div>
-            <div className="battle-unit-state">{buildUnitStateText(unit.hp)}</div>
-          </div>
-        </div>
-
-        <div className="battle-unit-bars">
-          <StatBar value={unit.hp} total={unit.maxHp} tone="hp" />
-          <StatBar value={unit.qi} total={unit.maxQi} tone="qi" />
         </div>
 
         {showStatusRow && statusTags.length > 0 ? (
@@ -146,6 +140,11 @@ export const BattleUnitCard: React.FC<BattleUnitCardProps> = ({
             ))}
           </div>
         ) : null}
+
+        <div className="battle-unit-bars">
+          <StatBar value={unit.hp} total={unit.maxHp} tone="hp" />
+          <StatBar value={unit.qi} total={unit.maxQi} tone="qi" />
+        </div>
       </div>
     </div>
   );

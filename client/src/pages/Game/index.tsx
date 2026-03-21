@@ -533,9 +533,14 @@ const pickStatRatio = (stats: Array<{ label: string; value: string | number }> |
 };
 
 const buildEnemyUnit = (target: InfoTarget): BattleUnit => {
+  const unitType = target.type === 'player' || target.type === 'monster' || target.type === 'npc'
+    ? target.type
+    : undefined;
   const fallback: BattleUnit = {
     id: `${target.type}-${target.id}`,
     name: target.name,
+    unitType,
+    avatar: target.type === 'player' ? target.avatar ?? null : null,
     tag: target.realm || (target.type === 'monster' ? '凡兽' : '凡人'),
     hp: 31,
     maxHp: 31,
@@ -578,6 +583,8 @@ const buildAllyUnit = (character: CharacterData | null): BattleUnit => {
   const fallback: BattleUnit = {
     id: 'player-self',
     name: '我方',
+    unitType: 'player',
+    avatar: null,
     tag: '凡人',
     hp: 100,
     maxHp: 100,
@@ -588,6 +595,8 @@ const buildAllyUnit = (character: CharacterData | null): BattleUnit => {
   return {
     id: `player-${character.id}`,
     name: character.nickname || '我方',
+    unitType: 'player',
+    avatar: character.avatar ?? null,
     tag: character.realm || '凡人',
     hp: character.qixue ?? fallback.hp,
     maxHp: character.maxQixue ?? fallback.maxHp,

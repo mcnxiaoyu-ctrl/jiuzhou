@@ -16,8 +16,8 @@
  * - 业务模块与入口模块复用同一条 URL 解析链
  *
  * 关键边界条件与坑点：
- * 1. `/uploads/*` 必须始终走 `SERVER_BASE`，不能误切到 CDN，否则上传内容会 404。
- * 2. 其它以 `/` 开头的静态资源统一走 `CDN_BASE`，这样 favicon 与游戏内图片才不会再出现“同逻辑多处各自拼路径”。
+ * 1. `/uploads/*` 必须始终走 `SERVER_BASE`，不能误切到静态资源域，否则玩家上传头像会 404。
+ * 2. 其它以 `/` 开头的静态资源默认走当前页面静态源；若配置 `VITE_CDN_BASE`，再统一走 CDN，避免前端 public 资源被误拼到 API 源站。
  */
 
 const normalizeBaseUrl = (raw: string): string => {
@@ -67,7 +67,11 @@ const resolveCdnBase = (): string => {
   const fromEnv = normalizeBaseUrl(
     (import.meta.env.VITE_CDN_BASE as string | undefined) ?? '',
   );
-  return fromEnv || SERVER_BASE;
+  if (fromEnv) return fromEnv;
+  if (typeof window !== 'undefined' && window.location) {
+    return normalizeBaseUrl(window.location.origin);
+  }
+  return SERVER_BASE;
 };
 
 export interface AssetUrlHostConfig {

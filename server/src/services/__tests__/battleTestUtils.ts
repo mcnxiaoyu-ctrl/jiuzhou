@@ -85,6 +85,7 @@ export const createCharacterData = (
   user_id: id,
   id,
   nickname: `角色${id}`,
+  avatar: null,
   realm: '炼气一层',
   sub_realm: null,
   attribute_element: 'none',

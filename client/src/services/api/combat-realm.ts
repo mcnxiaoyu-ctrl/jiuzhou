@@ -23,6 +23,7 @@ export type BattleUnitDto = {
   name: string;
   type: 'player' | 'monster' | 'npc' | 'summon' | 'partner';
   monthCardActive?: boolean;
+  avatar?: string | null;
   qixue: number;
   lingqi: number;
   currentAttrs: { max_qixue: number; max_lingqi: number; realm?: string };

@@ -3,6 +3,7 @@ import type {
   BattleCooldownMetaDto,
   BattleLogEntryDto,
   BattleRewardsDto,
+  BattleUnitDto,
   BattleStateDto,
 } from './api/combat-realm';
 
@@ -108,6 +109,62 @@ const mergeBattleLogs = (
   return baseLogs.concat(incomingLogs);
 };
 
+type BattleTeamStateDto = BattleStateDto['teams']['attacker'];
+
+const mergeBattleUnits = (
+  previousUnits: BattleUnitDto[],
+  incomingUnits: BattleUnitDto[],
+): BattleUnitDto[] => {
+  const previousUnitById = new Map(previousUnits.map((unit) => [unit.id, unit]));
+  return incomingUnits.map((unit) => {
+    const previousUnit = previousUnitById.get(unit.id);
+    if (!previousUnit) return unit;
+    return {
+      ...previousUnit,
+      ...unit,
+      currentAttrs: {
+        ...previousUnit.currentAttrs,
+        ...unit.currentAttrs,
+      },
+      buffs: unit.buffs,
+    };
+  });
+};
+
+const mergeBattleTeamState = (
+  previousTeam: BattleTeamStateDto,
+  incomingTeam: BattleTeamStateDto,
+): BattleTeamStateDto => {
+  return {
+    ...previousTeam,
+    ...incomingTeam,
+    units: mergeBattleUnits(previousTeam.units, incomingTeam.units),
+  };
+};
+
+const mergeBattleStateDelta = (
+  previousState: BattleStateDto | null,
+  incomingState: BattleStateDto,
+  unitsDelta: boolean,
+): BattleStateDto => {
+  if (!unitsDelta || !previousState) return incomingState;
+  if (previousState.battleId !== incomingState.battleId) return incomingState;
+  return {
+    ...previousState,
+    ...incomingState,
+    teams: {
+      attacker: mergeBattleTeamState(
+        previousState.teams.attacker,
+        incomingState.teams.attacker,
+      ),
+      defender: mergeBattleTeamState(
+        previousState.teams.defender,
+        incomingState.teams.defender,
+      ),
+    },
+  };
+};
+
 export const normalizeBattleRealtimePayload = (
   raw: BattleRealtimeWirePayload,
   previous: BattleRealtimeStatePayload | null,
@@ -143,6 +200,8 @@ export const normalizeBattleRealtimePayload = (
 
   const state = raw.state ?? envelope?.state;
   if (!state) return null;
+  const unitsDelta = Boolean(raw.unitsDelta);
+  const nextState = mergeBattleStateDelta(previous?.state ?? null, state, unitsDelta);
 
   const incomingLogs = raw.logs ?? envelope?.logs ?? [];
   const logDelta = Boolean(raw.logDelta);
@@ -157,7 +216,7 @@ export const normalizeBattleRealtimePayload = (
         ? kind
         : 'battle_state',
     battleId,
-    state,
+    state: nextState,
     logs: nextLogs,
     logStart,
     logDelta,
@@ -167,7 +226,7 @@ export const normalizeBattleRealtimePayload = (
     authoritative,
     success,
     message,
-    unitsDelta: Boolean(raw.unitsDelta),
+    unitsDelta,
     battleStartCooldownMs,
     retryAfterMs,
     nextBattleAvailableAt,
