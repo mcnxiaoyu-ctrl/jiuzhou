@@ -242,10 +242,10 @@ const toListingDto = (
     itemInstanceId: Number(row.item_instance_id),
     itemDefId,
     name: generatedTechniqueBookDisplay?.name ?? String(itemDef.name ?? ""),
-    icon:
-      itemDef.icon === null || itemDef.icon === undefined
+    icon: generatedTechniqueBookDisplay?.icon ??
+      (itemDef.icon === null || itemDef.icon === undefined
         ? null
-        : String(itemDef.icon),
+        : String(itemDef.icon)),
     quality:
       row.instance_quality === null || row.instance_quality === undefined
         ? generatedTechniqueBookDisplay?.quality ??

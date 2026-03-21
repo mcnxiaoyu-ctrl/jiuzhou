@@ -60,6 +60,7 @@ import {
 } from './shared/techniqueResearchRefund.js';
 import { persistGeneratedTechniqueCandidateTx } from './shared/generatedTechniquePersistence.js';
 import { getGeneratedTechniqueDefinitionById } from './generatedTechniqueConfigStore.js';
+import { generateGeneratedTechniqueBookCover } from './shared/generatedTechniqueBookCoverGenerator.js';
 
 export type TechniqueGenerationStatus =
   | 'pending'
@@ -1220,7 +1221,7 @@ class TechniqueGenerationService {
 
     const draftRes = await query(
       `
-        SELECT id, quality, is_published, name_locked
+        SELECT id, quality, type, attribute_element, description, is_published, name_locked
         FROM generated_technique_def
         WHERE id = $1
         FOR UPDATE
@@ -1271,6 +1272,14 @@ class TechniqueGenerationService {
     );
 
     const qualityText = asString(draftRow.quality) || '黄';
+    const generatedBookCoverIcon = await generateGeneratedTechniqueBookCover({
+      techniqueId: draftTechniqueId,
+      techniqueName: nameCheck.displayName,
+      quality: qualityText,
+      techniqueType: asString(draftRow.type) || '功法',
+      attributeElement: asString(draftRow.attribute_element) || 'none',
+      description: asString(draftRow.description) || `${nameCheck.displayName} 的仙侠功法秘卷封面`,
+    });
     const addRes = await addItemToInventory(characterId, userId, GENERATED_TECHNIQUE_BOOK_ITEM_DEF_ID, 1, {
       location: 'bag',
       bindType: 'none',
@@ -1278,6 +1287,7 @@ class TechniqueGenerationService {
       metadata: {
         generatedTechniqueId: draftTechniqueId,
         generatedTechniqueName: nameCheck.displayName,
+        generatedBookCoverIcon,
       },
       quality: qualityText,
       qualityRank: resolveQualityRankFromName(qualityText, 1),

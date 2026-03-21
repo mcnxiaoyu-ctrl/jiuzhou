@@ -285,7 +285,10 @@ const loadPartnerBooks = async (characterId: number): Promise<PartnerBookDto[]> 
         normalizeText(generatedDisplay?.name) ||
         normalizeText(itemDef.name) ||
         itemDefId,
-      icon: normalizeText(itemDef.icon) || null,
+      icon:
+        normalizeText(generatedDisplay?.icon) ||
+        normalizeText(itemDef.icon) ||
+        null,
       techniqueId: learning.techniqueId,
       techniqueName:
         normalizeText(generatedDisplay?.generatedTechniqueName) ||

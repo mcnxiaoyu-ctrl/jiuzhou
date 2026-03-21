@@ -7,7 +7,7 @@
  *
  * 输入/输出：
  * - 输入：itemDefId + itemInstance.metadata。
- * - 输出：命中时返回展示覆盖字段（名称/品质/描述/标签/关联功法ID）；否则返回 null。
+ * - 输出：命中时返回展示覆盖字段（名称/图标/品质/描述/标签/关联功法ID）；否则返回 null。
  *
  * 数据流/状态流：
  * metadata.generatedTechniqueId -> 生成功法缓存/功法定义 -> 组装展示 DTO 覆盖字段。
@@ -35,6 +35,7 @@ export type GeneratedTechniqueBookDisplay = {
   generatedTechniqueId: string;
   generatedTechniqueName: string;
   name: string;
+  icon: string | null;
   quality: string | null;
   description: string;
   longDesc: string;
@@ -65,6 +66,7 @@ export const resolveGeneratedTechniqueBookDisplay = (
     asString(fallbackTechniqueDef?.name) || asString(metadata.generatedTechniqueName);
   if (!generatedTechniqueName) return null;
 
+  const icon = asString(metadata.generatedBookCoverIcon) || null;
   const quality = asString(fallbackTechniqueDef?.quality) || null;
   const description =
     asString(fallbackTechniqueDef?.description) ||
@@ -78,6 +80,7 @@ export const resolveGeneratedTechniqueBookDisplay = (
     generatedTechniqueId,
     generatedTechniqueName,
     name: `《${generatedTechniqueName}》秘卷`,
+    icon,
     quality,
     description,
     longDesc,
