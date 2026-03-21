@@ -23,6 +23,9 @@ import { describe, expect, it } from 'vitest';
 import type { BattleSessionSnapshotDto } from '../../../../services/api/battleSession';
 import {
   buildBattleSessionAdvanceKey,
+  DEFAULT_BATTLE_SESSION_AUTO_ADVANCE_DELAY_MS,
+  getBattleSessionAutoAdvanceDelayMs,
+  TOWER_BATTLE_SESSION_AUTO_ADVANCE_DELAY_MS,
   resolveBattleSessionAdvanceMode,
 } from '../battleSessionAdvance';
 
@@ -80,11 +83,26 @@ describe('resolveBattleSessionAdvanceMode', () => {
     ).toBe('manual_session');
   });
 
-  it('千层塔即使可推进，也必须停在手动继续', () => {
+  it('千层塔通关后在继续下一层时，应允许自动推进', () => {
     expect(
       resolveBattleSessionAdvanceMode({
         session: createSession({
           type: 'tower',
+          context: { runId: 'tower-run-1', floor: 12 },
+        }),
+        inTeam: false,
+        isTeamLeader: true,
+        blockedAutoAdvanceSessionKey: '',
+      }),
+    ).toBe('auto_session');
+  });
+
+  it('千层塔结束挑战时，应保持手动返回地图', () => {
+    expect(
+      resolveBattleSessionAdvanceMode({
+        session: createSession({
+          type: 'tower',
+          nextAction: 'return_to_map',
           context: { runId: 'tower-run-1', floor: 12 },
         }),
         inTeam: false,
@@ -103,5 +121,25 @@ describe('resolveBattleSessionAdvanceMode', () => {
         blockedAutoAdvanceSessionKey: '',
       }),
     ).toBe('none');
+  });
+
+  it('千层塔自动推进应等待 1 秒，其余会话保持原有短延迟', () => {
+    expect(
+      getBattleSessionAutoAdvanceDelayMs(
+        createSession({
+          type: 'tower',
+          context: { runId: 'tower-run-1', floor: 18 },
+        }),
+      ),
+    ).toBe(TOWER_BATTLE_SESSION_AUTO_ADVANCE_DELAY_MS);
+
+    expect(
+      getBattleSessionAutoAdvanceDelayMs(
+        createSession({
+          type: 'dungeon',
+          context: { instanceId: 'dungeon-instance-2' },
+        }),
+      ),
+    ).toBe(DEFAULT_BATTLE_SESSION_AUTO_ADVANCE_DELAY_MS);
   });
 });

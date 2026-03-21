@@ -120,6 +120,7 @@ import {
 } from './shared/battleViewSync';
 import {
   buildBattleSessionAdvanceKey,
+  getBattleSessionAutoAdvanceDelayMs,
   resolveBattleSessionAdvanceMode,
 } from './shared/battleSessionAdvance';
 import { resolveBattleViewUiState } from './shared/battleViewUiState';
@@ -1431,10 +1432,11 @@ const Game: FC<GameProps> = ({ onLogout }) => {
 
     clearSessionAutoAdvanceTimer();
     lastAutoAdvanceSessionKeyRef.current = currentSessionAdvanceKey;
+    const autoAdvanceDelayMs = getBattleSessionAutoAdvanceDelayMs(session);
     sessionAutoAdvanceTimerRef.current = window.setTimeout(() => {
       sessionAutoAdvanceTimerRef.current = null;
       void handleAdvanceBattleSession();
-    }, 200);
+    }, autoAdvanceDelayMs);
 
     return () => {
       clearSessionAutoAdvanceTimer();

@@ -20,6 +20,9 @@
 import type { BattleSessionSnapshotDto } from '../../../services/api/battleSession';
 import type { BattleAdvanceMode } from '../modules/BattleArea/autoNextPolicy';
 
+export const DEFAULT_BATTLE_SESSION_AUTO_ADVANCE_DELAY_MS = 200;
+export const TOWER_BATTLE_SESSION_AUTO_ADVANCE_DELAY_MS = 1000;
+
 export const buildBattleSessionAdvanceKey = (
   session: BattleSessionSnapshotDto | null | undefined,
 ): string => {
@@ -38,6 +41,34 @@ const canControlBattleSession = (params: {
   isTeamLeader: boolean;
 }): boolean => {
   return !params.inTeam || params.isTeamLeader;
+};
+
+/**
+ * BattleSession 自动推进延迟策略。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把不同会话类型的自动推进等待时间集中到单一纯函数，避免 Game 页 effect 再写一套 `if (tower)` 的分支。
+ * 2. 做什么：明确千层塔胜利后保留 1 秒展示窗口，再自动进入下一层；其他会话继续沿用原有短延迟。
+ * 3. 不做什么：不判断当前 session 是否允许自动推进；是否自动推进仍由 `resolveBattleSessionAdvanceMode` 负责。
+ *
+ * 输入/输出：
+ * - 输入：当前 battle session 快照。
+ * - 输出：自动推进前端等待毫秒数。
+ *
+ * 数据流/状态流：
+ * - Game 拿到 active session -> 共享策略返回 delay -> 自动推进定时器按该 delay 触发 advance。
+ *
+ * 关键边界条件与坑点：
+ * 1. 只有千层塔“继续下一层”需要拉长到 1 秒；塔的 `return_to_map` 结束态不能误用这个延迟去暗示自动结束。
+ * 2. 延迟策略必须和推进模式解耦；后续若新增会话类型，只需要改本模块，不要在页面层散落条件判断。
+ */
+export const getBattleSessionAutoAdvanceDelayMs = (
+  session: BattleSessionSnapshotDto | null | undefined,
+): number => {
+  if (session?.type === 'tower' && session.nextAction === 'advance') {
+    return TOWER_BATTLE_SESSION_AUTO_ADVANCE_DELAY_MS;
+  }
+  return DEFAULT_BATTLE_SESSION_AUTO_ADVANCE_DELAY_MS;
 };
 
 export const resolveBattleSessionAdvanceMode = (params: {
@@ -63,7 +94,7 @@ export const resolveBattleSessionAdvanceMode = (params: {
     return 'manual_session';
   }
 
-  if (session.type === 'tower') {
+  if (session.type === 'tower' && session.nextAction === 'return_to_map') {
     return 'manual_session';
   }
 
