@@ -135,6 +135,16 @@ import {
   type LastDungeonSelection,
   type MapModalCategory,
 } from './modules/MapModal/lastDungeonSelection';
+import {
+  getDesktopSidePanelDisplay,
+  getInitialDesktopSidePanelState,
+  type DesktopSidePanelSide,
+} from './shared/desktopSidePanels';
+import {
+  getDesktopBottomPanelDisplay,
+  getInitialDesktopBottomPanelCollapsed,
+} from './shared/desktopBottomPanel';
+import DesktopPanelToggleButton from './shared/DesktopPanelToggleButton';
 
 interface GameProps {
   onLogout?: () => void;
@@ -688,6 +698,8 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [hasHydratedPosition, setHasHydratedPosition] = useState<boolean>(false);
   const [trackedRoomIds, setTrackedRoomIds] = useState<string[]>([]);
   const isMobile = useIsMobile();
+  const [desktopSidePanels, setDesktopSidePanels] = useState(getInitialDesktopSidePanelState);
+  const [desktopChatCollapsed, setDesktopChatCollapsed] = useState(getInitialDesktopBottomPanelCollapsed);
   const [topTab, setTopTab] = useState<'map' | 'room'>('map');
   const [mobileChatDrawerOpen, setMobileChatDrawerOpen] = useState(false);
   const [playerInfoOpen, setPlayerInfoOpen] = useState(false);
@@ -758,6 +770,25 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   >([]);
   const [unequippingId, setUnequippingId] = useState<number | null>(null);
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
+  const leftSidePanelDisplay = useMemo(
+    () => getDesktopSidePanelDisplay('left', desktopSidePanels.leftCollapsed),
+    [desktopSidePanels.leftCollapsed],
+  );
+  const rightSidePanelDisplay = useMemo(
+    () => getDesktopSidePanelDisplay('right', desktopSidePanels.rightCollapsed),
+    [desktopSidePanels.rightCollapsed],
+  );
+  const desktopBottomPanelDisplay = useMemo(
+    () => getDesktopBottomPanelDisplay(desktopChatCollapsed),
+    [desktopChatCollapsed],
+  );
+  const toggleDesktopSidePanel = useCallback((side: DesktopSidePanelSide) => {
+    setDesktopSidePanels((current) => (
+      side === 'left'
+        ? { ...current, leftCollapsed: !current.leftCollapsed }
+        : { ...current, rightCollapsed: !current.rightCollapsed }
+    ));
+  }, []);
   const mainQuestDialogueNodeIdRef = useRef('');
   const battleSkillCasterRef = useRef<(skillId: string, targetType?: string) => Promise<boolean>>(async () => false);
   const [gatherAction, setGatherAction] = useState<GatherActionUi>({ running: false });
@@ -2151,6 +2182,43 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const genderValue = String(character?.gender ?? '').trim().toLowerCase();
   const isFemale = genderValue === 'female' || genderValue === 'f' || genderValue === '女';
   const equipPortrait = isFemale ? equipFemale : equipMale;
+  const handleFunctionMenuAction = (key: string) => {
+    if (key === 'map') {
+      setMapModalCategory('world');
+      setMapModalOpen(true);
+    }
+    if (key === 'dungeon') {
+      setMapModalCategory('dungeon');
+      setMapModalOpen(true);
+    }
+    if (key === 'bag') setBagModalOpen(true);
+    if (key === 'partner') {
+      if (!partnerUnlocked) {
+        messageRef.current.info(PARTNER_FEATURE_UNLOCK_HINT);
+        return;
+      }
+      setPartnerModalOpen(true);
+    }
+    if (key === 'technique') setTechniqueModalOpen(true);
+    if (key === 'realm') setRealmModalOpen(true);
+    if (key === 'life' && WANDER_FEATURE_ENABLED) setWanderModalOpen(true);
+    if (key === 'task') {
+      setTaskModalOpen(true);
+    }
+    if (key === 'sect') setSectModalOpen(true);
+    if (key === 'market') setMarketModalOpen(true);
+    if (key === 'team') setTeamModalOpen(true);
+    if (key === 'monthcard') setMonthCardModalOpen(true);
+    if (key === 'battlepass') setBattlePassModalOpen(true);
+    if (key === 'arena') setArenaModalOpen(true);
+    if (key === 'rank') setRankModalOpen(true);
+    if (key === 'achievement') {
+      setAchievementModalOpen(true);
+    }
+    if (key === 'idle') setIdleModalOpen(true);
+    if (key === 'battle-report') setMobileChatDrawerOpen(true);
+    if (key === 'character') setPlayerInfoOpen(true);
+  };
   const functionIndicators: Record<string, { badgeCount?: number; badgeDot?: boolean; tooltip?: string }> | undefined = useMemo(() => {
     const out: Record<string, { badgeCount?: number; badgeDot?: boolean; tooltip?: string }> = {};
     if (isTeamLeader && teamApplicationUnread > 0) {
@@ -2339,120 +2407,139 @@ const Game: FC<GameProps> = ({ onLogout }) => {
 
       <div className="game-container">
         {!isMobile ? (
-          <aside className="game-left">
-            <PlayerInfo
-              initialRealmOverview={homeOverviewRealmOverview}
-              suspendInitialRealmOverviewLoad={!homeOverviewSettled}
+          <aside className={leftSidePanelDisplay.containerClassName}>
+            <DesktopPanelToggleButton
+              display={leftSidePanelDisplay}
+              onClick={() => toggleDesktopSidePanel('left')}
             />
+            <div className={leftSidePanelDisplay.contentClassName}>
+              <PlayerInfo
+                initialRealmOverview={homeOverviewRealmOverview}
+                suspendInitialRealmOverviewLoad={!homeOverviewSettled}
+              />
+            </div>
           </aside>
         ) : null}
 
         <main className={`game-center${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
-          <div className={`game-map-area${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
-            {isMobile ? (
-              isMobileBattleMode ? (
-                <div className="game-mobile-battle-page">
-                  <div className="game-mobile-battle-stage">
-                    <BattleArea
-                      enemies={battleEnemies}
-                      allies={battleAllies}
-                      onNotify={notifyBattleArea}
-                      allowLocalStart={allowLocalBattleStart}
-                      externalBattleId={externalBattleId}
-                      allowAutoNext={allowAutoNextBattle}
-                      advanceMode={battleAdvanceMode}
-                      onNext={battleOnNext}
-                      nextLabel="继续"
-                      onAppendBattleLines={appendBattleLinesToChat}
-                      onSessionChange={handleBattleSessionChange}
-                      onBindSkillCaster={bindBattleSkillCaster}
-                      onEscape={
-                        !inTeam || isTeamLeader
-                          ? handleBattleEscape
-                          : undefined
-                      }
-                      onTurnChange={handleBattleTurnChange}
-                    />
+          {isMobile ? (
+            <>
+              <div className={`game-map-area${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
+                {isMobileBattleMode ? (
+                  <div className="game-mobile-battle-page">
+                    <div className="game-mobile-battle-stage">
+                      <BattleArea
+                        enemies={battleEnemies}
+                        allies={battleAllies}
+                        onNotify={notifyBattleArea}
+                        allowLocalStart={allowLocalBattleStart}
+                        externalBattleId={externalBattleId}
+                        allowAutoNext={allowAutoNextBattle}
+                        advanceMode={battleAdvanceMode}
+                        onNext={battleOnNext}
+                        nextLabel="继续"
+                        onAppendBattleLines={appendBattleLinesToChat}
+                        onSessionChange={handleBattleSessionChange}
+                        onBindSkillCaster={bindBattleSkillCaster}
+                        onEscape={
+                          !inTeam || isTeamLeader
+                            ? handleBattleEscape
+                            : undefined
+                        }
+                        onTurnChange={handleBattleTurnChange}
+                      />
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className={`game-top-tabs${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
-                  <Tabs
-                    size="small"
-                    activeKey={topTab}
-                    onChange={(key) => setTopTab(key as 'map' | 'room')}
-                    items={[
-                      {
-                        key: 'map',
-                        label: '地图',
-                        children: (
-                          <div className={`game-top-tab-panel${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
-                            {viewMode === 'battle' ? (
-                              <BattleArea
-                                enemies={battleEnemies}
-                                allies={battleAllies}
-                                onNotify={notifyBattleArea}
-                                allowLocalStart={allowLocalBattleStart}
-                                externalBattleId={externalBattleId}
-                                allowAutoNext={allowAutoNextBattle}
-                                advanceMode={battleAdvanceMode}
-                                onNext={battleOnNext}
-                                nextLabel="继续"
-                                onAppendBattleLines={appendBattleLinesToChat}
-                                onSessionChange={handleBattleSessionChange}
-                                onBindSkillCaster={bindBattleSkillCaster}
-                                onEscape={
-                                  !inTeam || isTeamLeader
-                                    ? handleBattleEscape
-                                    : undefined
-                                }
-                                onTurnChange={handleBattleTurnChange}
-                              />
-                            ) : (
-                              canRenderWorldPanels ? (
-                                <GameMap
-                                  currentMapId={currentMapId}
-                                  currentRoomId={currentRoomId}
-                                  trackedRoomIds={trackedRoomIds}
-                                  onMove={(next) => {
-                                    setCurrentMapId(next.mapId);
-                                    setCurrentRoomId(next.roomId);
-                                    scheduleSavePosition(next.mapId, next.roomId);
-                                  }}
+                ) : (
+                  <div className={`game-top-tabs${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
+                    <Tabs
+                      size="small"
+                      activeKey={topTab}
+                      onChange={(key) => setTopTab(key as 'map' | 'room')}
+                      items={[
+                        {
+                          key: 'map',
+                          label: '地图',
+                          children: (
+                            <div className={`game-top-tab-panel${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
+                              {viewMode === 'battle' ? (
+                                <BattleArea
+                                  enemies={battleEnemies}
+                                  allies={battleAllies}
+                                  onNotify={notifyBattleArea}
+                                  allowLocalStart={allowLocalBattleStart}
+                                  externalBattleId={externalBattleId}
+                                  allowAutoNext={allowAutoNextBattle}
+                                  advanceMode={battleAdvanceMode}
+                                  onNext={battleOnNext}
+                                  nextLabel="继续"
+                                  onAppendBattleLines={appendBattleLinesToChat}
+                                  onSessionChange={handleBattleSessionChange}
+                                  onBindSkillCaster={bindBattleSkillCaster}
+                                  onEscape={
+                                    !inTeam || isTeamLeader
+                                      ? handleBattleEscape
+                                      : undefined
+                                  }
+                                  onTurnChange={handleBattleTurnChange}
                                 />
                               ) : (
+                                canRenderWorldPanels ? (
+                                  <GameMap
+                                    currentMapId={currentMapId}
+                                    currentRoomId={currentRoomId}
+                                    trackedRoomIds={trackedRoomIds}
+                                    onMove={(next) => {
+                                      setCurrentMapId(next.mapId);
+                                      setCurrentRoomId(next.roomId);
+                                      scheduleSavePosition(next.mapId, next.roomId);
+                                    }}
+                                  />
+                                ) : (
+                                  <WorldPanelLoading
+                                    title="正在同步当前位置"
+                                    detail="等待角色实时数据后再加载地图，避免首屏先请求默认村庄再切换到真实位置。"
+                                  />
+                                )
+                              )}
+                            </div>
+                          ),
+                        },
+                        {
+                          key: 'room',
+                          label: '房间',
+                          children: (
+                            <div className={`game-top-tab-panel${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
+                              {canRenderWorldPanels ? (
+                                <RoomObjects mapId={currentMapId} roomId={currentRoomId} onSelect={handleRoomObjectSelect} />
+                              ) : (
                                 <WorldPanelLoading
-                                  title="正在同步当前位置"
-                                  detail="等待角色实时数据后再加载地图，避免首屏先请求默认村庄再切换到真实位置。"
+                                  title="正在同步房间信息"
+                                  detail="当前位置尚未完成水合，房间对象会在拿到真实地图和房间后再请求。"
                                 />
-                              )
-                            )}
-                          </div>
-                        ),
-                      },
-                      {
-                        key: 'room',
-                        label: '房间',
-                        children: (
-                          <div className={`game-top-tab-panel${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
-                            {canRenderWorldPanels ? (
-                              <RoomObjects mapId={currentMapId} roomId={currentRoomId} onSelect={handleRoomObjectSelect} />
-                            ) : (
-                              <WorldPanelLoading
-                                title="正在同步房间信息"
-                                detail="当前位置尚未完成水合，房间对象会在拿到真实地图和房间后再请求。"
-                              />
-                            )}
-                          </div>
-                        ),
-                      },
-                    ]}
-                  />
+                              )}
+                            </div>
+                          ),
+                        },
+                      ]}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className={`game-chat-area is-mobile-drawer${mobileChatDrawerOpen ? ' is-open' : ''}`}>
+                <div className="game-chat-area-content">
+                  <div className="game-chat-left">
+                    <div className="game-chat-left-content">
+                      <ChatPanel ref={chatPanelRef} onSelectPlayer={setInfoTarget} isMobile={isMobile} />
+                    </div>
+                  </div>
                 </div>
-              )
-            ) : (
-              <div className="game-top-area">
-                <section className="game-map-pane">
+              </div>
+            </>
+          ) : (
+            <div className="game-desktop-layout">
+              <div className="game-desktop-main-column">
+                <div className={`game-map-area${isMobileBattleMode ? ' is-mobile-battle' : ''}`}>
                   {viewMode === 'battle' ? (
                     <BattleArea
                       enemies={battleEnemies}
@@ -2493,7 +2580,22 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                       />
                     )
                   )}
-                </section>
+                </div>
+                <div className={desktopBottomPanelDisplay.containerClassName}>
+                  <div className={desktopBottomPanelDisplay.contentClassName}>
+                    <div className={desktopBottomPanelDisplay.chatLeftClassName}>
+                      <DesktopPanelToggleButton
+                        display={desktopBottomPanelDisplay}
+                        onClick={() => setDesktopChatCollapsed((current) => !current)}
+                      />
+                      <div className={desktopBottomPanelDisplay.chatLeftContentClassName}>
+                        <ChatPanel ref={chatPanelRef} onSelectPlayer={setInfoTarget} isMobile={false} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="game-desktop-side-column">
                 <aside className="game-room-pane">
                   {canRenderWorldPanels ? (
                     <RoomObjects mapId={currentMapId} roomId={currentRoomId} onSelect={handleRoomObjectSelect} />
@@ -2504,21 +2606,16 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                     />
                   )}
                 </aside>
+                <div className="game-team-pane">
+                  <TeamPanel
+                    members={teamMembers}
+                    onSelectMember={(m) => setInfoTarget(buildTeamInfoTarget(m))}
+                    onLeaveTeam={inTeam ? onLeaveTeam : undefined}
+                  />
+                </div>
               </div>
-            )}
-          </div>
-          <div className={`game-chat-area${isMobile ? ' is-mobile-drawer' : ''}${isMobile && mobileChatDrawerOpen ? ' is-open' : ''}`}>
-            <div className="game-chat-left">
-              <ChatPanel ref={chatPanelRef} onSelectPlayer={setInfoTarget} isMobile={isMobile} />
             </div>
-            <div className="game-chat-right">
-              <TeamPanel
-                members={teamMembers}
-                onSelectMember={(m) => setInfoTarget(buildTeamInfoTarget(m))}
-                onLeaveTeam={inTeam ? onLeaveTeam : undefined}
-              />
-            </div>
-          </div>
+          )}
           {isMobile ? (
             <div
               className={`game-mobile-chat-mask${mobileChatDrawerOpen ? ' is-open' : ''}`}
@@ -2528,115 +2625,95 @@ const Game: FC<GameProps> = ({ onLogout }) => {
           ) : null}
         </main>
 
-        <aside className="game-right">
-          <div className="game-right-top">
-            <FunctionMenu
-              indicators={functionIndicators}
-              itemStates={functionItemStates}
-              onAction={(key) => {
-                if (key === 'map') {
-                  setMapModalCategory('world');
-                  setMapModalOpen(true);
-                }
-                if (key === 'dungeon') {
-                  setMapModalCategory('dungeon');
-                  setMapModalOpen(true);
-                }
-                if (key === 'bag') setBagModalOpen(true);
-                if (key === 'partner') {
-                  if (!partnerUnlocked) {
-                    messageRef.current.info(PARTNER_FEATURE_UNLOCK_HINT);
-                    return;
-                  }
-                  setPartnerModalOpen(true);
-                }
-                if (key === 'technique') setTechniqueModalOpen(true);
-                if (key === 'realm') setRealmModalOpen(true);
-                if (key === 'life' && WANDER_FEATURE_ENABLED) setWanderModalOpen(true);
-                if (key === 'task') {
-                  setTaskModalOpen(true);
-                }
-                if (key === 'sect') setSectModalOpen(true);
-                if (key === 'market') setMarketModalOpen(true);
-                if (key === 'team') setTeamModalOpen(true);
-                if (key === 'monthcard') setMonthCardModalOpen(true);
-                if (key === 'battlepass') setBattlePassModalOpen(true);
-                if (key === 'arena') setArenaModalOpen(true);
-                if (key === 'rank') setRankModalOpen(true);
-                if (key === 'achievement') {
-                  setAchievementModalOpen(true);
-                }
-                if (key === 'idle') setIdleModalOpen(true);
-                if (key === 'battle-report') setMobileChatDrawerOpen(true);
-                if (key === 'character') setPlayerInfoOpen(true);
-              }}
+        <aside className={isMobile ? 'game-right' : rightSidePanelDisplay.containerClassName}>
+          {isMobile ? null : (
+            <DesktopPanelToggleButton
+              display={rightSidePanelDisplay}
+              onClick={() => toggleDesktopSidePanel('right')}
             />
-          </div>
-          {!isMobile ? (
-            <div className="game-right-bottom">
-              <div className="equip-panel">
-                <div className="equip-panel-grid">
-                  <div className="equip-col">
-                    {EQUIP_SLOTS_LEFT.map((slot) => {
-                      const equipped = equippedByUiSlot.get(slot);
-                      return (
-                        <Tooltip
-                          key={slot}
-                          title={equipped ? renderEquipTooltip(slot, equipped.item) : null}
-                          placement="right"
-                          classNames={EQUIPMENT_TOOLTIP_CLASS_NAMES}
-                        >
-                          <div
-                            className={`equip-slot ${equipped ? 'has-item' : ''} ${unequippingId != null && equipped?.id === unequippingId ? 'is-busy' : ''
-                              }`}
-                            onContextMenu={(e) => {
-                              const it = equippedByUiSlot.get(slot);
-                              if (!it) return;
-                              e.preventDefault();
-                              void handleUnequipFromPanel(it);
-                            }}
+          )}
+          {isMobile ? (
+            <div className="game-right-top">
+              <FunctionMenu
+                indicators={functionIndicators}
+                itemStates={functionItemStates}
+                onAction={handleFunctionMenuAction}
+              />
+            </div>
+          ) : (
+            <div className={rightSidePanelDisplay.contentClassName}>
+              <div className="game-right-top">
+                <FunctionMenu
+                  indicators={functionIndicators}
+                  itemStates={functionItemStates}
+                  onAction={handleFunctionMenuAction}
+                />
+              </div>
+              <div className="game-right-bottom">
+                <div className="equip-panel">
+                  <div className="equip-panel-grid">
+                    <div className="equip-col">
+                      {EQUIP_SLOTS_LEFT.map((slot) => {
+                        const equipped = equippedByUiSlot.get(slot);
+                        return (
+                          <Tooltip
+                            key={slot}
+                            title={equipped ? renderEquipTooltip(slot, equipped.item) : null}
+                            placement="right"
+                            classNames={EQUIPMENT_TOOLTIP_CLASS_NAMES}
                           >
-                            {equipped ? <img className="equip-slot-icon" src={equipped.icon} alt={slot} /> : null}
-                            <div className="equip-slot-label">{slot}</div>
-                          </div>
-                        </Tooltip>
-                      );
-                    })}
-                  </div>
-                  <div className="equip-center">
-                    <img className="equip-portrait" src={equipPortrait} alt="人物形象" />
-                  </div>
-                  <div className="equip-col">
-                    {EQUIP_SLOTS_RIGHT.map((slot) => {
-                      const equipped = equippedByUiSlot.get(slot);
-                      return (
-                        <Tooltip
-                          key={slot}
-                          title={equipped ? renderEquipTooltip(slot, equipped.item) : null}
-                          placement="left"
-                          classNames={EQUIPMENT_TOOLTIP_CLASS_NAMES}
-                        >
-                          <div
-                            className={`equip-slot ${equipped ? 'has-item' : ''} ${unequippingId != null && equipped?.id === unequippingId ? 'is-busy' : ''
-                              }`}
-                            onContextMenu={(e) => {
-                              const it = equippedByUiSlot.get(slot);
-                              if (!it) return;
-                              e.preventDefault();
-                              void handleUnequipFromPanel(it);
-                            }}
+                            <div
+                              className={`equip-slot ${equipped ? 'has-item' : ''} ${unequippingId != null && equipped?.id === unequippingId ? 'is-busy' : ''
+                                }`}
+                              onContextMenu={(e) => {
+                                const it = equippedByUiSlot.get(slot);
+                                if (!it) return;
+                                e.preventDefault();
+                                void handleUnequipFromPanel(it);
+                              }}
+                            >
+                              {equipped ? <img className="equip-slot-icon" src={equipped.icon} alt={slot} /> : null}
+                              <div className="equip-slot-label">{slot}</div>
+                            </div>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                    <div className="equip-center">
+                      <img className="equip-portrait" src={equipPortrait} alt="人物形象" />
+                    </div>
+                    <div className="equip-col">
+                      {EQUIP_SLOTS_RIGHT.map((slot) => {
+                        const equipped = equippedByUiSlot.get(slot);
+                        return (
+                          <Tooltip
+                            key={slot}
+                            title={equipped ? renderEquipTooltip(slot, equipped.item) : null}
+                            placement="left"
+                            classNames={EQUIPMENT_TOOLTIP_CLASS_NAMES}
                           >
-                            {equipped ? <img className="equip-slot-icon" src={equipped.icon} alt={slot} /> : null}
-                            <div className="equip-slot-label">{slot}</div>
-                          </div>
-                        </Tooltip>
-                      );
-                    })}
+                            <div
+                              className={`equip-slot ${equipped ? 'has-item' : ''} ${unequippingId != null && equipped?.id === unequippingId ? 'is-busy' : ''
+                                }`}
+                              onContextMenu={(e) => {
+                                const it = equippedByUiSlot.get(slot);
+                                if (!it) return;
+                                e.preventDefault();
+                                void handleUnequipFromPanel(it);
+                              }}
+                            >
+                              {equipped ? <img className="equip-slot-icon" src={equipped.icon} alt={slot} /> : null}
+                              <div className="equip-slot-label">{slot}</div>
+                            </div>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          ) : null}
+          )}
         </aside>
       </div>
 

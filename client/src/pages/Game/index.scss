@@ -154,6 +154,13 @@
 }
 
 .game-container {
+  --desktop-side-panel-width: 20%;
+  --desktop-side-panel-collapsed-width: 30px;
+  --desktop-side-panel-toggle-width: 14px !important;
+  --desktop-chat-area-height: 300px;
+  --desktop-chat-left-collapsed-height: 28px;
+  --desktop-bottom-panel-toggle-width: 88px;
+  --desktop-bottom-panel-toggle-height: 18px;
   width: 100%;
   height: 100%;
   display: flex;
@@ -162,12 +169,18 @@
 
 // 左侧 - 个人信息
 .game-left {
-  flex: 0 0 20%;
+  flex: 0 0 var(--desktop-side-panel-width);
   min-width: 0;
   height: 100%;
   background: var(--panel-bg);
   border-right: 1px solid var(--border-color);
-  overflow-y: auto;
+  overflow: visible;
+  position: relative;
+  transition: flex-basis 0.2s ease, border-color 0.2s ease;
+}
+
+.game-left.is-collapsed {
+  flex-basis: var(--desktop-side-panel-collapsed-width);
 }
 
 // 中间 - 地图和聊天
@@ -185,6 +198,32 @@
   min-height: 0;
   background: var(--panel-bg);
   border-bottom: 1px solid var(--border-color);
+}
+
+.game-desktop-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  min-width: 0;
+}
+
+.game-desktop-main-column {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.game-desktop-side-column {
+  flex: 0 0 var(--room-pane-width);
+  width: var(--room-pane-width);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--border-color);
 }
 
 .game-top-area {
@@ -233,10 +272,9 @@
 }
 
 .game-room-pane {
-  flex: 0 0 var(--room-pane-width);
+  flex: 1;
   min-width: 0;
-  height: 100%;
-  border-left: 1px solid var(--border-color);
+  min-height: 0;
   background: var(--panel-bg);
 }
 
@@ -267,17 +305,58 @@
 }
 
 .game-chat-area {
-  height: 300px;
-  min-height: 300px;
+  height: var(--desktop-chat-area-height);
+  min-height: var(--desktop-chat-area-height);
   background: var(--panel-bg);
-  display: flex;
+  display: block;
   min-height: 0;
+  overflow: visible;
+  position: relative;
+  transition: height 0.2s ease, min-height 0.2s ease, border-color 0.2s ease;
+}
+
+.game-chat-area.is-collapsed {
+  height: var(--desktop-chat-left-collapsed-height);
+  min-height: var(--desktop-chat-left-collapsed-height);
+}
+
+.game-chat-area-content {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: visible;
+  transition: opacity 0.18s ease, visibility 0.18s ease;
 }
 
 .game-chat-left {
   flex: 1;
   min-width: 0;
   height: 100%;
+  overflow: visible;
+  position: relative;
+  transition: height 0.2s ease;
+}
+
+.game-chat-left.is-collapsed {
+  height: var(--desktop-chat-left-collapsed-height);
+  align-self: flex-start;
+}
+
+.game-chat-left-content {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  transition: opacity 0.18s ease, visibility 0.18s ease;
+}
+
+.game-chat-left-content.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
 }
 
 .game-chat-right {
@@ -287,16 +366,150 @@
   border-left: 1px solid var(--border-color);
 }
 
+.game-team-pane {
+  flex: 0 0 var(--desktop-chat-area-height);
+  min-height: 0;
+  border-top: 1px solid var(--border-color);
+  background: var(--panel-bg);
+}
+
 // 右侧 - 功能按钮
 .game-right {
-  flex: 0 0 20%;
+  flex: 0 0 var(--desktop-side-panel-width);
   min-width: 0;
   height: 100%;
   background: var(--panel-bg);
   border-left: 1px solid var(--border-color);
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
+  position: relative;
+  transition: flex-basis 0.2s ease, border-color 0.2s ease;
+}
+
+.game-right.is-collapsed {
+  flex-basis: var(--desktop-side-panel-collapsed-width);
+}
+
+.game-side-panel-content {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity 0.18s ease, visibility 0.18s ease;
+}
+
+.game-left .game-side-panel-content {
+  overflow-y: auto;
+}
+
+.game-side-panel-content.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.game-side-panel-toggle {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: var(--desktop-side-panel-toggle-width) !important;
+  min-width: var(--desktop-side-panel-toggle-width) !important;
+  height: 68px;
+  margin: 0;
+  padding: 0 !important;
+  gap: 0 !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 12px !important;
+  background: color-mix(in srgb, var(--panel-bg) 94%, transparent) !important;
+  color: var(--text-secondary) !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
+  transform: translateY(-50%);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.game-side-panel-toggle .game-panel-toggle__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.game-side-panel-toggle .game-panel-toggle__text {
+  display: none;
+}
+
+.game-bottom-panel-toggle {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 3;
+  width: var(--desktop-bottom-panel-toggle-width) !important;
+  min-width: var(--desktop-bottom-panel-toggle-width) !important;
+  height: var(--desktop-bottom-panel-toggle-height);
+  margin: 0;
+  padding: 0 !important;
+  gap: 0 !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--panel-bg) 96%, transparent) !important;
+  color: var(--text-secondary) !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
+  transform: translate(-50%, -50%);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.game-bottom-panel-toggle .game-panel-toggle__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.game-bottom-panel-toggle .game-panel-toggle__text {
+  display: none;
+}
+
+.game-side-panel-toggle:hover,
+.game-side-panel-toggle:focus-visible {
+  background: var(--panel-bg-soft) !important;
+  color: var(--text-color) !important;
+  border-color: var(--text-secondary) !important;
+}
+
+.game-bottom-panel-toggle:hover,
+.game-bottom-panel-toggle:focus-visible {
+  background: var(--panel-bg-soft) !important;
+  color: var(--text-color) !important;
+  border-color: var(--text-secondary) !important;
+}
+
+.game-side-panel-toggle.is-left {
+  right: calc(var(--desktop-side-panel-toggle-width) * -0.5);
+}
+
+.game-side-panel-toggle.is-right {
+  left: calc(var(--desktop-side-panel-toggle-width) * -0.5);
+}
+
+.game-left.is-collapsed .game-side-panel-toggle,
+.game-right.is-collapsed .game-side-panel-toggle {
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
+}
+
+.game-chat-left.is-collapsed .game-bottom-panel-toggle {
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .game-right-top {
@@ -709,7 +922,15 @@
     pointer-events: auto;
   }
 
+  .game-chat-area.is-mobile-drawer .game-chat-area-content {
+    height: 100%;
+  }
+
   .game-chat-area.is-mobile-drawer .game-chat-left {
+    height: 100%;
+  }
+
+  .game-chat-area.is-mobile-drawer .game-chat-left-content {
     height: 100%;
   }
 
