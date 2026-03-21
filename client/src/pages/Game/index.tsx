@@ -112,6 +112,7 @@ import {
   resolveRealtimeBattleViewSyncMode,
   shouldRestoreBattleSessionFromRealtime,
 } from './shared/battleViewSync';
+import { resolveBattleViewUiState } from './shared/battleViewUiState';
 import {
   shouldResetTeamBattleReplayContext,
   type TeamBattleReplayIdentity,
@@ -779,6 +780,8 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const activeBattleSessionRef = useRef<BattleSessionSnapshotDto | null>(null);
   const reconnectBattleIdRef = useRef<string | null>(null);
   const viewModeRef = useRef<'map' | 'battle'>('map');
+  const topTabRef = useRef<'map' | 'room'>('map');
+  const infoTargetRef = useRef<InfoTarget | null>(null);
   const hasLocalBattleTargetsRef = useRef(false);
   const pendingBattleSessionRestoreBattleIdRef = useRef<string | null>(null);
   const rememberLastDungeonSelection = useCallback((selection?: LastDungeonSelection | null) => {
@@ -855,6 +858,46 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     reconnectBattleIdRef.current = reconnectBattleId;
   }, [reconnectBattleId]);
 
+  /**
+   * 统一切换 Game 页战斗壳视图。
+   *
+   * 作用（做什么 / 不做什么）：
+   * 1. 做什么：把 battle/map 视图切换时的 `viewMode`、`topTab` 与 `infoTarget` 口径收口到单一入口，避免各分支散落维护。
+   * 2. 做什么：默认保留当前已打开的信息弹窗，确保怪物/玩家信息窗口不会因为战斗同步、推进或退出而被自动关闭。
+   * 3. 做什么：允许显式业务动作要求关闭信息窗，例如从怪物信息窗主动点击攻击。
+   * 4. 不做什么：不负责战斗 session、战斗对象、回合数据或聊天日志重置。
+   *
+   * 输入/输出：
+   * - 输入：目标视图模式 `map` / `battle`，以及是否保留当前信息窗。
+   * - 输出：无，直接写入 Game 页局部 UI state。
+   *
+   * 数据流/状态流：
+   * - battle realtime / battle session / InfoModal 攻击动作 -> 本函数 -> Game 页壳状态。
+   *
+   * 关键边界条件与坑点：
+   * 1. 进入或退出战斗都必须把顶层 tab 归回 `map`，否则移动端可能停留在房间标签导致视图错位。
+   * 2. 默认必须保持 `infoTarget` 原值；只有显式声明关闭时才允许清空，否则会再次破坏“弹窗不自动关闭”的规则。
+   */
+  const applyBattleViewUiState = useCallback((
+    nextViewMode: 'map' | 'battle',
+    options?: {
+      preserveInfoTarget?: boolean;
+    },
+  ) => {
+    const nextUiState = resolveBattleViewUiState(
+      {
+        viewMode: viewModeRef.current,
+        topTab: topTabRef.current,
+        infoTarget: infoTargetRef.current,
+      },
+      nextViewMode,
+      options,
+    );
+    setViewMode((prev) => (prev === nextUiState.viewMode ? prev : nextUiState.viewMode));
+    setTopTab((prev) => (prev === nextUiState.topTab ? prev : nextUiState.topTab));
+    setInfoTarget((prev) => (prev === nextUiState.infoTarget ? prev : nextUiState.infoTarget));
+  }, []);
+
   useEffect(() => {
     const currentIdentity: TeamBattleReplayIdentity = {
       teamId: teamInfo?.id ?? null,
@@ -881,13 +924,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       return;
     }
 
-    setViewMode('map');
-    setTopTab('map');
-    setInfoTarget(null);
+    applyBattleViewUiState('map');
     setBattleTurn(0);
     setBattlePhase(null);
     setBattleActiveUnitId(null);
   }, [
+    applyBattleViewUiState,
     clearBattleAutoCloseTimer,
     isTeamLeader,
     teamBattleId,
@@ -903,6 +945,14 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   useEffect(() => {
     viewModeRef.current = viewMode;
   }, [viewMode]);
+
+  useEffect(() => {
+    topTabRef.current = topTab;
+  }, [topTab]);
+
+  useEffect(() => {
+    infoTargetRef.current = infoTarget;
+  }, [infoTarget]);
 
   useEffect(() => {
     hasLocalBattleTargetsRef.current = battleEnemies.length > 0;
@@ -921,10 +971,8 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     setActiveBattleSession(session);
     setTeamBattleId(null);
     setReconnectBattleId(null);
-    setViewMode('battle');
-    setTopTab('map');
-    setInfoTarget(null);
-  }, [clearBattleAutoCloseTimer, clearSessionAutoAdvanceTimer]);
+    applyBattleViewUiState('battle');
+  }, [applyBattleViewUiState, clearBattleAutoCloseTimer, clearSessionAutoAdvanceTimer]);
 
   const applyBattleSessionChange = useCallback((
     session: BattleSessionSnapshotDto | null,
@@ -944,12 +992,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       clearBattleAutoCloseTimer();
       setTeamBattleId(null);
       setReconnectBattleId(null);
-      setViewMode('map');
-      setTopTab('map');
-      setInfoTarget(null);
+      applyBattleViewUiState('map');
     }
     setActiveBattleSession(session);
-  }, [activateBattleSessionContext, clearBattleAutoCloseTimer]);
+  }, [activateBattleSessionContext, applyBattleViewUiState, clearBattleAutoCloseTimer]);
 
   const handleBattleSessionChange = useCallback((session: BattleSessionSnapshotDto | null) => {
     applyBattleSessionChange(session);
@@ -1014,11 +1060,9 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       setTeamBattleId(null);
       setReconnectBattleId(battleId);
     }
-    setViewMode('battle');
-    setTopTab('map');
-    setInfoTarget(null);
+    applyBattleViewUiState('battle');
     return syncMode;
-  }, [inTeam, isTeamLeader]);
+  }, [applyBattleViewUiState, inTeam, isTeamLeader]);
 
   const handleRoomObjectSelect = useCallback((target: InfoTarget) => {
     if (target.type === 'item' && target.id === 'obj-warehouse') {
@@ -1248,9 +1292,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         clearBattleAutoCloseTimer();
         setTeamBattleId(null);
         setReconnectBattleId(null);
-        setViewMode('battle');
-        setTopTab('map');
-        setInfoTarget(null);
+        applyBattleViewUiState('battle');
         return;
       }
 
@@ -1265,8 +1307,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       }
 
       setReconnectBattleId(null);
-      setViewMode('map');
-      setTopTab('map');
+      applyBattleViewUiState('map');
       setBattleTurn(0);
       setBattlePhase(null);
       setBattleActiveUnitId(null);
@@ -1285,8 +1326,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         setActiveBattleSession(null);
         setTeamBattleId(null);
         setReconnectBattleId(null);
-        setViewMode('map');
-        setTopTab('map');
+        applyBattleViewUiState('map');
         setBattleTurn(0);
         setBattlePhase(null);
         setBattleActiveUnitId(null);
@@ -1294,7 +1334,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       }
       messageRef.current.error(errorText);
     }
-  }, [activeBattleSession, clearBattleAutoCloseTimer, clearSessionAutoAdvanceTimer]);
+  }, [activeBattleSession, applyBattleViewUiState, clearBattleAutoCloseTimer, clearSessionAutoAdvanceTimer]);
 
   useEffect(() => {
     const session = activeBattleSession;
@@ -1416,13 +1456,13 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const handleBattleEscape = useCallback(() => {
     clearSessionAutoAdvanceTimer();
     lastAutoAdvanceSessionKeyRef.current = '';
-    setViewMode('map');
+    applyBattleViewUiState('map');
     setBattleTurn(0);
     setBattlePhase(null);
     setBattleActiveUnitId(null);
     setActiveBattleSession(null);
     setReconnectBattleId(null);
-  }, [clearSessionAutoAdvanceTimer]);
+  }, [applyBattleViewUiState, clearSessionAutoAdvanceTimer]);
 
   const handleBattleCastSkill = useCallback((skillId: string, targetType?: string) => {
     return battleSkillCasterRef.current(skillId, targetType);
@@ -1734,9 +1774,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         }
         setTeamBattleId(null);
         setReconnectBattleId(null);
-        setViewMode('map');
-        setTopTab('map');
-        setInfoTarget(null);
+        applyBattleViewUiState('map');
         return;
       }
 
@@ -1759,7 +1797,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         teamBattleAutoCloseTimerRef.current = window.setTimeout(() => {
           setTeamBattleId(null);
           setReconnectBattleId(null);
-          setViewMode('map');
+          applyBattleViewUiState('map');
         }, 6000);
       }
     });
@@ -1767,7 +1805,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       clearBattleAutoCloseTimer();
       unsub();
     };
-  }, [clearBattleAutoCloseTimer, restoreBattleSessionContext, syncRealtimeBattleView]);
+  }, [applyBattleViewUiState, clearBattleAutoCloseTimer, restoreBattleSessionContext, syncRealtimeBattleView]);
 
   useEffect(() => {
     if (!characterId) return;
@@ -1805,8 +1843,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       setTeamBattleId(null);
       setReconnectBattleId(null);
       setActiveBattleSession(null);
-      setViewMode('map');
-      setTopTab('map');
+      applyBattleViewUiState('map');
       setBattleTurn(0);
       setBattlePhase(null);
       setBattleActiveUnitId(null);
@@ -1814,7 +1851,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     } catch {
       void 0;
     }
-  }, [characterId, clearBattleAutoCloseTimer, refreshTeamData]);
+  }, [applyBattleViewUiState, characterId, clearBattleAutoCloseTimer, refreshTeamData]);
 
   useEffect(() => {
     if (!character || hydratedPositionRef.current) return;
@@ -2185,9 +2222,9 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       setBattleEnemies(buildEnemyGroup(target));
       setBattleAllies(buildAllyGroup(character));
       setReconnectBattleId(null);
-      setViewMode('battle');
-      setTopTab('map');
-      setInfoTarget(null);
+      applyBattleViewUiState('battle', {
+        preserveInfoTarget: false,
+      });
       return;
     }
     if (action === 'gather' && target.type === 'item') {
