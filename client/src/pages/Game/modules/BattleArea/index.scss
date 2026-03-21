@@ -149,6 +149,7 @@
   --battle-bar-label-size: calc(var(--battle-bar-label-size-raw) * var(--battle-card-scale-safe));
   --battle-bar-value-size: calc(var(--battle-bar-value-size-raw) * var(--battle-card-scale-safe));
   --battle-bar-height: calc(var(--battle-bar-height-raw) * var(--battle-card-scale-safe));
+  --battle-bar-inline-padding: calc(6px * var(--battle-card-scale-safe));
   --battle-float-top: calc(var(--battle-float-top-raw) * var(--battle-card-scale-safe));
   --battle-unit-title-gap: calc(var(--battle-unit-title-gap-raw) * var(--battle-card-scale-safe));
   --battle-unit-bars-gap: calc(var(--battle-unit-bars-gap-raw) * var(--battle-card-scale-safe));
@@ -404,9 +405,13 @@
 }
 
 .battle-bar {
+  position: relative;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: var(--battle-bar-gap);
+  min-width: 0;
+  overflow: visible;
 }
 
 .battle-bar-label {
@@ -419,7 +424,7 @@
 .battle-bar-value {
   font-size: var(--battle-bar-value-size);
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.15;
 }
 
 .battle-bar-track {
@@ -428,7 +433,7 @@
   align-items: center;
   justify-content: flex-end;
   height: var(--battle-bar-height);
-  padding: 0 calc(6px * var(--battle-card-scale-safe));
+  padding: 0 var(--battle-bar-inline-padding);
   border-radius: 999px;
   overflow: hidden;
   background: var(--hover-bg);
@@ -445,17 +450,20 @@
 
 .battle-bar-value-overlay {
   position: absolute;
-  inset: 0;
+  inset-inline: 0;
+  top: 50%;
   z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 0 calc(6px * var(--battle-card-scale-safe));
+  padding: 0 var(--battle-bar-inline-padding);
+  transform: translateY(-50%);
   color: rgba(255, 255, 255, 0.96);
   font-weight: 800;
   text-shadow: var(--battle-overlay-text-shadow);
   white-space: nowrap;
   pointer-events: none;
+  overflow: visible;
 }
 
 .battle-bar-hp .battle-bar-fill {

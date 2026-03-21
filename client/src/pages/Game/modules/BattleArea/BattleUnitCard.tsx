@@ -52,14 +52,13 @@ const StatBar: React.FC<{
   tone: 'hp' | 'qi';
 }> = ({ value, total, tone }) => {
   const percent = toPercent(value, total);
+  const displayValue = Math.max(0, Math.floor(value));
   return (
     <div className={`battle-bar battle-bar-${tone}`}>
       <div className="battle-bar-track">
         <div className="battle-bar-fill" style={{ width: `${percent}%` }} />
-        <span className="battle-bar-value battle-bar-value-overlay">
-          {Math.max(0, Math.floor(value))}
-        </span>
       </div>
+      <span className="battle-bar-value battle-bar-value-overlay">{displayValue}</span>
     </div>
   );
 };

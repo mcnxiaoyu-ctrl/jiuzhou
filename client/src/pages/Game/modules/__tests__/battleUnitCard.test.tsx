@@ -16,6 +16,7 @@
  * 关键边界条件与坑点：
  * 1. 即使单位自带 `buffs` 数据，也不应再出现 `battle-unit-status-row` 容器。
  * 2. 当前需求只移除显示，不改战斗快照结构，因此测试必须显式保留 `buffs` 输入。
+ * 3. 数值覆盖层必须位于轨道外层，避免被 `overflow: hidden` 的血条轨道裁切后在部分浏览器里出现断裂文本。
  */
 
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -52,5 +53,28 @@ describe('BattleUnitCard', () => {
 
     expect(html).not.toContain('battle-unit-status-row');
     expect(html).not.toContain('攻击提升');
+  });
+
+  it('血条数值覆盖层应位于轨道外层，避免被轨道裁切', () => {
+    const html = renderToStaticMarkup(
+      <BattleUnitCard
+        unit={{
+          id: 'ally-2',
+          name: '青玄',
+          unitType: 'player',
+          hp: 120,
+          maxHp: 200,
+          qi: 80,
+          maxQi: 100,
+        }}
+        team="ally"
+        size="standard"
+        showAvatarBackground={false}
+        onToggleUnit={() => {}}
+      />,
+    );
+
+    expect(html).toContain('<div class="battle-bar-track"><div class="battle-bar-fill" style="width:60%"></div></div><span class="battle-bar-value battle-bar-value-overlay">120</span>');
+    expect(html).not.toContain('<div class="battle-bar-track"><div class="battle-bar-fill" style="width:60%"></div><span class="battle-bar-value battle-bar-value-overlay">120</span>');
   });
 });
