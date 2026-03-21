@@ -12,6 +12,10 @@
  * - MapObjectDto | null（找不到目标时返回 null）
  */
 import { query } from '../config/database.js';
+import {
+  getCharacterComputedByCharacterId,
+  type CharacterComputedRow,
+} from './characterComputedService.js';
 import type { MapObjectDto } from './roomObjectService.js';
 import {
   getItemDefinitionById,
@@ -32,6 +36,7 @@ import { getAdjustedDropQuantityRange } from './shared/dropQuantityMultiplier.js
 import { getGemLevel, isGemItemDefinition } from './shared/gemItemSemantics.js';
 import { getMonthCardActiveMapByCharacterIds } from './shared/monthCardBenefits.js';
 import {
+  CHARACTER_ATTR_DEFINITION_LIST,
   CHARACTER_ATTR_LABEL_MAP,
   CHARACTER_RATIO_ATTR_KEY_SET,
 } from './shared/characterAttrRegistry.js';
@@ -95,16 +100,6 @@ type ItemRow = {
   base_attrs: unknown;
 };
 
-type CharacterRow = {
-  id: number;
-  nickname: string | null;
-  title: string | null;
-  gender: string | null;
-  avatar: string | null;
-  realm: string | null;
-  sub_realm: string | null;
-};
-
 type EquippedRow = {
   equipped_slot: string | null;
   item_def_id: string | null;
@@ -122,6 +117,13 @@ const attrLabelMap: Record<string, string> = {
   shen: '神',
   ...CHARACTER_ATTR_LABEL_MAP,
 };
+
+const playerInfoAttrKeys = CHARACTER_ATTR_DEFINITION_LIST.reduce<Array<keyof CharacterComputedRow>>((keys, entry) => {
+  if (entry.key !== 'qixue' && entry.key !== 'lingqi') {
+    keys.push(entry.key);
+  }
+  return keys;
+}, []);
 
 const formatPercent = (value: number): string => {
   const percent = value * 100;
@@ -225,6 +227,24 @@ const formatChance = (mode: string, chance: number, weight: number, totalWeight:
     return formatRatioPercent(weight / totalWeight);
   }
   return formatRatioPercent(chance);
+};
+
+const buildPlayerStats = (
+  computed: CharacterComputedRow,
+): Array<{ label: string; value: string | number }> => {
+  const rows: Array<{ label: string; value: string | number }> = [];
+
+  for (const key of playerInfoAttrKeys) {
+    const value = computed[key];
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    const label = attrLabelMap[key] ?? key;
+    rows.push({
+      label,
+      value: CHARACTER_RATIO_ATTR_KEY_SET.has(key) ? formatPercent(value) : value,
+    });
+  }
+
+  return rows;
 };
 
 const buildFullRealm = (realmRaw: string | null, subRealmRaw: string | null): string => {
@@ -454,19 +474,8 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
     const characterId = Math.floor(Number(id));
     if (!Number.isFinite(characterId) || characterId <= 0) return null;
 
-    const charRes = await query(
-      `
-        SELECT id, nickname, title, gender, avatar, realm, sub_realm
-        FROM characters
-        WHERE id = $1
-        LIMIT 1
-      `,
-      [characterId]
-    );
-    const c = (charRes.rows[0] ?? null) as CharacterRow | null;
-    if (!c) return null;
-
-    const [equipRes, techRes] = await Promise.all([
+    const [computed, equipRes, techRes] = await Promise.all([
+      getCharacterComputedByCharacterId(characterId),
       query(
         `
           SELECT
@@ -491,6 +500,8 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
         [characterId]
       ),
     ]);
+
+    if (!computed) return null;
 
     const equipRows = equipRes.rows as EquippedRow[];
     const equipItemDefIds = Array.from(
@@ -535,19 +546,20 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
       })
       .filter((x): x is { name: string; level: string; type: string } => Boolean(x));
 
-    const name = typeof c.nickname === 'string' && c.nickname.trim() ? c.nickname.trim() : `修士${c.id}`;
-    const title = typeof c.title === 'string' && c.title.trim() ? c.title.trim() : '散修';
-    const monthCardActive = (await getMonthCardActiveMapByCharacterIds([c.id])).get(c.id) ?? false;
+    const name = computed.nickname.trim() || `修士${computed.id}`;
+    const title = computed.title.trim() || '散修';
+    const monthCardActive = (await getMonthCardActiveMapByCharacterIds([computed.id])).get(computed.id) ?? false;
 
     return {
       type: 'player',
-      id: String(c.id),
+      id: String(computed.id),
       name,
       monthCardActive,
       title,
-      gender: normalizeGender(c.gender) ?? '-',
-      realm: buildFullRealm(c.realm, c.sub_realm),
-      avatar: c.avatar ?? null,
+      gender: normalizeGender(computed.gender) ?? '-',
+      realm: buildFullRealm(computed.realm, computed.sub_realm),
+      avatar: computed.avatar ?? null,
+      stats: buildPlayerStats(computed),
       equipment,
       techniques,
     };

@@ -80,6 +80,7 @@ export type MapObjectDto =
       gender?: string;
       realm?: string;
       avatar?: string | null;
+      stats?: Array<{ label: string; value: string | number }>;
       equipment?: Array<{ slot: string; name: string; quality: string }>;
       techniques?: Array<{ name: string; level: string; type: string }>;
     };

@@ -11,72 +11,15 @@ import {
   SILENT_API_REQUEST_CONFIG,
   type BountyBoardRowDto,
   type BountyItemDefSearchRowDto,
+  type MapObjectDto,
 } from '../../../../services/api';
 import PlayerName from '../../shared/PlayerName';
 import './index.scss';
 
-type InfoTargetType = 'npc' | 'monster' | 'item' | 'player';
+type InfoTargetType = MapObjectDto['type'];
 type InfoActionItem = { key: string; text: string; disabled?: boolean };
 
-export type InfoTarget =
-  | {
-      type: 'npc';
-      id: string;
-      name: string;
-      title?: string;
-      gender?: string;
-      realm?: string;
-      avatar?: string | null;
-      desc?: string;
-      drops?: Array<{ name: string; quality: string; chance: string }>;
-    }
-  | {
-      type: 'monster';
-      id: string;
-      name: string;
-      title?: string;
-      gender?: string;
-      realm?: string;
-      avatar?: string | null;
-      base_attrs?: Record<string, number>;
-      attr_variance?: number;
-      attr_multiplier_min?: number;
-      attr_multiplier_max?: number;
-      stats?: Array<{ label: string; value: string | number }>;
-      drops?: Array<{ name: string; quality: string; chance: string }>;
-    }
-  | {
-      type: 'item';
-      id: string;
-      object_kind?: 'resource' | 'item' | 'board';
-      resource?: {
-        collectLimit: number;
-        usedCount: number;
-        remaining: number;
-        cooldownSec: number;
-        respawnSec: number;
-        cooldownUntil?: string | null;
-      };
-      name: string;
-      title?: string;
-      gender?: string;
-      realm?: string;
-      avatar?: string | null;
-      desc?: string;
-      stats?: Array<{ label: string; value: string | number }>;
-    }
-  | {
-      type: 'player';
-      id: string;
-      name: string;
-      monthCardActive?: boolean;
-      title?: string;
-      gender?: string;
-      realm?: string;
-      avatar?: string | null;
-      equipment?: Array<{ slot: string; name: string; quality: string }>;
-      techniques?: Array<{ name: string; level: string; type: string }>;
-    };
+export type InfoTarget = MapObjectDto;
 
 interface InfoModalProps {
   open: boolean;
@@ -158,7 +101,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
         if (cancelled) return;
         if (requestSeqRef.current !== seq) return;
         if (!res?.success || !res.data?.target) return;
-        setResolvedTarget(res.data.target as unknown as InfoTarget);
+        setResolvedTarget(res.data.target);
       })
       .catch(() => {
         if (cancelled) return;
@@ -304,6 +247,18 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
     </div>
   );
 
+  const renderStatsGrid = (stats: Array<{ label: string; value: string | number }> | undefined) => (
+    <div className="info-modal-grid">
+      {(stats ?? []).map((entry) => (
+        <div key={entry.label} className="info-kv">
+          <span className="info-k">{entry.label}</span>
+          <span className="info-v">{entry.value}</span>
+        </div>
+      ))}
+      {(stats ?? []).length === 0 ? <div className="info-modal-empty">暂无属性</div> : null}
+    </div>
+  );
+
   const renderNpcTabs = (t: Extract<InfoTarget, { type: 'npc' }>) => (
     <Tabs
       size="small"
@@ -337,17 +292,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
         {
           key: 'stats',
           label: '属性',
-          children: (
-            <div className="info-modal-grid">
-              {(t.stats ?? []).map((s) => (
-                <div key={s.label} className="info-kv">
-                  <span className="info-k">{s.label}</span>
-                  <span className="info-v">{s.value}</span>
-                </div>
-              ))}
-              {(t.stats ?? []).length === 0 ? <div className="info-modal-empty">暂无属性</div> : null}
-            </div>
-          ),
+          children: renderStatsGrid(t.stats),
         },
         {
           key: 'drops',
@@ -371,6 +316,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
       size="small"
       items={[
         { key: 'info', label: '信息', children: renderBaseInfo() },
+        { key: 'stats', label: '属性', children: renderStatsGrid(t.stats) },
         {
           key: 'equip',
           label: '装备',
