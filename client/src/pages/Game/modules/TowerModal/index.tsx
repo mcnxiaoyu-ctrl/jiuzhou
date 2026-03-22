@@ -1,4 +1,4 @@
-import { Alert, Button, Modal, Spin, Tag, Tabs, Typography } from 'antd';
+import { Alert, Button, Modal, Spin, Tag, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   SILENT_API_REQUEST_CONFIG,
@@ -24,6 +24,8 @@ interface TowerModalProps {
   }) => void;
 }
 
+type TowerModalTab = 'overview' | 'rank';
+
 const FLOOR_KIND_LABEL: Record<TowerFloorPreviewDto['kind'], string> = {
   normal: '普通层',
   elite: '精英层',
@@ -35,6 +37,11 @@ const FLOOR_KIND_DESCRIPTION: Record<TowerFloorPreviewDto['kind'], string> = {
   elite: '此层有精英镇守，不可轻敌。',
   boss: '此层强敌坐镇，需全力破关。',
 };
+
+const TOWER_MODAL_TAB_OPTIONS: Array<{ key: TowerModalTab; label: string }> = [
+  { key: 'overview', label: '冲层' },
+  { key: 'rank', label: '排行' },
+];
 
 const FloorPreviewCard: React.FC<{
   title: string;
@@ -98,6 +105,7 @@ const TowerModal: React.FC<TowerModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [activeTab, setActiveTab] = useState<TowerModalTab>('overview');
 
   const loadTowerData = useCallback(async () => {
     setLoading(true);
@@ -128,6 +136,7 @@ const TowerModal: React.FC<TowerModalProps> = ({
 
   useEffect(() => {
     if (!open) return;
+    setActiveTab('overview');
     void loadTowerData();
   }, [loadTowerData, open]);
 
@@ -187,86 +196,92 @@ const TowerModal: React.FC<TowerModalProps> = ({
         ) : null}
 
         {!loading && overview ? (
-          <Tabs
-            items={[
-              {
-                key: 'tower-overview',
-                label: '冲层',
-                children: (
-                  <div className="tower-modal-pane">
-                    <div className="tower-summary-panel">
-                      <div className="tower-summary-head">
-                        <div className="tower-summary-title-wrap">
-                          <div className="tower-summary-eyebrow">无尽试炼</div>
-                          <Typography.Title level={4}>千层塔</Typography.Title>
-                        </div>
-                        <div className="tower-summary-tip">塔中层层皆有守敌，破关方可更进一步。</div>
-                      </div>
+          <>
+            <div className="tower-modal-tabs" role="tablist" aria-label="千层塔面板切换">
+              {TOWER_MODAL_TAB_OPTIONS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
+                  className={`tower-modal-tab ${activeTab === tab.key ? 'is-active' : ''}`}
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-                      <div className="tower-summary-stats">
-                        <div className="tower-summary-stat">
-                          <span>历史最高</span>
-                          <strong>{overview.progress.bestFloor}</strong>
-                        </div>
-                        <div className="tower-summary-stat">
-                          <span>下一层数</span>
-                          <strong>{overview.progress.nextFloor}</strong>
-                        </div>
+            <div className="tower-modal-content">
+              {activeTab === 'overview' ? (
+                <div className="tower-modal-pane tower-modal-pane--overview">
+                  <div className="tower-summary-panel">
+                    <div className="tower-summary-head">
+                      <div className="tower-summary-title-wrap">
+                        <div className="tower-summary-eyebrow">无尽试炼</div>
+                        <Typography.Title level={4}>千层塔</Typography.Title>
                       </div>
+                      <div className="tower-summary-tip">塔中层层皆有守敌，破关方可更进一步。</div>
+                    </div>
 
-                      <div className="tower-summary-footer">
-                        <div className="tower-summary-actions">
-                          {inTeam ? (
-                            <Alert
-                              type="warning"
-                              showIcon
-                              message="组队状态下无法进入千层塔"
-                            />
-                          ) : null}
-                          <Button
-                            type="primary"
-                            loading={starting}
-                            onClick={() => void handleStart()}
-                            disabled={inTeam}
-                          >
-                            {challengeButtonText}
-                          </Button>
-                        </div>
+                    <div className="tower-summary-stats">
+                      <div className="tower-summary-stat">
+                        <span>历史最高</span>
+                        <strong>{overview.progress.bestFloor}</strong>
+                      </div>
+                      <div className="tower-summary-stat">
+                        <span>下一层数</span>
+                        <strong>{overview.progress.nextFloor}</strong>
                       </div>
                     </div>
 
-                    <div className="tower-preview-section">
-                      <FloorPreviewCard title="下一层守关" preview={overview.nextFloorPreview} />
+                    <div className="tower-summary-footer">
+                      <div className="tower-summary-actions">
+                        {inTeam ? (
+                          <Alert
+                            type="warning"
+                            showIcon
+                            message="组队状态下无法进入千层塔"
+                          />
+                        ) : null}
+                        <Button
+                          type="primary"
+                          loading={starting}
+                          onClick={() => void handleStart()}
+                          disabled={inTeam}
+                        >
+                          {challengeButtonText}
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                ),
-              },
-              {
-                key: 'tower-rank',
-                label: '排行',
-                children: (
-                  <div className="tower-modal-pane">
-                    <div className="tower-rank-list">
-                      {rankRows.length > 0 ? (
-                        rankRows.map((row) => (
-                          <div key={`tower-rank-${row.characterId}`} className="tower-rank-row">
-                            <div className="tower-rank-rank">{row.rank}</div>
-                            <div className="tower-rank-main">
-                              <div className="tower-rank-name">{row.name}</div>
-                              <div className="tower-rank-meta">{row.realm}</div>
-                            </div>
-                            <div className="tower-rank-floor">第 {row.bestFloor} 层</div>
+
+                  <div className="tower-preview-section">
+                    <FloorPreviewCard title="下一层守关" preview={overview.nextFloorPreview} />
+                  </div>
+                </div>
+              ) : (
+                <div className="tower-modal-pane tower-modal-pane--rank">
+                  <div className="tower-rank-list">
+                    {rankRows.length > 0 ? (
+                      rankRows.map((row) => (
+                        <div key={`tower-rank-${row.characterId}`} className="tower-rank-row">
+                          <div className="tower-rank-rank">{row.rank}</div>
+                          <div className="tower-rank-main">
+                            <div className="tower-rank-name">{row.name}</div>
+                            <div className="tower-rank-meta">{row.realm}</div>
                           </div>
-                        ))
-                      ) : (
-                        <div className="tower-rank-empty">尚无人留下登塔战绩。</div>
-                      )}
-                    </div>
+                          <div className="tower-rank-floor">第 {row.bestFloor} 层</div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="tower-rank-empty">尚无人留下登塔战绩。</div>
+                    )}
                   </div>
-                ),
-              },
-            ]}
-          />
+                </div>
+              )}
+            </div>
+          </>
         ) : null}
       </div>
     </Modal>
