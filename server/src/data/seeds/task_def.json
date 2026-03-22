@@ -1733,6 +1733,95 @@
       "prereq_task_ids": [],
       "enabled": true,
       "sort_weight": 726
+    },
+    {
+      "id": "task-hedao-daily-001",
+      "category": "daily",
+      "title": "玄宫日修",
+      "realm": "炼神返虚·合道期",
+      "description": "完成一次玄鉴司天宫问律，校准自身与镜律的共振节奏。",
+      "giver_npc_id": "npc-jingxu-lawkeeper",
+      "map_id": "map-dadao-jingxu",
+      "room_id": "room-jingxu-sitian-gate",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "text": "通关玄鉴司天宫 1 次",
+          "target": 1,
+          "params": {
+            "dungeon_id": "dungeon-lianshen-xuanjian-sitian-gong"
+          }
+        }
+      ],
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 31000
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 3100
+        },
+        {
+          "type": "item",
+          "item_def_id": "box-012",
+          "qty": 1
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 740
+    },
+    {
+      "id": "task-hedao-weekly-001",
+      "category": "event",
+      "title": "周常：司天轮照",
+      "realm": "炼神返虚·合道期",
+      "description": "多次完成困难玄鉴司天宫并击败玄鉴真君，验证问律承压上限。",
+      "giver_npc_id": "npc-jingxu-lawkeeper",
+      "map_id": "map-dadao-jingxu",
+      "room_id": "room-jingxu-sitian-gate",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "text": "通关玄鉴司天宫（困难）3次",
+          "target": 3,
+          "params": {
+            "dungeon_id": "dungeon-lianshen-xuanjian-sitian-gong",
+            "difficulty_id": "dd-jingxu-sitian-h"
+          }
+        },
+        {
+          "id": "obj-002",
+          "type": "kill_monster",
+          "text": "击败玄鉴真君 1 次",
+          "target": 1,
+          "params": {
+            "monster_id": "monster-boss-hedao-xuanjian-zhenjun"
+          }
+        }
+      ],
+      "rewards": [
+        {
+          "type": "spirit_stones",
+          "amount": 58000
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-hedao-qiyin",
+          "qty": 3
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-daojing-xuansha",
+          "qty": 10
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 741
     }
   ]
 }
