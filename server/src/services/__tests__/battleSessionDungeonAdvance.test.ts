@@ -26,6 +26,7 @@ import { dungeonService } from '../dungeon/service.js';
 import {
   advanceBattleSession,
   getCurrentBattleSessionDetail,
+  markBattleSessionFinished,
 } from '../battleSession/service.js';
 import {
   battleSessionById,
@@ -100,4 +101,108 @@ test('advanceBattleSession: 秘境最终结算后应通知其余队员退出旧�
     assert.fail('队员查询当前战斗会话应成功返回空结果');
   }
   assert.equal(memberSession.data.session ?? null, null);
+});
+
+test('markBattleSessionFinished: 秘境胜利后应由服务端自动推进下一波并广播新战斗快照', async (t) => {
+  const battleId = 'dungeon-battle-auto-advance-prev';
+  const nextBattleId = 'dungeon-battle-auto-advance-next';
+  const sessionId = 'dungeon-battle-auto-advance-session';
+  const instanceId = 'dungeon-instance-auto-advance';
+  const emitted: Array<{
+    userId: number;
+    event: string;
+    payload: {
+      kind?: string;
+      battleId?: string;
+      session?: { currentBattleId?: string | null; status?: string };
+    };
+  }> = [];
+  let scheduledAdvance: (() => Promise<void>) | null = null;
+
+  createBattleSessionRecord({
+    sessionId,
+    type: 'dungeon',
+    ownerUserId: 1,
+    participantUserIds: [1, 2],
+    currentBattleId: battleId,
+    status: 'running',
+    nextAction: 'none',
+    canAdvance: false,
+    lastResult: null,
+    context: { instanceId },
+  });
+
+  t.after(() => {
+    battleSessionById.delete(sessionId);
+    battleSessionIdByBattleId.delete(battleId);
+    battleSessionIdByBattleId.delete(nextBattleId);
+  });
+
+  t.mock.method(globalThis, 'setTimeout', ((handler: Parameters<typeof setTimeout>[0]) => {
+    if (typeof handler === 'function') {
+      scheduledAdvance = async () => {
+        await handler();
+      };
+    }
+    return 1 as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout);
+  t.mock.method(globalThis, 'clearTimeout', (() => undefined) as typeof clearTimeout);
+  t.mock.method(dungeonService, 'nextDungeonInstance', async (userId: number, requestInstanceId: string) => {
+    assert.equal(userId, 1);
+    assert.equal(requestInstanceId, instanceId);
+    return {
+      success: true as const,
+      data: {
+        instanceId,
+        status: 'running' as const,
+        battleId: nextBattleId,
+        state: {
+          battleId: nextBattleId,
+          phase: 'action',
+          roundCount: 1,
+        },
+      },
+    };
+  });
+  t.mock.method(gameServerModule, 'getGameServer', () => ({
+    emitToUser: (
+      userId: number,
+      event: string,
+      payload: {
+        kind?: string;
+        battleId?: string;
+        session?: { currentBattleId?: string | null; status?: string };
+      },
+    ) => {
+      emitted.push({ userId, event, payload });
+    },
+    pushCharacterUpdate: () => Promise.resolve(),
+  }) as never);
+
+  const waitingSnapshot = await markBattleSessionFinished(battleId, 'attacker_win');
+  assert.equal(waitingSnapshot?.status, 'waiting_transition');
+  assert.equal(waitingSnapshot?.nextAction, 'advance');
+  assert.ok(scheduledAdvance, '秘境胜利后应调度服务端自动推进');
+  const runScheduledAdvance = scheduledAdvance as (() => Promise<void>) | null;
+  if (!runScheduledAdvance) {
+    assert.fail('秘境胜利后应调度服务端自动推进');
+  }
+
+  await runScheduledAdvance();
+
+  const session = battleSessionById.get(sessionId);
+  assert.ok(session);
+  assert.equal(session?.status, 'running');
+  assert.equal(session?.currentBattleId, nextBattleId);
+  assert.equal(session?.nextAction, 'none');
+  assert.equal(session?.canAdvance, false);
+
+  assert.deepEqual(emitted.map((entry) => entry.userId), [1, 2]);
+  for (const entry of emitted) {
+    assert.equal(entry.event, 'battle:update');
+    assert.equal(entry.payload.kind, 'battle_started');
+    assert.equal(entry.payload.battleId, nextBattleId);
+    assert.equal(entry.payload.session?.currentBattleId, nextBattleId);
+    assert.equal(entry.payload.session?.status, 'running');
+  }
 });

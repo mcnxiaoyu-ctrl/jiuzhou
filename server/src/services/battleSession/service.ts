@@ -24,6 +24,7 @@
  */
 
 import crypto from 'crypto';
+import { getBattleLogCursor } from '../../battle/logStream.js';
 import { getGameServer } from '../../game/gameServer.js';
 import { battleParticipants } from '../battle/runtime/state.js';
 import { getBattleState } from '../battle/queries.js';
@@ -36,7 +37,10 @@ import {
 } from '../tower/service.js';
 import type { BattleState } from '../../battle/types.js';
 import type { BattleResult } from '../battle/battleTypes.js';
-import { buildBattleAbandonedRealtimePayload } from '../battle/runtime/realtime.js';
+import {
+  buildBattleAbandonedRealtimePayload,
+  buildBattleRealtimePayload,
+} from '../battle/runtime/realtime.js';
 import {
   createBattleSessionRecord,
   deleteBattleSessionRecord,
@@ -76,6 +80,9 @@ type BattleSessionResponse =
     message: string;
   };
 
+const DUNGEON_SESSION_SERVER_AUTO_ADVANCE_DELAY_MS = 200;
+const dungeonSessionAutoAdvanceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 const normalizeParticipantUserIds = (
   participantUserIds: number[],
   ownerUserId: number,
@@ -88,6 +95,13 @@ const normalizeParticipantUserIds = (
   }
   ids.add(ownerUserId);
   return [...ids];
+};
+
+const clearDungeonSessionAutoAdvanceTimer = (sessionId: string): void => {
+  const timer = dungeonSessionAutoAdvanceTimers.get(sessionId);
+  if (!timer) return;
+  clearTimeout(timer);
+  dungeonSessionAutoAdvanceTimers.delete(sessionId);
 };
 
 const getParticipantUserIdsForBattle = (
@@ -184,6 +198,107 @@ const buildSessionSuccess = (
   };
 };
 
+/**
+ * 秘境服务端自动推进广播。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：在服务端自动推进到下一波后，主动向 owner 与队员补一条携带最新 session 的权威战斗快照，去掉“必须等队长前端 HTTP 返回才能拿到新 session”的前端依赖。
+ * 2. 做什么：复用 battle:update 单一入口，只补 session 与日志游标，不额外发独立的“session changed”旁路事件。
+ * 3. 不做什么：不决定是否推进，也不修改 battle/session 存储；调用方必须先完成 `advanceBattleSession`。
+ *
+ * 输入/输出：
+ * - 输入：已经更新为 running 的 BattleSession 快照，以及开战返回的 battle state。
+ * - 输出：无；仅向当前会话受众发送一条 `battle_started` realtime。
+ *
+ * 数据流/状态流：
+ * waiting_transition session -> 服务端自动 advance -> 本函数补发新 battle 快照
+ * -> 客户端统一通过 battle:update 接管到下一波战斗。
+ *
+ * 关键边界条件与坑点：
+ * 1. 这里必须携带最新 session；秘境推进现在不再依赖队长前端手动拿 HTTP 返回。
+ * 2. 日志不能重置为全空全量，因此只发送当前 logCursor 的空增量，让已收到首帧的客户端保留原日志，漏帧客户端也能接上最新 battleId。
+ */
+const emitDungeonSessionAutoAdvanceSnapshot = (params: {
+  session: BattleSessionSnapshot;
+  state: unknown;
+}): void => {
+  if (!params.session.currentBattleId) return;
+  if (!params.state || typeof params.state !== 'object') return;
+
+  const targetUserIds = normalizeSessionAudienceUserIds([
+    params.session.ownerUserId,
+    ...params.session.participantUserIds,
+  ]);
+  if (targetUserIds.length === 0) return;
+
+  try {
+    const payload = buildBattleRealtimePayload({
+      kind: 'battle_started',
+      battleId: params.session.currentBattleId,
+      state: params.state as object,
+      logs: [],
+      extras: {
+        session: params.session,
+        authoritative: true,
+        logStart: getBattleLogCursor(params.session.currentBattleId),
+        logDelta: true,
+      },
+    });
+    const gameServer = getGameServer();
+    for (const userId of targetUserIds) {
+      gameServer.emitToUser(userId, 'battle:update', payload);
+    }
+  } catch (error) {
+    console.warn('[battleSession] 推送秘境自动推进快照失败:', error);
+  }
+};
+
+/**
+ * 秘境波次服务端自动推进调度。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把“秘境胜利后 200ms 自动推进下一波”的责任收口到服务端，避免 BattleSession 再依赖 leader 客户端定时器触发。
+ * 2. 做什么：同一 session 只保留一条待执行任务；重复进入 waiting_transition 时会先清旧任务再重排，避免双重推进。
+ * 3. 不做什么：不兜底处理失败结果，也不重试；推进成功与否仍以统一的 `advanceBattleSession` 逻辑为准。
+ *
+ * 输入/输出：
+ * - 输入：waiting_transition 中的秘境 sessionId。
+ * - 输出：无；到时后若 session 仍可推进，则直接调用统一 advance 入口。
+ *
+ * 数据流/状态流：
+ * markBattleSessionFinished(attacker_win)
+ * -> schedule
+ * -> timeout 到时校验 session 仍是 waiting_transition
+ * -> advanceBattleSession(owner)
+ * -> 补发带 session 的新 battle 快照。
+ *
+ * 关键边界条件与坑点：
+ * 1. 只有秘境胜利继续下一波才会调度；终局 cleared/failed 与其他会话类型不能误入。
+ * 2. 调度执行前必须重新读取最新 session，避免用户手动推进/退出后旧定时器继续误推进。
+ */
+const scheduleDungeonSessionAutoAdvance = (sessionId: string): void => {
+  clearDungeonSessionAutoAdvanceTimer(sessionId);
+  const timer = setTimeout(async () => {
+    dungeonSessionAutoAdvanceTimers.delete(sessionId);
+    const session = getBattleSessionRecord(sessionId);
+    if (!session) return;
+    if (session.type !== 'dungeon') return;
+    if (session.status !== 'waiting_transition') return;
+    if (session.nextAction !== 'advance' || !session.canAdvance) return;
+
+    const advanceResult = await advanceBattleSession(session.ownerUserId, sessionId);
+    if (!advanceResult.success) return;
+
+    const nextSession = advanceResult.data.session;
+    if (!nextSession.currentBattleId || advanceResult.data.finished) return;
+    emitDungeonSessionAutoAdvanceSnapshot({
+      session: nextSession,
+      state: advanceResult.data.state,
+    });
+  }, DUNGEON_SESSION_SERVER_AUTO_ADVANCE_DELAY_MS);
+  dungeonSessionAutoAdvanceTimers.set(sessionId, timer);
+};
+
 const getSessionFinalStatus = (
   type: BattleSessionType,
   result: BattleSessionResult,
@@ -265,6 +380,7 @@ const finalizeBattleSession = (params: {
   patch: Pick<BattleSessionRecord, 'status' | 'currentBattleId' | 'nextAction' | 'canAdvance'>
     & Partial<Pick<BattleSessionRecord, 'lastResult'>>;
 }): BattleSessionSnapshot | null => {
+  clearDungeonSessionAutoAdvanceTimer(params.sessionId);
   const updated = updateBattleSessionRecord(params.sessionId, params.patch);
   if (!updated) return null;
   const snapshot = toBattleSessionSnapshot(updated);
@@ -502,6 +618,7 @@ export const advanceBattleSession = async (
   if (!session.canAdvance) {
     return { success: false, message: '当前战斗会话不可推进' };
   }
+  clearDungeonSessionAutoAdvanceTimer(session.sessionId);
 
   if (session.type === 'pve') {
     if (session.nextAction === 'return_to_map') {
@@ -617,6 +734,9 @@ export const markBattleSessionFinished = async (
     } else {
       await deletePveResumeIntentForSession(updated);
     }
+  }
+  if (updated.type === 'dungeon' && policy.nextAction === 'advance') {
+    scheduleDungeonSessionAutoAdvance(updated.sessionId);
   }
   return toBattleSessionSnapshot(updated);
 };

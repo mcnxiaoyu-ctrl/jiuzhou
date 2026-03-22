@@ -46,7 +46,7 @@ const createSession = (
 });
 
 describe('resolveBattleSessionAdvanceMode', () => {
-  it('秘境 leader 在可推进时，应继续自动推进下一波', () => {
+  it('秘境 leader 在可推进时，应改为等待服务端自动推进下一波', () => {
     expect(
       resolveBattleSessionAdvanceMode({
         session: createSession(),
@@ -54,7 +54,7 @@ describe('resolveBattleSessionAdvanceMode', () => {
         isTeamLeader: true,
         blockedAutoAdvanceSessionKey: '',
       }),
-    ).toBe('auto_session');
+    ).toBe('none');
   });
 
   it('普通 PVE 的继续战斗在等待冷却时，应走自动冷却推进', () => {

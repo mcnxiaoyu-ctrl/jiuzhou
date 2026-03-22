@@ -3,7 +3,7 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：统一收口 Game 页对 battle session 的“自动推进 / 手动继续 / 不可控等待”判定，避免 effect、按钮展示、战斗模式计算各写一套条件。
- * 2. 做什么：把“自动推进失败后降级为手动继续”封成单一纯函数，确保秘境与普通 PVE 共用同一恢复策略，减少重复判断。
+ * 2. 做什么：把“自动推进失败后降级为手动继续”封成单一纯函数，并明确秘境改为等待服务端推进，避免页面层再分散判断。
  * 3. 不做什么：不直接发请求、不操作 React state，也不决定地图本地战斗如何续战。
  *
  * 输入/输出：
@@ -96,6 +96,10 @@ export const resolveBattleSessionAdvanceMode = (params: {
 
   if (session.type === 'tower' && session.nextAction === 'return_to_map') {
     return 'manual_session';
+  }
+
+  if (session.type === 'dungeon' && session.nextAction === 'advance') {
+    return 'none';
   }
 
   if (session.type === 'pve' && session.nextAction === 'advance') {
