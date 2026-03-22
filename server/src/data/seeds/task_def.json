@@ -1792,15 +1792,6 @@
             "dungeon_id": "dungeon-lianshen-xuanjian-sitian-gong",
             "difficulty_id": "dd-jingxu-sitian-h"
           }
-        },
-        {
-          "id": "obj-002",
-          "type": "kill_monster",
-          "text": "击败玄鉴真君 1 次",
-          "target": 1,
-          "params": {
-            "monster_id": "monster-boss-hedao-xuanjian-zhenjun"
-          }
         }
       ],
       "rewards": [
