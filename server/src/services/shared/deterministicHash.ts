@@ -66,3 +66,42 @@ export const pickDeterministicItem = <T>(params: {
   });
   return params.items[index] as T;
 };
+
+export const pickDeterministicItems = <T>(params: {
+  seed: string;
+  items: readonly T[];
+  count: number;
+}): T[] => {
+  const count = Math.max(0, Math.floor(params.count));
+  if (count <= 0) {
+    return [];
+  }
+  if (params.items.length <= 0) {
+    throw new Error('deterministic hash 缺少可选项');
+  }
+
+  const remaining = Array.from(params.items);
+  const picked: T[] = [];
+
+  while (remaining.length > 0 && picked.length < count) {
+    const index = pickDeterministicIndex({
+      seed: params.seed,
+      length: remaining.length,
+      offset: picked.length,
+    });
+    const [next] = remaining.splice(index, 1);
+    if (next !== undefined) {
+      picked.push(next);
+    }
+  }
+
+  while (picked.length < count) {
+    picked.push(pickDeterministicItem({
+      seed: params.seed,
+      items: params.items,
+      offset: picked.length,
+    }));
+  }
+
+  return picked;
+};

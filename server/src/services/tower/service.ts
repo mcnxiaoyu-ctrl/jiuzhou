@@ -47,13 +47,13 @@ import { isCharacterInBattle } from '../battle/runtime/state.js';
 import { TOWER_PVE_BATTLE_START_POLICY } from '../battle/shared/startPolicy.js';
 import { startResolvedPVEBattleByPolicy } from '../battle/pve.js';
 import { resolveOrderedMonsters } from '../battle/shared/monsters.js';
-import { resolveTowerFloor } from './algorithm.js';
 import { canReuseTowerSession, pickLatestActiveTowerSession } from './activeSession.js';
 import {
   deleteTowerBattleRuntime,
   getTowerBattleRuntime,
   registerTowerBattleRuntime,
 } from './runtime.js';
+import { resolveTowerFloorByFrozenFrontier } from './frozenFrontier.js';
 import type {
   TowerBattleRuntimeRecord,
   TowerFloorPreview,
@@ -298,11 +298,14 @@ const clearTowerRunState = async (params: {
   );
 };
 
-const buildTowerOverviewDto = (params: {
+const buildTowerOverviewDto = async (params: {
   progress: TowerProgressRecord;
   activeSession: BattleSessionSnapshot | null;
-  characterId: number;
-}): TowerOverviewDto => {
+}): Promise<TowerOverviewDto> => {
+  const nextFloorPreview = (await resolveTowerFloorByFrozenFrontier(
+    params.progress.nextFloor,
+  )).preview;
+
   return {
     progress: {
       bestFloor: params.progress.bestFloor,
@@ -312,10 +315,7 @@ const buildTowerOverviewDto = (params: {
       lastSettledFloor: params.progress.lastSettledFloor,
     },
     activeSession: params.activeSession,
-    nextFloorPreview: resolveTowerFloor({
-      characterId: params.characterId,
-      floor: params.progress.nextFloor,
-    }).preview,
+    nextFloorPreview,
   };
 };
 
@@ -370,10 +370,7 @@ const createTowerBattleForFloor = async (params: {
   runId: string;
   floor: number;
 }): Promise<{ battleId: string; state: BattleState; runtime: TowerBattleRuntimeRecord }> => {
-  const resolvedFloor = resolveTowerFloor({
-    characterId: params.characterId,
-    floor: params.floor,
-  });
+  const resolvedFloor = await resolveTowerFloorByFrozenFrontier(params.floor);
   const battleId = `tower-battle-${params.userId}-${Date.now()}`;
   const skillResolveResult = resolveOrderedMonsters(
     resolvedFloor.monsters.map((monster) => monster.id),
@@ -450,10 +447,9 @@ export const getTowerOverview = async (userId: number): Promise<{
 
     return {
       success: true,
-      data: buildTowerOverviewDto({
+      data: await buildTowerOverviewDto({
         progress,
         activeSession: visibleActiveSession,
-        characterId,
       }),
     };
   } catch (error) {

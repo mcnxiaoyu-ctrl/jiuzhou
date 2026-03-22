@@ -20,6 +20,7 @@
 
 import type { BattleSessionSnapshot } from '../battleSession/types.js';
 import type { MonsterData } from '../../battle/battleFactory.js';
+import type { MonsterDefConfig } from '../staticConfigLoader.js';
 
 export type TowerFloorKind = 'normal' | 'elite' | 'boss';
 
@@ -78,4 +79,23 @@ export interface TowerBattleRuntimeRecord {
   floor: number;
   monsters: MonsterData[];
   preview: TowerFloorPreview;
+}
+
+export interface TowerMonsterPoolState {
+  normal: Map<string, MonsterDefConfig[]>;
+  elite: Map<string, MonsterDefConfig[]>;
+  boss: Map<string, MonsterDefConfig[]>;
+}
+
+export interface TowerFrozenFrontierRecord {
+  frozenFloorMax: number;
+  updatedAt: string;
+}
+
+export interface TowerFrozenMonsterSnapshot {
+  frozenFloorMax: number;
+  kind: TowerFloorKind;
+  realm: string;
+  monsterDefId: string;
+  updatedAt: string;
 }

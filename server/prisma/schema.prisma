@@ -251,6 +251,26 @@ model character_tower_progress {
   @@index([best_floor(sort: Desc), reached_at(sort: Asc), character_id], map: "idx_character_tower_progress_rank")
 }
 
+/// 千层塔冻结前沿，单一全局入口
+model tower_frozen_frontier {
+  scope            String   @id @default("tower") @db.VarChar(32)
+  frozen_floor_max Int      @default(0)
+  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+}
+
+/// 千层塔冻结怪物池快照
+model tower_frozen_monster_snapshot {
+  id                 BigInt     @id @default(autoincrement())
+  frozen_floor_max   Int
+  kind               String     @db.VarChar(16)
+  realm              String     @db.VarChar(64)
+  monster_def_id     String     @db.VarChar(64)
+  updated_at         DateTime   @default(now()) @db.Timestamptz(6)
+
+  @@unique([frozen_floor_max, kind, realm, monster_def_id], map: "uq_tower_frozen_monster_snapshot_key")
+  @@index([frozen_floor_max, kind, realm, monster_def_id], map: "idx_tower_frozen_monster_snapshot_pool")
+}
+
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model character_room_resource_state {
   id             Int        @id @default(autoincrement())

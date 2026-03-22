@@ -2,36 +2,41 @@
  * 千层塔算法生成器。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：基于角色 ID、层数与怪物静态定义，稳定生成每层的怪物组合、层型与属性倍率。
+ * 1. 做什么：基于层数与怪物池定义，稳定生成每层的怪物组合、层型、候选池来源与属性倍率。
  * 2. 做什么：把塔的“节奏规则”集中为单一算法入口，避免路由、结算、前端预览各自拼一遍楼层逻辑。
  * 3. 不做什么：不写数据库，也不直接创建 battle session。
  *
  * 输入/输出：
- * - 输入：角色 ID、层数。
+ * - 输入：层数，以及按 `kind -> realm` 预分组后的怪物池。
  * - 输出：该层的战斗怪物与前端可展示的预览 DTO。
  *
  * 数据流/状态流：
  * - tower service 调用本模块 -> 生成楼层快照 -> start battle / overview / settlement 共用同一结果。
  *
  * 关键边界条件与坑点：
- * 1. 怪物池按 `kind -> realm` 预分组；如果某个 kind 没有任何可用怪物，会直接抛错阻断服务启动期配置问题。
- * 2. 强度倍率在怪物 `base_attrs` 上一次性生效，并把 encounter variance 归零，避免同一层在同一角色身上再次出现额外随机漂移。
+ * 1. 封顶前继续按境界推进选怪，封顶后改为按 `kind` 进入全量混池；这条规则必须只存在于本模块，不能散落到 service 或前端预览。
+ * 2. 强度倍率在怪物 `base_attrs` 上一次性生效，并把 encounter variance 归零，避免同一层在不同入口里出现额外随机漂移。
+ * 3. overflow 混池预览必须明确标出“混池”状态，否则前端会把最后一个境界名误当成当前层只会出该境界怪。
  */
 
 import type { MonsterData } from '../../battle/battleFactory.js';
 import { getMonsterDefinitions, type MonsterDefConfig } from '../staticConfigLoader.js';
 import { REALM_ORDER, normalizeRealmStrict } from '../shared/realmRules.js';
-import { pickDeterministicItem, pickDeterministicIndex } from '../shared/deterministicHash.js';
+import { pickDeterministicIndex, pickDeterministicItems } from '../shared/deterministicHash.js';
 import { resolveTowerAttrMultiplier } from './difficulty.js';
-import type { ResolvedTowerFloor, TowerFloorKind } from './types.js';
+import type { ResolvedTowerFloor, TowerFloorKind, TowerMonsterPoolState } from './types.js';
 
 const TOWER_CYCLE_FLOORS = 10;
-
-type TowerMonsterPoolState = {
-  normal: Map<string, MonsterDefConfig[]>;
-  elite: Map<string, MonsterDefConfig[]>;
-  boss: Map<string, MonsterDefConfig[]>;
-};
+const TOWER_NORMAL_MONSTER_COUNT_MIN = 2;
+const TOWER_NORMAL_MONSTER_COUNT_VARIANCE = 2;
+const TOWER_NORMAL_MONSTER_COUNT_INTERVAL = 50;
+const TOWER_NORMAL_MONSTER_COUNT_CAP = 5;
+const TOWER_ELITE_MONSTER_COUNT_BASE = 2;
+const TOWER_ELITE_MONSTER_COUNT_INTERVAL = 75;
+const TOWER_ELITE_MONSTER_COUNT_CAP = 4;
+const TOWER_BOSS_MONSTER_COUNT_BASE = 1;
+const TOWER_BOSS_MONSTER_COUNT_INTERVAL = 100;
+const TOWER_BOSS_MONSTER_COUNT_CAP = 3;
 
 const normalizeTowerMonsterKind = (value: string | null | undefined): TowerFloorKind => {
   if (value === 'boss') return 'boss';
@@ -84,14 +89,16 @@ const cloneMonsterBaseAttrs = (
   return next;
 };
 
-const buildTowerMonsterPools = (): TowerMonsterPoolState => {
+export const buildTowerMonsterPoolsFromDefinitions = (
+  monsterDefinitions: MonsterDefConfig[] = getMonsterDefinitions(),
+): TowerMonsterPoolState => {
   const pools: TowerMonsterPoolState = {
     normal: new Map(),
     elite: new Map(),
     boss: new Map(),
   };
 
-  for (const monster of getMonsterDefinitions()) {
+  for (const monster of monsterDefinitions) {
     if (monster.enabled === false) continue;
     const monsterId = typeof monster.id === 'string' ? monster.id.trim() : '';
     if (!monsterId) continue;
@@ -119,18 +126,39 @@ const buildTowerMonsterPools = (): TowerMonsterPoolState => {
   return pools;
 };
 
-const towerMonsterPools = buildTowerMonsterPools();
+const towerMonsterPools = buildTowerMonsterPoolsFromDefinitions();
 
-const getRealmSequenceForKind = (kind: TowerFloorKind): string[] => {
-  const pool = towerMonsterPools[kind];
-  return REALM_ORDER.filter((realm) => pool.has(realm));
+export const getLiveTowerMonsterPools = (): TowerMonsterPoolState => {
+  return towerMonsterPools;
+};
+
+export const buildTowerMixedMonsterCandidates = (params: {
+  kind: TowerFloorKind;
+  pools: TowerMonsterPoolState;
+}): MonsterDefConfig[] => {
+  const bucket = params.pools[params.kind];
+  const candidates: MonsterDefConfig[] = [];
+
+  for (const realm of REALM_ORDER) {
+    const monsters = bucket.get(realm);
+    if (!monsters || monsters.length <= 0) continue;
+    candidates.push(...monsters);
+  }
+
+  if (candidates.length <= 0) {
+    throw new Error(`千层塔缺少 ${params.kind} 混池怪物`);
+  }
+
+  return candidates;
 };
 
 const resolveKindRealmForFloor = (params: {
   floor: number;
   kind: TowerFloorKind;
+  pools: TowerMonsterPoolState;
 }): { realm: string; overflowTierCount: number } => {
-  const realms = getRealmSequenceForKind(params.kind);
+  const pool = params.pools[params.kind];
+  const realms = REALM_ORDER.filter((realm) => pool.has(realm));
   if (realms.length <= 0) {
     throw new Error(`千层塔缺少 ${params.kind} 境界怪物`);
   }
@@ -142,18 +170,91 @@ const resolveKindRealmForFloor = (params: {
   };
 };
 
-const resolveMonsterCountForFloor = (params: {
+const resolveTowerMonsterCountGrowth = (params: {
+  floor: number;
+  interval: number;
+}): number => {
+  const floor = Math.max(1, Math.floor(params.floor));
+  return Math.floor(floor / params.interval);
+};
+
+export const resolveTowerMonsterCandidatesForFloor = (params: {
+  floor: number;
+  kind: TowerFloorKind;
+  pools: TowerMonsterPoolState;
+}): {
+  realm: string;
+  overflowTierCount: number;
+  poolMode: 'realm' | 'mixed';
+  candidates: MonsterDefConfig[];
+} => {
+  const kindRealmResult = resolveKindRealmForFloor({
+    floor: params.floor,
+    kind: params.kind,
+    pools: params.pools,
+  });
+
+  if (kindRealmResult.overflowTierCount > 0) {
+    return {
+      realm: kindRealmResult.realm,
+      overflowTierCount: kindRealmResult.overflowTierCount,
+      poolMode: 'mixed',
+      candidates: buildTowerMixedMonsterCandidates({
+        kind: params.kind,
+        pools: params.pools,
+      }),
+    };
+  }
+
+  const candidates = params.pools[params.kind].get(kindRealmResult.realm);
+  if (!candidates || candidates.length <= 0) {
+    throw new Error(
+      `千层塔楼层缺少怪物候选: floor=${Math.max(1, Math.floor(params.floor))}, kind=${params.kind}, realm=${kindRealmResult.realm}`,
+    );
+  }
+
+  return {
+    realm: kindRealmResult.realm,
+    overflowTierCount: kindRealmResult.overflowTierCount,
+    poolMode: 'realm',
+    candidates,
+  };
+};
+
+export const resolveTowerMonsterCountForFloor = (params: {
   kind: TowerFloorKind;
   floor: number;
   seed: string;
 }): number => {
-  if (params.kind === 'boss') return 1;
-  if (params.kind === 'elite') return 2;
+  if (params.kind === 'boss') {
+    return Math.min(
+      TOWER_BOSS_MONSTER_COUNT_CAP,
+      TOWER_BOSS_MONSTER_COUNT_BASE + resolveTowerMonsterCountGrowth({
+        floor: params.floor,
+        interval: TOWER_BOSS_MONSTER_COUNT_INTERVAL,
+      }),
+    );
+  }
+  if (params.kind === 'elite') {
+    return Math.min(
+      TOWER_ELITE_MONSTER_COUNT_CAP,
+      TOWER_ELITE_MONSTER_COUNT_BASE + resolveTowerMonsterCountGrowth({
+        floor: params.floor,
+        interval: TOWER_ELITE_MONSTER_COUNT_INTERVAL,
+      }),
+    );
+  }
   const extraCount = pickDeterministicIndex({
     seed: `${params.seed}::monster-count`,
-    length: 2,
+    length: TOWER_NORMAL_MONSTER_COUNT_VARIANCE,
   });
-  return 2 + extraCount;
+  return Math.min(
+    TOWER_NORMAL_MONSTER_COUNT_CAP,
+    TOWER_NORMAL_MONSTER_COUNT_MIN + extraCount + resolveTowerMonsterCountGrowth({
+      floor: params.floor,
+      interval: TOWER_NORMAL_MONSTER_COUNT_INTERVAL,
+    }),
+  );
 };
 
 const buildTowerMonsterForFloor = (params: {
@@ -182,38 +283,41 @@ const buildTowerMonsterForFloor = (params: {
   };
 };
 
-export const resolveTowerFloor = (params: {
-  characterId: number;
+export const resolveTowerFloorFromPools = (params: {
   floor: number;
+  pools: TowerMonsterPoolState;
 }): ResolvedTowerFloor => {
   const floor = Math.max(1, Math.floor(params.floor));
   const kind = getTowerFloorKind(floor);
-  const seed = `tower:${params.characterId}:${floor}`;
-  const { realm, overflowTierCount } = resolveKindRealmForFloor({ floor, kind });
-  const candidates = towerMonsterPools[kind].get(realm);
-  if (!candidates || candidates.length <= 0) {
-    throw new Error(`千层塔楼层缺少怪物候选: floor=${floor}, kind=${kind}, realm=${realm}`);
-  }
+  const seed = `tower:${floor}`;
+  const {
+    realm,
+    overflowTierCount,
+    poolMode,
+    candidates,
+  } = resolveTowerMonsterCandidatesForFloor({
+    floor,
+    kind,
+    pools: params.pools,
+  });
 
   const attrMultiplier = resolveTowerAttrMultiplier({
     floor,
     kind,
     overflowTierCount,
   });
-  const monsterCount = resolveMonsterCountForFloor({ kind, floor, seed });
+  const monsterCount = resolveTowerMonsterCountForFloor({ kind, floor, seed });
 
-  const monsters = Array.from({ length: monsterCount }, (_value, index) => {
-    const picked = pickDeterministicItem({
-      seed: `${seed}::monster`,
-      items: candidates,
-      offset: index,
-    });
-    return buildTowerMonsterForFloor({
-      monster: picked,
-      kind,
-      attrMultiplier,
-    });
-  });
+  const previewRealm = poolMode === 'mixed' ? `${realm}·混池` : realm;
+  const monsters = pickDeterministicItems({
+    seed: `${seed}::monster`,
+    items: candidates,
+    count: monsterCount,
+  }).map((monster) => buildTowerMonsterForFloor({
+    monster,
+    kind,
+    attrMultiplier,
+  }));
 
   return {
     monsters,
@@ -221,9 +325,19 @@ export const resolveTowerFloor = (params: {
       floor,
       kind,
       seed,
-      realm,
+      realm: previewRealm,
       monsterIds: monsters.map((monster) => monster.id),
       monsterNames: monsters.map((monster) => monster.name),
     },
   };
+};
+
+export const resolveTowerFloor = (params: {
+  floor: number;
+  characterId?: number;
+}): ResolvedTowerFloor => {
+  return resolveTowerFloorFromPools({
+    floor: params.floor,
+    pools: towerMonsterPools,
+  });
 };
