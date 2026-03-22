@@ -27,7 +27,7 @@
           "玄鉴司天宫"
         ],
         "sort_weight": 109,
-        "enabled": false,
+        "enabled": true,
         "version": 1
       },
       "difficulties": [

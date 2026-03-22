@@ -3294,7 +3294,7 @@
       "revive_map_id": "map-dadao-jingxu",
       "revive_room_id": "room-jingxu-dukou",
       "sort_weight": 590,
-      "enabled": false,
+      "enabled": true,
       "rooms": [
         {
           "id": "room-jingxu-dukou",

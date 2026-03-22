@@ -541,12 +541,6 @@
       "to": "炼神返虚·合道期",
       "requirements": [
         {
-          "id": "version-lock-hedao",
-          "type": "version_locked",
-          "title": "境界开放进度",
-          "reason": "合道境暂未开放突破"
-        },
-        {
           "id": "exp",
           "type": "exp_min",
           "min": 4300000,

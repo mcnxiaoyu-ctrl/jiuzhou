@@ -1,7 +1,7 @@
 /**
  * 主线目标进度推进
  *
- * 作用：处理各类目标事件（击杀、采集、到达等）推进当前任务节的目标进度，以及同步境界/技能类静态目标。
+ * 作用：处理各类目标事件（击杀、采集、到达等）推进当前任务节的目标进度，以及同步境界/技能/背包持有类目标。
  * 输入：characterId + MainQuestProgressEvent。
  * 输出：推进结果（是否更新、是否全部完成）。
  *
@@ -11,7 +11,7 @@
  *
  * 边界条件：
  * 1) 仅在 section_status = 'objectives' 时处理，其余阶段直接返回。
- * 2) syncCurrentSectionStaticProgress 是幂等操作，可在多处安全调用。
+ * 2) syncCurrentSectionStaticProgress 是幂等操作，可在多处安全调用；适合在进入 objectives 阶段时回填“背包里已持有”的收集目标。
  */
 import { query } from '../../config/database.js';
 import { getRealmOrderIndex } from '../shared/realmRules.js';
@@ -26,7 +26,50 @@ const getRealmRank = (realmRaw: unknown, subRealmRaw?: unknown): number => {
   return getRealmOrderIndex(realmRaw, subRealmRaw);
 };
 
-/** 同步境界/技能目标（幂等） */
+/**
+ * 查询当前任务节里所有 collect 目标对应的背包持有量。
+ *
+ * 这样进入 objectives 阶段时，前置环节已经获得的任务物品就能一次性回填，
+ * 避免“明明背包里已经够了，但仍要额外再捡一次”。
+ */
+const loadCollectObjectiveItemQtyMap = async (
+  characterId: number,
+  objectives: Array<{ type?: unknown; params?: unknown }>,
+): Promise<Map<string, number>> => {
+  const itemIds = Array.from(
+    new Set(
+      objectives
+        .filter((objective) => asString(objective.type) === 'collect')
+        .map((objective) => asString(asObject(objective.params).item_id).trim())
+        .filter((itemId) => itemId.length > 0),
+    ),
+  );
+
+  if (itemIds.length === 0) {
+    return new Map<string, number>();
+  }
+
+  const itemQtyRes = await query(
+    `SELECT item_def_id, COALESCE(SUM(qty), 0)::int AS qty
+     FROM item_instance
+     WHERE owner_character_id = $1
+       AND location = 'bag'
+       AND item_def_id = ANY($2::text[])
+     GROUP BY item_def_id`,
+    [characterId, itemIds],
+  );
+
+  const itemQtyMap = new Map<string, number>();
+  for (const row of itemQtyRes.rows ?? []) {
+    const record = row as { item_def_id?: unknown; qty?: unknown };
+    const itemId = asString(record.item_def_id).trim();
+    if (!itemId) continue;
+    itemQtyMap.set(itemId, Math.max(0, Math.floor(asNumber(record.qty, 0))));
+  }
+  return itemQtyMap;
+};
+
+/** 同步境界/技能/背包持有目标（幂等） */
 export const syncCurrentSectionStaticProgress = async (characterId: number): Promise<void> => {
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return;
@@ -62,6 +105,7 @@ export const syncCurrentSectionStaticProgress = async (characterId: number): Pro
 
   const objectives = asArray<{ id?: unknown; type?: unknown; target?: unknown; params?: unknown }>(section.objectives);
   const progressData = asObject(progress.objectives_progress);
+  const collectObjectiveItemQtyMap = await loadCollectObjectiveItemQtyMap(cid, objectives);
 
   const characterRes = await query(`SELECT realm, sub_realm FROM characters WHERE id = $1 LIMIT 1`, [cid]);
   const characterRow = characterRes.rows?.[0] as { realm?: unknown; sub_realm?: unknown } | undefined;
@@ -91,6 +135,17 @@ export const syncCurrentSectionStaticProgress = async (characterId: number): Pro
 
     const objType = asString(obj.type);
     const params = asObject(obj.params);
+
+    if (objType === 'collect') {
+      const itemId = asString(params.item_id).trim();
+      const qtyHave = itemId ? (collectObjectiveItemQtyMap.get(itemId) ?? 0) : 0;
+      const nextDone = Math.min(target, qtyHave);
+      if (nextDone > done) {
+        progressData[objId] = nextDone;
+        updated = true;
+      }
+      continue;
+    }
 
     if (objType === 'upgrade_realm') {
       const requiredRealm = asString(params.realm).trim();

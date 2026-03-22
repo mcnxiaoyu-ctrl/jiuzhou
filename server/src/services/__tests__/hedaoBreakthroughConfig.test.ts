@@ -58,9 +58,7 @@ test('还虚->合道突破配置应满足合道一期前置/消耗/奖励口径'
 
   const requirements = entry.requirements ?? [];
   const versionLockedReq = requirements.find((row) => row.type === 'version_locked');
-  assert.ok(versionLockedReq, '合道期突破应存在版本锁前置');
-  assert.equal(versionLockedReq.title, '境界开放进度');
-  assert.equal(versionLockedReq.reason, '合道境暂未开放突破');
+  assert.equal(versionLockedReq, undefined, '合道期突破不应继续保留版本锁前置');
 
   const expReq = requirements.find((row) => row.type === 'exp_min');
   assert.equal(expReq?.min, 4_300_000);
