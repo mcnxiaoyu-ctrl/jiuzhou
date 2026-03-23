@@ -14,10 +14,10 @@ import {
   getPasswordPolicyError,
 } from '../services/authService.js';
 import {
-  assertCredentialAttemptAllowed,
-  clearCredentialAttemptFailures,
-  recordCredentialAttemptFailure,
-} from '../services/authAttemptGuardService.js';
+  assertActionAttemptAllowed,
+  clearActionAttemptFailures,
+  recordActionAttemptFailure,
+} from '../services/attemptGuardService.js';
 import { resolveRequestIp } from '../shared/requestIp.js';
 import { verifyCaptchaByProvider } from '../shared/verifyCaptchaByProvider.js';
 
@@ -113,13 +113,13 @@ router.post('/password/change', requireAuth, changePasswordQpsLimit, asyncHandle
     subject: String(userId),
     ip: requestIp,
   };
-  await assertCredentialAttemptAllowed(attemptScope);
+  await assertActionAttemptAllowed(attemptScope);
 
   const result = await changePassword(userId, currentPassword, newPassword);
   if (result.success) {
-    await clearCredentialAttemptFailures(attemptScope);
+    await clearActionAttemptFailures(attemptScope);
   } else {
-    await recordCredentialAttemptFailure(attemptScope);
+    await recordActionAttemptFailure(attemptScope);
   }
   return sendResult(res, result);
 }));

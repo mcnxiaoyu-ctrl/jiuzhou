@@ -1,35 +1,35 @@
 /**
- * 认证尝试防护服务
+ * 敏感操作尝试防护服务
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：基于 Redis 维护登录/改密的失败计数与临时锁定，拦截撞库和密码爆破。
- * 2. 做什么：把“账号 + IP”“账号”“IP”三种维度的失败统计集中管理，避免路由层重复拼 Redis key 和阈值判断。
- * 3. 不做什么：不负责验证码校验、不负责密码比对，也不负责决定认证接口的具体业务文案。
+ * 1. 做什么：基于 Redis 维护登录、改密、兑换码等敏感操作的失败计数与临时锁定，拦截撞库和爆破。
+ * 2. 做什么：把“主体 + IP”“主体”“IP”三种维度的失败统计集中管理，避免每条路由重复拼 Redis key 和阈值判断。
+ * 3. 不做什么：不负责验证码校验、不负责密码或兑换码真值校验，也不负责业务成功后的后续流程。
  *
  * 输入/输出：
- * - 输入：认证动作、主体标识（用户名或用户 ID）与请求 IP。
+ * - 输入：敏感操作类型、主体标识（用户名或用户 ID）与请求 IP。
  * - 输出：允许继续尝试时正常返回；超出阈值时抛出 429 BusinessError；失败/成功后负责更新或清理 Redis 计数。
  *
  * 数据流/状态流：
- * 路由层构造尝试作用域 -> assertCredentialAttemptAllowed 检查锁定状态 -> 认证失败 recordCredentialAttemptFailure ->
- * 达阈值后写入 block key -> 后续请求直接 429；认证成功 clearCredentialAttemptFailures 清理主体相关失败计数。
+ * 路由层构造尝试作用域 -> `assertActionAttemptAllowed` 检查锁定状态 -> 业务失败 `recordActionAttemptFailure` ->
+ * 达阈值后写入 block key -> 后续请求直接 429；业务成功 `clearActionAttemptFailures` 清理主体相关失败计数。
  *
  * 关键边界条件与坑点：
- * 1. Redis key 里的主体和 IP 都要做编码，避免用户名包含特殊字符时污染 key 结构。
+ * 1. Redis key 里的操作类型、主体和 IP 都要做编码，避免特殊字符污染 key 结构，确保不同入口共享同一套键规则。
  * 2. 成功后只清理“主体 + IP / 主体”维度，不清理纯 IP 维度，避免同一出口 IP 上其他异常流量被无意重置。
  */
 import { redis } from '../config/redis.js';
 import { BusinessError } from '../middleware/BusinessError.js';
 
-export type CredentialAttemptAction = 'login' | 'password-change';
+export type ActionAttemptAction = 'login' | 'password-change' | 'redeem-code';
 
-export type CredentialAttemptScope = {
-  action: CredentialAttemptAction;
+export type ActionAttemptScope = {
+  action: ActionAttemptAction;
   subject: string;
   ip: string;
 };
 
-type CredentialGuardPolicy = {
+type AttemptGuardPolicy = {
   failureWindowMs: number;
   blockWindowMs: number;
   subjectIpFailureLimit: number;
@@ -38,7 +38,7 @@ type CredentialGuardPolicy = {
   blockedMessage: string;
 };
 
-const LOGIN_POLICY: CredentialGuardPolicy = {
+const LOGIN_POLICY: AttemptGuardPolicy = {
   failureWindowMs: 15 * 60 * 1000,
   blockWindowMs: 15 * 60 * 1000,
   subjectIpFailureLimit: 5,
@@ -47,7 +47,7 @@ const LOGIN_POLICY: CredentialGuardPolicy = {
   blockedMessage: '登录尝试过于频繁，请15分钟后再试',
 };
 
-const PASSWORD_CHANGE_POLICY: CredentialGuardPolicy = {
+const PASSWORD_CHANGE_POLICY: AttemptGuardPolicy = {
   failureWindowMs: 10 * 60 * 1000,
   blockWindowMs: 10 * 60 * 1000,
   subjectIpFailureLimit: 5,
@@ -56,12 +56,22 @@ const PASSWORD_CHANGE_POLICY: CredentialGuardPolicy = {
   blockedMessage: '密码验证失败次数过多，请10分钟后再试',
 };
 
-const CREDENTIAL_GUARD_POLICY_MAP: Record<CredentialAttemptAction, CredentialGuardPolicy> = {
-  login: LOGIN_POLICY,
-  'password-change': PASSWORD_CHANGE_POLICY,
+const REDEEM_CODE_POLICY: AttemptGuardPolicy = {
+  failureWindowMs: 15 * 60 * 1000,
+  blockWindowMs: 15 * 60 * 1000,
+  subjectIpFailureLimit: 5,
+  subjectFailureLimit: 10,
+  ipFailureLimit: 20,
+  blockedMessage: '兑换码尝试过于频繁，请15分钟后再试',
 };
 
-const normalizeCredentialKeyPart = (value: string, fieldName: string): string => {
+const ATTEMPT_GUARD_POLICY_MAP: Record<ActionAttemptAction, AttemptGuardPolicy> = {
+  login: LOGIN_POLICY,
+  'password-change': PASSWORD_CHANGE_POLICY,
+  'redeem-code': REDEEM_CODE_POLICY,
+};
+
+const normalizeAttemptKeyPart = (value: string, fieldName: string): string => {
   const normalizedValue = value.trim();
   if (!normalizedValue) {
     throw new Error(`${fieldName} 不能为空`);
@@ -69,11 +79,12 @@ const normalizeCredentialKeyPart = (value: string, fieldName: string): string =>
   return encodeURIComponent(normalizedValue.toLowerCase());
 };
 
-const buildCredentialGuardKeys = (scope: CredentialAttemptScope) => {
-  const normalizedAction = normalizeCredentialKeyPart(scope.action, 'action');
-  const normalizedSubject = normalizeCredentialKeyPart(scope.subject, 'subject');
-  const normalizedIp = normalizeCredentialKeyPart(scope.ip, 'ip');
-  const baseKey = `auth:attempt-guard:${normalizedAction}`;
+const buildAttemptGuardKeys = (scope: ActionAttemptScope) => {
+  const normalizedAction = normalizeAttemptKeyPart(scope.action, 'action');
+  const normalizedSubject = normalizeAttemptKeyPart(scope.subject, 'subject');
+  const normalizedIp = normalizeAttemptKeyPart(scope.ip, 'ip');
+  const baseKey = `attempt-guard:${normalizedAction}`;
+
   return {
     subjectIpFailureKey: `${baseKey}:failure:subject-ip:${normalizedSubject}:${normalizedIp}`,
     subjectFailureKey: `${baseKey}:failure:subject:${normalizedSubject}`,
@@ -84,8 +95,8 @@ const buildCredentialGuardKeys = (scope: CredentialAttemptScope) => {
   };
 };
 
-const getCredentialGuardPolicy = (action: CredentialAttemptAction): CredentialGuardPolicy => {
-  return CREDENTIAL_GUARD_POLICY_MAP[action];
+const getAttemptGuardPolicy = (action: ActionAttemptAction): AttemptGuardPolicy => {
+  return ATTEMPT_GUARD_POLICY_MAP[action];
 };
 
 const touchFailureCounter = async (redisKey: string, windowMs: number): Promise<number> => {
@@ -100,11 +111,11 @@ const writeBlockKey = async (redisKey: string, blockWindowMs: number): Promise<v
   await redis.psetex(redisKey, blockWindowMs, '1');
 };
 
-export const assertCredentialAttemptAllowed = async (
-  scope: CredentialAttemptScope,
+export const assertActionAttemptAllowed = async (
+  scope: ActionAttemptScope,
 ): Promise<void> => {
-  const policy = getCredentialGuardPolicy(scope.action);
-  const keys = buildCredentialGuardKeys(scope);
+  const policy = getAttemptGuardPolicy(scope.action);
+  const keys = buildAttemptGuardKeys(scope);
   const blockFlags = await redis.mget(
     keys.subjectIpBlockKey,
     keys.subjectBlockKey,
@@ -116,11 +127,11 @@ export const assertCredentialAttemptAllowed = async (
   }
 };
 
-export const recordCredentialAttemptFailure = async (
-  scope: CredentialAttemptScope,
+export const recordActionAttemptFailure = async (
+  scope: ActionAttemptScope,
 ): Promise<void> => {
-  const policy = getCredentialGuardPolicy(scope.action);
-  const keys = buildCredentialGuardKeys(scope);
+  const policy = getAttemptGuardPolicy(scope.action);
+  const keys = buildAttemptGuardKeys(scope);
   const [subjectIpFailureCount, subjectFailureCount, ipFailureCount] = await Promise.all([
     touchFailureCounter(keys.subjectIpFailureKey, policy.failureWindowMs),
     touchFailureCounter(keys.subjectFailureKey, policy.failureWindowMs),
@@ -141,10 +152,10 @@ export const recordCredentialAttemptFailure = async (
   await Promise.all(blockTasks);
 };
 
-export const clearCredentialAttemptFailures = async (
-  scope: CredentialAttemptScope,
+export const clearActionAttemptFailures = async (
+  scope: ActionAttemptScope,
 ): Promise<void> => {
-  const keys = buildCredentialGuardKeys(scope);
+  const keys = buildAttemptGuardKeys(scope);
   await redis.del(
     keys.subjectIpFailureKey,
     keys.subjectFailureKey,

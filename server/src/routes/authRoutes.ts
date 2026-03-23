@@ -8,10 +8,10 @@ import {
   verifyTokenAndSession,
 } from '../services/authService.js';
 import {
-  assertCredentialAttemptAllowed,
-  clearCredentialAttemptFailures,
-  recordCredentialAttemptFailure,
-} from '../services/authAttemptGuardService.js';
+  assertActionAttemptAllowed,
+  clearActionAttemptFailures,
+  recordActionAttemptFailure,
+} from '../services/attemptGuardService.js';
 import { createCaptcha } from '../services/captchaService.js';
 import { isTencentCaptchaProvider } from '../config/captchaConfig.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
@@ -99,14 +99,14 @@ router.post('/login', loginQpsLimit, asyncHandler(async (req, res) => {
     subject: username,
     ip: requestIp,
   };
-  await assertCredentialAttemptAllowed(attemptScope);
+  await assertActionAttemptAllowed(attemptScope);
 
   await verifyCaptchaByProvider({ body: payload, userIp: requestIp });
   const result = await login(username, password);
   if (result.success) {
-    await clearCredentialAttemptFailures(attemptScope);
+    await clearActionAttemptFailures(attemptScope);
   } else {
-    await recordCredentialAttemptFailure(attemptScope);
+    await recordActionAttemptFailure(attemptScope);
   }
   sendResult(res, result);
 }));
