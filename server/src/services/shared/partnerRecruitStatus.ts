@@ -51,6 +51,7 @@ export interface PartnerRecruitStatusDto {
   currentJob: PartnerRecruitJobDto | null;
   hasUnreadResult: boolean;
   resultStatus: PartnerRecruitResultStatus;
+  remainingUntilGuaranteedHeaven: number;
   qualityRates: PartnerRecruitQualityRateEntry[];
 }
 
@@ -69,6 +70,7 @@ type BuildPartnerRecruitStatusDtoParams = {
   currentJob: PartnerRecruitJobDto | null;
   hasUnreadResult: boolean;
   resultStatus: PartnerRecruitResultStatus;
+  remainingUntilGuaranteedHeaven: number;
   qualityRates: PartnerRecruitQualityRateEntry[];
 };
 
@@ -90,6 +92,7 @@ export const buildPartnerRecruitStatusDto = (
     currentJob,
     hasUnreadResult,
     resultStatus,
+    remainingUntilGuaranteedHeaven,
     qualityRates,
   } = params;
 
@@ -110,6 +113,7 @@ export const buildPartnerRecruitStatusDto = (
       currentJob: null,
       hasUnreadResult: false,
       resultStatus: null,
+      remainingUntilGuaranteedHeaven,
       qualityRates,
     };
   }
@@ -130,6 +134,7 @@ export const buildPartnerRecruitStatusDto = (
     currentJob,
     hasUnreadResult,
     resultStatus,
+    remainingUntilGuaranteedHeaven,
     qualityRates,
   };
 };

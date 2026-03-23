@@ -202,6 +202,7 @@ export type PartnerRecruitStatusDto = {
   currentJob: PartnerRecruitJobDto | null;
   hasUnreadResult: boolean;
   resultStatus: PartnerRecruitResultStatusDto;
+  remainingUntilGuaranteedHeaven: number;
   qualityRates: PartnerRecruitQualityRateDto[];
 };
 
@@ -372,6 +373,7 @@ export interface PartnerRecruitGenerateResponse {
   message: string;
   data?: {
     generationId: string;
+    quality: PartnerRecruitQualityRateDto['quality'];
   };
 }
 

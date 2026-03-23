@@ -71,6 +71,7 @@ import {
   buildPartnerRecruitIndicator,
   hasPartnerRecruitCustomBaseModelToken,
   resolvePartnerRecruitCooldownDisplay,
+  resolvePartnerRecruitGuaranteeText,
   resolvePartnerRecruitLayoutState,
   resolvePartnerRecruitActionState,
   resolvePartnerRecruitPanelView,
@@ -1328,7 +1329,8 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
               ) : (
                 <div className="partner-meta">--</div>
               )}
-              <div className="partner-meta">当前展示的是本期基础招募权重。</div>
+              <div className="partner-meta">{resolvePartnerRecruitGuaranteeText(recruitStatus)}</div>
+              <div className="partner-meta">当前展示的是本次招募概率。</div>
             </div>
           </div>
         ) : null}

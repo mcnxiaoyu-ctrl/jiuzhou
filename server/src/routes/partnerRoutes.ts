@@ -124,10 +124,8 @@ router.post('/recruit/generate', asyncHandler(async (req, res) => {
     return sendResult(res, { success: false, message: 'requestedBaseModel 参数无效' });
   }
 
-  const quality = partnerRecruitService.resolveQualityForNewRecruit();
   const result = await partnerRecruitService.createRecruitJob(
     characterId,
-    quality,
     customBaseModelEnabledRaw === true,
     typeof requestedBaseModelRaw === 'string' ? requestedBaseModelRaw : null,
   );
@@ -139,7 +137,7 @@ router.post('/recruit/generate', asyncHandler(async (req, res) => {
     await enqueuePartnerRecruitJob({
       generationId: result.data.generationId,
       characterId,
-      quality,
+      quality: result.data.quality,
       userId,
     });
     await notifyPartnerRecruitStatus(characterId, userId);

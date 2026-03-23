@@ -57,7 +57,9 @@ import {
   isPartnerRecruitPreviewExpired,
   PARTNER_RECRUIT_COOLDOWN_APPLY_JOB_STATUSES,
   PARTNER_RECRUIT_SPIRIT_STONES_COST,
-  resolvePartnerRecruitQualityByWeight,
+  resolvePartnerRecruitGeneratedNonHeavenCountAfterSuccess,
+  resolvePartnerRecruitHeavenGuaranteeState,
+  resolvePartnerRecruitQualityForGeneratedPreviewSuccess,
   resolvePartnerRecruitQualityRateEntries,
   type PartnerRecruitDraft,
   type PartnerRecruitQuality,
@@ -334,6 +336,28 @@ class PartnerRecruitService {
     return Math.max(0, Math.floor(asNumber((result.rows[0] as Record<string, unknown>).spirit_stones, 0)));
   }
 
+  private async loadPartnerRecruitGeneratedNonHeavenCount(
+    characterId: number,
+    forUpdate: boolean,
+  ): Promise<number | null> {
+    const lockSql = forUpdate ? 'FOR UPDATE' : '';
+    const result = await query(
+      `
+        SELECT partner_recruit_generated_non_heaven_count
+        FROM characters
+        WHERE id = $1
+        LIMIT 1
+        ${lockSql}
+      `,
+      [characterId],
+    );
+    if (result.rows.length <= 0) return null;
+    return Math.max(0, Math.floor(asNumber(
+      (result.rows[0] as Record<string, unknown>).partner_recruit_generated_non_heaven_count,
+      0,
+    )));
+  }
+
   private async loadCharacterUserId(characterId: number, forUpdate: boolean): Promise<number | null> {
     const lockSql = forUpdate ? 'FOR UPDATE' : '';
     const result = await query(
@@ -382,6 +406,10 @@ class PartnerRecruitService {
     }
     const customBaseModelTokenItemName = getPartnerRecruitCustomBaseModelTokenName();
     const customBaseModelTokenAvailableQty = await this.loadCustomBaseModelTokenAvailableQty(characterId, false);
+    const generatedNonHeavenCount = await this.loadPartnerRecruitGeneratedNonHeavenCount(characterId, false);
+    if (generatedNonHeavenCount === null) {
+      return { success: false, message: '角色不存在', code: 'CHARACTER_NOT_FOUND' };
+    }
 
     const unlockState = await this.getPartnerRecruitUnlockStateTx(characterId, false);
     if (!unlockState.success || !unlockState.data) {
@@ -390,7 +418,8 @@ class PartnerRecruitService {
 
     if (!unlockState.data.unlocked) {
       const cooldownState = buildPartnerRecruitCooldownState(null);
-      const qualityRates = resolvePartnerRecruitQualityRateEntries();
+      const guaranteeState = resolvePartnerRecruitHeavenGuaranteeState(generatedNonHeavenCount);
+      const qualityRates = resolvePartnerRecruitQualityRateEntries(generatedNonHeavenCount);
       return {
         success: true,
         message: '获取成功',
@@ -409,6 +438,7 @@ class PartnerRecruitService {
           currentJob: null,
           hasUnreadResult: false,
           resultStatus: null,
+          remainingUntilGuaranteedHeaven: guaranteeState.remainingUntilGuaranteedHeaven,
           qualityRates,
         }),
       };
@@ -421,22 +451,23 @@ class PartnerRecruitService {
     const cooldownState = buildPartnerRecruitCooldownState(latestCooldownStartedAt, new Date(), {
       cooldownReductionRate,
     });
-    const qualityRates = resolvePartnerRecruitQualityRateEntries();
+    const guaranteeState = resolvePartnerRecruitHeavenGuaranteeState(generatedNonHeavenCount);
+    const qualityRates = resolvePartnerRecruitQualityRateEntries(generatedNonHeavenCount);
     const preview = latestJob?.previewPartnerDefId
       ? buildGeneratedPartnerPreviewByPartnerDefId(latestJob.previewPartnerDefId)
       : null;
     const jobState = buildPartnerRecruitJobState(latestJob
       ? {
-          generationId: latestJob.generationId,
-          status: latestJob.status,
-          startedAt: latestJob.cooldownStartedAt,
-          finishedAt: latestJob.finishedAt,
-          viewedAt: latestJob.viewedAt,
-          errorMessage: latestJob.errorMessage,
-          previewExpireAt: buildPartnerRecruitPreviewExpireAt(latestJob.finishedAt),
-          requestedBaseModel: latestJob.requestedBaseModel,
-          preview,
-        }
+        generationId: latestJob.generationId,
+        status: latestJob.status,
+        startedAt: latestJob.cooldownStartedAt,
+        finishedAt: latestJob.finishedAt,
+        viewedAt: latestJob.viewedAt,
+        errorMessage: latestJob.errorMessage,
+        previewExpireAt: buildPartnerRecruitPreviewExpireAt(latestJob.finishedAt),
+        requestedBaseModel: latestJob.requestedBaseModel,
+        preview,
+      }
       : null);
 
     return {
@@ -457,6 +488,7 @@ class PartnerRecruitService {
         currentJob: jobState.currentJob,
         hasUnreadResult: jobState.hasUnreadResult,
         resultStatus: jobState.resultStatus,
+        remainingUntilGuaranteedHeaven: guaranteeState.remainingUntilGuaranteedHeaven,
         qualityRates,
       }),
     };
@@ -465,10 +497,9 @@ class PartnerRecruitService {
   @Transactional
   private async createRecruitJobTx(
     characterId: number,
-    quality: PartnerRecruitQuality,
     customBaseModelEnabled: boolean,
     requestedBaseModel: string | null,
-  ): Promise<ServiceResult<{ generationId: string }>> {
+  ): Promise<ServiceResult<{ generationId: string; quality: PartnerRecruitQuality }>> {
     await this.discardExpiredDraftJobsTx(characterId);
 
     const requestedBaseModelValidation = await validatePartnerRecruitRequestedBaseModelSelection({
@@ -518,6 +549,10 @@ class PartnerRecruitService {
     if (spiritStones === null) {
       return { success: false, message: '角色不存在', code: 'CHARACTER_NOT_FOUND' };
     }
+    const generatedNonHeavenCount = await this.loadPartnerRecruitGeneratedNonHeavenCount(characterId, true);
+    if (generatedNonHeavenCount === null) {
+      return { success: false, message: '角色不存在', code: 'CHARACTER_NOT_FOUND' };
+    }
     if (spiritStones < PARTNER_RECRUIT_SPIRIT_STONES_COST) {
       return {
         success: false,
@@ -539,6 +574,7 @@ class PartnerRecruitService {
     }
 
     const generationId = buildPartnerRecruitGenerationId();
+    const quality = resolvePartnerRecruitQualityForGeneratedPreviewSuccess(generatedNonHeavenCount);
     await query(
       `
         UPDATE characters
@@ -596,17 +632,17 @@ class PartnerRecruitService {
       message: '伙伴招募已开始',
       data: {
         generationId,
+        quality,
       },
     };
   }
 
   async createRecruitJob(
     characterId: number,
-    quality: PartnerRecruitQuality,
     customBaseModelEnabled: boolean,
     requestedBaseModel: string | null,
-  ): Promise<ServiceResult<{ generationId: string }>> {
-    return this.createRecruitJobTx(characterId, quality, customBaseModelEnabled, requestedBaseModel);
+  ): Promise<ServiceResult<{ generationId: string; quality: PartnerRecruitQuality }>> {
+    return this.createRecruitJobTx(characterId, customBaseModelEnabled, requestedBaseModel);
   }
 
   @Transactional
@@ -689,7 +725,7 @@ class PartnerRecruitService {
     const { characterId, generationId, draft, partnerDefId, avatarUrl, techniques } = args;
     const jobRes = await query(
       `
-        SELECT id, status
+        SELECT id, status, quality_rolled
         FROM partner_recruit_job
         WHERE id = $1 AND character_id = $2
         FOR UPDATE
@@ -703,6 +739,7 @@ class PartnerRecruitService {
     if (jobStatus !== 'pending') {
       return { success: false, message: '招募任务状态异常', code: 'RECRUIT_JOB_STATE_INVALID' };
     }
+    const qualityRolled = (asString((jobRes.rows[0] as Record<string, unknown>).quality_rolled) as PartnerRecruitQuality) || '黄';
 
     const persist = await persistGeneratedPartnerPreviewTx({
       characterId,
@@ -712,6 +749,25 @@ class PartnerRecruitService {
       avatarUrl,
       techniques,
     });
+
+    const currentGeneratedNonHeavenCount = await this.loadPartnerRecruitGeneratedNonHeavenCount(characterId, true);
+    if (currentGeneratedNonHeavenCount === null) {
+      throw new Error('角色不存在');
+    }
+    const nextGeneratedNonHeavenCount = resolvePartnerRecruitGeneratedNonHeavenCountAfterSuccess(
+      currentGeneratedNonHeavenCount,
+      qualityRolled,
+    );
+
+    await query(
+      `
+        UPDATE characters
+        SET partner_recruit_generated_non_heaven_count = $2,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [characterId, nextGeneratedNonHeavenCount],
+    );
 
     await query(
       `
@@ -1018,9 +1074,6 @@ class PartnerRecruitService {
     };
   }
 
-  resolveQualityForNewRecruit(): PartnerRecruitQuality {
-    return resolvePartnerRecruitQualityByWeight();
-  }
 }
 
 export const partnerRecruitService = new PartnerRecruitService();

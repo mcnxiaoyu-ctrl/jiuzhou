@@ -57,6 +57,7 @@ test('buildPartnerRecruitStatusDto: 未开放时应返回锁定态 DTO 并清空
     hasUnreadResult: true,
     resultStatus: 'failed',
     qualityRates: [...EXPECTED_QUALITY_RATES],
+    remainingUntilGuaranteedHeaven: 7,
   });
 
   assert.equal(status.featureCode, 'partner');
@@ -75,6 +76,7 @@ test('buildPartnerRecruitStatusDto: 未开放时应返回锁定态 DTO 并清空
   assert.equal(status.hasUnreadResult, false);
   assert.equal(status.resultStatus, null);
   assert.deepEqual(status.qualityRates, EXPECTED_QUALITY_RATES);
+  assert.equal(status.remainingUntilGuaranteedHeaven, 7);
 });
 
 test('buildPartnerRecruitStatusDto: 已开放时应保留真实动态状态', () => {
@@ -108,6 +110,7 @@ test('buildPartnerRecruitStatusDto: 已开放时应保留真实动态状态', ()
     hasUnreadResult: true,
     resultStatus: 'generated_draft',
     qualityRates: [...EXPECTED_QUALITY_RATES],
+    remainingUntilGuaranteedHeaven: 1,
   });
 
   assert.equal(status.unlocked, true);
@@ -123,4 +126,5 @@ test('buildPartnerRecruitStatusDto: 已开放时应保留真实动态状态', ()
   assert.equal(status.hasUnreadResult, true);
   assert.equal(status.resultStatus, 'generated_draft');
   assert.deepEqual(status.qualityRates, EXPECTED_QUALITY_RATES);
+  assert.equal(status.remainingUntilGuaranteedHeaven, 1);
 });

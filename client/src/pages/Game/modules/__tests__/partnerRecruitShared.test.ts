@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PartnerRecruitStatusDto } from '../../../../services/api/partner';
 import {
   resolvePartnerRecruitQualityRateItems,
+  resolvePartnerRecruitGuaranteeText,
   resolvePartnerRecruitActionState,
   resolvePartnerRecruitCooldownDisplay,
   resolvePartnerRecruitLayoutState,
@@ -27,6 +28,7 @@ const buildRecruitStatus = (
   currentJob: null,
   hasUnreadResult: false,
   resultStatus: null,
+  remainingUntilGuaranteedHeaven: 20,
   qualityRates: [
     { quality: '黄', weight: 4, rate: 40 },
     { quality: '玄', weight: 3, rate: 30 },
@@ -94,6 +96,28 @@ describe('partnerRecruitShared', () => {
       { quality: '地', rateText: '20%' },
       { quality: '天', rateText: '10%' },
     ]);
+  });
+
+  it('保底态下应展示天级 100% 概率', () => {
+    expect(resolvePartnerRecruitQualityRateItems(buildRecruitStatus({
+      qualityRates: [
+        { quality: '黄', weight: 0, rate: 0 },
+        { quality: '玄', weight: 0, rate: 0 },
+        { quality: '地', weight: 0, rate: 0 },
+        { quality: '天', weight: 1, rate: 100 },
+      ],
+    }))).toEqual([
+      { quality: '黄', rateText: '0%' },
+      { quality: '玄', rateText: '0%' },
+      { quality: '地', rateText: '0%' },
+      { quality: '天', rateText: '100%' },
+    ]);
+  });
+
+  it('应把服务端下发的保底剩余次数格式化为统一提示文案', () => {
+    expect(resolvePartnerRecruitGuaranteeText(buildRecruitStatus({
+      remainingUntilGuaranteedHeaven: 3,
+    }))).toBe('再 3 次成功生成，必得天品伙伴');
   });
 
   it('生成结果预览态应隐藏顶部信息卡并压平预览卡片', () => {

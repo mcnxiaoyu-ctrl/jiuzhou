@@ -113,6 +113,12 @@ export type PartnerRecruitQualityRateEntry = {
   rate: number;
 };
 
+export type PartnerRecruitHeavenGuaranteeState = {
+  generatedNonHeavenCount: number;
+  remainingUntilGuaranteedHeaven: number;
+  isGuaranteedHeavenOnNextGeneratedPreview: boolean;
+};
+
 const SECOND_MS = 1_000;
 const MINUTE_SECONDS = 60;
 const HOUR_SECONDS = 60 * MINUTE_SECONDS;
@@ -212,6 +218,7 @@ const PARTNER_RECRUIT_TECHNIQUE_SLOT_COUNT_BY_QUALITY: Record<PartnerRecruitQual
   天: 6,
 };
 const PARTNER_RECRUIT_REFERENCE_PARTNER_ID = 'partner-qingmu-xiaoou';
+export const PARTNER_RECRUIT_HEAVEN_GUARANTEE_TRIGGER_COUNT = 20;
 
 const getPartnerRecruitPassiveValueConstraint = (
   key: PartnerRecruitPassiveKey,
@@ -553,6 +560,26 @@ export const buildPartnerRecruitResponseFormat = (
   });
 };
 
+const normalizePartnerRecruitGeneratedNonHeavenCount = (raw: number): number => {
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(0, Math.floor(raw));
+};
+
+export const resolvePartnerRecruitHeavenGuaranteeState = (
+  generatedNonHeavenCount: number,
+): PartnerRecruitHeavenGuaranteeState => {
+  const normalizedCount = normalizePartnerRecruitGeneratedNonHeavenCount(generatedNonHeavenCount);
+  const guaranteeThreshold = PARTNER_RECRUIT_HEAVEN_GUARANTEE_TRIGGER_COUNT - 1;
+  return {
+    generatedNonHeavenCount: normalizedCount,
+    remainingUntilGuaranteedHeaven: Math.max(
+      1,
+      PARTNER_RECRUIT_HEAVEN_GUARANTEE_TRIGGER_COUNT - normalizedCount,
+    ),
+    isGuaranteedHeavenOnNextGeneratedPreview: normalizedCount >= guaranteeThreshold,
+  };
+};
+
 export const resolvePartnerRecruitQualityByWeight = (): PartnerRecruitQuality => {
   const totalWeight = QUALITY_ROLL_TABLE.reduce((sum, entry) => sum + entry.weight, 0);
   let rolled = Math.random() * totalWeight;
@@ -572,23 +599,53 @@ export const resolvePartnerRecruitQualityByWeight = (): PartnerRecruitQuality =>
  * 3. 不做什么：不执行随机抽取，也不引入活动/道具等额外修正逻辑。
  *
  * 输入/输出：
- * - 输入：无。
+ * - 输入：当前角色连续成功生成但未出天的次数。
  * - 输出：按品质顺序排列的 `{ quality, weight, rate }` 数组，其中 `rate` 为百分比数值。
  *
  * 数据流/状态流：
  * QUALITY_ROLL_TABLE -> 本函数 -> 招募状态 DTO -> 前端招募面板。
  *
  * 关键边界条件与坑点：
- * 1. 概率展示必须直接从同一个权重表换算，不能手写 40/30/20/10，否则后续调权重时容易漏改 UI。
+ * 1. 概率展示必须直接从同一个权重表换算，不能手写 40/30/20/10；保底生效时也必须只在这里统一切成 100% 天级。
  * 2. `rate` 当前按权重总和换算为百分比整数；若未来引入非整除权重，应只在这里统一定义展示精度。
  */
-export const resolvePartnerRecruitQualityRateEntries = (): PartnerRecruitQualityRateEntry[] => {
+export const resolvePartnerRecruitQualityRateEntries = (
+  generatedNonHeavenCount = 0,
+): PartnerRecruitQualityRateEntry[] => {
+  const guaranteeState = resolvePartnerRecruitHeavenGuaranteeState(generatedNonHeavenCount);
+  if (guaranteeState.isGuaranteedHeavenOnNextGeneratedPreview) {
+    return QUALITY_ROLL_TABLE.map((entry) => ({
+      quality: entry.quality,
+      weight: entry.quality === '天' ? entry.weight : 0,
+      rate: entry.quality === '天' ? 100 : 0,
+    }));
+  }
   const totalWeight = QUALITY_ROLL_TABLE.reduce((sum, entry) => sum + entry.weight, 0);
   return QUALITY_ROLL_TABLE.map((entry) => ({
     quality: entry.quality,
     weight: entry.weight,
     rate: totalWeight > 0 ? (entry.weight / totalWeight) * 100 : 0,
   }));
+};
+
+export const resolvePartnerRecruitQualityForGeneratedPreviewSuccess = (
+  generatedNonHeavenCount: number,
+): PartnerRecruitQuality => {
+  const guaranteeState = resolvePartnerRecruitHeavenGuaranteeState(generatedNonHeavenCount);
+  if (guaranteeState.isGuaranteedHeavenOnNextGeneratedPreview) {
+    return '天';
+  }
+  return resolvePartnerRecruitQualityByWeight();
+};
+
+export const resolvePartnerRecruitGeneratedNonHeavenCountAfterSuccess = (
+  currentGeneratedNonHeavenCount: number,
+  quality: PartnerRecruitQuality,
+): number => {
+  if (quality === '天') {
+    return 0;
+  }
+  return normalizePartnerRecruitGeneratedNonHeavenCount(currentGeneratedNonHeavenCount) + 1;
 };
 
 export const getPartnerRecruitTechniqueMaxLayer = (

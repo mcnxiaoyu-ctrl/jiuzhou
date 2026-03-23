@@ -64,6 +64,16 @@ export type PartnerRecruitQualityRateItem = {
   rateText: string;
 };
 
+export const resolvePartnerRecruitGuaranteeText = (
+  status: PartnerRecruitStatusData | null,
+): string => {
+  const remainingUntilGuaranteedHeaven = status?.remainingUntilGuaranteedHeaven;
+  if (typeof remainingUntilGuaranteedHeaven !== 'number' || !Number.isFinite(remainingUntilGuaranteedHeaven)) {
+    return '--';
+  }
+  return `${Math.max(1, Math.floor(remainingUntilGuaranteedHeaven))} 次成功招募后必得天品伙伴`;
+};
+
 export type PartnerRecruitLayoutState = {
   showMetaCards: boolean;
   flattenPreviewCard: boolean;
@@ -196,7 +206,7 @@ export const resolvePartnerRecruitCooldownDisplay = (
   const cooldownText = formatPartnerRecruitCooldownRemaining(status.cooldownRemainingSeconds);
   const statusText = !coolingDown
     ? (bypassedByCustomBaseModel ? '可招募（本次不触发冷却）' : '可招募')
-    : (bypassedByCustomBaseModel ? `冷却中（本次招募不受影响，剩余${cooldownText}）` : `剩余${cooldownText}`);
+    : (bypassedByCustomBaseModel ? `本次招募无冷却` : `剩余${cooldownText}`);
   const ruleText = status.cooldownHours === 0
     ? '当前环境已关闭伙伴招募冷却，可连续招募。'
     : bypassedByCustomBaseModel

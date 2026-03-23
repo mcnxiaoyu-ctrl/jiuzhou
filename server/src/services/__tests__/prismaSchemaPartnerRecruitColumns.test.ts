@@ -40,3 +40,12 @@ test('partner_recruit_job: Prisma schema 应声明高级招募令模式标记列
     'partner_recruit_job 缺少 used_custom_base_model_token 列定义',
   );
 });
+
+test('characters: Prisma schema 应声明伙伴招募连续未出天累计字段', () => {
+  const block = getModelBlock('characters');
+  assert.match(
+    block,
+    /\bpartner_recruit_generated_non_heaven_count\s+Int\b/,
+    'characters 缺少 partner_recruit_generated_non_heaven_count 列定义',
+  );
+});

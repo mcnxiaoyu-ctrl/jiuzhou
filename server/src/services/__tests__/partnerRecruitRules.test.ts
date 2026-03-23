@@ -25,7 +25,10 @@ import {
   buildPartnerRecruitPromptInput,
   buildPartnerRecruitResponseFormat,
   fillPartnerRecruitBaseAttrs,
+  resolvePartnerRecruitGeneratedNonHeavenCountAfterSuccess,
+  resolvePartnerRecruitHeavenGuaranteeState,
   resolvePartnerRecruitQualityRateEntries,
+  resolvePartnerRecruitQualityForGeneratedPreviewSuccess,
   resolvePartnerRecruitTechniqueSlotCount,
   validatePartnerRecruitDraft,
 } from '../shared/partnerRecruitRules.js';
@@ -112,6 +115,32 @@ test('resolvePartnerRecruitQualityRateEntries: 应输出与当前权重同源的
     { quality: '地', weight: 2, rate: 20 },
     { quality: '天', weight: 1, rate: 10 },
   ]);
+});
+
+test('resolvePartnerRecruitHeavenGuaranteeState: 连续 19 次成功生成未出天后，下次应进入保底态', () => {
+  assert.deepEqual(resolvePartnerRecruitHeavenGuaranteeState(19), {
+    generatedNonHeavenCount: 19,
+    remainingUntilGuaranteedHeaven: 1,
+    isGuaranteedHeavenOnNextGeneratedPreview: true,
+  });
+});
+
+test('resolvePartnerRecruitQualityRateEntries: 保底态下应只展示天级 100% 概率', () => {
+  assert.deepEqual(resolvePartnerRecruitQualityRateEntries(19), [
+    { quality: '黄', weight: 0, rate: 0 },
+    { quality: '玄', weight: 0, rate: 0 },
+    { quality: '地', weight: 0, rate: 0 },
+    { quality: '天', weight: 1, rate: 100 },
+  ]);
+});
+
+test('resolvePartnerRecruitQualityForGeneratedPreviewSuccess: 保底态下成功生成时应直接产出天级', () => {
+  assert.equal(resolvePartnerRecruitQualityForGeneratedPreviewSuccess(19), '天');
+});
+
+test('resolvePartnerRecruitGeneratedNonHeavenCountAfterSuccess: 非天成功生成应累计，天级成功生成应重置', () => {
+  assert.equal(resolvePartnerRecruitGeneratedNonHeavenCountAfterSuccess(18, '地'), 19);
+  assert.equal(resolvePartnerRecruitGeneratedNonHeavenCountAfterSuccess(19, '天'), 0);
 });
 
 const buildValidDraft = (
