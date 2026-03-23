@@ -81,6 +81,8 @@ type BattleSessionResponse =
     message: string;
   };
 
+type AdvanceBattleSessionEndNotificationScope = 'peers_only' | 'all_participants';
+
 const DUNGEON_SESSION_SERVER_AUTO_ADVANCE_DELAY_MS = 200;
 const dungeonSessionAutoAdvanceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -287,7 +289,9 @@ const scheduleDungeonSessionAutoAdvance = (sessionId: string): void => {
     if (session.status !== 'waiting_transition') return;
     if (session.nextAction !== 'advance' || !session.canAdvance) return;
 
-    const advanceResult = await advanceBattleSession(session.ownerUserId, sessionId);
+    const advanceResult = await advanceBattleSession(session.ownerUserId, sessionId, {
+      endNotificationScope: 'all_participants',
+    });
     if (!advanceResult.success) return;
 
     const nextSession = advanceResult.data.session;
@@ -390,33 +394,40 @@ const finalizeBattleSession = (params: {
 };
 
 /**
- * 广播“会话已终止，其他参与者应退出旧战斗页”。
+ * 广播“会话已终止，参与者应退出旧战斗页”。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：把 BattleSession 终态收尾后，通知其余参与者清理旧战斗视图的广播逻辑收口到单一入口，避免普通战斗/秘境各自补一套 socket 推送。
- * 2. 做什么：只通知“当前触发推进的人以外”的参与者，推进发起者继续以 HTTP 返回为准，避免同一客户端同时吃到本地返回和额外广播。
+ * 1. 做什么：把 BattleSession 终态收尾后的退出广播收口到单一入口，避免普通战斗、秘境手动推进、秘境服务端自动推进各自补一套 socket 推送。
+ * 2. 做什么：支持两种广播范围。
+ *    `peers_only`：真实前端发起推进时，仅通知其他参与者，发起者继续以 HTTP 返回为准。
+ *    `all_participants`：服务端代替前端自动推进时，包含 owner 在内的所有参与者都必须收到退出信号。
  * 3. 不做什么：不改 session/runtime 状态；调用方必须先完成 finalize，再调用本函数。
  *
  * 输入/输出：
- * - 输入：已进入终态前的 session、当前触发推进的 actorUserId，以及给前端清场用的 battleId。
- * - 输出：无返回值；仅向其余参与者发送 `battle_abandoned` 作为统一退出信号。
+ * - 输入：已进入终态前的 session、逻辑上的 actorUserId、给前端清场用的 battleId，以及结束广播范围。
+ * - 输出：无返回值；向目标参与者发送 `battle_abandoned` 作为统一退出信号。
  *
  * 数据流/状态流：
- * - advanceBattleSession 完成终态收尾 -> 本函数读取 session 参与者 -> 其余参与者收到 `battle_abandoned` -> 前端退出旧战斗页。
+ * - advanceBattleSession 完成终态收尾 -> 本函数读取 session 参与者 -> 目标客户端收到 `battle_abandoned` -> 前端退出旧战斗页。
  *
  * 关键边界条件与坑点：
  * 1. 广播名单必须基于 finalize 前的 session 拍快照；session 删除后再读就拿不到参与者了。
- * 2. battleId 必须沿用刚结束的那场 battle；前端是按 battleId 对齐当前视图的，不能传 null。
+ * 2. 秘境服务端自动推进属于“后台代发”，不能沿用“排除 actorUserId”的前端语义，否则 owner 会错过最终清场广播。
  */
-const notifyPeerUsersSessionEnded = (params: {
+const notifyBattleSessionEndedUsers = (params: {
   session: BattleSessionRecord;
   actorUserId: number;
   battleId: string;
+  endNotificationScope?: AdvanceBattleSessionEndNotificationScope;
 }): void => {
   const targetUserIds = normalizeSessionAudienceUserIds([
     params.session.ownerUserId,
     ...params.session.participantUserIds,
-  ]).filter((userId) => userId !== params.actorUserId);
+  ]).filter((userId) => (
+    params.endNotificationScope === 'all_participants'
+      ? true
+      : userId !== params.actorUserId
+  ));
   if (targetUserIds.length === 0) {
     return;
   }
@@ -579,6 +590,7 @@ export const getCurrentBattleSessionDetail = async (
 const completeSessionReturnToMap = async (
   userId: number,
   session: BattleSessionRecord,
+  endNotificationScope: AdvanceBattleSessionEndNotificationScope,
 ): Promise<BattleSessionResponse> => {
   if (session.type === 'tower') {
     await endTowerRunBySession(session);
@@ -599,10 +611,11 @@ const completeSessionReturnToMap = async (
     return { success: false, message: '战斗会话不存在' };
   }
   if (settledBattleId) {
-    notifyPeerUsersSessionEnded({
+    notifyBattleSessionEndedUsers({
       session,
       actorUserId: userId,
       battleId: settledBattleId,
+      endNotificationScope,
     });
   }
   return buildSessionSuccess(snapshot, undefined, true);
@@ -611,6 +624,9 @@ const completeSessionReturnToMap = async (
 export const advanceBattleSession = async (
   userId: number,
   sessionId: string,
+  options?: {
+    endNotificationScope?: AdvanceBattleSessionEndNotificationScope;
+  },
 ): Promise<BattleSessionResponse> => {
   const session = getBattleSessionRecord(sessionId);
   if (!ensureSessionAccess(userId, session)) {
@@ -620,10 +636,11 @@ export const advanceBattleSession = async (
     return { success: false, message: '当前战斗会话不可推进' };
   }
   clearDungeonSessionAutoAdvanceTimer(session.sessionId);
+  const endNotificationScope = options?.endNotificationScope ?? 'peers_only';
 
   if (session.type === 'pve') {
     if (session.nextAction === 'return_to_map') {
-      return completeSessionReturnToMap(userId, session);
+      return completeSessionReturnToMap(userId, session, endNotificationScope);
     }
     const context = session.context as { monsterIds: string[] };
     const battleRes = await startPVEBattle(userId, context.monsterIds);
@@ -678,10 +695,11 @@ export const advanceBattleSession = async (
         return { success: false, message: '战斗会话不存在' };
       }
       if (settledBattleId) {
-        notifyPeerUsersSessionEnded({
+        notifyBattleSessionEndedUsers({
           session,
           actorUserId: userId,
           battleId: settledBattleId,
+          endNotificationScope,
         });
       }
       return buildSessionSuccess(snapshot, undefined, true);
@@ -705,7 +723,7 @@ export const advanceBattleSession = async (
 
   if (session.type === 'tower') {
     if (session.nextAction === 'return_to_map') {
-      return completeSessionReturnToMap(userId, session);
+      return completeSessionReturnToMap(userId, session, endNotificationScope);
     }
     return advanceTowerRun({
       userId,
@@ -713,7 +731,7 @@ export const advanceBattleSession = async (
     });
   }
 
-  return completeSessionReturnToMap(userId, session);
+  return completeSessionReturnToMap(userId, session, endNotificationScope);
 };
 
 export const markBattleSessionFinished = async (
