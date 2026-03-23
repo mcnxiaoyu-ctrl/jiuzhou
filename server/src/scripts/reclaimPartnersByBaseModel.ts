@@ -243,6 +243,7 @@ const PARTNER_RECLAIM_MAIL_EXPIRE_DAYS = 30;
 const RECHECK_EXECUTABLE_PARTNER_LOCK_SQL = 'FOR UPDATE OF cp';
 const DEFAULT_BACKUP_DIR = path.resolve(process.cwd(), '.tmp', 'partner-reclaim-backups');
 const TARGET_BASE_MODELS = [
+    '群体六连十万血六万攻女',
     '法术群体六连击三千法攻',
     '法术群体六连击三千法攻',
     '群体法术六连击三千法攻',
