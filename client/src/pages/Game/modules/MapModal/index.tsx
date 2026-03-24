@@ -1,6 +1,6 @@
 import { Button, Input, Modal, Select, Table, Tabs, Tag } from 'antd';
 import { LeftOutlined, SearchOutlined } from '@ant-design/icons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IMG_MAP_01 as map01, IMG_MAP_02 as map02, IMG_MAP_03 as map03, IMG_MAP_04 as map04, IMG_MAP_05 as map05, IMG_MAP_06 as map06 } from '../../shared/imageAssets';
 import {
   type DungeonDefLite,
@@ -20,6 +20,7 @@ import {
   type LastDungeonSelection,
   type MapModalCategory,
 } from './lastDungeonSelection';
+import { resolveMapModalCategorySync } from './categorySync';
 import WaveDetailPanel from './WaveDetailPanel';
 import './index.scss';
 
@@ -174,6 +175,7 @@ const MapModal: React.FC<MapModalProps> = ({
   const [dungeonDifficultyOptionsById, setDungeonDifficultyOptionsById] = useState<Record<string, DungeonDifficultyOption[]>>({});
   const [dungeonDifficultyLoadingById, setDungeonDifficultyLoadingById] = useState<Record<string, boolean>>({});
   const [dungeonDifficultyResolvedById, setDungeonDifficultyResolvedById] = useState<Record<string, boolean>>({});
+  const appliedInitialCategoryRef = useRef<MapCategory | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -184,6 +186,7 @@ const MapModal: React.FC<MapModalProps> = ({
   useEffect(() => {
     if (open) return;
     // 关闭时同步清理当前打开周期的列表与选中态，避免下次打开先用旧列表触发一轮详情请求。
+    appliedInitialCategoryRef.current = null;
     setMapEntries([]);
     setActiveId('');
     setListLoading(false);
@@ -335,13 +338,25 @@ const MapModal: React.FC<MapModalProps> = ({
 
   useEffect(() => {
     if (!open) return;
-    if (initialCategory && initialCategory !== category) {
-      setCategory(initialCategory);
+    const syncResult = resolveMapModalCategorySync({
+      open,
+      category,
+      initialCategory,
+      appliedInitialCategory: appliedInitialCategoryRef.current,
+    });
+    if (!syncResult.shouldSync) return;
+
+    appliedInitialCategoryRef.current = syncResult.nextAppliedInitialCategory;
+    if (syncResult.nextCategory !== category) {
+      setCategory(syncResult.nextCategory);
       setQuery('');
       setActiveId('');
       setHasUserChosenActiveId(false);
-      return;
     }
+  }, [category, initialCategory, open]);
+
+  useEffect(() => {
+    if (!open) return;
     const nextSelection = resolveInitialDungeonSelection({
       category,
       filteredIds: filtered.map((entry) => entry.id),
@@ -364,7 +379,7 @@ const MapModal: React.FC<MapModalProps> = ({
         [nextSelection.activeId]: nextSelectionRank,
       };
     });
-  }, [activeId, category, filtered, hasUserChosenActiveId, initialCategory, lastDungeonSelection, open]);
+  }, [activeId, category, filtered, hasUserChosenActiveId, lastDungeonSelection, open]);
 
   useEffect(() => {
     if (!open) return;
