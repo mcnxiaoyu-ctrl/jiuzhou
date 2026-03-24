@@ -172,7 +172,7 @@ export interface SinglePlayerRewardSettlementResult {
  * 关键边界条件与坑点：
  *   1. distributeBattleRewards 使用 @Transactional 确保奖励分发的原子性
  *   2. 背包满时自动通过邮件补发，每封邮件最多 10 个附件
- *   3. 境界压制倍率影响掉落概率和经验银两，每超出 1 级倍率乘 0.5
+ *   3. 境界压制倍率影响经验银两，且仅普通战斗掉落概率会受影响；每超出 1 级倍率乘 0.5
  *   4. 装备掉落支持品质权重和自动分解规则
  */
 class BattleDropService {
@@ -205,6 +205,41 @@ class BattleDropService {
     const extraLevels = playerRank - (monsterRank + 1);
     if (extraLevels <= 0) return 1;
     return 0.5 ** extraLevels;
+  }
+
+  /**
+   * 统一掉落用境界压制倍率。
+   *
+   * 作用：
+   * 1. 把“普通战斗吃境界压制、秘境掉落不吃境界压制”的规则收敛到单一入口。
+   * 2. 复用 rollDrops 在概率池/权重池两条分支的同一口径，避免场景判断散落。
+   *
+   * 输入/输出：
+   * - 输入：rollDrops 的战斗场景、玩家/怪物境界，以及上游已计算好的覆盖倍率。
+   * - 输出：本次掉落结算应使用的 0~1 倍率。
+   *
+   * 数据流/状态流：
+   * - 单人奖励计划和组队奖励结算都先把场景参数传给 rollDrops；
+   * - 本方法在 rollDrops 内统一解释“是否压制掉落”；
+   * - 后续概率池与权重池都只消费这里返回的倍率。
+   *
+   * 关键边界条件与坑点：
+   * 1. 秘境只豁免掉落压制，不豁免经验和银两压制，因此不能替换 getRealmSuppressionMultiplier 的通用语义。
+   * 2. 组队场景会传入队伍平均倍率；普通战斗仍应优先尊重该显式输入，避免重复计算造成口径漂移。
+   */
+  private getDropRealmSuppressionMultiplier(options: RollDropsOptions): number {
+    if (options.isDungeonBattle === true) {
+      return 1;
+    }
+
+    const optionsSuppression = Number(options.realmSuppressionMultiplier);
+    if (Number.isFinite(optionsSuppression)) {
+      return this.clamp01(optionsSuppression);
+    }
+
+    const playerRealm = typeof options.playerRealm === 'string' ? options.playerRealm : null;
+    const monsterRealm = typeof options.monsterRealm === 'string' ? options.monsterRealm : null;
+    return this.getRealmSuppressionMultiplier(playerRealm, monsterRealm);
   }
 
   /**
@@ -373,11 +408,7 @@ class BattleDropService {
     const isDungeonBattle = options.isDungeonBattle === true;
     const monsterKind = normalizeMonsterKind(options.monsterKind);
     const monsterRealm = typeof options.monsterRealm === 'string' ? options.monsterRealm : null;
-    const playerRealm = typeof options.playerRealm === 'string' ? options.playerRealm : null;
-    const optionsSuppression = Number(options.realmSuppressionMultiplier);
-    const realmSuppressionMultiplier = Number.isFinite(optionsSuppression)
-      ? this.clamp01(optionsSuppression)
-      : this.getRealmSuppressionMultiplier(playerRealm, monsterRealm);
+    const realmSuppressionMultiplier = this.getDropRealmSuppressionMultiplier(options);
 
     if (dropPool.mode === 'prob') {
       // 概率模式：每个条目独立判定
@@ -940,7 +971,7 @@ class BattleDropService {
       const dropPool = await this.getDropPool(monster.drop_pool_id);
       if (!dropPool) continue;
 
-      // 掉落生成按“队伍平均福缘 + 队伍平均境界压制”计算，
+      // 掉落生成按“队伍平均福缘 + 掉落口径的队伍压制倍率”计算，
       // 但战利品归属改为“每个掉落条目按数量逐件独立ROLL点”。
       const teamRealmSuppressionMultiplier =
         participants.reduce(
