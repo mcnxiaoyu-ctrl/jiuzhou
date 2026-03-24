@@ -5,6 +5,7 @@ import { getPvpWeeklyTitleIdByRank, PVP_WEEKLY_TITLE_VALID_DAYS } from './achiev
 import { clearExpiredEquippedPvpWeeklyTitlesTx, grantExpiringTitleTx } from './achievement/titleOwnership.js';
 import { sendSystemMail } from './mailService.js';
 import { getTitleDefinitions } from './staticConfigLoader.js';
+import { withSessionAdvisoryLock } from './shared/sessionAdvisoryLock.js';
 
 /**
  * 竞技场周结算服务（每周一 00:00，Asia/Shanghai）
@@ -415,15 +416,17 @@ class ArenaWeeklySettlementService {
     this.inFlight = true;
 
     try {
-      const lockRes = await query(`SELECT pg_try_advisory_lock($1, $2) AS locked`, [ADVISORY_LOCK_KEY_1, ADVISORY_LOCK_KEY_2]);
-      const lockRow = (lockRes.rows?.[0] ?? {}) as Record<string, unknown>;
-      if (lockRow.locked !== true) {
+      const execution = await withSessionAdvisoryLock(
+        ADVISORY_LOCK_KEY_1,
+        ADVISORY_LOCK_KEY_2,
+        async () => {
+          await this.settlePendingWeeks();
+        },
+      );
+      if (!execution.acquired) {
         return;
       }
-
-      await this.settlePendingWeeks();
     } finally {
-      await query(`SELECT pg_advisory_unlock($1, $2)`, [ADVISORY_LOCK_KEY_1, ADVISORY_LOCK_KEY_2]);
       this.inFlight = false;
     }
   }

@@ -1,8 +1,9 @@
-import { query } from '../../config/database.js';
+import type { PoolClient } from 'pg';
 import {
   parseScheduledCleanupBooleanEnv,
   parseScheduledCleanupIntegerEnv,
 } from '../shared/scheduledCleanupConfig.js';
+import { withSessionAdvisoryLock } from '../shared/sessionAdvisoryLock.js';
 
 /**
  * idle_battle_batches 清理服务（仅负责清理逻辑，不负责定时调度）
@@ -103,8 +104,8 @@ class IdleBattleBatchCleanupService {
     )} 秒，单批 ${this.config.deleteBatchSize} 条，单轮最多 ${this.config.maxDeleteBatchesPerRun} 批`;
   }
 
-  private async deleteExpiredBatchesOnce(): Promise<number> {
-    const res = await query(
+  private async deleteExpiredBatchesOnce(client: PoolClient): Promise<number> {
+    const res = await client.query(
       `
       WITH stale_batch AS (
         SELECT b.id
@@ -130,42 +131,36 @@ class IdleBattleBatchCleanupService {
     if (this.inFlight) return 0;
     this.inFlight = true;
 
-    let lockAcquired = false;
     try {
-      const lockRes = await query(`SELECT pg_try_advisory_lock($1, $2) AS locked`, [
-        IDLE_CLEANUP_LOCK_KEY_1,
-        IDLE_CLEANUP_LOCK_KEY_2,
-      ]);
-      lockAcquired = lockRes.rows[0]?.locked === true;
-      if (!lockAcquired) return 0;
+      const execution = await withSessionAdvisoryLock(IDLE_CLEANUP_LOCK_KEY_1, IDLE_CLEANUP_LOCK_KEY_2, async (client) => {
+        let totalDeleted = 0;
+        for (let batchNo = 0; batchNo < this.config.maxDeleteBatchesPerRun; batchNo += 1) {
+          const deletedCount = await this.deleteExpiredBatchesOnce(client);
+          totalDeleted += deletedCount;
 
-      let totalDeleted = 0;
-      for (let batchNo = 0; batchNo < this.config.maxDeleteBatchesPerRun; batchNo += 1) {
-        const deletedCount = await this.deleteExpiredBatchesOnce();
-        totalDeleted += deletedCount;
-
-        if (deletedCount < this.config.deleteBatchSize) {
-          break;
+          if (deletedCount < this.config.deleteBatchSize) {
+            break;
+          }
         }
+
+        if (totalDeleted > 0) {
+          console.log(
+            `[IdleBatchCleanup] 本轮清理完成：删除 ${totalDeleted} 条（保留 ${this.config.retentionDays} 天内数据）`,
+          );
+        }
+
+        return totalDeleted;
+      });
+
+      if (!execution.acquired) {
+        return 0;
       }
 
-      if (totalDeleted > 0) {
-        console.log(
-          `[IdleBatchCleanup] 本轮清理完成：删除 ${totalDeleted} 条（保留 ${this.config.retentionDays} 天内数据）`,
-        );
-      }
-      return totalDeleted;
+      return execution.result ?? 0;
     } catch (error) {
       console.error('[IdleBatchCleanup] 清理失败:', error);
       return 0;
     } finally {
-      if (lockAcquired) {
-        try {
-          await query(`SELECT pg_advisory_unlock($1, $2)`, [IDLE_CLEANUP_LOCK_KEY_1, IDLE_CLEANUP_LOCK_KEY_2]);
-        } catch (unlockError) {
-          console.error('[IdleBatchCleanup] 释放 advisory lock 失败:', unlockError);
-        }
-      }
       this.inFlight = false;
     }
   }

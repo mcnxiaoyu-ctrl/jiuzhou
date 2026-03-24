@@ -1,8 +1,9 @@
-import { query } from '../config/database.js';
+import type { PoolClient } from 'pg';
 import {
   parseScheduledCleanupBooleanEnv,
   parseScheduledCleanupIntegerEnv,
 } from './shared/scheduledCleanupConfig.js';
+import { withSessionAdvisoryLock } from './shared/sessionAdvisoryLock.js';
 
 /**
  * 邮件热表生命周期清理服务（仅负责清理逻辑，不负责定时调度）
@@ -134,8 +135,8 @@ class MailHistoryCleanupService {
     )} 秒，单批 ${this.config.deleteBatchSize} 条，单轮最多 ${this.config.maxDeleteBatchesPerRun} 批`;
   }
 
-  private async deleteStaleMailOnce(sql: string): Promise<number> {
-    const result = await query(sql, [
+  private async deleteStaleMailOnce(client: PoolClient, sql: string): Promise<number> {
+    const result = await client.query(sql, [
       this.config.retentionDays,
       this.config.deleteBatchSize,
     ]);
@@ -147,50 +148,45 @@ class MailHistoryCleanupService {
     if (this.inFlight) return 0;
     this.inFlight = true;
 
-    let lockAcquired = false;
     try {
-      const lockResult = await query<{ locked?: boolean }>(
-        'SELECT pg_try_advisory_lock($1, $2) AS locked',
-        [MAIL_HISTORY_CLEANUP_LOCK_KEY_1, MAIL_HISTORY_CLEANUP_LOCK_KEY_2],
+      const execution = await withSessionAdvisoryLock(
+        MAIL_HISTORY_CLEANUP_LOCK_KEY_1,
+        MAIL_HISTORY_CLEANUP_LOCK_KEY_2,
+        async (client) => {
+          let totalDeleted = 0;
+          for (let batchNo = 0; batchNo < this.config.maxDeleteBatchesPerRun; batchNo += 1) {
+            const deletedSoftDeletedCount = await this.deleteStaleMailOnce(client, MAIL_SOFT_DELETED_CLEANUP_SQL);
+            totalDeleted += deletedSoftDeletedCount;
+            if (deletedSoftDeletedCount >= this.config.deleteBatchSize) {
+              continue;
+            }
+
+            const deletedExpiredCount = await this.deleteStaleMailOnce(client, MAIL_EXPIRED_HISTORY_CLEANUP_SQL);
+            totalDeleted += deletedExpiredCount;
+            if (deletedExpiredCount < this.config.deleteBatchSize) {
+              break;
+            }
+          }
+
+          if (totalDeleted > 0) {
+            console.log(
+              `[${MAIL_HISTORY_CLEANUP_LOG_SCOPE}] 本轮清理完成：删除 ${totalDeleted} 条历史邮件（保留 ${this.config.retentionDays} 天内数据）`,
+            );
+          }
+
+          return totalDeleted;
+        },
       );
-      lockAcquired = lockResult.rows[0]?.locked === true;
-      if (!lockAcquired) return 0;
 
-      let totalDeleted = 0;
-      for (let batchNo = 0; batchNo < this.config.maxDeleteBatchesPerRun; batchNo += 1) {
-        const deletedSoftDeletedCount = await this.deleteStaleMailOnce(MAIL_SOFT_DELETED_CLEANUP_SQL);
-        totalDeleted += deletedSoftDeletedCount;
-        if (deletedSoftDeletedCount >= this.config.deleteBatchSize) {
-          continue;
-        }
-
-        const deletedExpiredCount = await this.deleteStaleMailOnce(MAIL_EXPIRED_HISTORY_CLEANUP_SQL);
-        totalDeleted += deletedExpiredCount;
-        if (deletedExpiredCount < this.config.deleteBatchSize) {
-          break;
-        }
+      if (!execution.acquired) {
+        return 0;
       }
 
-      if (totalDeleted > 0) {
-        console.log(
-          `[${MAIL_HISTORY_CLEANUP_LOG_SCOPE}] 本轮清理完成：删除 ${totalDeleted} 条历史邮件（保留 ${this.config.retentionDays} 天内数据）`,
-        );
-      }
-      return totalDeleted;
+      return execution.result ?? 0;
     } catch (error) {
       console.error(`[${MAIL_HISTORY_CLEANUP_LOG_SCOPE}] 清理失败:`, error);
       return 0;
     } finally {
-      if (lockAcquired) {
-        try {
-          await query(
-            'SELECT pg_advisory_unlock($1, $2)',
-            [MAIL_HISTORY_CLEANUP_LOCK_KEY_1, MAIL_HISTORY_CLEANUP_LOCK_KEY_2],
-          );
-        } catch (unlockError) {
-          console.error(`[${MAIL_HISTORY_CLEANUP_LOG_SCOPE}] 释放 advisory lock 失败:`, unlockError);
-        }
-      }
       this.inFlight = false;
     }
   }
