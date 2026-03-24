@@ -82,7 +82,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
   const panelView = resolveTechniqueResearchPanelView(status);
   const cooldownDisplay = resolveTechniqueResearchCooldownDisplay(status, cooldownBypassEnabled);
   const currentFragmentCost = resolveTechniqueResearchCurrentFragmentCost(status, cooldownBypassEnabled);
-  const burningWordPromptMaxLength = status?.burningWordPromptMaxLength ?? 1;
+  const burningWordPromptMaxLength = status?.burningWordPromptMaxLength ?? 2;
   const burningWordPromptInputDisabled = !status?.unlocked
     || panelView.kind === 'pending'
     || panelView.kind === 'draft'

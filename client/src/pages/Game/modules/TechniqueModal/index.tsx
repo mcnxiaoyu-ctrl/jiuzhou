@@ -409,7 +409,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
     () => hasTechniqueResearchCooldownBypassToken(researchStatus),
     [researchStatus],
   );
-  const researchBurningWordMaxLength = researchStatus?.burningWordPromptMaxLength ?? 1;
+  const researchBurningWordMaxLength = researchStatus?.burningWordPromptMaxLength ?? 2;
 
   useEffect(() => {
     gameSocket.connect();

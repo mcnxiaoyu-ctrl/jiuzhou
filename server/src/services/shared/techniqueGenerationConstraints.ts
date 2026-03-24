@@ -68,6 +68,10 @@ import {
   type GeneratedTechniqueQuality,
   type TechniquePassiveValueConstraint,
 } from './techniquePassiveValueBudget.js';
+import {
+  TECHNIQUE_BURNING_WORD_PROMPT_GENERAL_RULE,
+  TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_GENERAL_RULE,
+} from './techniqueBurningWordPrompt.js';
 
 export const GENERATED_TECHNIQUE_TYPE_LIST = ['武技', '心法', '法诀', '身法', '辅修'] as const;
 export type GeneratedTechniqueType = (typeof GENERATED_TECHNIQUE_TYPE_LIST)[number];
@@ -168,7 +172,8 @@ export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   '所有字段必须使用 camelCase，禁止 snake_case 与中文 key',
   '顶层必须直接返回 technique/skills/layers，禁止额外包裹 candidate/data/result/payload 等中间键',
   '若 extraContext.techniqueRetryGuidance 存在，必须优先修正 previousFailureReason 指出的错误，再满足其余设计约束与业务规则',
-  '若 extraContext.techniqueBurningWordPrompt 存在，它表示玩家提供的一字焚诀意象；请围绕该字延展功法命名、描述、技能意象与文风，但不要解释这个提示词，也不要把它输出成额外字段或固定前缀',
+  TECHNIQUE_BURNING_WORD_PROMPT_GENERAL_RULE,
+  TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_GENERAL_RULE,
   'skills 必须为数组，长度必须满足 skillCountRange',
   'layers 必须与 maxLayer 一致，按 layer 从小到大给出',
   '生成功法不需要升级材料，layers[*].costMaterials 必须是 []',

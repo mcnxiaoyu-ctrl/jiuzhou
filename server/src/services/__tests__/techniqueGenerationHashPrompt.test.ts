@@ -25,6 +25,11 @@ import {
 } from '../shared/techniqueGenerationCandidateCore.js';
 import { buildTechniqueAuraAttackPercentSoftRangePromptRule } from '../shared/techniqueGenerationConstraints.js';
 import {
+  TECHNIQUE_BURNING_WORD_PROMPT_GENERAL_RULE,
+  TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_GENERAL_RULE,
+  TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_RULES,
+} from '../shared/techniqueBurningWordPrompt.js';
+import {
   TECHNIQUE_UPGRADE_DAMAGE_EFFECT_MAX_TOTAL_SCALE_RATE,
 } from '../shared/techniqueSkillGenerationSpec.js';
 import {
@@ -53,25 +58,38 @@ test('buildTechniqueGenerationTextModelRequest: 应显式传入 seed 并在 prom
   assert.equal(parsedUserMessage.extraContext?.source, 'unit-test');
 });
 
-test('buildTechniqueGenerationTextModelRequest: 一字焚诀语境应保留在 extraContext 中', () => {
+test('buildTechniqueGenerationTextModelRequest: 焚诀语境与作用范围限制应保留在 extraContext 中', () => {
   const request = buildTechniqueGenerationTextModelRequest({
     techniqueType: '法诀',
     quality: '地',
     maxLayer: 7,
     seed: 20260323,
     promptContext: {
-      techniqueBurningWordPrompt: '焰',
+      techniqueBurningWordPrompt: '焰心',
+      techniqueBurningWordPromptScopeRules: [...TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_RULES],
     },
   });
   const parsedUserMessage = JSON.parse(request.userMessage) as {
-    extraContext?: { techniqueBurningWordPrompt?: string };
+    extraContext?: {
+      techniqueBurningWordPrompt?: string;
+      techniqueBurningWordPromptScopeRules?: string[];
+    };
     constraints?: { generalRules?: string[] };
   };
 
-  assert.equal(parsedUserMessage.extraContext?.techniqueBurningWordPrompt, '焰');
+  assert.equal(parsedUserMessage.extraContext?.techniqueBurningWordPrompt, '焰心');
+  assert.deepEqual(parsedUserMessage.extraContext?.techniqueBurningWordPromptScopeRules, [
+    ...TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_RULES,
+  ]);
   assert.equal(
     parsedUserMessage.constraints?.generalRules?.includes(
-      '若 extraContext.techniqueBurningWordPrompt 存在，它表示玩家提供的一字焚诀意象；请围绕该字延展功法命名、描述、技能意象与文风，但不要解释这个提示词，也不要把它输出成额外字段或固定前缀',
+      TECHNIQUE_BURNING_WORD_PROMPT_GENERAL_RULE,
+    ),
+    true,
+  );
+  assert.equal(
+    parsedUserMessage.constraints?.generalRules?.includes(
+      TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_GENERAL_RULE,
     ),
     true,
   );

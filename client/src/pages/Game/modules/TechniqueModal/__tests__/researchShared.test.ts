@@ -23,7 +23,7 @@ const buildStatus = (
   cooldownBypassTokenCost: 1,
   cooldownBypassTokenItemName: '顿悟符',
   cooldownBypassTokenAvailableQty: 1,
-  burningWordPromptMaxLength: 1,
+  burningWordPromptMaxLength: 2,
   currentDraft: null,
   draftExpireAt: null,
   nameRules: {
