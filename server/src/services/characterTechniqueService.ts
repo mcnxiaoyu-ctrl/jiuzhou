@@ -4,6 +4,7 @@
  */
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
+import { consumeCharacterStoredResources } from './inventory/shared/consume.js';
 import { updateSectionProgress } from './mainQuest/index.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { isCharacterInBattle } from './battle/index.js';
@@ -415,23 +416,6 @@ class CharacterTechniqueService {
     const costExp = scaleTechniqueBaseCostByQuality(layer.costExp, qualityMultiplier);
     const costMaterials = layer.costMaterials;
 
-    // 检查并扣除灵石和经验
-    const charResult = await query(
-      'SELECT spirit_stones, exp FROM characters WHERE id = $1 FOR UPDATE',
-      [characterId]
-    );
-    if (charResult.rows.length === 0) {
-      return { success: false, message: '角色不存在' };
-    }
-
-    const char = charResult.rows[0];
-    if (char.spirit_stones < costStones) {
-      return { success: false, message: `灵石不足，需要${costStones}，当前${char.spirit_stones}` };
-    }
-    if (char.exp < costExp) {
-      return { success: false, message: `经验不足，需要${costExp}，当前${char.exp}` };
-    }
-
     // 检查并扣除材料
     for (const mat of costMaterials) {
       const matResult = await query(
@@ -449,10 +433,13 @@ class CharacterTechniqueService {
     }
 
     // 扣除灵石和经验
-    await query(
-      'UPDATE characters SET spirit_stones = spirit_stones - $1, exp = exp - $2, updated_at = NOW() WHERE id = $3',
-      [costStones, costExp, characterId]
-    );
+    const consumeResourceResult = await consumeCharacterStoredResources(characterId, {
+      spiritStones: costStones,
+      exp: costExp,
+    });
+    if (!consumeResourceResult.success) {
+      return { success: false, message: consumeResourceResult.message };
+    }
 
     // 扣除材料
     for (const mat of costMaterials) {

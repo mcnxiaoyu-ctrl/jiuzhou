@@ -1,5 +1,8 @@
-import { query } from '../../config/database.js';
 import { lockCharacterInventoryMutexes } from '../inventoryMutex.js';
+import {
+  lockCharacterRowsInOrder,
+  normalizeCharacterRowLockIds,
+} from './characterRowLock.js';
 
 /**
  * Character Reward Target Lock - 奖励结算目标统一加锁工具
@@ -26,10 +29,7 @@ import { lockCharacterInventoryMutexes } from '../inventoryMutex.js';
  */
 export const normalizeCharacterRewardTargetIds = (
   characterIds: number[],
-): number[] =>
-  [...new Set(characterIds)]
-    .filter((characterId) => Number.isInteger(characterId) && characterId > 0)
-    .sort((left, right) => left - right);
+): number[] => normalizeCharacterRowLockIds(characterIds);
 
 export const lockCharacterRewardSettlementTargets = async (
   characterIds: number[],
@@ -40,16 +40,7 @@ export const lockCharacterRewardSettlementTargets = async (
   }
 
   await lockCharacterInventoryMutexes(normalizedCharacterIds);
-  await query(
-    `
-      SELECT id
-      FROM characters
-      WHERE id = ANY($1::int[])
-      ORDER BY id
-      FOR UPDATE
-    `,
-    [normalizedCharacterIds],
-  );
+  await lockCharacterRowsInOrder(normalizedCharacterIds);
 
   return normalizedCharacterIds;
 };

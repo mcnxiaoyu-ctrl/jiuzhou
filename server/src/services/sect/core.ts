@@ -15,6 +15,7 @@
  */
 import { query } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
+import { consumeCharacterCurrencies } from '../inventory/shared/consume.js';
 import { assertMember, generateSectId, getCharacterSectId, hasPermission, positionRank, toNumber } from './db.js';
 import { getCachedSectInfo, invalidateSectInfoCache } from './cache.js';
 import type { CreateResult, Result, SectDefRow, SectInfo, SectListResult, SectPosition } from './types.js';
@@ -81,18 +82,15 @@ class SectCoreService {
     }
 
     const createCost = 1000;
-    const charRes = await query('SELECT spirit_stones FROM characters WHERE id = $1 FOR UPDATE', [characterId]);
-    if (charRes.rows.length === 0) {
-      return { success: false, message: '角色不存在' };
+    const consumeResult = await consumeCharacterCurrencies(characterId, {
+      spiritStones: createCost,
+    });
+    if (!consumeResult.success) {
+      if (consumeResult.message.startsWith('灵石不足')) {
+        return { success: false, message: `灵石不足，创建需要${createCost}` };
+      }
+      return { success: false, message: consumeResult.message };
     }
-    const curSS = toNumber(charRes.rows[0]?.spirit_stones);
-    if (curSS < createCost) {
-      return { success: false, message: `灵石不足，创建需要${createCost}` };
-    }
-    await query(`UPDATE characters SET spirit_stones = spirit_stones - $1, updated_at = NOW() WHERE id = $2`, [
-      createCost,
-      characterId,
-    ]);
 
     const sectId = generateSectId();
     await query(

@@ -19,11 +19,16 @@
  */
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
+import {
+  addCharacterCurrenciesExact,
+  consumeCharacterCurrenciesExact,
+} from './inventory/shared/consume.js';
 import { createCacheLayer } from './shared/cacheLayer.js';
 import {
   createCacheVersionManager,
   parseVersionedCacheBaseKey,
 } from './shared/cacheVersion.js';
+import { lockCharacterRowsInOrder } from './shared/characterRowLock.js';
 import {
   buildPartnerDisplay,
   loadPartnerTechniqueRows,
@@ -313,16 +318,13 @@ const buildPartnerSnapshot = async (partnerId: number): Promise<PartnerDisplayDt
 
 const loadCharacterWallet = async (
   characterId: number,
-  forUpdate: boolean,
 ): Promise<CharacterWalletRow | null> => {
-  const lockSql = forUpdate ? 'FOR UPDATE' : '';
   const result = await query(
     `
       SELECT id, user_id, spirit_stones, silver
       FROM characters
       WHERE id = $1
       LIMIT 1
-      ${lockSql}
     `,
     [characterId],
   );
@@ -489,7 +491,7 @@ class PartnerMarketService {
       return { success: false, message: 'unitPriceSpiritStones参数错误' };
     }
 
-    const seller = await loadCharacterWallet(params.characterId, true);
+    const seller = await loadCharacterWallet(params.characterId);
     if (!seller) return { success: false, message: '角色不存在' };
     if (Number(seller.user_id) !== params.userId) {
       return { success: false, message: '角色归属异常' };
@@ -511,24 +513,19 @@ class PartnerMarketService {
     const snapshot = await buildPartnerSnapshot(partnerId);
     const totalPrice = calculateMarketTradeTotalPrice(BigInt(unitPrice), 1);
     const listingFeeSilver = calculateMarketListingFeeSilver(totalPrice);
-    const sellerSilver = BigInt(seller.silver ?? 0);
-    if (sellerSilver < listingFeeSilver) {
-      return {
-        success: false,
-        message: `银两不足，上架手续费需要${listingFeeSilver.toString()}`,
-      };
-    }
-
     if (listingFeeSilver > 0n) {
-      await query(
-        `
-          UPDATE characters
-          SET silver = silver - $1,
-              updated_at = NOW()
-          WHERE id = $2
-        `,
-        [listingFeeSilver.toString(), params.characterId],
-      );
+      const consumeResult = await consumeCharacterCurrenciesExact(params.characterId, {
+        silver: listingFeeSilver,
+      });
+      if (!consumeResult.success) {
+        if (consumeResult.message.startsWith('银两不足')) {
+          return {
+            success: false,
+            message: `银两不足，上架手续费需要${listingFeeSilver.toString()}`,
+          };
+        }
+        return { success: false, message: consumeResult.message };
+      }
     }
 
     const listingResult = await query(
@@ -587,9 +584,6 @@ class PartnerMarketService {
     const listingId = parsePositiveInt(params.listingId);
     if (listingId === null) return { success: false, message: 'listingId参数错误' };
 
-    const seller = await loadCharacterWallet(params.characterId, true);
-    if (!seller) return { success: false, message: '角色不存在' };
-
     const listingResult = await query(
       `
         SELECT id, seller_character_id, status, listing_fee_silver
@@ -628,15 +622,12 @@ class PartnerMarketService {
 
     const refundFeeSilver = BigInt(listing.listing_fee_silver ?? 0);
     if (refundFeeSilver > 0n) {
-      await query(
-        `
-          UPDATE characters
-          SET silver = silver + $1,
-              updated_at = NOW()
-          WHERE id = $2
-        `,
-        [refundFeeSilver.toString(), params.characterId],
-      );
+      const addResult = await addCharacterCurrenciesExact(params.characterId, {
+        silver: refundFeeSilver,
+      });
+      if (!addResult.success) {
+        return { success: false, message: addResult.message };
+      }
     }
 
     await invalidatePartnerMarketListingsCache();
@@ -678,28 +669,6 @@ class PartnerMarketService {
     }
     if (sellerCharacterId === params.buyerCharacterId) {
       return { success: false, message: '不能购买自己上架的伙伴' };
-    }
-
-    const [buyerLockId, sellerLockId] =
-      params.buyerCharacterId < sellerCharacterId
-        ? [params.buyerCharacterId, sellerCharacterId]
-        : [sellerCharacterId, params.buyerCharacterId];
-    const firstCharacter = await loadCharacterWallet(buyerLockId, true);
-    const secondCharacter = await loadCharacterWallet(sellerLockId, true);
-    if (!firstCharacter || !secondCharacter) {
-      return { success: false, message: '角色不存在' };
-    }
-
-    const buyer =
-      Number(firstCharacter.id) === params.buyerCharacterId
-        ? firstCharacter
-        : secondCharacter;
-    const seller =
-      Number(firstCharacter.id) === sellerCharacterId
-        ? firstCharacter
-        : secondCharacter;
-    if (!buyer || !seller) {
-      return { success: false, message: '角色不存在' };
     }
 
     const lockedListingResult = await query(
@@ -754,32 +723,26 @@ class PartnerMarketService {
     );
     const taxAmount = getTaxAmount(totalPrice, PARTNER_MARKET_TAX_RATE);
     const sellerGain = totalPrice - taxAmount;
-    const buyerStones = BigInt(buyer.spirit_stones ?? 0);
-    if (buyerStones < totalPrice) {
-      return {
-        success: false,
-        message: `灵石不足，需要${totalPrice.toString()}`,
-      };
+    const lockedCharacterIds = await lockCharacterRowsInOrder([
+      params.buyerCharacterId,
+      sellerCharacterId,
+    ]);
+    if (lockedCharacterIds.length !== 2) {
+      return { success: false, message: '角色不存在' };
     }
 
-    await query(
-      `
-        UPDATE characters
-        SET spirit_stones = spirit_stones - $1,
-            updated_at = NOW()
-        WHERE id = $2
-      `,
-      [totalPrice.toString(), params.buyerCharacterId],
-    );
-    await query(
-      `
-        UPDATE characters
-        SET spirit_stones = spirit_stones + $1,
-            updated_at = NOW()
-        WHERE id = $2
-      `,
-      [sellerGain.toString(), sellerCharacterId],
-    );
+    const buyerConsumeResult = await consumeCharacterCurrenciesExact(params.buyerCharacterId, {
+      spiritStones: totalPrice,
+    });
+    if (!buyerConsumeResult.success) {
+      return { success: false, message: buyerConsumeResult.message };
+    }
+    const sellerAddResult = await addCharacterCurrenciesExact(sellerCharacterId, {
+      spiritStones: sellerGain,
+    });
+    if (!sellerAddResult.success) {
+      return { success: false, message: sellerAddResult.message };
+    }
 
     await query(
       `

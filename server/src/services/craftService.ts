@@ -2,6 +2,7 @@ import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { addItemToInventory } from './inventory/index.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
+import { consumeCharacterStoredResources } from './inventory/shared/consume.js';
 import { recordCraftItemEvent } from './taskService.js';
 import { REALM_ORDER } from './shared/realmRules.js';
 import { normalizeRecipeRateToPercent, normalizeRecipeRateToRatio } from './shared/recipeRate.js';
@@ -486,11 +487,6 @@ class CraftService {
     }
     await lockCharacterInventoryMutex(characterSnapshot.id);
 
-    const character = await getCharacterByUserId(user, true);
-    if (!character) {
-      return { success: false, message: '角色不存在' };
-    }
-
     const recipeDef = getItemRecipeById(recipeId);
     if (!recipeDef || recipeDef.enabled === false) {
       return { success: false, message: '配方不存在' };
@@ -518,7 +514,7 @@ class CraftService {
       product_sub_category: recipeProductDef?.sub_category ?? null,
     } satisfies RecipeRow;
     const reqRealm = asString(recipe.req_realm) || null;
-    if (!isRealmSufficient(character.realm, reqRealm)) {
+    if (!isRealmSufficient(characterSnapshot.realm, reqRealm)) {
       return { success: false, message: `境界不足，需要${reqRealm}` };
     }
 
@@ -533,37 +529,33 @@ class CraftService {
     const totalSpiritCost = costSpiritPerCraft * times;
     const totalExpCost = costExpPerCraft * times;
 
-    if (character.silver < totalSilverCost) {
+    if (characterSnapshot.silver < totalSilverCost) {
       return { success: false, message: '银两不足' };
     }
-    if (character.spiritStones < totalSpiritCost) {
+    if (characterSnapshot.spiritStones < totalSpiritCost) {
       return { success: false, message: '灵石不足' };
     }
-    if (character.exp < totalExpCost) {
+    if (characterSnapshot.exp < totalExpCost) {
       return { success: false, message: '经验不足' };
     }
 
     for (const itemCost of costItems) {
       const totalQty = itemCost.qty * times;
-      const consume = await consumeMaterialByDefIdTx(character.id, itemCost.itemDefId, totalQty);
+      const consume = await consumeMaterialByDefIdTx(characterSnapshot.id, itemCost.itemDefId, totalQty);
       if (!consume.success) {
         return { success: false, message: consume.message };
       }
     }
 
     if (totalSilverCost > 0 || totalSpiritCost > 0 || totalExpCost > 0) {
-      await query(
-        `
-          UPDATE characters
-          SET
-            silver = silver - $2,
-            spirit_stones = spirit_stones - $3,
-            exp = exp - $4,
-            updated_at = NOW()
-          WHERE id = $1
-        `,
-        [character.id, totalSilverCost, totalSpiritCost, totalExpCost],
-      );
+      const consumeResourceResult = await consumeCharacterStoredResources(characterSnapshot.id, {
+        silver: totalSilverCost,
+        spiritStones: totalSpiritCost,
+        exp: totalExpCost,
+      });
+      if (!consumeResourceResult.success) {
+        return { success: false, message: consumeResourceResult.message };
+      }
     }
 
     const successRateRatio = normalizeRecipeRateToRatio(recipe.success_rate, recipeType, 1);
@@ -588,7 +580,7 @@ class CraftService {
     if (successCount > 0) {
       const totalProductQty = productQty * successCount;
       const addResult = await addItemToInventory(
-        character.id,
+        characterSnapshot.id,
         user,
         asString(recipe.product_item_def_id),
         totalProductQty,
@@ -613,7 +605,7 @@ class CraftService {
         const rollbackQty = Math.floor(itemCost.qty * failCount * failReturnRateRatio);
         if (rollbackQty <= 0) continue;
         const addResult = await addItemToInventory(
-          character.id,
+          characterSnapshot.id,
           user,
           itemCost.itemDefId,
           rollbackQty,
@@ -628,7 +620,7 @@ class CraftService {
 
     const characterRes = await query(
       `SELECT exp, silver, spirit_stones FROM characters WHERE id = $1 LIMIT 1`,
-      [character.id],
+      [characterSnapshot.id],
     );
     const charRow = (characterRes.rows?.[0] ?? {}) as Record<string, unknown>;
     const productCategory = asString(recipe.product_category);
@@ -637,7 +629,7 @@ class CraftService {
 
     if (successCount > 0) {
       await recordCraftItemEvent(
-        character.id,
+        characterSnapshot.id,
         asString(recipe.id),
         craftKind,
         asString(recipe.product_item_def_id),

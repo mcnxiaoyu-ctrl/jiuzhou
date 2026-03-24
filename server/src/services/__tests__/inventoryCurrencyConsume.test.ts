@@ -22,7 +22,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import * as database from '../../config/database.js';
-import { addCharacterCurrencies, consumeCharacterCurrencies } from '../inventory/shared/consume.js';
+import {
+  addCharacterCurrencies,
+  addCharacterCurrenciesExact,
+  consumeCharacterCurrencies,
+  consumeCharacterCurrenciesExact,
+  consumeCharacterStoredResources,
+} from '../inventory/shared/consume.js';
 
 test('consumeCharacterCurrencies: 应使用条件更新而不是先锁 characters', async (t) => {
   const sqlCalls: string[] = [];
@@ -33,8 +39,8 @@ test('consumeCharacterCurrencies: 应使用条件更新而不是先锁 character
     if (sql.includes('UPDATE characters') && sql.includes('silver = silver - $2')) {
       return { rows: [] };
     }
-    if (sql.includes('SELECT silver, spirit_stones FROM characters WHERE id = $1 LIMIT 1')) {
-      return { rows: [{ silver: 5, spirit_stones: 99 }] };
+    if (sql.includes('SELECT silver, spirit_stones, exp FROM characters WHERE id = $1 LIMIT 1')) {
+      return { rows: [{ silver: 5, spirit_stones: 99, exp: 0 }] };
     }
 
     throw new Error(`未处理的 SQL: ${sql}`);
@@ -73,6 +79,101 @@ test('addCharacterCurrencies: 应直接更新并返回，不再先锁 characters
   const result = await addCharacterCurrencies(202, {
     silver: 18,
     spiritStones: 6,
+  });
+
+  assert.deepEqual(result, {
+    success: true,
+    message: '增加成功',
+  });
+  assert.equal(sqlCalls.length, 1);
+  assert.match(sqlCalls[0] ?? '', /UPDATE characters/u);
+  assert.match(sqlCalls[0] ?? '', /RETURNING id/u);
+  assert.doesNotMatch(sqlCalls[0] ?? '', /FOR UPDATE/u);
+});
+
+test('consumeCharacterStoredResources: 应支持经验并使用条件更新而不是先锁 characters', async (t) => {
+  const sqlCalls: string[] = [];
+
+  t.mock.method(database, 'query', async (sql: string) => {
+    sqlCalls.push(sql);
+
+    if (sql.includes('UPDATE characters') && sql.includes('exp = exp - $4')) {
+      return { rows: [] };
+    }
+    if (sql.includes('SELECT silver, spirit_stones, exp FROM characters WHERE id = $1 LIMIT 1')) {
+      return { rows: [{ silver: 30, spirit_stones: 20, exp: 5 }] };
+    }
+
+    throw new Error(`未处理的 SQL: ${sql}`);
+  });
+
+  const result = await consumeCharacterStoredResources(303, {
+    silver: 10,
+    spiritStones: 3,
+    exp: 8,
+  });
+
+  assert.deepEqual(result, {
+    success: false,
+    message: '经验不足，需要8',
+  });
+  assert.equal(sqlCalls.length, 2);
+  assert.match(sqlCalls[0] ?? '', /UPDATE characters/u);
+  assert.match(sqlCalls[0] ?? '', /AND silver >= \$2/u);
+  assert.match(sqlCalls[0] ?? '', /AND spirit_stones >= \$3/u);
+  assert.match(sqlCalls[0] ?? '', /AND exp >= \$4/u);
+  assert.doesNotMatch(sqlCalls[0] ?? '', /FOR UPDATE/u);
+  assert.doesNotMatch(sqlCalls[1] ?? '', /FOR UPDATE/u);
+});
+
+test('consumeCharacterCurrenciesExact: 应以 bigint 条件更新扣费而不是先锁 characters', async (t) => {
+  const sqlCalls: string[] = [];
+
+  t.mock.method(database, 'query', async (sql: string) => {
+    sqlCalls.push(sql);
+
+    if (sql.includes('UPDATE characters') && sql.includes('silver = silver - $2')) {
+      return { rows: [] };
+    }
+    if (sql.includes('SELECT silver, spirit_stones FROM characters WHERE id = $1 LIMIT 1')) {
+      return { rows: [{ silver: '8', spirit_stones: '99' }] };
+    }
+
+    throw new Error(`未处理的 SQL: ${sql}`);
+  });
+
+  const result = await consumeCharacterCurrenciesExact(404, {
+    silver: 10n,
+    spiritStones: 3n,
+  });
+
+  assert.deepEqual(result, {
+    success: false,
+    message: '银两不足，需要10',
+  });
+  assert.equal(sqlCalls.length, 2);
+  assert.match(sqlCalls[0] ?? '', /AND silver >= \$2/u);
+  assert.match(sqlCalls[0] ?? '', /AND spirit_stones >= \$3/u);
+  assert.doesNotMatch(sqlCalls[0] ?? '', /FOR UPDATE/u);
+  assert.doesNotMatch(sqlCalls[1] ?? '', /FOR UPDATE/u);
+});
+
+test('addCharacterCurrenciesExact: 应直接更新 bigint 货币而不是先锁 characters', async (t) => {
+  const sqlCalls: string[] = [];
+
+  t.mock.method(database, 'query', async (sql: string) => {
+    sqlCalls.push(sql);
+
+    if (sql.includes('UPDATE characters') && sql.includes('silver = silver + $2')) {
+      return { rows: [{ id: 505 }] };
+    }
+
+    throw new Error(`未处理的 SQL: ${sql}`);
+  });
+
+  const result = await addCharacterCurrenciesExact(505, {
+    silver: 18n,
+    spiritStones: 6n,
   });
 
   assert.deepEqual(result, {

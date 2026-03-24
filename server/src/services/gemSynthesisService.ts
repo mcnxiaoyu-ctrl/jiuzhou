@@ -2,6 +2,7 @@ import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { randomInt } from 'crypto';
 import { addItemToInventory } from './inventory/index.js';
+import { consumeCharacterCurrencies } from './inventory/shared/consume.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import {
   getCharacterComputedByCharacterId,
@@ -378,16 +379,16 @@ const normalizeMaterialLocations = (
 
 const getCharacterWalletTx = async (
   characterId: number,
-  forUpdate: boolean,
 ): Promise<CharacterWallet | null> => {
-  const sql = `
+  const result = await query(
+    `
     SELECT silver, spirit_stones
     FROM characters
     WHERE id = $1
-    ${forUpdate ? 'FOR UPDATE' : ''}
     LIMIT 1
-  `;
-  const result = await query(sql, [characterId]);
+  `,
+    [characterId],
+  );
   if (!result.rows[0]) return null;
   const row = result.rows[0] as CharacterWalletRow;
   return {
@@ -641,17 +642,44 @@ const calcMaxSynthesizeTimes = (params: {
   return Math.max(0, Math.min(byItems, bySilver, bySpirit));
 };
 
-const updateCharacterWalletTx = async (characterId: number, wallet: CharacterWallet): Promise<void> => {
-  await query(
-    `
-      UPDATE characters
-      SET silver = $2,
-          spirit_stones = $3,
-          updated_at = NOW()
-      WHERE id = $1
-    `,
-    [characterId, wallet.silver, wallet.spiritStones],
-  );
+/**
+ * 在 gem 事务内扣减角色钱包资源
+ *
+ * 作用：
+ * - 复用公共货币扣减入口，避免 gem 链路在持有背包互斥锁时继续 `FOR UPDATE characters`
+ * - 在扣减成功后同步本地钱包快照，供批量合成的后续步骤继续复用
+ *
+ * 输入/输出：
+ * - 输入：characterId、当前钱包快照、待扣减的银两/灵石
+ * - 输出：成功/失败结果；成功时会原地刷新 wallet
+ *
+ * 数据流：
+ * - gem 流程计算成本 -> consumeCharacterCurrencies 条件扣减
+ * - RETURNING 剩余余额 -> 回写本地 wallet 快照
+ *
+ * 关键边界条件与坑点：
+ * 1) 这里只处理银两/灵石，不承担材料扣减与产物发放，避免职责混杂
+ * 2) 必须以公共扣减入口返回的余额刷新 wallet，避免批量流程继续沿用过期快照
+ */
+const consumeCharacterWalletCostsTx = async (
+  characterId: number,
+  wallet: CharacterWallet,
+  costs: { silver?: number; spiritStones?: number },
+): Promise<{ success: boolean; message: string }> => {
+  const consumeResult = await consumeCharacterCurrencies(characterId, costs);
+  if (!consumeResult.success) {
+    return consumeResult;
+  }
+
+  if (consumeResult.remaining) {
+    wallet.silver = consumeResult.remaining.silver;
+    wallet.spiritStones = consumeResult.remaining.spiritStones;
+  }
+
+  return {
+    success: true,
+    message: consumeResult.message,
+  };
 };
 
 type GemConvertContext = {
@@ -867,7 +895,7 @@ const rollRandomGemOutputCounts = (
  */
 class GemSynthesisService {
   async getGemSynthesisRecipeList(characterId: number): Promise<GemSynthesisRecipeListResult> {
-    const wallet = await getCharacterWalletTx(characterId, false);
+    const wallet = await getCharacterWalletTx(characterId);
     if (!wallet) return { success: false, message: '角色不存在' };
 
     const recipeRows = await getGemRecipeRows();
@@ -975,7 +1003,7 @@ class GemSynthesisService {
    * 2) 转换成本来自 gem_synthesis 配方映射，配置冲突/缺失会直接失败
    */
   async getGemConvertOptions(characterId: number): Promise<GemConvertOptionListResult> {
-    const wallet = await getCharacterWalletTx(characterId, false);
+    const wallet = await getCharacterWalletTx(characterId);
     if (!wallet) return { success: false, message: '角色不存在' };
 
     const contextResult = await getGemConvertContext();
@@ -1080,7 +1108,7 @@ class GemSynthesisService {
 
     await lockCharacterInventoryMutex(characterId);
 
-    const wallet = await getCharacterWalletTx(characterId, true);
+    const wallet = await getCharacterWalletTx(characterId);
     if (!wallet) {
       return { success: false, message: '角色不存在' };
     }
@@ -1158,15 +1186,19 @@ class GemSynthesisService {
       consumeQtyByItemId.set(itemId, baseQty * requestedTimes);
     }
 
+    const consumeInputGemQty = GEM_CONVERT_INPUT_QTY * requestedTimes;
+    const spentSpiritStones = costSpiritStonesPerConvert * requestedTimes;
+    const spendResult = await consumeCharacterWalletCostsTx(characterId, wallet, {
+      spiritStones: spentSpiritStones,
+    });
+    if (!spendResult.success) {
+      return { success: false, message: spendResult.message };
+    }
+
     const consumeRes = await consumeSelectedItemInstancesTx(consumeQtyByItemId, rowsByItemId);
     if (!consumeRes.success) {
       return { success: false, message: consumeRes.message };
     }
-
-    const consumeInputGemQty = GEM_CONVERT_INPUT_QTY * requestedTimes;
-    const spentSpiritStones = costSpiritStonesPerConvert * requestedTimes;
-    wallet.spiritStones -= spentSpiritStones;
-    await updateCharacterWalletTx(characterId, wallet);
 
     const rolledOutputCounts = rollRandomGemOutputCounts(candidateOutputItemDefIds, requestedTimes);
     const producedItemDefIds = [...rolledOutputCounts.keys()].sort((a, b) => a.localeCompare(b));
@@ -1237,7 +1269,7 @@ class GemSynthesisService {
 
     await lockCharacterInventoryMutex(characterId);
 
-    const wallet = await getCharacterWalletTx(characterId, true);
+    const wallet = await getCharacterWalletTx(characterId);
     if (!wallet) {
       return { success: false, message: '角色不存在' };
     }
@@ -1266,22 +1298,21 @@ class GemSynthesisService {
       return { success: false, message: `当前最多可合成${maxTimes}次` };
     }
 
+    const totalSilverCost = recipe.costSilver * times;
+    const totalSpiritStoneCost = recipe.costSpiritStones * times;
+    const spendResult = await consumeCharacterWalletCostsTx(characterId, wallet, {
+      silver: totalSilverCost,
+      spiritStones: totalSpiritStoneCost,
+    });
+    if (!spendResult.success) {
+      return { success: false, message: spendResult.message };
+    }
+
     const consumeQty = recipe.inputQty * times;
     const consumeRes = await consumeItemDefQtyTx(characterId, recipe.inputItemDefId, consumeQty);
     if (!consumeRes.success) {
       return { success: false, message: consumeRes.message };
     }
-
-    const totalSilverCost = recipe.costSilver * times;
-    const totalSpiritStoneCost = recipe.costSpiritStones * times;
-    wallet.silver -= totalSilverCost;
-    wallet.spiritStones -= totalSpiritStoneCost;
-
-    if (wallet.silver < 0 || wallet.spiritStones < 0) {
-      return { success: false, message: '货币不足' };
-    }
-
-    await updateCharacterWalletTx(characterId, wallet);
 
     const successRate = Math.max(0, Math.min(1, Number(recipe.successRate) || 0));
     let successCount = 0;
@@ -1358,7 +1389,7 @@ class GemSynthesisService {
 
     await lockCharacterInventoryMutex(characterId);
 
-    const wallet = await getCharacterWalletTx(characterId, true);
+    const wallet = await getCharacterWalletTx(characterId);
     if (!wallet) {
       return { success: false, message: '角色不存在' };
     }
@@ -1434,19 +1465,20 @@ class GemSynthesisService {
 
       if (maxTimes <= 0) continue;
 
+      const totalSilverCost = recipe.costSilver * maxTimes;
+      const totalSpiritCost = recipe.costSpiritStones * maxTimes;
+      const spendResult = await consumeCharacterWalletCostsTx(characterId, wallet, {
+        silver: totalSilverCost,
+        spiritStones: totalSpiritCost,
+      });
+      if (!spendResult.success) {
+        return { success: false, message: spendResult.message };
+      }
+
       const consumeQty = recipe.inputQty * maxTimes;
       const consumeRes = await consumeItemDefQtyTx(characterId, recipe.inputItemDefId, consumeQty);
       if (!consumeRes.success) {
         return { success: false, message: consumeRes.message };
-      }
-
-      const totalSilverCost = recipe.costSilver * maxTimes;
-      const totalSpiritCost = recipe.costSpiritStones * maxTimes;
-
-      wallet.silver -= totalSilverCost;
-      wallet.spiritStones -= totalSpiritCost;
-      if (wallet.silver < 0 || wallet.spiritStones < 0) {
-        return { success: false, message: '货币不足' };
       }
 
       spentSilver += totalSilverCost;
@@ -1501,8 +1533,6 @@ class GemSynthesisService {
     if (steps.length === 0) {
       return { success: false, message: '材料或货币不足，无法批量合成' };
     }
-
-    await updateCharacterWalletTx(characterId, wallet);
 
     const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
     const totalSuccess = steps.reduce((sum, step) => sum + step.successCount, 0);

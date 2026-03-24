@@ -71,21 +71,6 @@ export const getMonthCardStatus = (monthCardId?: string): Promise<MonthCardStatu
   return api.get('/monthcard/status', { params: { monthCardId } });
 };
 
-export interface MonthCardBuyResponse {
-  success: boolean;
-  message: string;
-  data?: {
-    monthCardId: string;
-    expireAt: string;
-    daysLeft: number;
-    spiritStones: number;
-  };
-}
-
-export const buyMonthCard = (monthCardId?: string): Promise<MonthCardBuyResponse> => {
-  return api.post('/monthcard/buy', { monthCardId });
-};
-
 export type BattlePassTaskDto = {
   id: string;
   code: string;

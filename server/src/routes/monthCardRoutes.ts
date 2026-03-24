@@ -15,17 +15,6 @@ router.get('/status', requireAuth, asyncHandler(async (req, res) => {
   sendResult(res, result);
 }));
 
-router.post('/buy', requireAuth, asyncHandler(async (req, res) => {
-  const userId = req.userId!;
-  const body = req.body as { monthCardId?: unknown };
-  const monthCardId = typeof body?.monthCardId === 'string' ? body.monthCardId : DEFAULT_MONTH_CARD_ID;
-  const result = await monthCardService.buyMonthCard(userId, monthCardId);
-  if (result.success) {
-    await safePushCharacterUpdate(userId);
-  }
-  sendResult(res, result);
-}));
-
 router.post('/use-item', requireAuth, asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const body = req.body as { monthCardId?: unknown; itemInstanceId?: unknown };

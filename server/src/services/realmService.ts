@@ -200,6 +200,18 @@ type CharacterRealmRow = {
   attribute_points: number | string | null;
 };
 
+type BreakthroughCharacterState = {
+  characterId: number;
+  realm: string;
+  subRealm: string;
+  fromRealm: string;
+  exp: number;
+  spiritStones: number;
+  attributePoints: number;
+  nextRealm: string | null;
+  breakthroughConfig: BreakthroughConfig | null;
+};
+
 const isExpMinRequirement = (
   requirement: BreakthroughRequirement,
 ): requirement is ExpMinRequirement =>
@@ -574,6 +586,76 @@ const getCompletedMainQuestChapterSet = async (
     chapterSet.add(chapterId);
   }
   return chapterSet;
+};
+
+const loadBreakthroughCharacterRow = async (
+  userId: number,
+  forUpdate: boolean,
+): Promise<CharacterRealmRow | null> => {
+  const result = await query<CharacterRealmRow>(
+    `SELECT
+       id, realm, sub_realm, exp, spirit_stones, attribute_points
+     FROM characters
+     WHERE user_id = $1
+     ${forUpdate ? 'FOR UPDATE' : ''}`,
+    [userId],
+  );
+  return result.rows[0] ?? null;
+};
+
+const resolveBreakthroughCharacterState = (
+  row: CharacterRealmRow,
+  cfg: RealmBreakthroughConfigFile,
+): BreakthroughCharacterState => {
+  const characterId = Number(row.id ?? 0) || 0;
+  const realm = typeof row.realm === 'string' ? row.realm.trim() : '凡人';
+  const subRealm = typeof row.sub_realm === 'string' ? row.sub_realm.trim() : '';
+  const fromRealm = realm === '凡人' || !subRealm ? realm : `${realm}·${subRealm}`;
+  const nextRealm = getNextRealmName(cfg.realmOrder, fromRealm);
+
+  return {
+    characterId,
+    realm,
+    subRealm,
+    fromRealm,
+    exp: Number(row.exp ?? 0) || 0,
+    spiritStones: Number(row.spirit_stones ?? 0) || 0,
+    attributePoints: Number(row.attribute_points ?? 0) || 0,
+    nextRealm,
+    breakthroughConfig: nextRealm ? getBreakthroughConfig(cfg, fromRealm) : null,
+  };
+};
+
+const getFirstUnmetRequirement = (
+  requirements: RealmRequirementView[],
+): RealmRequirementView | null => {
+  return requirements.find((requirement) => requirement.status !== 'done') ?? null;
+};
+
+const buildRequirementFailureResult = (
+  requirement: RealmRequirementView,
+): RealmBreakthroughResult => {
+  if (requirement.sourceType === 'version_gate') {
+    return {
+      success: false,
+      message: requirement.detail || '当前版本暂未开放',
+    };
+  }
+
+  return {
+    success: false,
+    message: `条件未满足：${requirement.title}`,
+  };
+};
+
+const getVolatileBreakthroughRequirements = (
+  requirements: BreakthroughRequirement[],
+): BreakthroughRequirement[] => {
+  return requirements.filter(
+    (requirement) =>
+      requirement.type === 'main_technique_layer_min'
+      || requirement.type === 'main_and_sub_technique_layer_min',
+  );
 };
 
 const evaluateRequirements = async (args: {
@@ -1163,59 +1245,37 @@ class RealmService {
   async breakthroughToNextRealm(userId: number): Promise<RealmBreakthroughResult> {
     const cfg = await loadConfig();
 
-    const charRes = await query<CharacterRealmRow>(
-      `SELECT
-         id, realm, sub_realm, exp, spirit_stones, attribute_points
-       FROM characters
-       WHERE user_id = $1
-       FOR UPDATE`,
-      [userId],
-    );
-    if (charRes.rows.length === 0)
+    const previewRow = await loadBreakthroughCharacterRow(userId, false);
+    if (!previewRow)
       return { success: false, message: "角色不存在" };
 
-    const row = charRes.rows[0];
-    const characterId = Number(row.id ?? 0) || 0;
-    const realm = typeof row.realm === "string" ? row.realm.trim() : "凡人";
-    const subRealm =
-      typeof row.sub_realm === "string" ? row.sub_realm.trim() : "";
-    const fromRealm =
-      realm === "凡人" || !subRealm ? realm : `${realm}·${subRealm}`;
-
-    const exp = Number(row.exp ?? 0) || 0;
-    const spiritStones = Number(row.spirit_stones ?? 0) || 0;
-    const attributePoints = Number(row.attribute_points ?? 0) || 0;
-
-    const nextRealm = getNextRealmName(cfg.realmOrder, fromRealm);
+    const previewState = resolveBreakthroughCharacterState(previewRow, cfg);
+    const characterId = previewState.characterId;
+    const fromRealm = previewState.fromRealm;
+    const nextRealm = previewState.nextRealm;
     if (!nextRealm) return { success: false, message: "已达最高境界" };
 
-    const bt = getBreakthroughConfig(cfg, fromRealm);
+    const bt = previewState.breakthroughConfig;
     if (!bt || bt.to !== nextRealm)
       return { success: false, message: "下一境界配置不存在" };
 
-    const reqViews = await evaluateRequirements({
+    const previewRequirementViews = await evaluateRequirements({
       characterId,
-      exp,
-      spiritStones,
+      exp: previewState.exp,
+      spiritStones: previewState.spiritStones,
       requirements: bt.requirements ?? [],
     });
-    const unmet = reqViews.find((r) => r.status !== "done");
-    if (unmet) {
-      if (unmet.sourceType === "version_gate") {
-        return {
-          success: false,
-          message: unmet.detail || "当前版本暂未开放",
-        };
-      }
-      return { success: false, message: `条件未满足：${unmet.title}` };
+    const previewUnmetRequirement = getFirstUnmetRequirement(previewRequirementViews);
+    if (previewUnmetRequirement) {
+      return buildRequirementFailureResult(previewUnmetRequirement);
     }
 
     const costsBuilt = await buildCostsView({
       costs: bt.costs ?? [],
     });
-    if (exp < costsBuilt.exp)
+    if (previewState.exp < costsBuilt.exp)
       return { success: false, message: `经验不足，需要 ${costsBuilt.exp}` };
-    if (spiritStones < costsBuilt.spiritStones)
+    if (previewState.spiritStones < costsBuilt.spiritStones)
       return {
         success: false,
         message: `灵石不足，需要 ${costsBuilt.spiritStones}`,
@@ -1235,6 +1295,39 @@ class RealmService {
       }
     }
 
+    const lockedRow = await loadBreakthroughCharacterRow(userId, true);
+    if (!lockedRow) {
+      return { success: false, message: '角色不存在' };
+    }
+    const lockedState = resolveBreakthroughCharacterState(lockedRow, cfg);
+    if (lockedState.fromRealm !== fromRealm) {
+      return { success: false, message: '角色状态已变化，请重试' };
+    }
+
+    const volatileRequirements = getVolatileBreakthroughRequirements(bt.requirements ?? []);
+    if (volatileRequirements.length > 0) {
+      const volatileRequirementViews = await evaluateRequirements({
+        characterId,
+        exp: lockedState.exp,
+        spiritStones: lockedState.spiritStones,
+        requirements: volatileRequirements,
+      });
+      const volatileUnmetRequirement = getFirstUnmetRequirement(volatileRequirementViews);
+      if (volatileUnmetRequirement) {
+        return buildRequirementFailureResult(volatileUnmetRequirement);
+      }
+    }
+
+    if (lockedState.exp < costsBuilt.exp) {
+      return { success: false, message: `经验不足，需要 ${costsBuilt.exp}` };
+    }
+    if (lockedState.spiritStones < costsBuilt.spiritStones) {
+      return {
+        success: false,
+        message: `灵石不足，需要 ${costsBuilt.spiritStones}`,
+      };
+    }
+
     for (const it of costsBuilt.items) {
       const consumeRes = await consumeItemFromBagTx(
         characterId,
@@ -1248,9 +1341,9 @@ class RealmService {
     const rewards = bt.rewards || {};
     const apAdd = Math.max(0, Number(rewards.attributePoints ?? 0) || 0);
 
-    const newExp = exp - costsBuilt.exp;
-    const newSpiritStones = spiritStones - costsBuilt.spiritStones;
-    const newAttributePoints = attributePoints + apAdd;
+    const newExp = lockedState.exp - costsBuilt.exp;
+    const newSpiritStones = lockedState.spiritStones - costsBuilt.spiritStones;
+    const newAttributePoints = lockedState.attributePoints + apAdd;
 
     await query(
       `

@@ -2,6 +2,7 @@ import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { getGameServer } from '../game/gameServer.js';
 import { updateAchievementProgress } from './achievementService.js';
+import { addCharacterCurrenciesExact } from './inventory/shared/consume.js';
 import { invalidateStaminaCache } from './staminaCacheService.js';
 import {
   DEFAULT_MONTH_CARD_ITEM_DEF_ID,
@@ -28,17 +29,6 @@ export type MonthCardStatusResult = {
     today: string;
     lastClaimDate: string | null;
     canClaim: boolean;
-    spiritStones: number;
-  };
-};
-
-export type MonthCardBuyResult = {
-  success: boolean;
-  message: string;
-  data?: {
-    monthCardId: string;
-    expireAt: string;
-    daysLeft: number;
     spiritStones: number;
   };
 };
@@ -259,93 +249,6 @@ class MonthCardService {
   }
 
   @Transactional
-  async buyMonthCard(userId: number, monthCardId: string): Promise<MonthCardBuyResult> {
-    const monthCardDef = getMonthCardDefinitionById(monthCardId);
-    if (!monthCardDef) {
-      return { success: false, message: '月卡不存在或未启用' };
-    }
-
-    const durationDays = asNumber(monthCardDef.duration_days, 30);
-    const priceSpiritStones = BigInt(monthCardDef.price_spirit_stones ?? 0);
-
-    const characterRes = await query(
-      `SELECT id, spirit_stones FROM characters WHERE user_id = $1 LIMIT 1`,
-      [userId],
-    );
-    if (characterRes.rows.length === 0) {
-      return { success: false, message: '角色不存在' };
-    }
-    const characterId = Number(characterRes.rows[0].id);
-    const curStones = BigInt(characterRes.rows[0]?.spirit_stones ?? 0);
-    if (priceSpiritStones > 0n && curStones < priceSpiritStones) {
-      return { success: false, message: `灵石不足，需要${priceSpiritStones.toString()}` };
-    }
-
-    let nextStones = curStones;
-    if (priceSpiritStones > 0n) {
-      const updated = await query(
-        `
-          UPDATE characters
-          SET spirit_stones = spirit_stones - $1, updated_at = NOW()
-          WHERE id = $2
-            AND spirit_stones >= $1
-          RETURNING spirit_stones
-        `,
-        [priceSpiritStones.toString(), characterId],
-      );
-      if (updated.rows.length === 0) {
-        return { success: false, message: `灵石不足，需要${priceSpiritStones.toString()}` };
-      }
-      nextStones = BigInt(updated.rows[0]?.spirit_stones ?? nextStones);
-    }
-
-    const ownRes = await query(
-      `
-        SELECT id, expire_at
-        FROM month_card_ownership
-        WHERE character_id = $1 AND month_card_id = $2
-        LIMIT 1
-        FOR UPDATE
-      `,
-      [characterId, monthCardId],
-    );
-
-    const now = new Date();
-    const baseMs = ownRes.rows[0]?.expire_at ? new Date(ownRes.rows[0].expire_at).getTime() : 0;
-    const startMs = Math.max(now.getTime(), baseMs);
-    const expireAt = new Date(startMs + durationDays * 24 * 60 * 60 * 1000);
-    if (ownRes.rows.length > 0) {
-      await query(`UPDATE month_card_ownership SET expire_at = $1, updated_at = NOW() WHERE id = $2`, [
-        expireAt.toISOString(),
-        ownRes.rows[0].id,
-      ]);
-    } else {
-      await query(
-        `
-          INSERT INTO month_card_ownership (character_id, month_card_id, start_at, expire_at)
-          VALUES ($1, $2, NOW(), $3)
-        `,
-        [characterId, monthCardId, expireAt.toISOString()],
-      );
-    }
-    await updateAchievementProgress(characterId, 'monthcard:activate', 1);
-    await invalidateStaminaCache(characterId);
-    void getGameServer().pushCharacterUpdate(userId);
-
-    const daysLeft = Math.max(0, Math.ceil((expireAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
-    return {
-      success: true,
-      message: '购买成功',
-      data: {
-        monthCardId,
-        expireAt: expireAt.toISOString(),
-        daysLeft,
-        spiritStones: Number(nextStones),
-      },
-    };
-  }
-
-  @Transactional
   async claimMonthCardReward(userId: number, monthCardId: string): Promise<MonthCardClaimResult> {
     const monthCardDef = getMonthCardDefinitionById(monthCardId);
     if (!monthCardDef) {
@@ -393,10 +296,16 @@ class MonthCardService {
       [characterId, monthCardId, todayKey, reward],
     );
 
-    const updated = await query(
-      `UPDATE characters SET spirit_stones = spirit_stones + $1, updated_at = NOW() WHERE id = $2 RETURNING spirit_stones`,
-      [reward, characterId],
+    const addResult = await addCharacterCurrenciesExact(
+      characterId,
+      {
+        spiritStones: BigInt(reward),
+      },
+      { includeRemaining: true },
     );
+    if (!addResult.success) {
+      return { success: false, message: addResult.message };
+    }
 
     await query(
       `UPDATE month_card_ownership SET last_claim_date = $1::date, updated_at = NOW() WHERE id = $2`,
@@ -410,7 +319,7 @@ class MonthCardService {
         monthCardId,
         date: todayKey,
         rewardSpiritStones: reward,
-        spiritStones: Number(updated.rows[0]?.spirit_stones ?? 0),
+        spiritStones: Number(addResult.remaining?.spiritStones ?? 0n),
       },
     };
   }

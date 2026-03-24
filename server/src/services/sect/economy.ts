@@ -12,7 +12,8 @@
  */
 import { query } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
-import { assertMember, toNumber } from './db.js';
+import { consumeCharacterCurrencies } from '../inventory/shared/consume.js';
+import { assertMember } from './db.js';
 import { invalidateSectInfoCache } from './cache.js';
 import { recordSectDonateEventTx } from './quests.js';
 import type { DonateResult } from './types.js';
@@ -51,20 +52,12 @@ class SectEconomyService {
     if (donatedSpiritStones <= 0) return { success: false, message: '捐献数量不能为空' };
 
     const member = await assertMember(characterId);
-
-    const charRes = await query(`SELECT spirit_stones FROM characters WHERE id = $1 FOR UPDATE`, [characterId]);
-    if (charRes.rows.length === 0) {
-      return { success: false, message: '角色不存在' };
+    const consumeResult = await consumeCharacterCurrencies(characterId, {
+      spiritStones: donatedSpiritStones,
+    });
+    if (!consumeResult.success) {
+      return { success: false, message: consumeResult.message };
     }
-    const curSpiritStones = toNumber(charRes.rows[0].spirit_stones);
-    if (curSpiritStones < donatedSpiritStones) {
-      return { success: false, message: '灵石不足' };
-    }
-
-    await query(`UPDATE characters SET spirit_stones = spirit_stones - $2, updated_at = NOW() WHERE id = $1`, [
-      characterId,
-      donatedSpiritStones,
-    ]);
 
     const addedContribution = donatedSpiritStones * SPIRIT_STONE_TO_CONTRIBUTION_RATIO;
     const addedFunds = addedContribution;

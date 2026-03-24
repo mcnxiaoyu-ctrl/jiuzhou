@@ -22,6 +22,7 @@ import {
 import { inventoryService } from './inventory/service.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { buildEquipmentDisplayBaseAttrs, type CharacterAttrRecord } from './equipmentGrowthRules.js';
+import { loadCharacterRealmSnapshot } from './shared/characterRealm.js';
 import { getRealmRankZeroBased } from './shared/realmRules.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { shouldValidateTechniqueLearnRealm } from './shared/techniqueLearnRule.js';
@@ -75,12 +76,6 @@ type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 type JsonObject = { [key: string]: JsonValue | undefined };
 
 type ItemUseEffect = JsonObject;
-
-type CharacterRealmRow = {
-  id: number;
-  realm: string;
-  sub_realm: string | null;
-};
 
 type ItemUseCooldownRow = {
   cooldown_until: Date | string | null;
@@ -407,20 +402,16 @@ class ItemService {
     qty: number = 1,
     options: { targetItemInstanceId?: number; partnerId?: number } = {},
   ): Promise<ItemUseResult> {
-    await lockCharacterInventoryMutex(characterId);
-
-    const charResult = await query<CharacterRealmRow>(
-      'SELECT id, realm, sub_realm FROM characters WHERE id = $1 FOR UPDATE',
-      [characterId]
-    );
-    if (charResult.rows.length === 0) {
+    const realmSnapshot = await loadCharacterRealmSnapshot(characterId);
+    if (!realmSnapshot) {
       return { success: false, message: '角色不存在' };
     }
-    const charRow = charResult.rows[0];
     const computedBefore = await getCharacterComputedByCharacterId(characterId);
     if (!computedBefore) {
       return { success: false, message: '角色数据异常' };
     }
+
+    await lockCharacterInventoryMutex(characterId);
 
     // 获取物品实例
     const instanceResult = await query<ItemInstanceRow>(
@@ -722,7 +713,7 @@ class ItemService {
         const requiredRealm = String(techniqueDef.required_realm || '').trim();
         if (
           shouldValidateTechniqueLearnRealm({ effectType: 'learn_generated_technique', itemDefId }) &&
-          !isRealmSufficient(charRow.realm, requiredRealm, charRow.sub_realm)
+          !isRealmSufficient(realmSnapshot.realm, requiredRealm, realmSnapshot.subRealm)
         ) {
           return { success: false, message: `境界不足，需要达到${requiredRealm}` };
         }
@@ -792,7 +783,7 @@ class ItemService {
         }
 
         const requiredRealm = String(techniqueDef.required_realm || '').trim();
-        if (!isRealmSufficient(charRow.realm, requiredRealm, charRow.sub_realm)) {
+        if (!isRealmSufficient(realmSnapshot.realm, requiredRealm, realmSnapshot.subRealm)) {
           return { success: false, message: `境界不足，需要达到${requiredRealm}` };
         }
 
