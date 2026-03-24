@@ -32,8 +32,8 @@ export const TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_GENERAL_RULE =
   '若 extraContext.techniqueBurningWordPromptScopeRules 存在，必须逐条遵守这些作用范围限制；焚诀只能收束主题与表现，不得借此突破品质、层数、效果数量、目标数量、倍率、冷却、被动预算等既有硬约束';
 export const TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_RULES = [
   '焚诀只用于限定本次功法的主题意象、命名气质、描述文风、元素倾向与局部招式表现，不决定品质、层数、效果数量、目标数量与数值预算。',
-  '若焚诀与当前功法类型不完全贴合，应做同主题的合理化转译，不要为了迎合焚诀强行拼接多体系、全覆盖或违和机制。',
-  '不要把焚诀扩写成夸张设定，不要生成全能通吃、超大范围、多段超高倍率、超长控制、超高回复或明显超出既有硬约束与预算的功法。',
+  '若焚诀与当前功法类型不完全贴合，应做同主题的合理化转译；可以保留更鲜明的核心套路与招式母题，但不要为了迎合焚诀强行拼接多体系、全覆盖或违和机制。',
+  '可以把焚诀延展成更鲜明、更偏锋的套路气质与招式表现，但不要生成全能通吃、超大范围、多段超高倍率、超长控制、超高回复或明显超出既有硬约束与预算的功法。',
 ] as const;
 
 export type TechniqueBurningWordPromptValidationCode =

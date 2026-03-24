@@ -2,15 +2,12 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 /**
  * 九州修仙录 - 角色功法路由
- * 提供功法学习、修炼、装备、技能配置等API
+ * 提供功法状态、修炼、装备、技能配置等 API
  */
 import { requireAuth } from '../middleware/auth.js';
 import {
   characterTechniqueService,
   techniqueGenerationService,
-} from '../domains/character/index.js';
-import type {
-  ServiceResult
 } from '../domains/character/index.js';
 import { query } from '../config/database.js';
 import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
@@ -23,11 +20,6 @@ import {
 import { notifyTechniqueResearchStatus } from '../services/techniqueResearchPush.js';
 
 const router = Router();
-
-// 扩展Request类型以包含user和params
-interface AuthRequest extends Request<{ characterId: string; techniqueId?: string }> {
-  userId?: number;
-}
 
 const parseCharacterIdParam = (req: Request): number | null => {
   return parsePositiveInt(getSingleParam(req.params.characterId));
@@ -255,33 +247,6 @@ router.get('/:characterId/techniques/equipped', asyncHandler(async (req, res) =>
   }
 
   const result = await characterTechniqueService.getEquippedTechniques(characterId);
-  sendResult(res, result);
-}));
-
-// ============================================
-// 学习功法
-// POST /api/character/:characterId/technique/learn
-// Body: { techniqueId: string, obtainedFrom?: string, obtainedRefId?: string }
-// ============================================
-router.post('/:characterId/technique/learn', asyncHandler(async (req, res) => {
-  const characterId = parseCharacterIdParam(req);
-  if (characterId === null) {
-    throw new BusinessError('无效的角色ID');
-  }
-
-  const { techniqueId, obtainedFrom, obtainedRefId } = req.body;
-  if (!techniqueId) {
-    throw new BusinessError('缺少功法ID');
-  }
-  const result = await characterTechniqueService.learnTechnique(characterId, techniqueId, obtainedFrom, obtainedRefId);
-
-  if (result.success) {
-    const userId = req.userId!;
-    if (userId && Number.isFinite(userId)) {
-      await safePushCharacterUpdate(userId);
-    }
-  }
-
   sendResult(res, result);
 }));
 

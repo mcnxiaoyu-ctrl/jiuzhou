@@ -166,6 +166,12 @@ export const TECHNIQUE_SKILL_COUNT_RANGE_BY_QUALITY: Record<GeneratedTechniqueQu
 
 export const TECHNIQUE_EFFECT_SCALE_ATTR_OPTIONS = TECHNIQUE_SKILL_SCALE_ATTR_LIST;
 export const TECHNIQUE_DAMAGE_EFFECT_FORBIDDEN_SCALE_ATTR_OPTIONS = ['sudu'] as const;
+export const TECHNIQUE_PROMPT_CREATIVE_DIRECTION_RULES = [
+  '功法可以围绕 1~2 个核心机制展开，不必平均覆盖输出、控制、生存、回复等所有方向。',
+  '允许采用偏科、连段、蓄势、印记、反制、献祭、铺场、光环、延迟爆发等鲜明套路；只要主题统一且满足既有硬约束，不必为了“全面”强行补齐无关效果。',
+  'skills、layers 与 layerDesc 应服务同一核心套路的递进深化；允许多个层级持续强化同一机制，不必为追求差异而频繁换套路。',
+  '命名、description、longDesc、layerDesc 与 skill.description 可以更有门派感、人物气质和招式辨识度，避免模板化套话。',
+] as const;
 
 export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   '仅输出单个 JSON 对象，不要输出代码块与解释文本',
@@ -174,6 +180,7 @@ export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   '若 extraContext.techniqueRetryGuidance 存在，必须优先修正 previousFailureReason 指出的错误，再满足其余设计约束与业务规则',
   TECHNIQUE_BURNING_WORD_PROMPT_GENERAL_RULE,
   TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_GENERAL_RULE,
+  ...TECHNIQUE_PROMPT_CREATIVE_DIRECTION_RULES,
   'skills 必须为数组，长度必须满足 skillCountRange',
   'layers 必须与 maxLayer 一致，按 layer 从小到大给出',
   '生成功法不需要升级材料，layers[*].costMaterials 必须是 []',

@@ -1,6 +1,6 @@
 /**
  * 九州修仙录 - 角色功法服务
- * 功能：学习功法、修炼升级、装备功法、技能配置、属性计算
+ * 功能：功法状态查询、修炼升级、装备功法、技能配置、属性计算
  */
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
@@ -8,8 +8,6 @@ import { consumeCharacterStoredResources } from './inventory/shared/consume.js';
 import { updateSectionProgress } from './mainQuest/index.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { isCharacterInBattle } from './battle/index.js';
-import { getRealmRankZeroBased } from './shared/realmRules.js';
-import { shouldValidateTechniqueLearnRealm } from './shared/techniqueLearnRule.js';
 import { scheduleCharacterBattleLoadoutRefreshByCharacterId } from './battle/shared/profileCache.js';
 import { invalidateCharacterComputedCache } from './characterComputedService.js';
 import { getItemDefinitionById } from './staticConfigLoader.js';
@@ -80,16 +78,6 @@ export interface ServiceResult<T = unknown> {
 // ============================================
 // 辅助函数
 // ============================================
-const getRealmRank = (realmRaw: unknown, subRealmRaw?: unknown): number => {
-  return getRealmRankZeroBased(realmRaw, subRealmRaw);
-};
-
-const isRealmSufficient = (currentRealm: unknown, requiredRealm: unknown, currentSubRealm?: unknown): boolean => {
-  const required = typeof requiredRealm === 'string' ? requiredRealm.trim() : '';
-  if (!required) return true;
-  return getRealmRank(currentRealm, currentSubRealm) >= getRealmRank(required);
-};
-
 const asStringArray = (raw: unknown): string[] => {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -170,7 +158,7 @@ const reconcileEquippedSkillSlots = async (characterId: number): Promise<Reconci
 /**
  * 角色功法服务
  *
- * 作用：管理角色功法的学习、修炼升级、装备/卸下、技能配置、被动属性计算
+ * 作用：管理角色功法的修炼升级、装备/卸下、技能配置、被动属性计算
  * 不做：不处理路由层参数校验、不做权限判断
  *
  * 数据流：
@@ -178,7 +166,7 @@ const reconcileEquippedSkillSlots = async (characterId: number): Promise<Reconci
  * - 写方法通过 @Transactional 保证事务原子性，内部统一使用 query() 访问数据库
  *
  * 边界条件：
- * 1) learnTechnique / upgradeTechnique / equipTechnique / unequipTechnique / equipSkill 使用 @Transactional
+ * 1) upgradeTechnique / equipTechnique / unequipTechnique / equipSkill 使用 @Transactional
  * 2) 纯读方法（getCharacterTechniques / getEquippedTechniques 等）不加 @Transactional
  */
 class CharacterTechniqueService {
@@ -259,66 +247,7 @@ class CharacterTechniqueService {
 
 
   // ============================================
-  // 3. 学习功法（写操作，@Transactional）
-  // ============================================
-  @Transactional
-  async learnTechnique(
-    characterId: number,
-    techniqueId: string,
-    obtainedFrom: string = 'item',
-    obtainedRefId?: string
-  ): Promise<ServiceResult<CharacterTechnique>> {
-    // 检查是否已学习
-    const existCheck = await query(
-      'SELECT id FROM character_technique WHERE character_id = $1 AND technique_id = $2',
-      [characterId, techniqueId]
-    );
-    if (existCheck.rows.length > 0) {
-      return { success: false, message: '已学习该功法' };
-    }
-
-    // 检查功法是否存在
-    const techniqueDef = getCharacterVisibleTechniqueDefMap().get(techniqueId) ?? null;
-    if (!techniqueDef) {
-      return { success: false, message: '功法不存在' };
-    }
-
-    const charResult = await query(
-      'SELECT realm, sub_realm FROM characters WHERE id = $1 LIMIT 1',
-      [characterId],
-    );
-    if (charResult.rows.length === 0) {
-      return { success: false, message: '角色不存在' };
-    }
-
-    const requiredRealm = typeof techniqueDef.required_realm === 'string' ? techniqueDef.required_realm.trim() : '';
-    const currentRealm = charResult.rows[0].realm;
-    const currentSubRealm = charResult.rows[0].sub_realm;
-    if (
-      shouldValidateTechniqueLearnRealm({ obtainedFrom }) &&
-      !isRealmSufficient(currentRealm, requiredRealm, currentSubRealm)
-    ) {
-      return { success: false, message: `境界不足，需要达到${requiredRealm}` };
-    }
-
-    // 插入角色功法记录（初始层数为1）
-    const insertResult = await query(`
-      INSERT INTO character_technique (
-        character_id, technique_id, current_layer,
-        obtained_from, obtained_ref_id
-      ) VALUES ($1, $2, 1, $3, $4)
-      RETURNING *
-    `, [characterId, techniqueId, obtainedFrom, obtainedRefId || null]);
-    await invalidateCharacterComputedCache(characterId);
-    return {
-      success: true,
-      message: `成功学习${techniqueDef.name}`,
-      data: insertResult.rows[0]
-    };
-  }
-
-  // ============================================
-  // 4. 获取功法升级消耗（纯读，不加 @Transactional）
+  // 3. 获取功法升级消耗（纯读，不加 @Transactional）
   // ============================================
   async getTechniqueUpgradeCost(
     characterId: number,
@@ -374,7 +303,7 @@ class CharacterTechniqueService {
 
 
   // ============================================
-  // 5. 修炼升级功法（写操作，@Transactional）
+  // 4. 修炼升级功法（写操作，@Transactional）
   // ============================================
   @Transactional
   async upgradeTechnique(
@@ -492,7 +421,7 @@ class CharacterTechniqueService {
 
 
   // ============================================
-  // 6. 装备功法到槽位（写操作，@Transactional）
+  // 5. 装备功法到槽位（写操作，@Transactional）
   // ============================================
   @Transactional
   async equipTechnique(
@@ -592,7 +521,7 @@ class CharacterTechniqueService {
   }
 
   // ============================================
-  // 7. 卸下功法（写操作，@Transactional）
+  // 6. 卸下功法（写操作，@Transactional）
   // ============================================
   @Transactional
   async unequipTechnique(
@@ -633,7 +562,7 @@ class CharacterTechniqueService {
 
 
   // ============================================
-  // 8. 获取角色可用技能列表（从已装备功法解锁的技能）（纯读，不加 @Transactional）
+  // 7. 获取角色可用技能列表（从已装备功法解锁的技能）（纯读，不加 @Transactional）
   // ============================================
   async getAvailableSkills(
     characterId: number
@@ -679,7 +608,7 @@ class CharacterTechniqueService {
   }
 
   // ============================================
-  // 9. 获取角色已装备的技能槽（纯读，不加 @Transactional）
+  // 8. 获取角色已装备的技能槽（纯读，不加 @Transactional）
   // ============================================
   async getEquippedSkills(
     characterId: number
@@ -716,7 +645,7 @@ class CharacterTechniqueService {
   }
 
   // ============================================
-  // 10. 装备技能到槽位（写操作，@Transactional）
+  // 9. 装备技能到槽位（写操作，@Transactional）
   // ============================================
   @Transactional
   async equipSkill(
@@ -779,7 +708,7 @@ class CharacterTechniqueService {
   }
 
   // ============================================
-  // 11. 卸下技能（单条 DELETE，不需要 @Transactional）
+  // 10. 卸下技能（单条 DELETE，不需要 @Transactional）
   // ============================================
   async unequipSkill(
     characterId: number,
@@ -800,7 +729,7 @@ class CharacterTechniqueService {
 
 
   // ============================================
-  // 12. 计算功法被动加成（用于战斗和属性面板）（纯读，不加 @Transactional）
+  // 11. 计算功法被动加成（用于战斗和属性面板）（纯读，不加 @Transactional）
   // ============================================
   private calcTechniquePassiveEffectiveValue(value: number, ratio: number): number {
     // 百分比统一为比例值后，需要保留更高精度，避免 30% 副功法把小数加成截断成 0。
@@ -847,7 +776,7 @@ class CharacterTechniqueService {
   }
 
   // ============================================
-  // 13. 获取角色战斗技能列表（用于战斗系统）（纯读，不加 @Transactional）
+  // 12. 获取角色战斗技能列表（用于战斗系统）（纯读，不加 @Transactional）
   // ============================================
   async getBattleSkills(
     characterId: number
@@ -860,7 +789,7 @@ class CharacterTechniqueService {
   }
 
   // ============================================
-  // 14. 获取完整的角色功法状态（用于前端展示）（纯读，不加 @Transactional）
+  // 13. 获取完整的角色功法状态（用于前端展示）（纯读，不加 @Transactional）
   // ============================================
   async getCharacterTechniqueStatus(
     characterId: number

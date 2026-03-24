@@ -146,15 +146,6 @@ export const getCharacterTechniqueStatus = (characterId: number): Promise<Charac
   return api.get(`/character/${characterId}/technique/status`);
 };
 
-export const learnCharacterTechnique = (
-  characterId: number,
-  techniqueId: string,
-  obtainedFrom?: string,
-  obtainedRefId?: string
-): Promise<{ success: boolean; message: string; data?: unknown }> => {
-  return api.post(`/character/${characterId}/technique/learn`, { techniqueId, obtainedFrom, obtainedRefId });
-};
-
 export interface TechniqueUpgradeCostResponse {
   success: boolean;
   message: string;
