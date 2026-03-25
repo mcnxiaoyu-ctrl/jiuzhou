@@ -53,9 +53,19 @@ import { createSlowOperationLogger } from "../../utils/slowOperationLogger.js";
 
 const battlePveLogger = createScopedLogger("battle.pve");
 
+export type PveBattleRegisteredPayload = {
+  battleId: string;
+  participantUserIds: number[];
+};
+
+export type StartPVEBattleOptions = {
+  onBattleRegistered?: (payload: PveBattleRegisteredPayload) => void;
+};
+
 export async function startPVEBattle(
   userId: number,
   monsterIds: string[],
+  options?: StartPVEBattleOptions,
 ): Promise<BattleResult> {
   const slowLogger = createSlowOperationLogger({
     label: "battle.startPVEBattle",
@@ -282,6 +292,10 @@ export async function startPVEBattle(
 
     const engine = new BattleEngine(battleState);
     registerStartedBattle(battleId, engine, participantUserIds);
+    options?.onBattleRegistered?.({
+      battleId,
+      participantUserIds: participantUserIds.slice(),
+    });
     slowLogger.mark("registerStartedBattle", {
       battleId,
       participantUserCount: participantUserIds.length,

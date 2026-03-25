@@ -220,6 +220,13 @@ const buildTeamMembers = (
   return members;
 };
 
+const findMemberInTeamInfo = (
+  teamInfo: TeamInfo,
+  characterId: number,
+): TeamMember | null => {
+  return teamInfo.members.find((member) => member.characterId === characterId) ?? null;
+};
+
 const getTeamMembersByTeamId = async (teamId: string): Promise<TeamMember[]> => {
   const membersResult = await query(
     `SELECT tm.character_id, c.user_id, tm.role, c.nickname, c.realm, c.sub_realm, c.avatar
@@ -528,20 +535,25 @@ const assertCharacterCanJoinTeam = async (
 export const getCharacterTeam = async (characterId: number) => {
   // 查询角色所在队伍
   const memberResult = await query(
-    `SELECT tm.team_id, tm.role FROM team_members tm WHERE tm.character_id = $1`,
+    `SELECT tm.team_id FROM team_members tm WHERE tm.character_id = $1`,
     [characterId]
   );
 
   if (memberResult.rows.length === 0) {
     return { success: true, data: null, message: '未加入队伍' };
   }
-
-  const { team_id: teamId, role } = memberResult.rows[0];
+  const { team_id: teamId } = memberResult.rows[0];
   const teamInfo = await teamInfoCache.get(teamId);
   if (!teamInfo) {
-    return { success: false, message: '队伍不存在' };
+    return { success: true, data: null, role: null, message: '未加入队伍' };
   }
 
+  const currentMember = findMemberInTeamInfo(teamInfo, characterId);
+  if (!currentMember) {
+    return { success: true, data: null, role: null, message: '未加入队伍' };
+  }
+
+  const role: TeamMember['role'] = teamInfo.leaderId === characterId ? 'leader' : 'member';
   return { success: true, data: teamInfo, role };
 };
 

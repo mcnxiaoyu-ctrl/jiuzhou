@@ -29,6 +29,7 @@ import { REALM_ORDER } from '../../shared/realm';
 import { useDebouncedValue } from '../../shared/useDebouncedValue';
 import { useRealtimeMemberPresence } from '../../shared/useRealtimeMemberPresence';
 import PlayerName from '../../shared/PlayerName';
+import { isCurrentCharacterTeamLeader } from '../../shared/teamIdentity';
 import './index.scss';
 
 type TeamPanelKey = 'my' | 'apply' | 'near' | 'lobby';
@@ -56,7 +57,6 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
   const characterId = character?.id ?? null;
 
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null);
-  const [teamRole, setTeamRole] = useState<'leader' | 'member' | null>(null);
   const [applications, setApplications] = useState<TeamApplication[]>([]);
   const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
   const [nearbyTeams, setNearbyTeams] = useState<TeamEntry[]>([]);
@@ -72,11 +72,10 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
   const [draftTransferLeaderId, setDraftTransferLeaderId] = useState<number | null>(null);
 
   const inTeam = Boolean(teamInfo?.id);
-  const isLeader = useMemo(() => {
-    if (!teamInfo || !characterId) return false;
-    if (teamRole === 'leader') return true;
-    return teamInfo.leaderId === characterId;
-  }, [characterId, teamInfo, teamRole]);
+  const isLeader = useMemo(
+    () => isCurrentCharacterTeamLeader({ characterId, teamInfo }),
+    [characterId, teamInfo],
+  );
   const teamPresenceMembers = useMemo(
     () => (teamInfo?.members ?? []).map((member) => ({ characterId: member.characterId })),
     [teamInfo],
@@ -178,16 +177,12 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
       if (!res.success) {
         void 0;
         setTeamInfo(null);
-        setTeamRole(null);
         return;
       }
       setTeamInfo(res.data ?? null);
-      if (res.role === 'leader' || res.role === 'member') setTeamRole(res.role);
-      else setTeamRole(null);
     } catch {
       void 0;
       setTeamInfo(null);
-      setTeamRole(null);
     }
   }, []);
 

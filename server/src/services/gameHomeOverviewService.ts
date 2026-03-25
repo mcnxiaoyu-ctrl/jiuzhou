@@ -71,7 +71,7 @@ const buildCurrentMonth = (): string => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 
-const normalizeTeamRole = (value: string | undefined): TeamRole => {
+const normalizeTeamRole = (value: string | null | undefined): TeamRole => {
   if (value === 'leader') return 'leader';
   if (value === 'member') return 'member';
   return null;

@@ -130,6 +130,7 @@ import {
   shouldResetTeamBattleReplayContext,
   type TeamBattleReplayIdentity,
 } from './shared/teamBattleReplayContext';
+import { resolveCurrentCharacterTeamRole } from './shared/teamIdentity';
 import {
   countCompletableBountyTaskOverviewRows,
   countCompletableTaskOverviewRows,
@@ -702,7 +703,6 @@ const Game: FC<GameProps> = ({ onLogout }) => {
 
   const [character, setCharacter] = useState<CharacterData | null>(null);
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null);
-  const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [teamApplicationUnread, setTeamApplicationUnread] = useState(0);
   const [sectPendingApplicationCount, setSectPendingApplicationCount] = useState(0);
   const [sectMyApplicationCount, setSectMyApplicationCount] = useState(0);
@@ -850,6 +850,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const homeOverviewRequestSeqRef = useRef(0);
   const pendingHomeTaskSnapshotRef = useRef<GameHomeOverviewDto['task'] | null>(null);
   const pendingHomeMainQuestSnapshotRef = useRef<MainQuestProgressDto | null>(null);
+  const characterId = character?.id ?? null;
+  const teamRole = useMemo(
+    () => resolveCurrentCharacterTeamRole({ characterId, teamInfo }),
+    [characterId, teamInfo],
+  );
+  const isTeamLeader = teamRole === 'leader';
   const inTeam = Boolean(teamInfo?.id);
   const canRenderWorldPanels = hasHydratedPosition && currentMapId.length > 0 && currentRoomId.length > 0;
   const activeSessionBattleId = activeBattleSession?.currentBattleId ?? null;
@@ -951,7 +957,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       leaderId: Number.isFinite(Number(teamInfo?.leaderId))
         ? Number(teamInfo?.leaderId)
         : null,
-      role: !teamInfo ? null : isTeamLeader ? 'leader' : 'member',
+      role: teamRole,
     };
     const previousIdentity = lastTeamBattleReplayIdentityRef.current;
     lastTeamBattleReplayIdentityRef.current = currentIdentity;
@@ -978,8 +984,8 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   }, [
     applyBattleViewUiState,
     clearBattleAutoCloseTimer,
-    isTeamLeader,
     teamBattleId,
+    teamRole,
     teamInfo,
   ]);
 
@@ -1135,7 +1141,6 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       role: m.role,
     }));
   }, [isTeamCharacterOnline, teamInfo]);
-  const characterId = character?.id ?? null;
   const partnerUnlocked = hasCharacterFeature(character, PARTNER_FEATURE_CODE);
   const myBattleUnitId = useMemo(() => (characterId ? `player-${characterId}` : null), [characterId]);
   const isMobileBattleMode = isMobile && viewMode === 'battle';
@@ -1148,10 +1153,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     setTeamInfo(team.info);
 
     const teamId = team.info?.id ?? null;
-    const leader = Boolean(teamId && team.role === 'leader');
-    setIsTeamLeader(leader);
+    const currentRole = resolveCurrentCharacterTeamRole({
+      characterId,
+      teamInfo: team.info,
+    });
 
-    if (!leader || !teamId) {
+    if (currentRole !== 'leader' || !teamId) {
       setTeamApplicationUnread(0);
       return;
     }

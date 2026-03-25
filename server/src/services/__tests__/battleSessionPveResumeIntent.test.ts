@@ -32,7 +32,9 @@ import { abandonBattle } from '../battle/action.js';
 import * as battlePersistenceModule from '../battle/runtime/persistence.js';
 import { activeBattles, battleParticipants, finishedBattleResults } from '../battle/runtime/state.js';
 import * as battlePveModule from '../battle/pve.js';
+import type { StartPVEBattleOptions } from '../battle/pve.js';
 import {
+  advanceBattleSession,
   getCurrentBattleSessionDetail,
   markBattleSessionFinished,
   startPVEBattleSession,
@@ -41,6 +43,7 @@ import {
   battleSessionById,
   battleSessionIdByBattleId,
   createBattleSessionRecord,
+  getBattleSessionSnapshotByBattleId,
 } from '../battleSession/runtime.js';
 import { createCharacterData, createState, createUnit } from './battleTestUtils.js';
 
@@ -87,10 +90,18 @@ test('startPVEBattleSession: 应写入普通 PVE 续战意图', async (t) => {
     storage.set(key, value);
     return 'OK';
   });
-  t.mock.method(battlePveModule, 'startPVEBattle', async (userId: number, monsterIds: string[]) => {
+  t.mock.method(battlePveModule, 'startPVEBattle', async (
+    userId: number,
+    monsterIds: string[],
+    options?: StartPVEBattleOptions,
+  ) => {
     assert.equal(userId, 1);
     assert.deepEqual(monsterIds, ['monster-1']);
     battleParticipants.set(battleId, [1, 2]);
+    options?.onBattleRegistered?.({
+      battleId,
+      participantUserIds: [1, 2],
+    });
     return {
       success: true as const,
       data: {
@@ -189,10 +200,18 @@ test('getCurrentBattleSessionDetail: 应按当前真实队伍恢复普通 PVE，
     storage.set(key, value);
     return 'OK';
   });
-  t.mock.method(battlePveModule, 'startPVEBattle', async (userId: number, monsterIds: string[]) => {
+  t.mock.method(battlePveModule, 'startPVEBattle', async (
+    userId: number,
+    monsterIds: string[],
+    options?: StartPVEBattleOptions,
+  ) => {
     assert.equal(userId, 1);
     assert.deepEqual(monsterIds, ['monster-1']);
     battleParticipants.set(restoredBattleId, [1]);
+    options?.onBattleRegistered?.({
+      battleId: restoredBattleId,
+      participantUserIds: [1],
+    });
     return {
       success: true as const,
       data: {
@@ -220,6 +239,76 @@ test('getCurrentBattleSessionDetail: 应按当前真实队伍恢复普通 PVE，
   assert.ok(stored);
   assert.deepEqual(stored.participantUserIds, [1]);
   assert.equal(stored.battleId, restoredBattleId);
+});
+
+test('advanceBattleSession: 普通 PVE 继续下一场时应在底层开战返回前先绑定新 battleId', async (t) => {
+  const previousBattleId = 'battle-pve-advance-previous';
+  const nextBattleId = 'battle-pve-advance-next';
+  const sessionId = 'battle-pve-advance-session';
+
+  createBattleSessionRecord({
+    sessionId,
+    type: 'pve',
+    ownerUserId: 1,
+    participantUserIds: [1],
+    currentBattleId: previousBattleId,
+    status: 'waiting_transition',
+    nextAction: 'advance',
+    canAdvance: true,
+    lastResult: 'attacker_win',
+    context: { monsterIds: ['monster-1'] },
+  });
+
+  t.after(() => {
+    battleParticipants.delete(nextBattleId);
+    battleSessionById.clear();
+    battleSessionIdByBattleId.clear();
+  });
+
+  t.mock.method(battlePveModule, 'startPVEBattle', async (
+    userId: number,
+    monsterIds: string[],
+    options?: StartPVEBattleOptions,
+  ) => {
+    assert.equal(userId, 1);
+    assert.deepEqual(monsterIds, ['monster-1']);
+    battleParticipants.set(nextBattleId, [1]);
+    options?.onBattleRegistered?.({
+      battleId: nextBattleId,
+      participantUserIds: [1],
+    });
+
+    const nextSessionSnapshot = getBattleSessionSnapshotByBattleId(nextBattleId);
+    assert.ok(nextSessionSnapshot);
+    assert.equal(nextSessionSnapshot.sessionId, sessionId);
+    assert.equal(nextSessionSnapshot.status, 'running');
+    assert.equal(nextSessionSnapshot.canAdvance, false);
+
+    return {
+      success: true as const,
+      data: {
+        battleId: nextBattleId,
+        state: (() => {
+          const state = createState({
+          attacker: [createUnit({ id: 'player-1', name: '主角' })],
+          defender: [createUnit({ id: 'monster-1', name: '妖兽', type: 'monster' })],
+          });
+          state.battleId = nextBattleId;
+          return state;
+        })(),
+      },
+    };
+  });
+
+  const result = await advanceBattleSession(1, sessionId);
+
+  assert.equal(result.success, true);
+  if (!result.success) {
+    assert.fail('普通 PVE 继续下一场应成功');
+  }
+  assert.equal(result.data.session.currentBattleId, nextBattleId);
+  assert.equal(result.data.session.status, 'running');
+  assert.equal(result.data.session.nextAction, 'none');
 });
 
 test('abandonBattle: 主动逃跑后应删除普通 PVE 续战意图', async (t) => {

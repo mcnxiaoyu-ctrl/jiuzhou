@@ -226,6 +226,7 @@ const schedulePveResumeIntentDeletionForSession = (
 const createRunningSession = (params: {
   type: BattleSessionType;
   ownerUserId: number;
+  participantUserIds: number[];
   currentBattleId: string;
   context: BattleSessionContext;
 }): BattleSessionRecord => {
@@ -233,8 +234,8 @@ const createRunningSession = (params: {
     sessionId: crypto.randomUUID(),
     type: params.type,
     ownerUserId: params.ownerUserId,
-    participantUserIds: getParticipantUserIdsForBattle(
-      params.currentBattleId,
+    participantUserIds: normalizeParticipantUserIds(
+      params.participantUserIds,
       params.ownerUserId,
     ),
     currentBattleId: params.currentBattleId,
@@ -244,6 +245,69 @@ const createRunningSession = (params: {
     lastResult: null,
     context: params.context,
   });
+};
+
+/**
+ * 普通 PVE 开战与 BattleSession 绑定共享入口。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把“startPVEBattle 注册成功后，立刻把 battleId 绑定到 BattleSession”的时序收口到单一入口，避免首次开战、续战恢复、继续下一场各自重复维护并再次出现竞态。
+ * 2. 做什么：确保绑定发生在 `startPVEBattle` 返回前，同步覆盖“首帧即终态 / 下一场秒结算”场景，保证后续 `battle_finished` 能拿到正确 session。
+ * 3. 不做什么：不决定 session 是新建还是更新；具体创建/换绑策略由调用方传入的 `bindSession` 决定。
+ *
+ * 输入/输出：
+ * - 输入：userId、monsterIds，以及一个“收到 battleId 后如何绑定 session”的同步回调。
+ * - 输出：成功时返回底层 battle 返回值与已绑定好的 session 记录；失败时返回精确错误。
+ *
+ * 数据流/状态流：
+ * - 调用方发起普通 PVE -> startPVEBattle 同步注册战斗 -> onBattleRegistered 立即 bindSession
+ * - battle 启动回调/首帧结算随后发生时，session 已经指向最新 currentBattleId。
+ *
+ * 关键边界条件与坑点：
+ * 1. `bindSession` 必须同步执行；若改成异步，仍会重新暴露“battle 已结束但 session 还没绑上”的老问题。
+ * 2. 这里不使用兜底 fallback；成功开战但未绑定到 session 视为真正异常，直接返回失败，避免把损坏状态继续往后传。
+ */
+const startPveBattleAndBindSession = async (params: {
+  userId: number;
+  monsterIds: string[];
+  bindSession: (payload: {
+    battleId: string;
+    participantUserIds: number[];
+  }) => BattleSessionRecord | null;
+}): Promise<
+  | {
+    success: true;
+    battleId: string;
+    state: unknown;
+    session: BattleSessionRecord;
+  }
+  | {
+    success: false;
+    message: string;
+  }
+> => {
+  let boundSession: BattleSessionRecord | null = null;
+  const battleRes = await startPVEBattle(params.userId, params.monsterIds, {
+    onBattleRegistered: (payload) => {
+      boundSession = params.bindSession(payload);
+    },
+  });
+  if (!battleRes.success || !battleRes.data?.battleId) {
+    return { success: false, message: battleRes.message || '开启战斗失败' };
+  }
+  const state = battleRes.data.state;
+  if (state === undefined) {
+    return { success: false, message: '战斗缺少初始状态' };
+  }
+  if (!boundSession) {
+    return { success: false, message: '战斗会话绑定失败' };
+  }
+  return {
+    success: true,
+    battleId: String(battleRes.data.battleId),
+    state,
+    session: boundSession,
+  };
 };
 
 const buildSessionSuccess = (
@@ -525,22 +589,26 @@ export const startPVEBattleSession = async (
   userId: number,
   monsterIds: string[],
 ): Promise<BattleSessionResponse> => {
-  const battleRes = await startPVEBattle(userId, monsterIds);
-  if (!battleRes.success || !battleRes.data?.battleId) {
-    return { success: false, message: battleRes.message || '开启战斗失败' };
-  }
-  const session = createRunningSession({
-    type: 'pve',
-    ownerUserId: userId,
-    currentBattleId: String(battleRes.data.battleId),
-    context: {
-      monsterIds: monsterIds
-        .filter((monsterId) => typeof monsterId === 'string' && monsterId.length > 0)
-        .slice(0, 5),
-    },
+  const normalizedMonsterIds = normalizePveMonsterIds(monsterIds);
+  const startResult = await startPveBattleAndBindSession({
+    userId,
+    monsterIds,
+    bindSession: ({ battleId, participantUserIds }) => createRunningSession({
+      type: 'pve',
+      ownerUserId: userId,
+      participantUserIds,
+      currentBattleId: battleId,
+      context: {
+        monsterIds: normalizedMonsterIds,
+      },
+    }),
   });
+  if (!startResult.success) {
+    return { success: false, message: startResult.message };
+  }
+  const { state, session } = startResult;
   schedulePveResumeIntentSyncForSession(session);
-  return buildSessionSuccess(session, battleRes.data.state);
+  return buildSessionSuccess(session, state);
 };
 
 export const startDungeonBattleSession = async (
@@ -557,6 +625,10 @@ export const startDungeonBattleSession = async (
   const session = createRunningSession({
     type: 'dungeon',
     ownerUserId: userId,
+    participantUserIds: getParticipantUserIdsForBattle(
+      String(dungeonRes.data.battleId),
+      userId,
+    ),
     currentBattleId: String(dungeonRes.data.battleId),
     context: { instanceId },
   });
@@ -580,6 +652,10 @@ export const startPVPBattleSession = async (params: {
   const session = createRunningSession({
     type: 'pvp',
     ownerUserId: params.userId,
+    participantUserIds: getParticipantUserIdsForBattle(
+      String(pvpRes.data.battleId),
+      params.userId,
+    ),
     currentBattleId: String(pvpRes.data.battleId),
     context: {
       opponentCharacterId: params.opponentCharacterId,
@@ -641,20 +717,25 @@ export const getCurrentBattleSessionDetail = async (
     if (!resumeIntent) {
       return { success: true, data: { session: null } };
     }
-    const battleRes = await startPVEBattle(userId, resumeIntent.monsterIds);
-    if (!battleRes.success || !battleRes.data?.battleId) {
-      return { success: false, message: battleRes.message || '恢复普通战斗失败' };
-    }
-    const restoredSession = createRunningSession({
-      type: 'pve',
-      ownerUserId: userId,
-      currentBattleId: String(battleRes.data.battleId),
-      context: {
-        monsterIds: normalizePveMonsterIds(resumeIntent.monsterIds),
-      },
+    const startResult = await startPveBattleAndBindSession({
+      userId,
+      monsterIds: resumeIntent.monsterIds,
+      bindSession: ({ battleId, participantUserIds }) => createRunningSession({
+        type: 'pve',
+        ownerUserId: userId,
+        participantUserIds,
+        currentBattleId: battleId,
+        context: {
+          monsterIds: normalizePveMonsterIds(resumeIntent.monsterIds),
+        },
+      }),
     });
+    if (!startResult.success) {
+      return { success: false, message: startResult.message || '恢复普通战斗失败' };
+    }
+    const { state, session: restoredSession } = startResult;
     schedulePveResumeIntentSyncForSession(restoredSession);
-    return buildSessionSuccess(restoredSession, battleRes.data.state);
+    return buildSessionSuccess(restoredSession, state);
   }
 
   return getBattleSessionDetail(userId, session.sessionId);
@@ -741,47 +822,43 @@ export const advanceBattleSession = async (
       });
     }
     const context = session.context as { monsterIds: string[] };
-    const battleRes = await startPVEBattle(userId, context.monsterIds);
-    slowLogger.mark('startPVEBattle', {
-      battleStarted: Boolean(battleRes.success && battleRes.data?.battleId),
+    const startResult = await startPveBattleAndBindSession({
+      userId,
+      monsterIds: context.monsterIds,
+      bindSession: ({ battleId, participantUserIds }) => updateBattleSessionRecord(session.sessionId, {
+        currentBattleId: battleId,
+        participantUserIds: normalizeParticipantUserIds(
+          participantUserIds,
+          session.ownerUserId,
+        ),
+        status: 'running',
+        nextAction: 'none',
+        canAdvance: false,
+        lastResult: null,
+      }),
     });
-    if (!battleRes.success || !battleRes.data?.battleId) {
+    if (!startResult.success) {
       return flushAndReturn(
-        { success: false, message: battleRes.message || '开启下一场战斗失败' },
+        { success: false, message: startResult.message || '开启下一场战斗失败' },
         {
           reason: 'start_pve_battle_failed',
         },
       );
     }
-    const updated = updateBattleSessionRecord(session.sessionId, {
-      currentBattleId: String(battleRes.data.battleId),
-      participantUserIds: getParticipantUserIdsForBattle(
-        String(battleRes.data.battleId),
-        session.ownerUserId,
-      ),
-      status: 'running',
-      nextAction: 'none',
-      canAdvance: false,
-      lastResult: null,
+    const { battleId, state, session: updated } = startResult;
+    slowLogger.mark('startPVEBattle', {
+      battleStarted: true,
     });
     slowLogger.mark('updateBattleSessionRecord', {
       sessionUpdated: Boolean(updated),
     });
-    if (!updated) {
-      return flushAndReturn(
-        { success: false, message: '战斗会话不存在' },
-        {
-          reason: 'session_missing_after_pve_advance',
-        },
-      );
-    }
     schedulePveResumeIntentSyncForSession(updated);
     slowLogger.mark('syncPveResumeIntentForSession');
     return flushAndReturn(
-      buildSessionSuccess(updated, battleRes.data.state, false),
+      buildSessionSuccess(updated, state, false),
       {
         finished: false,
-        battleId: String(battleRes.data.battleId),
+        battleId,
       },
     );
   }
