@@ -430,6 +430,8 @@ const MarketItemTooltipContent: React.FC<{ item: MarketTooltipItemData }> = ({ i
       {shouldShowTechniqueSkills ? (
         <div className="item-tooltip-section">
           <TechniqueSkillSection
+            title="可学习技能"
+            emptyText="该功法暂无可展示技能"
             skills={techniqueSkillState.skills}
             loading={techniqueSkillState.loading}
             error={techniqueSkillState.error}

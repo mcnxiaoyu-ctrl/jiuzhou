@@ -7,7 +7,7 @@
  * 3. 不做什么：不处理坊市购买/上架按钮，也不负责伙伴属性区域布局。
  *
  * 输入/输出：
- * - 输入：伙伴功法列表，以及可选的单列布局开关。
+ * - 输入：伙伴功法列表、单列布局开关，以及是否启用悬浮技能详情。
  * - 输出：统一的坊市功法列表 DOM 结构；无功法时输出占位文案。
  *
  * 数据流/状态流：
@@ -18,16 +18,22 @@
  * 2. 单列与双列仅允许通过布局参数控制，内容结构本身保持一致，避免后续修文案时又在不同弹层漏改一处。
  */
 import type { FC } from 'react';
+import { Tooltip } from 'antd';
 import type { PartnerTechniqueDto } from '../../../../services/api';
 import { formatPartnerTechniqueLayerLabel } from '../../shared/partnerDisplay';
+import MarketPartnerTechniqueTooltip, {
+  MARKET_PARTNER_TECHNIQUE_TOOLTIP_CLASS_NAMES,
+} from './MarketPartnerTechniqueTooltip';
 
 interface MarketPartnerTechniqueListProps {
   techniques: PartnerTechniqueDto[];
+  enableTooltip: boolean;
   singleColumn?: boolean;
 }
 
 const MarketPartnerTechniqueList: FC<MarketPartnerTechniqueListProps> = ({
   techniques,
+  enableTooltip,
   singleColumn = false,
 }) => {
   if (techniques.length <= 0) {
@@ -39,17 +45,34 @@ const MarketPartnerTechniqueList: FC<MarketPartnerTechniqueListProps> = ({
       className="market-partner-technique-grid"
       style={singleColumn ? { gridTemplateColumns: '1fr' } : undefined}
     >
-      {techniques.map((technique) => (
-        <div key={technique.techniqueId} className="market-partner-technique-cell">
-          <div className="market-partner-technique-name">
-            {technique.name}
-            <span className="market-partner-technique-level">
-              {formatPartnerTechniqueLayerLabel(technique)}
-            </span>
+      {techniques.map((technique) => {
+        const content = (
+          <div className={`market-partner-technique-cell${enableTooltip ? ' market-partner-technique-cell--hoverable' : ''}`}>
+            <div className="market-partner-technique-name">
+              {technique.name}
+              <span className="market-partner-technique-level">
+                {formatPartnerTechniqueLayerLabel(technique)}
+              </span>
+            </div>
+            <div className="market-partner-technique-desc">{technique.description || '暂无描述'}</div>
           </div>
-          <div className="market-partner-technique-desc">{technique.description || '暂无描述'}</div>
-        </div>
-      ))}
+        );
+
+        if (!enableTooltip) {
+          return <div key={technique.techniqueId}>{content}</div>;
+        }
+
+        return (
+          <Tooltip
+            key={technique.techniqueId}
+            title={<MarketPartnerTechniqueTooltip technique={technique} />}
+            placement={singleColumn ? 'leftTop' : 'topLeft'}
+            classNames={MARKET_PARTNER_TECHNIQUE_TOOLTIP_CLASS_NAMES}
+          >
+            {content}
+          </Tooltip>
+        );
+      })}
     </div>
   );
 };

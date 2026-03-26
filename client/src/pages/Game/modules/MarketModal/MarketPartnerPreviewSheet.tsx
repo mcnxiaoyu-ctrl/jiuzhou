@@ -83,7 +83,7 @@ const MarketPartnerPreviewSheet: React.FC<MarketPartnerPreviewSheetProps> = ({
           </div>
           <div className="market-list-sheet-section">
             <div className="market-list-sheet-section-title">功法</div>
-            <MarketPartnerTechniqueList techniques={partner.techniques} />
+            <MarketPartnerTechniqueList techniques={partner.techniques} enableTooltip={false} />
           </div>
         </div>
 

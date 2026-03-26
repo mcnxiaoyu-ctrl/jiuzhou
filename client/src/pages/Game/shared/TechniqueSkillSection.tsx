@@ -2,16 +2,16 @@
  * 功法技能展示区
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：统一渲染功法书里的“可学习技能”区块，供背包详情与仓库/坊市 tooltip 复用。
+ * 1. 做什么：统一渲染功法相关技能区块，供功法书详情、物品 tooltip 与伙伴功法悬浮层复用。
  * 2. 做什么：集中处理加载中、错误、空态，以及“详情卡片版 / tooltip 紧凑明细版”两种展示形态。
  * 3. 不做什么：不负责拉取数据、不判断物品是不是功法书，也不处理学习交互。
  *
  * 输入/输出：
- * - 输入：`skills` 技能数组、`loading` 加载态、`error` 错误文案、`variant` 展示形态。
+ * - 输入：`title` 标题、`emptyText` 空态文案、`skills` 技能数组、`loading` 加载态、`error` 错误文案、`variant` 展示形态。
  * - 输出：可直接插入详情面板或 tooltip 的 React 节点。
  *
  * 数据流/状态流：
- * useTechniqueSkillDetails -> TechniqueSkillSection -> BagModal / Warehouse / Market。
+ * useTechniqueSkillDetails / PartnerTechniqueDto.skills -> TechniqueSkillSection -> BagModal / Warehouse / Market / Partner Tooltip。
  *
  * 关键边界条件与坑点：
  * 1. 功法存在但无技能配置时不能静默隐藏，否则用户会误以为 tooltip 没生效，必须显式输出空态。
@@ -21,6 +21,8 @@ import type { TechniqueSkillDetailLike } from '../modules/TechniqueModal/skillDe
 import { renderSkillCardDetails, renderSkillInlineDetails } from '../modules/TechniqueModal/skillDetailShared';
 
 interface TechniqueSkillSectionProps {
+  title: string;
+  emptyText: string;
   skills: TechniqueSkillDetailLike[];
   loading: boolean;
   error: string | null;
@@ -28,6 +30,8 @@ interface TechniqueSkillSectionProps {
 }
 
 export const TechniqueSkillSection: React.FC<TechniqueSkillSectionProps> = ({
+  title,
+  emptyText,
   skills,
   loading,
   error,
@@ -37,7 +41,7 @@ export const TechniqueSkillSection: React.FC<TechniqueSkillSectionProps> = ({
 
   return (
     <div className={`technique-skill-section technique-skill-section--${variant}`}>
-      <div className="technique-skill-section__title">可学习技能</div>
+      <div className="technique-skill-section__title">{title}</div>
 
       {loading ? (
         <div className="technique-skill-section__state">技能详情加载中...</div>
@@ -48,7 +52,7 @@ export const TechniqueSkillSection: React.FC<TechniqueSkillSectionProps> = ({
       ) : null}
 
       {!loading && !error && skills.length <= 0 ? (
-        <div className="technique-skill-section__state">该功法暂无可展示技能</div>
+        <div className="technique-skill-section__state">{emptyText}</div>
       ) : null}
 
       {!loading && !error && skills.length > 0 ? (

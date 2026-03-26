@@ -81,7 +81,7 @@ const MarketPartnerBuyModal: React.FC<MarketPartnerBuyModalProps> = ({
           </div>
           <div className="market-list-detail-section" style={{ flex: 1, paddingRight: '8px', borderLeft: '1px solid var(--border-color-soft)', paddingLeft: '24px' }}>
             <div className="market-list-detail-title">功法</div>
-            <MarketPartnerTechniqueList techniques={partner.techniques} singleColumn />
+            <MarketPartnerTechniqueList techniques={partner.techniques} enableTooltip singleColumn />
           </div>
         </div>
 

@@ -1067,6 +1067,8 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                     {hasTechniqueBookSkills ? (
                       <div className="bag-detail-section">
                         <TechniqueSkillSection
+                          title="可学习技能"
+                          emptyText="该功法暂无可展示技能"
                           skills={techniqueBookSkillsState.skills}
                           loading={techniqueBookSkillsState.loading}
                           error={techniqueBookSkillsState.error}

@@ -1,7 +1,10 @@
 @use '../../shared/tooltipSurfaceShared';
+@use '../../shared/techniqueSkillSection' as techniqueSkill;
 @use '../../shared/itemQualityTag' as qualityTag;
 @use '../../shared/modalShellLayout' as modalShell;
 @use '../../../../styles/tag' as appTag;
+
+@include techniqueSkill.technique-skill-section();
 
 .market-modal {
   .ant-modal-content {
@@ -1006,6 +1009,17 @@
   border: 1px solid var(--border-color-soft);
 }
 
+.market-partner-technique-cell--hoverable {
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--primary-color) 38%, var(--border-color-soft));
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+  }
+}
+
 .market-partner-technique-name {
   font-size: 13px;
   font-weight: 800;
@@ -1029,6 +1043,68 @@
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+.market-partner-technique-tooltip-overlay,
+.market-partner-technique-tooltip-overlay-container {
+  --game-tooltip-bg: var(--game-tooltip-surface-bg);
+  --game-tooltip-border: var(--game-tooltip-surface-border);
+  --game-tooltip-shadow: var(--game-tooltip-surface-shadow);
+  --game-tooltip-text: var(--game-tooltip-surface-text);
+  --game-tooltip-muted: var(--game-tooltip-surface-muted);
+  --game-tooltip-divider: var(--game-tooltip-surface-divider);
+  --game-tooltip-radius: 14px;
+  --game-tooltip-padding: 12px;
+  --game-tooltip-max-width: min(360px, calc(100vw - 24px));
+  --game-tooltip-max-height: min(62vh, 560px);
+}
+
+.market-partner-technique-tooltip {
+  --technique-skill-title: var(--game-tooltip-text);
+  --technique-skill-text: var(--game-tooltip-text);
+  --technique-skill-muted: var(--game-tooltip-muted);
+  --technique-skill-border: var(--game-tooltip-surface-section-border);
+  --technique-skill-surface: var(--game-tooltip-surface-section-bg);
+  --technique-skill-card-bg: var(--game-tooltip-bg);
+  --technique-skill-accent: color-mix(in srgb, var(--game-tooltip-text) 82%, #1677ff);
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(336px, calc(100vw - 48px));
+}
+
+.market-partner-technique-tooltip__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.market-partner-technique-tooltip__name {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--game-tooltip-text);
+  line-height: 1.35;
+}
+
+.market-partner-technique-tooltip__layer {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.market-partner-technique-tooltip__desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--game-tooltip-muted);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--game-tooltip-divider);
 }
 
 .market-list-detail-title {

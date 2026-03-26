@@ -477,6 +477,8 @@ const ItemSheet: React.FC<SheetProps> = ({
           {hasTechniqueBookSkills && (
             <div className="mbag-sheet-section">
               <TechniqueSkillSection
+                title="可学习技能"
+                emptyText="该功法暂无可展示技能"
                 skills={techniqueBookSkillsState.skills}
                 loading={techniqueBookSkillsState.loading}
                 error={techniqueBookSkillsState.error}
