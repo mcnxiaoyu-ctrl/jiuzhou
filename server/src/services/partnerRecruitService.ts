@@ -151,11 +151,13 @@ export const buildPartnerRecruitTextModelRequest = buildGeneratedPartnerTextMode
 class PartnerRecruitService {
   private async broadcastHeavenPartnerRecruit(
     characterId: number,
+    partnerId: number,
     partnerDefId: string,
     partnerName: string,
   ): Promise<void> {
     await broadcastHeavenPartnerAcquired({
       characterId,
+      partnerId,
       partnerDefId,
       partnerName,
       sourceLabel: '伙伴招募',
@@ -889,6 +891,7 @@ class PartnerRecruitService {
     if (result.success && result.data) {
       await this.broadcastHeavenPartnerRecruit(
         characterId,
+        result.data.partnerId,
         result.data.partnerDefId,
         result.data.partnerName,
       );

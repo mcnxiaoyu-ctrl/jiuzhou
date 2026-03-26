@@ -30,8 +30,7 @@ import {
 } from './shared/cacheVersion.js';
 import { lockCharacterRowsInOrder } from './shared/characterRowLock.js';
 import {
-  buildPartnerDisplay,
-  loadPartnerTechniqueRows,
+  loadPartnerDisplayById,
   loadSinglePartnerRow,
   loadSinglePartnerRowById,
   normalizeInteger,
@@ -39,7 +38,6 @@ import {
   toPartnerBaseAttrsDto,
   type PartnerDisplayDto,
 } from './shared/partnerView.js';
-import type { PartnerOwnerRealmContext } from './shared/partnerLevelLimit.js';
 import {
   calculateMarketListingFeeSilver,
   calculateMarketTradeTotalPrice,
@@ -282,38 +280,9 @@ const buildTradeRecordDto = async (
 };
 
 const buildPartnerSnapshot = async (partnerId: number): Promise<PartnerDisplayDto> => {
-  const partnerRow = await loadSinglePartnerRowById(partnerId, false);
-  if (!partnerRow) {
-    throw new Error('伙伴不存在');
-  }
-  const ownerRealmResult = await query(
-    `
-      SELECT realm, sub_realm
-      FROM characters
-      WHERE id = $1
-      LIMIT 1
-    `,
-    [partnerRow.character_id],
-  );
-  if (ownerRealmResult.rows.length <= 0) {
-    throw new Error(`伙伴所属角色不存在: ${partnerRow.character_id}`);
-  }
-  const definition = await getPartnerDefinitionById(partnerRow.partner_def_id);
-  if (!definition) {
-    throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
-  }
-  const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
-  const ownerRealmRow = ownerRealmResult.rows[0] as { realm: string | null; sub_realm: string | null };
-  const ownerRealm: PartnerOwnerRealmContext = {
-    realm: normalizeText(ownerRealmRow.realm) || '凡人',
-    subRealm: normalizeText(ownerRealmRow.sub_realm) || null,
-  };
-  return buildPartnerDisplay({
-    row: partnerRow,
-    definition,
-    techniqueRows: techniqueMap.get(partnerId) ?? [],
-    ownerRealm,
-  });
+  const snapshot = await loadPartnerDisplayById(partnerId);
+  if (!snapshot) throw new Error('伙伴不存在');
+  return snapshot;
 };
 
 const loadCharacterWallet = async (

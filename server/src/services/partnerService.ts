@@ -54,6 +54,7 @@ import {
   findEffectivePartnerTechniqueEntry,
   getPartnerInnateTechniqueIds,
   getPartnerTechniqueStaticMeta,
+  loadPartnerDisplayById,
   loadPartnerRows,
   loadPartnerTechniqueRows,
   loadSinglePartnerRow,
@@ -868,6 +869,24 @@ const createPartnerInstanceFromDefinition = async (params: {
 class PartnerService {
   async listLearnTechniqueBooks(characterId: number): Promise<PartnerBookDto[]> {
     return loadPartnerBooks(characterId);
+  }
+
+  async getPreview(partnerId: number): Promise<PartnerResult<PartnerDisplayDto>> {
+    try {
+      const partner = await loadPartnerDisplayById(partnerId);
+      if (!partner) {
+        return { success: false, message: '伙伴不存在' };
+      }
+
+      return {
+        success: true,
+        message: 'ok',
+        data: partner,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '未知错误';
+      return { success: false, message: `伙伴详情读取失败：${reason}` };
+    }
   }
 
   async getOverview(characterId: number): Promise<PartnerResult<PartnerOverviewDto>> {

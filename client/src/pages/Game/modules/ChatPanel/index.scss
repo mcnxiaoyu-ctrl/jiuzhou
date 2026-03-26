@@ -322,6 +322,36 @@
       word-break: break-word;
     }
 
+    .message-content-inline {
+      display: inline;
+    }
+
+    .message-partner-preview-name {
+      appearance: none;
+      border: none;
+      background: none;
+      padding: 0;
+      margin: 0;
+      display: inline;
+      vertical-align: baseline;
+      font: inherit;
+      line-height: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: color 0.2s ease, text-decoration-color 0.2s ease;
+    }
+
+    .message-partner-preview-name:hover {
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+    }
+
+    .message-partner-preview-name:focus-visible {
+      outline: 1px solid currentColor;
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+
     .message-content.message-content-battle {
       .battle-token {
         font-weight: 600;

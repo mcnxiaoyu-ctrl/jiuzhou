@@ -74,6 +74,17 @@ router.get('/overview', asyncHandler(async (req, res) => {
   return sendResult(res, result);
 }));
 
+router.get('/preview', asyncHandler(async (req, res) => {
+  const partnerId = parsePositiveInt(req.query?.partnerId);
+  if (!partnerId) {
+    sendResult(res, { success: false, message: 'partnerId 参数无效' });
+    return;
+  }
+
+  const result = await partnerService.getPreview(partnerId);
+  return sendResult(res, result);
+}));
+
 router.get('/skill-policy', asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
   const partnerId = parsePositiveInt(req.query?.partnerId);

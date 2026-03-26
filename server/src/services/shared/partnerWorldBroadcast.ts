@@ -21,8 +21,13 @@ import { getPartnerDefinitionById } from '../staticConfigLoader.js';
 import { getCharacterNicknameById } from './characterNickname.js';
 import { broadcastWorldSystemMessage } from './worldChatBroadcast.js';
 
+const buildChatPartnerToken = (partnerId: number, label: string): string => {
+  return `[#partner|${partnerId}|${label}]`;
+};
+
 export const broadcastHeavenPartnerAcquired = async (params: {
   characterId: number;
+  partnerId: number;
   partnerDefId: string;
   partnerName: string;
   sourceLabel: string;
@@ -39,6 +44,6 @@ export const broadcastHeavenPartnerAcquired = async (params: {
 
   broadcastWorldSystemMessage({
     senderTitle: '天机传音',
-    content: `【${params.sourceLabel}】『${nickname}』获得天级伙伴【${params.partnerName}】，灵契共鸣，声传九州！`,
+    content: `【${params.sourceLabel}】『${nickname}』获得天级伙伴${buildChatPartnerToken(params.partnerId, `【${params.partnerName}】`)}，灵契共鸣，声传九州！`,
   });
 };

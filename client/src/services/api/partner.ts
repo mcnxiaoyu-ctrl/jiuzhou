@@ -1,6 +1,7 @@
 import api from './core';
 import type { CharacterFeatureCode } from '../feature';
 import type { AxiosRequestConfig } from 'axios';
+import { withRequestParams } from './requestConfig';
 
 export type PartnerGrowthDto = {
   max_qixue: number;
@@ -307,6 +308,12 @@ export interface PartnerOverviewResponse {
   data?: PartnerOverviewDto;
 }
 
+export interface PartnerPreviewResponse {
+  success: boolean;
+  message: string;
+  data?: PartnerDisplayDto;
+}
+
 export interface PartnerActivateResponse {
   success: boolean;
   message: string;
@@ -478,6 +485,13 @@ export interface UpdatePartnerSkillPolicyResponse {
 
 export const getPartnerOverview = (): Promise<PartnerOverviewResponse> => {
   return api.get('/partner/overview');
+};
+
+export const getPartnerPreview = (
+  partnerId: number,
+  requestConfig?: AxiosRequestConfig,
+): Promise<PartnerPreviewResponse> => {
+  return api.get('/partner/preview', withRequestParams(requestConfig, { partnerId }));
 };
 
 export const activatePartner = (partnerId: number): Promise<PartnerActivateResponse> => {

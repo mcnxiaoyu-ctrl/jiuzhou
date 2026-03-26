@@ -794,6 +794,7 @@ class PartnerFusionService {
     if (result.success && result.data) {
       await broadcastHeavenPartnerAcquired({
         characterId,
+        partnerId: result.data.partnerId,
         partnerDefId: result.data.partnerDefId,
         partnerName: result.data.partnerName,
         sourceLabel: '三魂归契',

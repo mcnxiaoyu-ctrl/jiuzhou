@@ -22,6 +22,7 @@ import type { SkillData } from '../../battle/battleFactory.js';
 import type { SkillTriggerType } from '../../shared/skillTriggerType.js';
 import { resolveSkillTriggerType } from '../../shared/skillTriggerType.js';
 import {
+  getPartnerDefinitionById,
   getPartnerDefinitionsByIds,
   getPartnerGrowthConfig,
   getSkillDefinitions,
@@ -313,6 +314,50 @@ export const loadSinglePartnerRowById = async (
   );
   if (result.rows.length <= 0) return null;
   return result.rows[0] as PartnerRow;
+};
+
+const loadPartnerOwnerRealmContext = async (
+  characterId: number,
+): Promise<PartnerOwnerRealmContext | null> => {
+  const result = await query(
+    `
+      SELECT realm, sub_realm
+      FROM characters
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [characterId],
+  );
+  if (result.rows.length <= 0) return null;
+  const row = result.rows[0] as { realm: string | null; sub_realm: string | null };
+  return {
+    realm: normalizeText(row.realm) || '凡人',
+    subRealm: normalizeText(row.sub_realm) || null,
+  };
+};
+
+export const loadPartnerDisplayById = async (
+  partnerId: number,
+): Promise<PartnerDisplayDto | null> => {
+  const normalizedPartnerId = normalizeInteger(partnerId);
+  if (normalizedPartnerId <= 0) return null;
+
+  const partnerRow = await loadSinglePartnerRowById(normalizedPartnerId, false);
+  if (!partnerRow) return null;
+
+  const ownerRealm = await loadPartnerOwnerRealmContext(partnerRow.character_id);
+  if (!ownerRealm) return null;
+
+  const definition = await getPartnerDefinitionById(partnerRow.partner_def_id);
+  if (!definition) return null;
+
+  const techniqueMap = await loadPartnerTechniqueRows([normalizedPartnerId], false);
+  return buildPartnerDisplay({
+    row: partnerRow,
+    definition,
+    techniqueRows: techniqueMap.get(normalizedPartnerId) ?? [],
+    ownerRealm,
+  });
 };
 
 export const loadPartnerTechniqueRows = async (

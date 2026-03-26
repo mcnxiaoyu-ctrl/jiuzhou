@@ -10,6 +10,7 @@ import {
 import { getElementToneClassName } from '../../shared/elementTheme';
 import { getItemQualityTagClassName } from '../../shared/itemQuality';
 import MarketPartnerTechniqueList from './MarketPartnerTechniqueList';
+import './index.scss';
 
 interface MarketPartnerBuyModalProps {
   partner: PartnerDisplayDto | null;

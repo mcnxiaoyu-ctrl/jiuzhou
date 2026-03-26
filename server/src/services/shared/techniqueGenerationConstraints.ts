@@ -76,6 +76,7 @@ import {
   TECHNIQUE_RECENT_SUCCESSFUL_DESCRIPTION_GENERAL_RULE,
   TECHNIQUE_RECENT_SUCCESSFUL_DESCRIPTION_SCOPE_GENERAL_RULE,
 } from './techniqueRecentSuccessfulDescriptionPrompt.js';
+import { TECHNIQUE_RESEARCH_CREATIVE_DIRECTION_GENERAL_RULE } from './techniqueResearchCreativeDirectionPrompt.js';
 
 export const GENERATED_TECHNIQUE_TYPE_LIST = ['武技', '心法', '法诀', '身法', '辅修'] as const;
 export type GeneratedTechniqueType = (typeof GENERATED_TECHNIQUE_TYPE_LIST)[number];
@@ -174,7 +175,6 @@ export const TECHNIQUE_PROMPT_CREATIVE_DIRECTION_RULES = [
   '功法可以围绕 1~2 个核心机制展开，不必平均覆盖输出、控制、生存、回复等所有方向。',
   '允许采用偏科、连段、蓄势、印记、反制、献祭、铺场、光环、延迟爆发等鲜明套路；只要主题统一且满足既有硬约束，不必为了“全面”强行补齐无关效果。',
   'skills、layers 与 layerDesc 应服务同一核心套路的递进深化；允许多个层级持续强化同一机制，不必为追求差异而频繁换套路。',
-  '优先把差异放在技能机制骨架与战斗节奏上，而不是只换元素、名称或描述外皮；若采用相近主题，也要尽量改换触发条件、资源消耗、效果链条或成长曲线。',
   '命名、description、longDesc、layerDesc 与 skill.description 可以更有门派感、人物气质和招式辨识度，避免模板化套话。',
 ] as const;
 
@@ -187,6 +187,7 @@ export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_GENERAL_RULE,
   TECHNIQUE_RECENT_SUCCESSFUL_DESCRIPTION_GENERAL_RULE,
   TECHNIQUE_RECENT_SUCCESSFUL_DESCRIPTION_SCOPE_GENERAL_RULE,
+  TECHNIQUE_RESEARCH_CREATIVE_DIRECTION_GENERAL_RULE,
   ...TECHNIQUE_PROMPT_CREATIVE_DIRECTION_RULES,
   'skills 必须为数组，长度必须满足 skillCountRange',
   'layers 必须与 maxLayer 一致，按 layer 从小到大给出',

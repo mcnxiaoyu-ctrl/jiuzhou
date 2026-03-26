@@ -85,6 +85,7 @@ import {
   buildTechniqueRecentSuccessfulDescriptionPromptContext,
   type TechniqueRecentSuccessfulDescriptionPromptContext,
 } from './shared/techniqueRecentSuccessfulDescriptionPrompt.js';
+import { buildTechniqueResearchCreativeDirectionPromptContext } from './shared/techniqueResearchCreativeDirectionPrompt.js';
 
 export type TechniqueGenerationStatus =
   | 'pending'
@@ -433,12 +434,11 @@ const buildTechniqueResearchPromptContext = (params: {
   burningWordPrompt: string | null;
   recentSuccessfulDescriptionPromptContext?: TechniqueRecentSuccessfulDescriptionPromptContext;
 }) => {
+  const researchCreativeDirectionPromptContext = buildTechniqueResearchCreativeDirectionPromptContext();
   const burningWordPromptContext = buildTechniqueBurningWordPromptContext(params.burningWordPrompt);
-  if (!burningWordPromptContext && !params.recentSuccessfulDescriptionPromptContext) {
-    return undefined;
-  }
 
   return {
+    ...researchCreativeDirectionPromptContext,
     ...(burningWordPromptContext ?? {}),
     ...(params.recentSuccessfulDescriptionPromptContext ?? {}),
   };

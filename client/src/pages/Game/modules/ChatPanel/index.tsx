@@ -1,8 +1,16 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Button, Drawer, Input, Popover, Select, Table, Tabs, Tooltip, type InputRef } from 'antd';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react';
+import { App, Button, Drawer, Input, Popover, Select, Table, Tabs, Tooltip, type InputRef } from 'antd';
 import { BarChartOutlined, CloseOutlined, LineChartOutlined, SendOutlined } from '@ant-design/icons';
 import { gameSocket, type CharacterData, type OnlinePlayerDto } from '../../../../services/gameSocket';
+import {
+  getPartnerPreview,
+  getUnifiedApiErrorMessage,
+  SILENT_API_REQUEST_CONFIG,
+  type PartnerDisplayDto,
+} from '../../../../services/api';
 import type { InfoTarget } from '../InfoModal';
+import MarketPartnerBuyModal from '../MarketModal/MarketPartnerBuyModal';
+import MarketPartnerPreviewSheet from '../MarketModal/MarketPartnerPreviewSheet';
 import { parseBattleLootLine } from '../../shared/battleLoot';
 import PhoneBindingDialog from '../../shared/PhoneBindingDialog';
 import PlayerName from '../../shared/PlayerName';
@@ -109,6 +117,13 @@ interface PieSlice {
   color: string;
   percent: number;
 }
+
+type ChatContentSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'token'; tokenType: string; entityId: string; label: string };
+
+const CHAT_CONTENT_TOKEN_PATTERN = /\[#([a-z_]+)\|([^|\]]+)\|([^\]]+)\]/g;
+const HEAVEN_PARTNER_PREVIEW_COLOR = 'var(--rarity-tian)';
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -329,6 +344,41 @@ const countByRegex = (line: string, pattern: RegExp): number => {
   return count;
 };
 
+// 聊天正文统一走受控 token 协议解析，避免“哪段文字可点击”继续散落成字符串猜测。
+// 当前先支持 `[#partner|实体ID|显示文本]`，后续新增 token 只需扩展 tokenType 分发。
+const parseChatContentSegments = (content: string): ChatContentSegment[] => {
+  const source = String(content ?? '');
+  if (!source) return [];
+
+  const segments: ChatContentSegment[] = [];
+  let cursor = 0;
+  for (const matched of source.matchAll(CHAT_CONTENT_TOKEN_PATTERN)) {
+    const tokenType = matched[1] ?? '';
+    const entityId = matched[2] ?? '';
+    const label = matched[3] ?? '';
+    const index = matched.index ?? -1;
+    const tokenText = matched[0] ?? '';
+    if (!tokenType || !entityId || !label || !tokenText || index < cursor) continue;
+    if (index > cursor) {
+      segments.push({ kind: 'text', text: source.slice(cursor, index) });
+    }
+    segments.push({ kind: 'token', tokenType, entityId, label });
+    cursor = index + tokenText.length;
+  }
+  if (cursor < source.length) {
+    segments.push({ kind: 'text', text: source.slice(cursor) });
+  }
+  return segments.length > 0 ? segments : [{ kind: 'text', text: source }];
+};
+
+const parseChatTokenEntityId = (entityId: string): number | null => {
+  const normalizedEntityId = Math.floor(Number(entityId));
+  if (!Number.isFinite(normalizedEntityId) || normalizedEntityId <= 0) {
+    return null;
+  }
+  return normalizedEntityId;
+};
+
 interface ChatPanelProps {
   onSelectPlayer?: (target: InfoTarget) => void;
   isMobile?: boolean;
@@ -356,6 +406,7 @@ const initialMessageBuckets = buildInitialMessageBuckets(initialMessages);
 const initialPrivateTargets = buildInitialPrivateTargets(initialMessageBuckets.all);
 
 const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer, isMobile }, ref) => {
+  const { message } = App.useApp();
   const [activeChannel, setActiveChannel] = useState<ChatChannel>('all');
   const [inputValue, setInputValue] = useState('');
   const [messageBuckets, setMessageBuckets] = useState<MessageBuckets>(initialMessageBuckets);
@@ -375,6 +426,7 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
   const [outputActor, setOutputActor] = useState<string | undefined>(undefined);
   const [battleStatsFromTs, setBattleStatsFromTs] = useState(0);
   const [onlineDrawerOpen, setOnlineDrawerOpen] = useState(false);
+  const [previewPartner, setPreviewPartner] = useState<PartnerDisplayDto | null>(null);
   const [shouldLoadPhoneBindingStatus, setShouldLoadPhoneBindingStatus] = useState(false);
   const {
     status: phoneBindingStatus,
@@ -386,6 +438,8 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
   const privateMessagesContentRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<InputRef>(null);
   const myCharacterIdRef = useRef<number | null>(character?.id ?? null);
+  const partnerPreviewCacheRef = useRef<Map<number, PartnerDisplayDto>>(new Map());
+  const partnerPreviewRequestRef = useRef<Map<number, Promise<PartnerDisplayDto>>>(new Map());
 
   useEffect(() => {
     myCharacterIdRef.current = character?.id ?? null;
@@ -694,9 +748,80 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
 
   const activePrivateTarget = privateTargets.find((t) => t.id === activePrivateTargetId) ?? null;
 
-  const renderMessageContent = useCallback((msg: Message): string => {
-    return String(msg.content ?? '');
+  const openPartnerPreview = useCallback((partner: PartnerDisplayDto) => {
+    setPreviewPartner(partner);
   }, []);
+
+  const openPartnerPreviewById = useCallback(async (entityId: string) => {
+    const partnerId = parseChatTokenEntityId(entityId);
+    if (!partnerId) {
+      return;
+    }
+
+    const cachedPartner = partnerPreviewCacheRef.current.get(partnerId);
+    if (cachedPartner) {
+      openPartnerPreview(cachedPartner);
+      return;
+    }
+
+    const request = partnerPreviewRequestRef.current.get(partnerId) ?? (async () => {
+      const result = await getPartnerPreview(partnerId, SILENT_API_REQUEST_CONFIG);
+      if (!result.data) {
+        throw new Error('伙伴不存在');
+      }
+      return result.data;
+    })();
+
+    if (!partnerPreviewRequestRef.current.has(partnerId)) {
+      partnerPreviewRequestRef.current.set(partnerId, request);
+    }
+    try {
+      const partner = await request;
+      partnerPreviewCacheRef.current.set(partnerId, partner);
+      openPartnerPreview(partner);
+    } catch (error) {
+      message.error(getUnifiedApiErrorMessage(error, '伙伴详情加载失败'));
+    } finally {
+      if (partnerPreviewRequestRef.current.get(partnerId) === request) {
+        partnerPreviewRequestRef.current.delete(partnerId);
+      }
+    }
+  }, [message, openPartnerPreview]);
+
+  const renderMessageContent = useCallback((msg: Message): ReactNode => {
+    const content = String(msg.content ?? '');
+    const segments = parseChatContentSegments(content);
+    if (segments.length === 1 && segments[0]?.kind === 'text') {
+      return segments[0].text;
+    }
+
+    const isSystemWorldMessage = msg.channel === 'world' && msg.senderCharacterId === 0;
+    return (
+      <span className="message-content-inline">
+        {segments.map((segment, index) => {
+          if (segment.kind === 'token' && segment.tokenType === 'partner' && isSystemWorldMessage) {
+            return (
+              <button
+                key={`token-${index}`}
+                type="button"
+                className="message-partner-preview-name"
+                style={{ color: HEAVEN_PARTNER_PREVIEW_COLOR }}
+                onClick={() => void openPartnerPreviewById(segment.entityId)}
+                title="查看伙伴详情"
+              >
+                {segment.label}
+              </button>
+            );
+          }
+          return (
+            <span key={`${segment.kind}-${index}`}>
+              {segment.kind === 'token' ? segment.label : segment.text}
+            </span>
+          );
+        })}
+      </span>
+    );
+  }, [openPartnerPreviewById]);
 
   const handleRemovePrivateTarget = (targetId: string) => {
     const nextTargets = privateTargets.filter((t) => t.id !== targetId);
@@ -1685,6 +1810,11 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
           description="当前账号尚未绑定手机号，所有聊天频道均已禁用。完成绑定后即可恢复世界、队伍、宗门与私聊发言。"
         />
       ) : null}
+      {previewPartner
+        ? isMobile
+          ? <MarketPartnerPreviewSheet partner={previewPartner} onClose={() => setPreviewPartner(null)} />
+          : <MarketPartnerBuyModal partner={previewPartner} onClose={() => setPreviewPartner(null)} />
+        : null}
     </div>
   );
 });
