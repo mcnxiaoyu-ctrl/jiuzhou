@@ -3,7 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProper
 import { getCharacterTechniqueStatus, resolveAssetUrl, type CharacterSkillSlotDto } from '../../../../services/api';
 import { formatElementLabel, getElementToneClassName } from '../../shared/elementTheme';
 import { resolveIconUrl } from '../../shared/resolveIcon';
-import { gameSocket } from '../../../../services/gameSocket';
+import { gameSocket, type CharacterData } from '../../../../services/gameSocket';
 import type { BattleRealtimePayload } from '../../../../services/battleRealtime';
 import { readIsMobileViewport, useIsMobile } from '../../shared/responsive';
 import { buildSkillCostEntries, normalizeSkillCost, resolveSkillCostRequirement } from '../../shared/skillCost';
@@ -84,6 +84,47 @@ type SkillResourceState = {
   qixue: number;
   maxLingqi: number;
   maxQixue: number;
+};
+
+const normalizeNonNegativeInteger = (value: unknown): number => {
+  const next = Number(value);
+  if (!Number.isFinite(next)) return 0;
+  return Math.max(0, Math.floor(next));
+};
+
+const resolveBattleResourceMax = (value: unknown, fallback: number): number => {
+  const next = Number(value);
+  if (!Number.isFinite(next)) return fallback;
+  return Math.max(0, Math.floor(next));
+};
+
+const buildSkillResourceStateFromCharacter = (
+  character: CharacterData | null,
+): SkillResourceState => ({
+  lingqi: normalizeNonNegativeInteger(character?.lingqi),
+  qixue: normalizeNonNegativeInteger(character?.qixue),
+  maxLingqi: normalizeNonNegativeInteger(character?.maxLingqi),
+  maxQixue: normalizeNonNegativeInteger(character?.maxQixue),
+});
+
+const buildSkillResourceStateFromBattleUnit = (
+  unit: BattleUnitWithCooldownDto,
+  fallback: Pick<SkillResourceState, 'maxLingqi' | 'maxQixue'>,
+): SkillResourceState => ({
+  lingqi: normalizeNonNegativeInteger(unit.lingqi),
+  qixue: normalizeNonNegativeInteger(unit.qixue),
+  maxLingqi: resolveBattleResourceMax(unit.currentAttrs?.max_lingqi, fallback.maxLingqi),
+  maxQixue: resolveBattleResourceMax(unit.currentAttrs?.max_qixue, fallback.maxQixue),
+});
+
+const isSameSkillResourceState = (
+  left: SkillResourceState,
+  right: SkillResourceState,
+): boolean => {
+  return left.lingqi === right.lingqi
+    && left.qixue === right.qixue
+    && left.maxLingqi === right.maxLingqi
+    && left.maxQixue === right.maxQixue;
 };
 
 type SkillAvailabilityReason =
@@ -397,21 +438,13 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
 }) => {
   const { message } = App.useApp();
   const isMobile = useIsMobile();
-  const initialLingqi = Math.max(0, Math.floor(Number(gameSocket.getCharacter()?.lingqi) || 0));
-  const initialQixue = Math.max(0, Math.floor(Number(gameSocket.getCharacter()?.qixue) || 0));
-  const initialMaxLingqi = Math.max(0, Math.floor(Number(gameSocket.getCharacter()?.maxLingqi) || 0));
-  const initialMaxQixue = Math.max(0, Math.floor(Number(gameSocket.getCharacter()?.maxQixue) || 0));
+  const initialSkillResourceState = buildSkillResourceStateFromCharacter(gameSocket.getCharacter());
   const [open, setOpen] = useState(false);
   const [characterId, setCharacterId] = useState<number | null>(() => gameSocket.getCharacter()?.id ?? null);
   const [skills, setSkills] = useState<SkillItem[]>(() => buildSkillItems([], [], []));
   const [isCasting, setIsCasting] = useState(false);
   const [skillConfigLoadState, setSkillConfigLoadState] = useState<'idle' | 'loading' | 'ok' | 'failed'>('idle');
-  const [skillResourceState, setSkillResourceState] = useState<SkillResourceState>({
-    lingqi: initialLingqi,
-    qixue: initialQixue,
-    maxLingqi: initialMaxLingqi,
-    maxQixue: initialMaxQixue,
-  });
+  const [skillResourceState, setSkillResourceState] = useState<SkillResourceState>(initialSkillResourceState);
   const [controlState, setControlState] = useState<SkillControlState>(EMPTY_SKILL_CONTROL_STATE);
   const [localTurn, setLocalTurn] = useState(1);
   // 自动战斗状态（使用外部传入的 autoMode）
@@ -429,13 +462,15 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   const battleEnterSyncRef = useRef(false);
+  const isBattleRunningRef = useRef(isBattleRunning);
+  const battleResourceAuthorityRef = useRef(false);
   const lastExternalTurnRef = useRef<number | null>(turn ?? null);
   const lastBattleIdRef = useRef<string | null>(null);
   const skillsRef = useRef<SkillItem[]>(skills);
-  const myLingqiRef = useRef<number>(initialLingqi);
-  const myQixueRef = useRef<number>(initialQixue);
-  const myMaxLingqiRef = useRef<number>(initialMaxLingqi);
-  const myMaxQixueRef = useRef<number>(initialMaxQixue);
+  const myLingqiRef = useRef<number>(initialSkillResourceState.lingqi);
+  const myQixueRef = useRef<number>(initialSkillResourceState.qixue);
+  const myMaxLingqiRef = useRef<number>(initialSkillResourceState.maxLingqi);
+  const myMaxQixueRef = useRef<number>(initialSkillResourceState.maxQixue);
   const controlStateRef = useRef<SkillControlState>(EMPTY_SKILL_CONTROL_STATE);
   const lastAutoActionKeyRef = useRef<string | null>(null);
   const lastAutoAttemptKeyRef = useRef<string | null>(null);
@@ -455,6 +490,17 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
     skillsRef.current = skills;
   }, [skills]);
 
+  const applySkillResourceState = useCallback((nextState: SkillResourceState) => {
+    const lingqiChanged = myLingqiRef.current !== nextState.lingqi;
+    const qixueChanged = myQixueRef.current !== nextState.qixue;
+    myLingqiRef.current = nextState.lingqi;
+    myQixueRef.current = nextState.qixue;
+    myMaxLingqiRef.current = nextState.maxLingqi;
+    myMaxQixueRef.current = nextState.maxQixue;
+    setSkillResourceState((prev) => (isSameSkillResourceState(prev, nextState) ? prev : nextState));
+    return { lingqiChanged, qixueChanged };
+  }, []);
+
   const showCastBlockedMessage = useCallback(
     (content: string) => {
       message.open({
@@ -471,27 +517,15 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
     gameSocket.connect();
     const unsubscribe = gameSocket.onCharacterUpdate((c) => {
       setCharacterId(c?.id ?? null);
-      const nextLingqi = Math.max(0, Math.floor(Number(c?.lingqi) || 0));
-      const nextQixue = Math.max(0, Math.floor(Number(c?.qixue) || 0));
-      const nextMaxLingqi = Math.max(0, Math.floor(Number(c?.maxLingqi) || 0));
-      const nextMaxQixue = Math.max(0, Math.floor(Number(c?.maxQixue) || 0));
-      myLingqiRef.current = nextLingqi;
-      myQixueRef.current = nextQixue;
-      myMaxLingqiRef.current = nextMaxLingqi;
-      myMaxQixueRef.current = nextMaxQixue;
-      setSkillResourceState((prev) =>
-        prev.lingqi === nextLingqi
-        && prev.qixue === nextQixue
-        && prev.maxLingqi === nextMaxLingqi
-        && prev.maxQixue === nextMaxQixue
-          ? prev
-          : { lingqi: nextLingqi, qixue: nextQixue, maxLingqi: nextMaxLingqi, maxQixue: nextMaxQixue },
-      );
+      if (isBattleRunningRef.current && battleResourceAuthorityRef.current) {
+        return;
+      }
+      applySkillResourceState(buildSkillResourceStateFromCharacter(c));
     });
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [applySkillResourceState]);
 
   useEffect(() => {
     const onResize = () => {
@@ -542,14 +576,17 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
   }, [open, refreshSkillConfig]);
 
   useEffect(() => {
+    isBattleRunningRef.current = isBattleRunning;
     if (!isBattleRunning) {
       battleEnterSyncRef.current = false;
+      battleResourceAuthorityRef.current = false;
+      applySkillResourceState(buildSkillResourceStateFromCharacter(gameSocket.getCharacter()));
       return;
     }
     if (battleEnterSyncRef.current) return;
     battleEnterSyncRef.current = true;
     void refreshSkillConfig();
-  }, [isBattleRunning, refreshSkillConfig]);
+  }, [applySkillResourceState, isBattleRunning, refreshSkillConfig]);
 
   useEffect(() => {
     if (!isBattleRunning || skillConfigLoadState !== 'failed') return;
@@ -603,10 +640,12 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
       );
       const myUnit = attackerUnits.find((u) => String(u?.id ?? '') === myUnitId);
       if (!myUnit) {
+        battleResourceAuthorityRef.current = false;
         controlStateRef.current = EMPTY_SKILL_CONTROL_STATE;
         setControlState((prev) => (prev.silenced || prev.disarmed || prev.taunted ? EMPTY_SKILL_CONTROL_STATE : prev));
         return;
       }
+      battleResourceAuthorityRef.current = true;
 
       const nextControlState = readSkillControlState(myUnit?.buffs, aliveEnemyNameById);
       controlStateRef.current = nextControlState;
@@ -619,29 +658,17 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
           : nextControlState,
       );
 
-      const nextLingqi = Number(myUnit?.lingqi) || 0;
-      const nextQixue = Number(myUnit?.qixue) || 0;
-      const nextMaxLingqi = Number(myUnit.currentAttrs?.max_lingqi) || myMaxLingqiRef.current;
-      const nextMaxQixue = Number(myUnit.currentAttrs?.max_qixue) || myMaxQixueRef.current;
-      const lingqiChanged = myLingqiRef.current !== nextLingqi;
-      const qixueChanged = myQixueRef.current !== nextQixue;
-      myLingqiRef.current = nextLingqi;
-      myQixueRef.current = nextQixue;
-      myMaxLingqiRef.current = nextMaxLingqi;
-      myMaxQixueRef.current = nextMaxQixue;
-      setSkillResourceState((prev) =>
-        prev.lingqi === nextLingqi
-        && prev.qixue === nextQixue
-        && prev.maxLingqi === nextMaxLingqi
-        && prev.maxQixue === nextMaxQixue
-          ? prev
-          : { lingqi: nextLingqi, qixue: nextQixue, maxLingqi: nextMaxLingqi, maxQixue: nextMaxQixue },
+      const { lingqiChanged, qixueChanged } = applySkillResourceState(
+        buildSkillResourceStateFromBattleUnit(myUnit, {
+          maxLingqi: myMaxLingqiRef.current,
+          maxQixue: myMaxQixueRef.current,
+        }),
       );
 
       if (lingqiChanged || qixueChanged) {
         gameSocket.updateCharacterLocal({
-          lingqi: nextLingqi,
-          qixue: nextQixue,
+          lingqi: myLingqiRef.current,
+          qixue: myQixueRef.current,
         });
       }
 
@@ -668,7 +695,7 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
     return () => unsub();
     // 故意不依赖 isBattleRunning，确保订阅持续存在，避免 battle_started 事件丢失
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [applySkillResourceState]);
 
   // 追踪战斗 ID 变化，重置自动战斗状态
   useEffect(() => {

@@ -118,7 +118,7 @@ const buildCharacterAttributesFromOnlineBattleSnapshot = (
   });
 };
 
-const mergeRuntimeStaminaFromOnlineBattleSnapshot = (
+const mergeRuntimeResourcesFromOnlineBattleSnapshot = (
   character: CharacterAttributes,
   snapshot: OnlineBattleCharacterSnapshot | null,
 ): CharacterAttributes => {
@@ -126,6 +126,20 @@ const mergeRuntimeStaminaFromOnlineBattleSnapshot = (
     return character;
   }
 
+  const runtimeQixue = Math.max(
+    0,
+    Math.min(
+      character.maxQixue,
+      Math.floor(Number(snapshot.computed.qixue) || 0),
+    ),
+  );
+  const runtimeLingqi = Math.max(
+    0,
+    Math.min(
+      character.maxLingqi,
+      Math.floor(Number(snapshot.computed.lingqi) || 0),
+    ),
+  );
   const runtimeStamina = Math.max(
     0,
     Math.min(
@@ -133,12 +147,18 @@ const mergeRuntimeStaminaFromOnlineBattleSnapshot = (
       Math.floor(Number(snapshot.computed.stamina) || 0),
     ),
   );
-  if (runtimeStamina === character.stamina) {
+  if (
+    runtimeQixue === character.qixue
+    && runtimeLingqi === character.lingqi
+    && runtimeStamina === character.stamina
+  ) {
     return character;
   }
 
   return {
     ...character,
+    qixue: runtimeQixue,
+    lingqi: runtimeLingqi,
     stamina: runtimeStamina,
   };
 };
@@ -809,7 +829,7 @@ class GameServer {
         characterWithUnlockedFeatures,
       );
       const runtimeSnapshot = await getOnlineBattleCharacterSnapshotByUserId(userId);
-      return mergeRuntimeStaminaFromOnlineBattleSnapshot(
+      return mergeRuntimeResourcesFromOnlineBattleSnapshot(
         character,
         runtimeSnapshot,
       );
