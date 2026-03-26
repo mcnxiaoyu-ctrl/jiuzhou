@@ -1056,7 +1056,8 @@
   --game-tooltip-radius: 14px;
   --game-tooltip-padding: 12px;
   --game-tooltip-max-width: min(360px, calc(100vw - 24px));
-  --game-tooltip-max-height: min(62vh, 560px);
+  --game-tooltip-max-height: min(52vh, calc(100vh - 140px));
+  overscroll-behavior: contain;
 }
 
 .market-partner-technique-tooltip {
@@ -1070,41 +1071,7 @@
 
   display: flex;
   flex-direction: column;
-  gap: 10px;
   max-width: min(336px, calc(100vw - 48px));
-}
-
-.market-partner-technique-tooltip__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.market-partner-technique-tooltip__name {
-  min-width: 0;
-  font-size: 14px;
-  font-weight: 900;
-  color: var(--game-tooltip-text);
-  line-height: 1.35;
-}
-
-.market-partner-technique-tooltip__layer {
-  flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--primary-color);
-  background: color-mix(in srgb, var(--primary-color) 14%, transparent);
-  padding: 3px 8px;
-  border-radius: 999px;
-}
-
-.market-partner-technique-tooltip__desc {
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--game-tooltip-muted);
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--game-tooltip-divider);
 }
 
 .market-list-detail-title {
