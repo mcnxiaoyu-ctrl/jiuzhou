@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "九州修仙录",
+  "packageManager": "pnpm@10.19.0",
   "scripts": {
     "dev": "pnpm --parallel -r dev",
     "dev:client": "pnpm --filter ./client dev",

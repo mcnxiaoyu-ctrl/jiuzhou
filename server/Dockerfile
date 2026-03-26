@@ -13,18 +13,26 @@
 #
 # 关键边界条件与坑点：
 # 1) lockfile 配置必须与 Docker 内 pnpm 配置一致，否则 frozen-lockfile 会失败
-# 2) 仅保留 server 运行必需依赖，避免把未使用依赖打入生产镜像
+# 2) Node 与 pnpm 版本都从单一入口收敛，避免 builder / prod-deps / runner 各自漂移
+# 3) 仅保留 server 运行必需依赖，避免把未使用依赖打入生产镜像
 # ==========================================================
 
+ARG NODE_BASE_IMAGE=node:24.14.0-alpine
+
 # =======================================
-# 基础工具链阶段：统一 pnpm 与镜像源配置
+# 基础工具链阶段：统一 Node 24、pnpm 与 workspace 清单
 # =======================================
-FROM guergeiro/pnpm:22-10-alpine AS base
+FROM ${NODE_BASE_IMAGE} AS base
 
 WORKDIR /app
 
+# 复用根 packageManager 作为 pnpm 版本单点，避免多个 Dockerfile/阶段重复维护版本号
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
 # 配置 pnpm 镜像源和 lockfile 相关配置，保证构建可复现
-RUN pnpm config set registry https://registry.npmmirror.com && \
+RUN corepack enable && \
+    corepack install && \
+    pnpm config set registry https://registry.npmmirror.com && \
     pnpm config set auto-install-peers true
 
 # =======================================
@@ -32,8 +40,7 @@ RUN pnpm config set registry https://registry.npmmirror.com && \
 # =======================================
 FROM base AS builder
 
-# 先复制依赖解析清单，最大化依赖缓存命中
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# base 已经携带 workspace 根清单，这里只补充服务端依赖解析所需的子包清单
 COPY client/package.json ./client/
 COPY server/package.json ./server/
 
@@ -51,8 +58,7 @@ RUN pnpm --filter jiuzhou-server build
 # =======================================
 FROM base AS prod-deps
 
-# 仅复制解析生产依赖所需文件
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# base 已经携带 workspace 根清单，这里只补充服务端依赖解析所需的子包清单
 COPY client/package.json ./client/
 COPY server/package.json ./server/
 
@@ -63,7 +69,7 @@ RUN pnpm install --prod --frozen-lockfile --filter jiuzhou-server... --package-i
 # =======================================
 # 运行阶段：仅保留运行必需文件
 # =======================================
-FROM guergeiro/pnpm:22-10-alpine AS runner
+FROM ${NODE_BASE_IMAGE} AS runner
 
 WORKDIR /app
 
