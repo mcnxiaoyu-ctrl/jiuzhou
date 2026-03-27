@@ -28,7 +28,7 @@ import {
 } from './staticConfigLoader.js';
 import { getCharacterUserId } from './sect/db.js';
 import { notifyPartnerRecruitStatus } from './partnerRecruitPush.js';
-import { partnerRecruitService } from './partnerRecruitService.js';
+import { appendPartnerRecruitRefundHint, partnerRecruitService } from './partnerRecruitService.js';
 import type { PartnerRecruitQuality } from './shared/partnerRecruitRules.js';
 import type {
   PartnerRecruitWorkerMessage,
@@ -101,13 +101,14 @@ class PartnerRecruitJobRunner {
       await partnerRecruitService.forceRefundPendingRecruitJob(params.characterId, params.generationId, reason);
       const userId = params.userId ?? await getCharacterUserId(params.characterId);
       if (!userId) return;
+      const errorMessage = appendPartnerRecruitRefundHint(reason);
       getGameServer().emitToUser(userId, 'partnerRecruitResult', {
         characterId: params.characterId,
         generationId: params.generationId,
         status: 'failed',
         hasUnreadResult: true,
         message: '伙伴招募失败，请前往伙伴界面查看',
-        errorMessage: reason,
+        errorMessage,
       });
       await notifyPartnerRecruitStatus(params.characterId, userId);
     };

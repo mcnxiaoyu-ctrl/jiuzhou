@@ -2,7 +2,7 @@
  * 伙伴招募扣费链路回归测试
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：锁定伙伴招募创建任务时必须复用共享货币扣减入口，避免再次手写 `UPDATE characters` 扣灵石。
+ * 1. 做什么：锁定伙伴招募创建任务时必须复用共享货币扣减入口，且失败退款统一走邮件发放，避免再次手写 `UPDATE characters` 扣/退灵石。
  * 2. 做什么：验证该链路不再依赖 `loadCharacterSpiritStones(..., true)` 这类角色行锁读取。
  * 3. 不做什么：不连接数据库，不覆盖伙伴招募完整业务状态机。
  *
@@ -21,14 +21,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-test('partnerRecruitService: 创建与退款链路应复用共享货币入口，保底计数改为原子更新', () => {
+test('partnerRecruitService: 创建走共享扣费入口，退款统一走邮件发放，保底计数改为原子更新', () => {
   const source = readFileSync(
     new URL('../partnerRecruitService.ts', import.meta.url),
     'utf8',
   );
 
   assert.match(source, /consumeCharacterCurrencies\(characterId,\s*\{/u);
-  assert.match(source, /addCharacterCurrencies\(characterId,\s*\{/u);
+  assert.match(source, /mailService\.sendMail\(\{/u);
+  assert.match(source, /attachSpiritStones:\s*spiritStonesCost/u);
+  assert.match(source, /source:\s*'partner_recruit_refund'/u);
   assert.match(source, /SPIRIT_STONES_STATE_CHANGED/u);
   assert.match(
     source,

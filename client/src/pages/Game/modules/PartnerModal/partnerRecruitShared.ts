@@ -132,7 +132,7 @@ export const resolvePartnerRecruitPanelView = (
     return {
       kind: 'failed',
       job,
-      errorMessage: job.errorMessage || '本次伙伴招募未能成形，消耗的灵石已自动退回。',
+      errorMessage: job.errorMessage || '本次伙伴招募未能成形，本次消耗已通过邮件退回，请前往邮箱领取。',
     };
   }
   return { kind: 'empty' };

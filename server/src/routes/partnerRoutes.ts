@@ -159,7 +159,7 @@ router.post('/recruit/generate', asyncHandler(async (req, res) => {
     await notifyPartnerRecruitStatus(characterId, userId);
     return sendResult(res, {
       success: false,
-      message: '伙伴招募启动失败，已自动退还灵石',
+      message: '伙伴招募启动失败，退款邮件已发放',
     });
   }
 

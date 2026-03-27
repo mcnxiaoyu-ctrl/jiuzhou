@@ -1603,7 +1603,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
               <div className="partner-stat-label">开始招募</div>
               <div className="partner-meta">
                 {shouldShowSpiritStoneCost
-                  ? '消耗灵石后异步生成伙伴形象、属性与天生功法。生成失败会自动退款。'
+                  ? '消耗灵石后异步生成伙伴形象、属性与天生功法。生成失败会通过邮件退回本次消耗。'
                   : '异步生成伙伴形象、属性与天生功法。'}
               </div>
             </div>

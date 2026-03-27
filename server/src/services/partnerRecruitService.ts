@@ -28,8 +28,8 @@ import {
   getItemDefinitionById,
   getPartnerDefinitionById,
 } from './staticConfigLoader.js';
-import { addItemToInventory } from './inventory/index.js';
-import { addCharacterCurrencies, consumeCharacterCurrencies, consumeMaterialByDefId } from './inventory/shared/consume.js';
+import { consumeCharacterCurrencies, consumeMaterialByDefId } from './inventory/shared/consume.js';
+import { mailService } from './mailService.js';
 import { partnerService } from './partnerService.js';
 import {
   buildPartnerRecruitJobState,
@@ -135,6 +135,8 @@ const normalizeGeneratedId = (prefix: string): string => {
 };
 
 const buildPartnerRecruitGenerationId = (): string => normalizeGeneratedId('partner-recruit');
+const PARTNER_RECRUIT_REFUND_MAIL_TITLE = '伙伴招募失败退还通知';
+const PARTNER_RECRUIT_REFUND_HINT = '本次消耗已通过邮件退回，请前往邮箱领取。';
 const getPartnerRecruitCustomBaseModelTokenName = (): string => {
   const itemDef = getItemDefinitionById(PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID);
   const itemName = asString(itemDef?.name);
@@ -142,6 +144,24 @@ const getPartnerRecruitCustomBaseModelTokenName = (): string => {
     throw new Error(`伙伴招募自定义底模消耗道具未配置：${PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID}`);
   }
   return itemName;
+};
+
+const buildPartnerRecruitRefundMailContent = (reason: string): string => {
+  const lines = [
+    '本次伙伴招募未能成形，系统已将本次消耗通过邮件退回。',
+  ];
+  const normalizedReason = reason.trim();
+  if (normalizedReason) {
+    lines.push(`失败原因：${normalizedReason}`);
+  }
+  return lines.join('\n');
+};
+
+export const appendPartnerRecruitRefundHint = (reason: string): string => {
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) return PARTNER_RECRUIT_REFUND_HINT;
+  if (normalizedReason.includes(PARTNER_RECRUIT_REFUND_HINT)) return normalizedReason;
+  return `${normalizedReason} ${PARTNER_RECRUIT_REFUND_HINT}`;
 };
 
 export type GeneratedRecruitTechniqueDraft = GeneratedPartnerTechniqueDraft;
@@ -658,26 +678,42 @@ class PartnerRecruitService {
     const usedCustomBaseModelToken = asBoolean(row.used_custom_base_model_token);
     if (status === 'accepted' || status === 'discarded' || status === 'failed' || status === 'refunded') return;
 
-    const addCurrencyResult = await addCharacterCurrencies(characterId, {
-      spiritStones: spiritStonesCost,
+    const userId = await this.loadCharacterUserId(characterId);
+    if (!userId) {
+      throw new Error('退款邮件发送失败：角色不存在');
+    }
+
+    const refundErrorMessage = appendPartnerRecruitRefundHint(reason);
+    const refundMailResult = await mailService.sendMail({
+      recipientUserId: userId,
+      recipientCharacterId: characterId,
+      senderType: 'system',
+      senderName: '系统',
+      mailType: 'reward',
+      title: PARTNER_RECRUIT_REFUND_MAIL_TITLE,
+      content: buildPartnerRecruitRefundMailContent(reason),
+      attachSpiritStones: spiritStonesCost,
+      attachItems: usedCustomBaseModelToken
+        ? [
+            {
+              item_def_id: PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID,
+              item_name: getPartnerRecruitCustomBaseModelTokenName(),
+              qty: PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_COST,
+            },
+          ]
+        : undefined,
+      expireDays: 30,
+      source: 'partner_recruit_refund',
+      sourceRefId: generationId,
+      metadata: {
+        generationId,
+        reason,
+      },
     });
-    if (!addCurrencyResult.success) {
-      throw new Error(addCurrencyResult.message);
+    if (!refundMailResult.success) {
+      throw new Error(refundMailResult.message || '退款邮件发送失败');
     }
-    if (usedCustomBaseModelToken) {
-      const userId = await this.loadCharacterUserId(characterId);
-      if (userId) {
-        await addItemToInventory(
-          characterId,
-          userId,
-          PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID,
-          PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_COST,
-          {
-            obtainedFrom: 'partner_recruit_refund',
-          },
-        );
-      }
-    }
+
     await query(
       `
         UPDATE partner_recruit_job
@@ -688,7 +724,7 @@ class PartnerRecruitService {
             updated_at = NOW()
         WHERE id = $1 AND character_id = $2
       `,
-      [generationId, characterId, nextStatus, reason],
+      [generationId, characterId, nextStatus, refundErrorMessage],
     );
   }
 
@@ -874,14 +910,15 @@ class PartnerRecruitService {
     }
 
     const finalReason = lastModelName ? `伙伴生成失败：${lastFailure}（model=${lastModelName}）` : `伙伴生成失败：${lastFailure}`;
+    const finalErrorMessage = appendPartnerRecruitRefundHint(finalReason);
     await this.refundRecruitJobTx(args.characterId, args.generationId, finalReason, 'refunded');
     return {
       success: true,
-      message: finalReason,
+      message: finalErrorMessage,
       data: {
         status: 'refunded',
         preview: null,
-        errorMessage: finalReason,
+        errorMessage: finalErrorMessage,
       },
     };
   }
