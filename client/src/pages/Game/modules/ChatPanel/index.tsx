@@ -376,6 +376,7 @@ const parseChatTokenEntityId = (entityId: string): number | null => {
 interface ChatPanelProps {
   onSelectPlayer?: (target: InfoTarget) => void;
   isMobile?: boolean;
+  onPartnerPreviewOpen?: () => void;
 }
 
 export interface ChatPanelHandle {
@@ -399,7 +400,7 @@ const buildInitialPrivateTargets = (list: Message[]): PrivateTarget[] => {
 const initialMessageBuckets = buildInitialMessageBuckets(initialMessages);
 const initialPrivateTargets = buildInitialPrivateTargets(initialMessageBuckets.all);
 
-const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer, isMobile }, ref) => {
+const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer, isMobile, onPartnerPreviewOpen }, ref) => {
   const [activeChannel, setActiveChannel] = useState<ChatChannel>('all');
   const [inputValue, setInputValue] = useState('');
   const [messageBuckets, setMessageBuckets] = useState<MessageBuckets>(initialMessageBuckets);
@@ -439,6 +440,13 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
   useEffect(() => {
     myCharacterIdRef.current = character?.id ?? null;
   }, [character]);
+
+  useEffect(() => {
+    if (isMobile !== true || !previewPartner) {
+      return;
+    }
+    onPartnerPreviewOpen?.();
+  }, [isMobile, onPartnerPreviewOpen, previewPartner]);
 
   const ensurePhoneBindingStatusLoaded = useCallback(() => {
     setShouldLoadPhoneBindingStatus(true);

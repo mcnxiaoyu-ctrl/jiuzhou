@@ -944,13 +944,14 @@ type PartnerRecruitCooldownOptions = {
  * - 纯函数测试可通过 `bypassCooldown` 显式覆盖，避免业务主链再混入环境特判。
  *
  * 设计原因：
- * - 开发、测试、生产都默认走同一套正式冷却，避免本地联调与线上表现分叉。
- * - 将默认行为收敛在共享规则后，服务层只消费冷却状态，不再重复实现环境例外。
+ * - 本地开发环境需要支持连续联调，因此直接在共享规则内关闭冷却，避免状态接口与创建校验口径分裂。
+ * - 测试与生产仍保留正式冷却，保证测试断言与线上规则一致。
+ * - 将默认行为收敛在这里后，服务层只关注冷却状态，不再重复判断运行环境。
  */
 export const shouldBypassPartnerRecruitCooldown = (
-  _nodeEnv: string | undefined = process.env.NODE_ENV,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
 ): boolean => {
-  return false;
+  return nodeEnv === 'development';
 };
 
 const buildIdleCooldownState = (

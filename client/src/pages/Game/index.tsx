@@ -1170,6 +1170,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     setMobileChatDrawerOpen(false);
   }, [isMobileBattleMode]);
 
+  const handleMobilePartnerPreviewOpen = useCallback(() => {
+    setMobileChatDrawerOpen(false);
+  }, []);
+
   const stopGatherLoop = useCallback(() => {
     gatherActionKeyRef.current = '';
     if (gatherTickTimerRef.current) {
@@ -2655,7 +2659,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                 <div className="game-chat-area-content">
                   <div className="game-chat-left">
                     <div className="game-chat-left-content">
-                      <ChatPanel ref={chatPanelRef} onSelectPlayer={setInfoTarget} isMobile={isMobile} />
+                      <ChatPanel
+                        ref={chatPanelRef}
+                        onSelectPlayer={setInfoTarget}
+                        isMobile={isMobile}
+                        onPartnerPreviewOpen={handleMobilePartnerPreviewOpen}
+                      />
                     </div>
                   </div>
                 </div>
