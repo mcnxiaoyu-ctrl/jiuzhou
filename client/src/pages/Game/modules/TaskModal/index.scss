@@ -252,7 +252,6 @@
 
 .task-section-title {
   font-size: 13px;
-  font-weight: 900;
   color: var(--text-color);
 }
 
@@ -282,7 +281,6 @@
 }
 
 .task-objective-text {
-  font-weight: 900;
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -299,7 +297,6 @@
 }
 
 .task-objective-progress {
-  font-weight: 900;
   color: var(--text-tertiary);
   flex: 0 0 auto;
 }
@@ -340,7 +337,6 @@
 }
 
 .task-reward-name {
-  font-weight: 900;
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -353,7 +349,6 @@
   position: absolute;
   right: -10px;
   bottom: -8px;
-  font-weight: 900;
   color: var(--text-color);
   font-size: 11px;
   background: var(--panel-bg);

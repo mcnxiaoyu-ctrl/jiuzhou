@@ -74,7 +74,7 @@ import {
   type PartnerPanelKey,
 } from './partnerShared';
 import { getElementTextClassName, getElementToneClassName } from '../../shared/elementTheme';
-import { getItemQualityTagClassName } from '../../shared/itemQuality';
+import { getItemQualityTagClassName, normalizeItemQualityName } from '../../shared/itemQuality';
 import {
   buildPartnerRecruitIndicator,
   hasPartnerRecruitCustomBaseModelToken,
@@ -995,15 +995,16 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
               {hasPartnerLevelLimitApplied(selectedPartner) ? (
                 <Tag color="red">生效等级 {selectedPartner.currentEffectiveLevel}</Tag>
               ) : null}
-              <Tag className={getItemQualityTagClassName(selectedPartner.quality)}>{selectedPartner.quality}</Tag>
-              {selectedPartner.tradeStatus === 'market_listed' ? <Tag color="orange">坊市中</Tag> : null}
-              {selectedPartner.fusionStatus === 'fusion_locked' ? <Tag color="magenta">归契中</Tag> : null}
-            </div>
-            <div className="partner-tag-row">
+              <Tag className={getItemQualityTagClassName(selectedPartner.quality)}>{normalizeItemQualityName(selectedPartner.quality)}</Tag>
               <Tag className={getElementToneClassName(selectedPartner.element)}>{formatPartnerElementLabel(selectedPartner.element)}</Tag>
               <Tag color="cyan">{selectedPartner.role}</Tag>
               <Tag color="purple">功法槽 {selectedPartner.slotCount}</Tag>
+              {selectedPartner.tradeStatus === 'market_listed' ? <Tag color="orange">坊市中</Tag> : null}
+              {selectedPartner.fusionStatus === 'fusion_locked' ? <Tag color="magenta">归契中</Tag> : null}
             </div>
+            {selectedPartner.description ? (
+              <div className="partner-meta">{selectedPartner.description}</div>
+            ) : null}
             {selectedPartner.tradeStatus === 'market_listed' ? (
               <div className="partner-meta partner-meta--warning">已在坊市挂单，无法出战、灌注或修炼功法。</div>
             ) : null}

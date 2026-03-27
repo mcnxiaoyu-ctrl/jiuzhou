@@ -229,7 +229,6 @@
 
 .sect-stat-k {
   font-size: 12px;
-  font-weight: 800;
   color: var(--text-tertiary);
 }
 
@@ -273,7 +272,6 @@
 .sect-subtitle {
   margin-top: 6px;
   font-size: 12px;
-  font-weight: 800;
   color: var(--text-tertiary);
 }
 
@@ -461,7 +459,6 @@
 .sect-mobile-meta-v {
   font-size: 11px;
   color: var(--text-color);
-  font-weight: 800;
 }
 
 .sect-mobile-message {
@@ -490,13 +487,11 @@
   text-align: center;
   color: var(--text-tertiary);
   font-size: 12px;
-  font-weight: 800;
 }
 
 .sect-tips {
   color: var(--text-tertiary);
   font-size: 12px;
-  font-weight: 800;
 }
 
 .sect-building-grid {
@@ -566,7 +561,6 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  font-weight: 800;
   color: var(--text-tertiary);
 
   .lv-arrow {
@@ -624,14 +618,12 @@
     .side-label {
       font-size: 10px;
       color: var(--text-tertiary);
-      font-weight: 900;
       text-transform: uppercase;
     }
 
     .side-val {
       font-size: 13px;
       color: var(--text-color);
-      font-weight: 800;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -676,7 +668,6 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  font-weight: 800;
   color: var(--text-color);
   transition: color 0.2s;
 
@@ -706,7 +697,6 @@
 .sect-building-maxed-tip {
   text-align: center;
   font-size: 12px;
-  font-weight: 800;
   color: var(--text-tertiary);
   padding: 8px;
   border: 1px dashed var(--border-color);
@@ -728,7 +718,6 @@
 .sect-shop-balance-k {
   font-size: 12px;
   color: var(--text-tertiary);
-  font-weight: 900;
 }
 
 .sect-shop-balance-v {
@@ -817,7 +806,6 @@
   flex-wrap: wrap;
   gap: 8px;
   font-size: 11px;
-  font-weight: 800;
 }
 
 .sect-shop-qty {
@@ -957,7 +945,6 @@
   background: var(--panel-bg);
   padding: 8px;
   font-size: 12px;
-  font-weight: 900;
   color: var(--text-color);
 }
 
@@ -1080,7 +1067,6 @@
 
 .sect-form-label {
   font-size: 12px;
-  font-weight: 900;
   color: var(--text-tertiary);
 }
 
@@ -1122,7 +1108,6 @@
 }
 
 .sect-create-cost-text {
-  font-weight: 900;
   color: var(--text-tertiary);
 }
 
@@ -1139,7 +1124,6 @@
 
 .sect-create-balance-text {
   font-size: 13px;
-  font-weight: 900;
   color: var(--text-tertiary);
 }
 
@@ -1159,7 +1143,6 @@
 .sect-donate-balance-k {
   font-size: 12px;
   color: var(--text-tertiary);
-  font-weight: 900;
 }
 
 .sect-donate-balance-v {
@@ -1182,7 +1165,6 @@
 .sect-donate-preview-k {
   font-size: 12px;
   color: var(--text-tertiary);
-  font-weight: 900;
 }
 
 .sect-donate-preview-v {

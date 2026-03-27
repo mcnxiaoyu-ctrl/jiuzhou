@@ -62,6 +62,9 @@ const MarketPartnerPreviewSheet: React.FC<MarketPartnerPreviewSheetProps> = ({
                   <span className="market-list-sheet-tag">生效 {partner.currentEffectiveLevel}</span>
                 ) : null}
               </div>
+              {partner.description ? (
+                <div className="market-list-sheet-desc">{partner.description}</div>
+              ) : null}
             </div>
           </div>
         </div>

@@ -61,6 +61,9 @@ const MarketPartnerBuyModal: React.FC<MarketPartnerBuyModalProps> = ({
                 <Tag className="market-tag">等级 {partner.level}</Tag>
                 {hasPartnerLevelLimitApplied(partner) ? <Tag className="market-tag">生效 {partner.currentEffectiveLevel}</Tag> : null}
               </div>
+              {partner.description ? (
+                <div className="market-list-detail-desc">{partner.description}</div>
+              ) : null}
             </div>
           </div>
         </div>
