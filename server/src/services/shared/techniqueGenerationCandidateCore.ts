@@ -42,6 +42,7 @@ import {
 } from './techniqueGenerationConstraints.js';
 import {
   resolveSkillTriggerType,
+  type SkillTriggerType,
   validatePassiveSkillConfig,
 } from '../../shared/skillTriggerType.js';
 import type { TechniqueSkillUpgradeEntry } from './techniqueSkillGenerationSpec.js';
@@ -136,6 +137,16 @@ const readAliasedField = (
 const clamp = (value: number, min: number, max: number): number => {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, value));
+};
+
+const resolveGeneratedSkillCooldown = (
+  rawCooldown: unknown,
+  triggerType: SkillTriggerType,
+): number => {
+  if (rawCooldown === null || rawCooldown === undefined) {
+    return triggerType === 'active' ? 1 : 0;
+  }
+  return Math.floor(clamp(asNumber(rawCooldown, 0), 0, 6));
 };
 
 const isTechniquePlainObject = (raw: unknown): raw is Record<string, unknown> => {
@@ -484,6 +495,10 @@ export const sanitizeTechniqueGenerationCandidateFromModelDetailed = (
       type: typeof effect.type === 'string' ? effect.type : undefined,
       buffKind: typeof effect.buffKind === 'string' ? effect.buffKind : undefined,
     }));
+    const triggerType = resolveSkillTriggerType({
+      triggerType: asString(readAliasedField(row, 'triggerType', 'trigger_type')) || undefined,
+      effects: auraInspectableEffects,
+    });
     return [{
       id: asString(row.id) || buildGeneratedSkillId(idx + 1),
       name,
@@ -494,16 +509,13 @@ export const sanitizeTechniqueGenerationCandidateFromModelDetailed = (
       costLingqiRate: clamp(asNumber(readAliasedField(row, 'costLingqiRate', 'cost_lingqi_rate'), 0), 0, 1),
       costQixue: Math.floor(clamp(asNumber(readAliasedField(row, 'costQixue', 'cost_qixue'), 0), 0, 120)),
       costQixueRate: clamp(asNumber(readAliasedField(row, 'costQixueRate', 'cost_qixue_rate'), 0), 0, 0.95),
-      cooldown: Math.floor(clamp(asNumber(row.cooldown, 1), 0, 6)),
+      cooldown: resolveGeneratedSkillCooldown(row.cooldown, triggerType),
       targetType: toTargetType(readAliasedField(row, 'targetType', 'target_type')),
       targetCount: Math.floor(clamp(asNumber(readAliasedField(row, 'targetCount', 'target_count'), 1), 1, 6)),
       damageType: toDamageType(readAliasedField(row, 'damageType', 'damage_type')),
       element: asString(row.element) || technique.attributeElement || 'none',
       effects,
-      triggerType: resolveSkillTriggerType({
-        triggerType: asString(readAliasedField(row, 'triggerType', 'trigger_type')) || undefined,
-        effects: auraInspectableEffects,
-      }),
+      triggerType,
       aiPriority: Math.floor(clamp(asNumber(readAliasedField(row, 'aiPriority', 'ai_priority'), 50), 0, 100)),
       upgrades: Array.isArray(row.upgrades)
         ? row.upgrades.flatMap((entry) => {

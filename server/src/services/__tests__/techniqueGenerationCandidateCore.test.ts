@@ -187,7 +187,6 @@ test('sanitizeTechniqueGenerationCandidateFromModel: 光环技能应统一归一
         id: 'skill-aura-wrong-active',
         name: '镜月常明',
         description: '展开镜月光环',
-        cooldown: 0,
         target_type: 'self',
         target_count: 1,
         element: 'shui',
@@ -249,6 +248,87 @@ test('sanitizeTechniqueGenerationCandidateFromModel: 光环技能应统一归一
 
   const skill = candidate.skills[0];
   assert.equal(skill.triggerType, 'passive');
+  assert.equal(skill.cooldown, 0);
+
+  const validation = validateTechniqueGenerationCandidate({
+    candidate,
+    expectedTechniqueType: '武技',
+    expectedQuality: '黄',
+    expectedMaxLayer: 3,
+  });
+  assert.deepEqual(validation, { success: true });
+});
+
+test('sanitizeTechniqueGenerationCandidateFromModel: 主动技能缺少 cooldown 时应自动修正为 1 回合', () => {
+  const raw = {
+    technique: {
+      name: '玄炁归元诀',
+      required_realm: '凡人',
+      attribute_type: 'magic',
+      attribute_element: 'feng',
+      description: '测试主动技能冷却补正',
+      long_desc: '测试主动技能冷却补正长描述',
+      tags: ['测试', '冷却'],
+    },
+    skills: [
+      {
+        id: 'skill-active-default-cooldown',
+        name: '归元风刃',
+        description: '未声明冷却的主动技能',
+        cost_lingqi: 12,
+        target_type: 'single_enemy',
+        target_count: 1,
+        damage_type: 'magic',
+        element: 'feng',
+        triggerType: 'active',
+        ai_priority: 40,
+        effects: [
+          {
+            type: 'damage',
+            valueType: 'scale',
+            scaleAttr: 'fagong',
+            scaleRate: 1.15,
+          },
+        ],
+      },
+    ],
+    layers: [
+      {
+        layer: 1,
+        cost_spirit_stones: 100,
+        cost_exp: 50,
+        passives: [{ key: 'fagong', value: 12 }],
+        unlock_skill_ids: ['skill-active-default-cooldown'],
+        upgrade_skill_ids: [],
+        layer_desc: '入门',
+      },
+      {
+        layer: 2,
+        cost_spirit_stones: 200,
+        cost_exp: 100,
+        passives: [{ key: 'fagong', value: 18 }],
+        unlock_skill_ids: [],
+        upgrade_skill_ids: [],
+        layer_desc: '精进',
+      },
+      {
+        layer: 3,
+        cost_spirit_stones: 300,
+        cost_exp: 150,
+        passives: [{ key: 'fagong', value: 24 }],
+        unlock_skill_ids: [],
+        upgrade_skill_ids: [],
+        layer_desc: '圆满',
+      },
+    ],
+  };
+
+  const candidate = sanitizeTechniqueGenerationCandidateFromModel(raw, '武技', '黄', 3);
+  assert.ok(candidate);
+
+  const skill = candidate.skills[0];
+  assert.equal(skill.triggerType, 'active');
+  assert.equal(skill.cooldown, 1);
 
   const validation = validateTechniqueGenerationCandidate({
     candidate,
