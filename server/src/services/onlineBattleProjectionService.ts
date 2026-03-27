@@ -28,6 +28,12 @@ import {
   getCharacterComputedBatchByCharacterIds,
 } from './characterComputedService.js';
 import { toSafeNonNegativeIntegerStrict } from './shared/safeInteger.js';
+import {
+  DEFAULT_ARENA_DAILY_LIMIT,
+  DEFAULT_ARENA_SCORE,
+  buildArenaProjectionRecord,
+  collectArenaProjectionCharacterIds,
+} from './shared/arenaProjection.js';
 import { getDungeonDifficultyById } from './staticConfigLoader.js';
 import {
   loadCharacterBattleLoadoutsByCharacterIds,
@@ -1264,6 +1270,77 @@ const loadArenaProjectionFromRedis = async (
   return cached;
 };
 
+const hydrateArenaProjectionByCharacterId = async (
+  characterId: number,
+): Promise<ArenaProjectionRecord | null> => {
+  const normalizedCharacterId = toInt(characterId);
+  if (normalizedCharacterId <= 0) return null;
+
+  const snapshot = await getOnlineBattleCharacterSnapshotByCharacterId(normalizedCharacterId);
+  if (!snapshot) {
+    return null;
+  }
+
+  const [ratingResult, todayUsageResult, recordResult] = await Promise.all([
+    query<ArenaRatingWarmupRow>(
+      `
+        SELECT character_id, rating, win_count, lose_count
+        FROM arena_rating
+        WHERE character_id = $1
+        LIMIT 1
+      `,
+      [normalizedCharacterId],
+    ),
+    query<ArenaTodayUsageRow>(
+      `
+        SELECT challenger_character_id, COUNT(*)::int AS cnt
+        FROM arena_battle
+        WHERE challenger_character_id = $1
+          AND created_at >= date_trunc('day', NOW())
+        GROUP BY challenger_character_id
+      `,
+      [normalizedCharacterId],
+    ),
+    query<ArenaRecordWarmupRow>(
+      `
+        SELECT
+          ab.battle_id,
+          ab.created_at,
+          ab.challenger_character_id,
+          ab.opponent_character_id,
+          ab.result,
+          ab.delta_score,
+          ab.score_after,
+          c.nickname AS opponent_name,
+          c.realm AS opponent_realm
+        FROM arena_battle ab
+        JOIN characters c ON c.id = ab.opponent_character_id
+        WHERE ab.challenger_character_id = $1
+          AND ab.status = 'finished'
+        ORDER BY ab.created_at DESC
+        LIMIT $2
+      `,
+      [normalizedCharacterId, RECENT_ARENA_RECORD_LIMIT],
+    ),
+  ]);
+
+  const ratingRow = ratingResult.rows[0] ?? null;
+  const todayUsed = clampNonNegative(toInt(todayUsageResult.rows[0]?.cnt, 0));
+  const records = buildArenaRecordsByCharacterId(recordResult.rows).get(normalizedCharacterId) ?? [];
+  const projection = buildArenaProjectionRecord<ArenaRecord>({
+    characterId: snapshot.characterId,
+    score: toInt(ratingRow?.rating, DEFAULT_ARENA_SCORE),
+    winCount: clampNonNegative(toInt(ratingRow?.win_count, 0)),
+    loseCount: clampNonNegative(toInt(ratingRow?.lose_count, 0)),
+    todayUsed,
+    todayLimit: DEFAULT_ARENA_DAILY_LIMIT,
+    records,
+  });
+
+  await persistArenaProjection(projection);
+  return projection;
+};
+
 const loadDungeonProjectionFromRedis = async (
   instanceId: string,
 ): Promise<DungeonProjectionRecord | null> => {
@@ -1348,8 +1425,7 @@ const warmupCharacterSnapshotChunk = async (
   return snapshots.length;
 };
 
-const warmupCharacterSnapshots = async (): Promise<number> => {
-  const queryCharacterIdsStartAt = Date.now();
+const loadWarmupCharacterIds = async (): Promise<number[]> => {
   const characterIdResult = await query<CharacterWarmupIdRow>(
     `
       WITH recent_characters AS (
@@ -1391,10 +1467,16 @@ const warmupCharacterSnapshots = async (): Promise<number> => {
     `,
     [CHARACTER_WARMUP_ACTIVE_WINDOW_DAYS],
   );
-  logWarmupPhaseDetail('角色快照预热', '角色ID查询', Date.now() - queryCharacterIdsStartAt);
-  const characterIds = characterIdResult.rows
+
+  return characterIdResult.rows
     .map((row) => toInt(row.character_id))
     .filter((characterId) => characterId > 0);
+};
+
+const warmupCharacterSnapshots = async (): Promise<number> => {
+  const queryCharacterIdsStartAt = Date.now();
+  const characterIds = await loadWarmupCharacterIds();
+  logWarmupPhaseDetail('角色快照预热', '角色ID查询', Date.now() - queryCharacterIdsStartAt);
   return warmupCharacterSnapshotChunk(characterIds);
 };
 
@@ -1440,8 +1522,35 @@ const warmupTeamProjections = async (): Promise<void> => {
   await processBatchesConcurrently(projections, persistTeamProjectionsBatch);
 };
 
+const createArenaRecordProjection = (row: ArenaRecordWarmupRow): ArenaRecord => ({
+  id: String(row.battle_id || ''),
+  ts: new Date(String(row.created_at || '')).getTime(),
+  opponentName: String(row.opponent_name || ''),
+  opponentRealm: String(row.opponent_realm || '凡人'),
+  opponentPower: 0,
+  result: row.result === 'win' || row.result === 'lose' || row.result === 'draw' ? row.result : 'draw',
+  deltaScore: toInt(row.delta_score),
+  scoreAfter: Math.max(0, toInt(row.score_after, DEFAULT_ARENA_SCORE)),
+});
+
+const buildArenaRecordsByCharacterId = (
+  rows: ArenaRecordWarmupRow[],
+): Map<number, ArenaRecord[]> => {
+  const recordsByCharacterId = new Map<number, ArenaRecord[]>();
+  for (const row of rows) {
+    const challengerCharacterId = toInt(row.challenger_character_id);
+    if (challengerCharacterId <= 0) continue;
+    const current = recordsByCharacterId.get(challengerCharacterId) ?? [];
+    if (current.length >= RECENT_ARENA_RECORD_LIMIT) continue;
+    current.push(createArenaRecordProjection(row));
+    recordsByCharacterId.set(challengerCharacterId, current);
+  }
+  return recordsByCharacterId;
+};
+
 const warmupArenaProjections = async (): Promise<number> => {
-  const [ratingResult, todayUsageResult, recordResult] = await Promise.all([
+  const [activeCharacterIds, ratingResult, todayUsageResult, recordResult] = await Promise.all([
+    loadWarmupCharacterIds(),
     query<ArenaRatingWarmupRow>(
       `
         SELECT character_id, rating, win_count, lose_count
@@ -1483,52 +1592,34 @@ const warmupArenaProjections = async (): Promise<number> => {
     todayUsageByCharacterId.set(toInt(row.challenger_character_id), clampNonNegative(row.cnt));
   }
 
-  const recordsByCharacterId = new Map<number, ArenaRecord[]>();
-  for (const row of recordResult.rows) {
-    const challengerCharacterId = toInt(row.challenger_character_id);
-    if (challengerCharacterId <= 0) continue;
-    const current = recordsByCharacterId.get(challengerCharacterId) ?? [];
-    if (current.length >= RECENT_ARENA_RECORD_LIMIT) continue;
-    current.push({
-      id: String(row.battle_id || ''),
-      ts: new Date(String(row.created_at || '')).getTime(),
-      opponentName: String(row.opponent_name || ''),
-      opponentRealm: String(row.opponent_realm || '凡人'),
-      opponentPower: 0,
-      result: row.result === 'win' || row.result === 'lose' || row.result === 'draw' ? row.result : 'draw',
-      deltaScore: toInt(row.delta_score),
-      scoreAfter: Math.max(1000, toInt(row.score_after, 1000)),
-    });
-    recordsByCharacterId.set(challengerCharacterId, current);
-  }
+  const recordsByCharacterId = buildArenaRecordsByCharacterId(recordResult.rows);
 
-  const characterIds = new Set<number>();
   const ratingByCharacterId = new Map<number, ArenaRatingWarmupRow>();
   for (const row of ratingResult.rows) {
     const characterId = toInt(row.character_id);
-    characterIds.add(characterId);
+    if (characterId <= 0) continue;
     ratingByCharacterId.set(characterId, row);
   }
-  for (const [characterId] of todayUsageByCharacterId) {
-    characterIds.add(characterId);
-  }
 
-  const projections: ArenaProjectionRecord[] = [];
-  for (const characterId of characterIds) {
-    if (characterId <= 0) continue;
+  const characterIds = collectArenaProjectionCharacterIds({
+    activeCharacterIds,
+    ratedCharacterIds: [...ratingByCharacterId.keys()],
+    todayUsageCharacterIds: [...todayUsageByCharacterId.keys()],
+  });
+
+  const projections: ArenaProjectionRecord[] = characterIds.map((characterId) => {
     const ratingRow = ratingByCharacterId.get(characterId) ?? null;
     const todayUsed = todayUsageByCharacterId.get(characterId) ?? 0;
-    projections.push({
+    return buildArenaProjectionRecord<ArenaRecord>({
       characterId,
-      score: Math.max(1000, toInt(ratingRow?.rating, 1000)),
+      score: toInt(ratingRow?.rating, DEFAULT_ARENA_SCORE),
       winCount: clampNonNegative(toInt(ratingRow?.win_count, 0)),
       loseCount: clampNonNegative(toInt(ratingRow?.lose_count, 0)),
       todayUsed,
-      todayLimit: 20,
-      todayRemaining: Math.max(0, 20 - todayUsed),
+      todayLimit: DEFAULT_ARENA_DAILY_LIMIT,
       records: recordsByCharacterId.get(characterId) ?? [],
     });
-  }
+  });
 
   await processBatchesConcurrently(projections, persistArenaProjectionsBatch);
   return projections.length;
@@ -2170,7 +2261,11 @@ export const getArenaProjection = async (
   if (normalizedCharacterId <= 0) return null;
   const cached = arenaProjectionByCharacterId.get(normalizedCharacterId);
   if (cached) return cached;
-  return loadArenaProjectionFromRedis(normalizedCharacterId);
+  const redisProjection = await loadArenaProjectionFromRedis(normalizedCharacterId);
+  if (redisProjection) {
+    return redisProjection;
+  }
+  return hydrateArenaProjectionByCharacterId(normalizedCharacterId);
 };
 
 export const listArenaProjections = (): ArenaProjectionRecord[] => {

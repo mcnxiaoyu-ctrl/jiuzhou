@@ -4,10 +4,8 @@ import {
   listArenaProjections,
   canArenaChallengeTodayProjection,
 } from './onlineBattleProjectionService.js';
+import { DEFAULT_ARENA_DAILY_LIMIT } from './shared/arenaProjection.js';
 import { computeRankPower } from './shared/rankPower.js';
-
-const MAX_DAILY_CHALLENGES = 20;
-const DEFAULT_RATING = 1000;
 
 export type ArenaStatus = {
   score: number;
@@ -32,7 +30,7 @@ export const getArenaStatus = async (
       winCount: projection.winCount,
       loseCount: projection.loseCount,
       todayUsed: projection.todayUsed,
-      todayLimit: projection.todayLimit || MAX_DAILY_CHALLENGES,
+      todayLimit: projection.todayLimit || DEFAULT_ARENA_DAILY_LIMIT,
       todayRemaining: projection.todayRemaining,
     },
   };
@@ -114,4 +112,4 @@ export const canChallengeToday = async (
   return canArenaChallengeTodayProjection(characterId);
 };
 
-export const DEFAULT_ARENA_RATING_VALUE = DEFAULT_RATING;
+export { DEFAULT_ARENA_SCORE as DEFAULT_ARENA_RATING_VALUE } from './shared/arenaProjection.js';
