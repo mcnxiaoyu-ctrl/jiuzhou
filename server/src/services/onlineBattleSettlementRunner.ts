@@ -62,6 +62,16 @@ const settlementRunnerLogger = createScopedLogger('onlineBattle.settlementRunner
 
 type DeferredSettlementMonsterSnapshot = DeferredSettlementTask['payload']['monsters'][number];
 
+const collectUniqueParticipantCharacterIds = (
+  participants: DeferredSettlementTask['payload']['participants'],
+): number[] => {
+  return [...new Set(
+    participants
+      .map((participant) => Math.floor(Number(participant.characterId)))
+      .filter((characterId) => Number.isFinite(characterId) && characterId > 0),
+  )].sort((left, right) => left - right);
+};
+
 /**
  * 从延迟结算任务里的怪物快照构建任务进度事件。
  *
@@ -401,11 +411,8 @@ const settleDungeonClearInDbInTransaction = async (
   const difficultyDef = getDungeonDifficultyById(dungeonSettlement.difficultyId);
   const firstClearRewardConfig = difficultyDef?.first_clear_rewards ?? {};
   const rewardParticipants = task.payload.rewardParticipants;
-  const participantCharacterIds = [...new Set(
-    rewardParticipants
-      .map((participant) => Math.floor(Number(participant.characterId)))
-      .filter((characterId) => Number.isFinite(characterId) && characterId > 0),
-  )].sort((left, right) => left - right);
+  const participantCharacterIds = collectUniqueParticipantCharacterIds(rewardParticipants);
+  const teamClearParticipantCount = collectUniqueParticipantCharacterIds(task.payload.participants).length;
 
   const clearCountMap = new Map<number, number>();
   const autoDisassembleSettings = new Map<number, AutoDisassembleSetting>();
@@ -679,7 +686,7 @@ const settleDungeonClearInDbInTransaction = async (
       participant.characterId,
       dungeonSettlement.dungeonId,
       1,
-      rewardParticipants.length,
+      teamClearParticipantCount,
       dungeonSettlement.difficultyId,
     );
   }
