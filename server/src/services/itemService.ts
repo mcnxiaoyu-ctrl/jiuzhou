@@ -712,7 +712,7 @@ class ItemService {
   
         const requiredRealm = String(techniqueDef.required_realm || '').trim();
         if (
-          shouldValidateTechniqueLearnRealm({ effectType: 'learn_generated_technique', itemDefId }) &&
+          shouldValidateTechniqueLearnRealm({ effectType: 'learn_technique', itemDefId }) &&
           !isRealmSufficient(realmSnapshot.realm, requiredRealm, realmSnapshot.subRealm)
         ) {
           return { success: false, message: `境界不足，需要达到${requiredRealm}` };
@@ -783,7 +783,10 @@ class ItemService {
         }
 
         const requiredRealm = String(techniqueDef.required_realm || '').trim();
-        if (!isRealmSufficient(realmSnapshot.realm, requiredRealm, realmSnapshot.subRealm)) {
+        if (
+          shouldValidateTechniqueLearnRealm({ effectType: 'learn_generated_technique', itemDefId }) &&
+          !isRealmSufficient(realmSnapshot.realm, requiredRealm, realmSnapshot.subRealm)
+        ) {
           return { success: false, message: `境界不足，需要达到${requiredRealm}` };
         }
 
