@@ -27,7 +27,7 @@ import { resolveOrderedMonsters } from '../battle/shared/monsters.js';
 import { loadDialogue } from '../dialogueService.js';
 import { getDungeonDefById } from '../dungeon/shared/configLoader.js';
 import { getEnabledMainQuestChapterById } from '../mainQuest/shared/questConfig.js';
-import { getRoomInMap, getRoomsInMap, isMapEnabled } from '../mapService.js';
+import { getMapDefById, getRoomInMap, getRoomsInMap, isMapEnabled } from '../mapService.js';
 import { getTaskDefinitionById } from '../taskDefinitionService.js';
 import {
   asArray,
@@ -149,6 +149,7 @@ test('证道期主线、地图、秘境与任务应统一处于关闭态', async
   assert.ok(map, '缺少万法天阙地图定义');
   assert.equal(map?.enabled, false, '万法天阙地图应关闭');
   assert.equal(isMapEnabled(map as { enabled?: boolean | null }), false, '地图可用性判定应识别万法天阙为关闭态');
+  assert.notEqual(await getMapDefById('map-wanfa-tianque'), null, '运行时内部仍应可读取关闭地图原始定义');
   assert.equal((await getRoomsInMap('map-wanfa-tianque')).length, 0, '关闭地图后不应返回房间列表');
   assert.equal(await getRoomInMap('map-wanfa-tianque', 'room-tianque-outer-gate'), null, '关闭地图后不应返回外庭房间');
 

@@ -27,7 +27,7 @@ import { randomUUID } from 'crypto';
 import { query, withTransactionAuto } from '../../config/database.js';
 import { BATTLE_TICK_MS, BATTLE_START_COOLDOWN_MS } from '../battle/index.js';
 import { getGameServer } from '../../game/gameServer.js';
-import { getRoomInMap } from '../mapService.js';
+import { getMapDefById, getRoomInMap, isMapEnabled } from '../mapService.js';
 import { getCharacterUserId } from '../sect/db.js';
 import type {
   IdleBattleReplaySnapshot,
@@ -71,6 +71,7 @@ import {
 } from './idleFlushControl.js';
 import { partitionIdleWorkerFlushBatches } from './idleWorkerFlushPartition.js';
 import { getWorkerPool } from '../../workers/workerPool.js';
+import { relocateCharacterOutOfDisabledMap } from '../mapDisabledRelocationService.js';
 
 // ============================================
 // 类型定义
@@ -367,6 +368,13 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
     }
 
     clearLoopRuntimeState();
+    if (stop.onFinalized) {
+      try {
+        await stop.onFinalized();
+      } catch (error) {
+        console.error(`[IdleBattleExecutor] 会话 ${session.id} 终止收尾失败:`, error);
+      }
+    }
     await idleSessionService.completeIdleSession(session.id, stop.status);
     await idleSessionService.releaseIdleLock(session.characterId);
 
@@ -420,6 +428,12 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
       const shouldStopBeforeBattle = await checkTerminationConditions(session, runtime);
       if (shouldStopBeforeBattle.terminate) {
         await finalizeTermination(shouldStopBeforeBattle);
+        return;
+      }
+
+      const disabledMapTermination = await resolveDisabledMapTermination(session, userId);
+      if (disabledMapTermination) {
+        await finalizeTermination(disabledMapTermination);
         return;
       }
 
@@ -572,7 +586,35 @@ export function stopAllExecutionLoops(): void {
 
 type TerminationCheckResult =
   | { terminate: false }
-  | { terminate: true; status: 'completed' | 'interrupted'; reason: string };
+  | {
+      terminate: true;
+      status: 'completed' | 'interrupted';
+      reason: string;
+      onFinalized?: (() => Promise<void>) | undefined;
+    };
+
+async function resolveDisabledMapTermination(
+  session: IdleSessionRow,
+  userId: number,
+): Promise<Extract<TerminationCheckResult, { terminate: true }> | null> {
+  const currentMap = await getMapDefById(session.mapId);
+  if (currentMap && isMapEnabled(currentMap)) {
+    return null;
+  }
+
+  return {
+    terminate: true,
+    status: 'interrupted',
+    reason: '地图已关闭，已返回安全区域',
+    onFinalized: async () => {
+      await relocateCharacterOutOfDisabledMap({
+        characterId: session.characterId,
+        userId,
+        sourceMapId: session.mapId,
+      });
+    },
+  };
+}
 
 function checkTerminationConditionsWithoutDb(
   session: IdleSessionRow,

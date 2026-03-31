@@ -228,6 +228,47 @@ export const updateCharacterPosition = async (
   currentMapId: string,
   currentRoomId: string
 ): Promise<{ success: boolean; message: string }> => {
+  const normalizedPosition = normalizeCharacterPositionInput(currentMapId, currentRoomId);
+  if (!normalizedPosition.success) {
+    return normalizedPosition;
+  }
+
+  const { mapId, roomId } = normalizedPosition;
+  const result = await query(
+    `
+      UPDATE characters
+      SET current_map_id = $1,
+          current_room_id = $2,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = $3
+      RETURNING id
+    `,
+    [mapId, roomId, userId],
+  );
+
+  if (result.rowCount === 0) {
+    return { success: false, message: '角色不存在' };
+  }
+
+  const characterId = Number(result.rows?.[0]?.id);
+  if (Number.isFinite(characterId) && characterId > 0) {
+    await syncCharacterRuntimePosition(characterId, mapId, roomId);
+    await updateSectionProgress(characterId, { type: 'reach', roomId });
+    await updateAchievementProgress(characterId, `map:discover:${mapId}`, 1);
+    await updateAchievementProgress(characterId, `room:reach:${roomId}`, 1);
+  }
+
+  return { success: true, message: '位置更新成功' };
+};
+
+type NormalizedCharacterPositionResult =
+  | { success: true; mapId: string; roomId: string }
+  | { success: false; message: string };
+
+const normalizeCharacterPositionInput = (
+  currentMapId: string,
+  currentRoomId: string,
+): NormalizedCharacterPositionResult => {
   const mapId = String(currentMapId || '').trim();
   const roomId = String(currentRoomId || '').trim();
 
@@ -239,32 +280,79 @@ export const updateCharacterPosition = async (
     return { success: false, message: '位置参数过长' };
   }
 
-  const sql = `
-    UPDATE characters
-    SET current_map_id = $1,
-        current_room_id = $2,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE user_id = $3
-    RETURNING id
-  `;
-  const result = await query(sql, [mapId, roomId, userId]);
+  return { success: true, mapId, roomId };
+};
+
+const syncCharacterRuntimePosition = async (
+  characterId: number,
+  mapId: string,
+  roomId: string,
+): Promise<void> => {
+  await setOnlineBattleCharacterPosition(characterId, {
+    currentMapId: mapId,
+    currentRoomId: roomId,
+  });
+};
+
+/**
+ * 系统强制迁移角色位置。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：供地图关闭、运行态收口等服务端强制迁移场景复用，只同步 DB 与在线战斗位置。
+ * 2. 做什么：避免后台迁移误触发“到达房间”型主线和探索成就。
+ * 3. 不做什么：不负责客户端推送，不做地图可用性判定。
+ *
+ * 输入/输出：
+ * - 输入：characterId、目标 mapId、目标 roomId。
+ * - 输出：统一 `{ success, message, userId }`，供上层决定是否继续推送角色刷新。
+ *
+ * 数据流/状态流：
+ * - 后台收口服务 -> 本方法写 `characters.current_map_id/current_room_id`
+ * - -> `setOnlineBattleCharacterPosition` 同步在线战斗快照
+ * - -> 调用方按需推送客户端刷新。
+ *
+ * 复用设计说明：
+ * - 玩家主动移动与系统强制迁移对“位置持久化 + 在线战斗快照同步”的底层写入诉求相同。
+ * - 但系统迁移不该顺带推进主线/成就，因此拆出独立入口，避免业务层到处复制“只写位置不记进度”的 SQL。
+ * - 地图关闭、异常房间收口等都可以复用这条单一入口。
+ *
+ * 关键边界条件与坑点：
+ * 1. 迁移必须沿用与前台移动相同的参数归一化，避免后台写入脏 roomId 造成后续房间匹配失败。
+ * 2. 这里只做位置写入，不补任何兜底 map/room，落点是否合法必须由上层先解析完成。
+ */
+export const relocateCharacterPositionByCharacterId = async (
+  characterId: number,
+  currentMapId: string,
+  currentRoomId: string,
+): Promise<{ success: boolean; message: string; userId?: number }> => {
+  const normalizedPosition = normalizeCharacterPositionInput(currentMapId, currentRoomId);
+  if (!normalizedPosition.success) {
+    return normalizedPosition;
+  }
+
+  const { mapId, roomId } = normalizedPosition;
+  const result = await query(
+    `
+      UPDATE characters
+      SET current_map_id = $1,
+          current_room_id = $2,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $3
+      RETURNING user_id
+    `,
+    [mapId, roomId, characterId],
+  );
 
   if (result.rowCount === 0) {
     return { success: false, message: '角色不存在' };
   }
 
-  const characterId = Number(result.rows?.[0]?.id);
-  if (Number.isFinite(characterId) && characterId > 0) {
-    await setOnlineBattleCharacterPosition(characterId, {
-      currentMapId: mapId,
-      currentRoomId: roomId,
-    });
-    await updateSectionProgress(characterId, { type: 'reach', roomId });
-    await updateAchievementProgress(characterId, `map:discover:${mapId}`, 1);
-    await updateAchievementProgress(characterId, `room:reach:${roomId}`, 1);
-  }
-
-  return { success: true, message: '位置更新成功' };
+  await syncCharacterRuntimePosition(characterId, mapId, roomId);
+  return {
+    success: true,
+    message: '位置迁移成功',
+    userId: Number(result.rows?.[0]?.user_id),
+  };
 };
 
 export const updateCharacterAutoCastSkills = async (

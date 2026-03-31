@@ -86,8 +86,10 @@ export const getMapDefById = async (mapId: string): Promise<MapDefRow | null> =>
 
   const row = (getMapDefinitions().find((entry) => entry.id === mapId) ?? null) as MapDefRow | null;
   mapDefCache.set(mapId, row);
-  if (row) {
+  if (row && isMapEnabled(row)) {
     mapRoomsCache.set(mapId, parseRooms(row.rooms));
+  } else {
+    mapRoomsCache.delete(mapId);
   }
   return row;
 };
@@ -123,11 +125,15 @@ export const getEnabledMaps = async (): Promise<
 };
 
 export const getRoomsInMap = async (mapId: string): Promise<MapRoom[]> => {
+  const map = await getMapDefById(mapId);
+  if (!map || !isMapEnabled(map)) {
+    mapRoomsCache.delete(mapId);
+    return [];
+  }
+
   const cachedRooms = mapRoomsCache.get(mapId);
   if (cachedRooms) return cachedRooms;
 
-  const map = await getMapDefById(mapId);
-  if (!map || !isMapEnabled(map)) return [];
   const rooms = parseRooms(map.rooms);
   mapRoomsCache.set(mapId, rooms);
   return rooms;
