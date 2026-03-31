@@ -22,7 +22,6 @@ import { randomUUID } from 'crypto';
 import { query } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
 import { getMapDefinitions } from '../staticConfigLoader.js';
-import { getMainQuestProgress } from '../mainQuest/index.js';
 import { grantPermanentTitleTx } from '../achievement/titleOwnership.js';
 import { generateWanderAiEpisodeDraft, isWanderAiAvailable, type WanderAiPreviousEpisodeContext } from './ai.js';
 import { buildDateKey, resolveWanderGenerationDayKey, shouldBypassWanderDailyLimit } from './rules.js';
@@ -111,8 +110,8 @@ type WanderGenerationJobRow = {
 };
 
 const WANDER_MAX_CONTEXT_EPISODES = 5;
-const WANDER_MAX_EPISODE_INDEX = 7;
-const WANDER_MIN_ENDING_EPISODE_INDEX = 3;
+const WANDER_MAX_EPISODE_INDEX = 15;
+const WANDER_MIN_ENDING_EPISODE_INDEX = 5;
 const WANDER_SOURCE_TYPE = 'wander_story';
 
 const toIsoString = (value: Date | string | null): string | null => {
@@ -575,13 +574,11 @@ class WanderService {
 
     const activeStory = await this.loadActiveStoryRow(characterId);
     const previousEpisodes = activeStory ? await this.loadRecentEpisodeContext(activeStory.id) : [];
-    const mainQuest = await getMainQuestProgress(characterId);
     const nextEpisodeIndex = activeStory ? activeStory.episode_count + 1 : 1;
     const aiDraft = await generateWanderAiEpisodeDraft({
       nickname: character.nickname,
       realm: buildRealmText(character.realm, character.sub_realm),
       mapName: getMapName(character.current_map_id),
-      mainQuestName: mainQuest.currentSection?.name ?? '暂无主线追踪',
       hasTeam: character.has_team,
       activeTheme: activeStory?.story_theme ?? null,
       activePremise: activeStory?.story_premise ?? null,

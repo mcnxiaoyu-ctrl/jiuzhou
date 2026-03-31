@@ -21,26 +21,40 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const workerBuildEntries = [
+  'src/workers/idleBattleWorker.ts',
+  'src/workers/techniqueGenerationWorker.ts',
+  'src/workers/techniqueGenerationWorkerShared.ts',
+  'src/workers/wanderWorker.ts',
+  'src/workers/wanderWorkerShared.ts',
+  'src/workers/partnerRecruitWorker.ts',
+  'src/workers/partnerRecruitWorkerShared.ts',
+  'src/workers/partnerFusionWorker.ts',
+  'src/workers/partnerFusionWorkerShared.ts',
+  'src/workers/partnerFusionWorkerExecution.ts',
+  // 挂机 worker 依赖的纯计算模块在开发环境也要一起输出到 dist。
+  'src/services/idle/idleBattleSimulationCore.ts',
+  'src/services/idle/types.ts',
+  // 功法生成 worker 会间接依赖该共享执行模块，显式纳入避免开发态 dist 缺文件。
+  'src/services/shared/techniqueGenerationExecution.ts',
+];
 
 console.log('[build-workers] 正在编译 worker 文件...');
 
 try {
-  // 编译 worker 及其依赖到 dist 目录
+  // 编译所有开发环境下会被 worker_threads 直接加载的入口与关键依赖到 dist 目录。
   execSync(
-    'npx tsc ' +
-    'src/workers/idleBattleWorker.ts ' +
-    'src/workers/techniqueGenerationWorker.ts ' +
-    'src/workers/techniqueGenerationWorkerShared.ts ' +
-    'src/services/idle/idleBattleSimulationCore.ts ' +
-    'src/services/idle/types.ts ' +
-    'src/services/shared/techniqueGenerationExecution.ts ' +
-    '--outDir dist ' +
-    '--module esnext ' +
-    '--target es2022 ' +
-    '--moduleResolution node ' +
-    '--esModuleInterop ' +
-    '--skipLibCheck ' +
-    '--noCheck',
+    [
+      'npx tsc',
+      ...workerBuildEntries,
+      '--outDir dist',
+      '--module esnext',
+      '--target es2022',
+      '--moduleResolution node',
+      '--esModuleInterop',
+      '--skipLibCheck',
+      '--noCheck',
+    ].join(' '),
     {
       cwd: dirname(__dirname),
       stdio: 'inherit'

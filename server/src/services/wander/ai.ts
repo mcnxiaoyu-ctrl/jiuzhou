@@ -49,7 +49,6 @@ export interface WanderAiGenerationInput {
   nickname: string;
   realm: string;
   mapName: string;
-  mainQuestName: string;
   hasTeam: boolean;
   activeTheme: string | null;
   activePremise: string | null;
@@ -61,7 +60,7 @@ export interface WanderAiGenerationInput {
 }
 
 const WANDER_OPTION_COUNT = 3;
-const WANDER_AI_TIMEOUT_MS = 20_000;
+const WANDER_AI_TIMEOUT_MS = 600_000;
 const WANDER_AI_MAX_ATTEMPTS = 3;
 const WANDER_ENDING_TYPE_VALUES: WanderEndingType[] = ['none', 'good', 'neutral', 'tragic', 'bizarre'];
 const WANDER_NON_ENDING_TYPE_VALUES: WanderEndingType[] = ['none'];
@@ -71,23 +70,45 @@ type WanderAiEndingMode = 'must_continue' | 'can_continue_or_end' | 'must_end';
 
 type WanderAiDraftParseResult =
   | {
-      success: true;
-      data: WanderAiEpisodeDraft;
-    }
+    success: true;
+    data: WanderAiEpisodeDraft;
+  }
   | {
-      success: false;
-      reason: string;
-    };
+    success: false;
+    reason: string;
+  };
 
 type WanderAiContentValidationResult =
   | {
       success: true;
-      data: WanderAiEpisodeDraft;
-    }
+    data: WanderAiEpisodeDraft;
+  }
   | {
-      success: false;
-      reason: string;
+    success: false;
+    reason: string;
     };
+
+type WanderAiPromptRuleSet = {
+  systemRules: string[];
+  outputRules: {
+    storyThemeLengthRange: string;
+    storyThemeStyleRule: string;
+    storyThemeExample: string;
+    optionCount: number;
+    optionStyleRule: string;
+    optionExample: [string, string, string];
+    episodeTitleLengthRange: string;
+    episodeTitleStyleRule: string;
+    openingLengthRange: string;
+    openingStyleRule: string;
+    openingExample: string;
+    summaryLengthRange: string;
+    rewardTitleNameLengthRange: string;
+    rewardTitleDescLengthRange: string;
+    endingTypeValues: WanderEndingType[];
+    endingRule: string;
+  };
+};
 
 const resolveWanderAiEndingMode = (input: WanderAiGenerationInput): WanderAiEndingMode => {
   if (!input.canEndThisEpisode) {
@@ -99,6 +120,18 @@ const resolveWanderAiEndingMode = (input: WanderAiGenerationInput): WanderAiEndi
   return 'can_continue_or_end';
 };
 
+const WANDER_OPTION_EXAMPLE: [string, string, string] = [
+  '先借檐避雨，再试探来意',
+  '绕到桥下暗查灵息',
+  '收敛气机，静观其变',
+];
+const WANDER_STORY_THEME_EXAMPLE = '雨夜借灯';
+const WANDER_STORY_THEME_STYLE_RULE = 'storyTheme 必须是 24 字内主题短词，只概括这一幕或这条故事线的意象母题，像“雨夜借灯”“荒祠问卜”，禁止把剧情摘要直接写进 storyTheme，也不要写完整事件经过或长句解释。';
+const WANDER_OPTION_STYLE_RULE = 'optionTexts 必须是长度恰好为 3 的字符串数组，每个元素都必须是非空短句，禁止返回空字符串、null、对象、嵌套数组或把三个选项拼成一个字符串。';
+const WANDER_EPISODE_TITLE_STYLE_RULE = 'episodeTitle 必须是 24字内中文短标题，像“雨夜借灯”“断桥问剑”，禁止句子式长标题、标点堆砌和副标题。';
+const WANDER_OPENING_STYLE_RULE = 'opening 必须是一段 80 到 420 字的完整正文，要交代当下场景、人物动作与异样征兆，禁止只写一句过短摘要、提纲句或纯背景说明。';
+const WANDER_OPENING_EXAMPLE = '夜雨压桥，河雾顺着石栏缓缓爬起，你才在破庙檐下收住衣角，便见对岸灯影摇成一线。那人披着旧蓑衣，手里提灯不前不后，只隔着雨幕望来，像是在等谁认出他的来意；桥下水声却忽然沉了一拍，仿佛另有什么东西正贴着桥墩缓缓游过。';
+
 const buildWanderAiEndingRuleText = (endingMode: WanderAiEndingMode): string => {
   if (endingMode === 'must_continue') {
     return '本幕禁止结束剧情：isEnding 必须为 false，endingType 必须为 none，rewardTitleName 与 rewardTitleDesc 必须为空字符串。';
@@ -109,14 +142,48 @@ const buildWanderAiEndingRuleText = (endingMode: WanderAiEndingMode): string => 
   return '若本幕未完结，endingType 必须为 none，rewardTitleName 与 rewardTitleDesc 必须为空字符串；若本幕完结，必须给出 2 到 8 字中文正式称号名与 8 到 40 字中文称号描述。';
 };
 
-const buildWanderAiSystemMessage = (endingMode: WanderAiEndingMode): string => {
+export const buildWanderAiPromptRuleSet = (endingMode: WanderAiEndingMode): WanderAiPromptRuleSet => {
+  return {
+    systemRules: [
+      '你是《九州修仙录》的云游奇遇导演。',
+      '你必须输出严格 JSON，不得输出 markdown、解释、额外注释。',
+      '剧情必须是东方修仙语境，禁止现代梗、科幻设定、英文名、阿拉伯数字名。',
+      '每次只写一幕剧情，正文需要留有抉择空间，但不能替玩家做选择。',
+      WANDER_STORY_THEME_STYLE_RULE,
+      `storyTheme 示例：${WANDER_STORY_THEME_EXAMPLE}`,
+      WANDER_OPTION_STYLE_RULE,
+      `optionTexts 示例：${JSON.stringify(WANDER_OPTION_EXAMPLE)}`,
+      WANDER_EPISODE_TITLE_STYLE_RULE,
+      WANDER_OPENING_STYLE_RULE,
+      `opening 示例：${WANDER_OPENING_EXAMPLE}`,
+      buildWanderAiEndingRuleText(endingMode),
+      '三条选项都必须可执行、方向明确、互相有差异，不能只换措辞。',
+    ],
+    outputRules: {
+      storyThemeLengthRange: '2-24',
+      storyThemeStyleRule: WANDER_STORY_THEME_STYLE_RULE,
+      storyThemeExample: WANDER_STORY_THEME_EXAMPLE,
+      optionCount: WANDER_OPTION_COUNT,
+      optionStyleRule: WANDER_OPTION_STYLE_RULE,
+      optionExample: WANDER_OPTION_EXAMPLE,
+      episodeTitleLengthRange: '2-24',
+      episodeTitleStyleRule: WANDER_EPISODE_TITLE_STYLE_RULE,
+      openingLengthRange: '80-420',
+      openingStyleRule: WANDER_OPENING_STYLE_RULE,
+      openingExample: WANDER_OPENING_EXAMPLE,
+      summaryLengthRange: '20-160',
+      rewardTitleNameLengthRange: '2-8',
+      rewardTitleDescLengthRange: '8-40',
+      endingTypeValues: WANDER_ENDING_TYPE_VALUES,
+      endingRule: buildWanderAiEndingRuleText(endingMode),
+    },
+  };
+};
+
+export const buildWanderAiSystemMessage = (endingMode: WanderAiEndingMode): string => {
+  const ruleSet = buildWanderAiPromptRuleSet(endingMode);
   return [
-    '你是《九州修仙录》的云游奇遇导演。',
-    '你必须输出严格 JSON，不得输出 markdown、解释、额外注释。',
-    '剧情必须是东方修仙语境，禁止现代梗、科幻设定、英文名、阿拉伯数字名。',
-    '每次只写一幕剧情，正文需要留有抉择空间，但不能替玩家做选择。',
-    buildWanderAiEndingRuleText(endingMode),
-    '三条选项都必须可执行、方向明确、互相有差异，不能只换措辞。',
+    ...ruleSet.systemRules,
   ].join('\n');
 };
 
@@ -296,16 +363,35 @@ const buildWanderAiResponseSchema = (endingMode: WanderAiEndingMode): TechniqueT
   return schema;
 };
 
-const buildWanderAiUserMessage = (input: WanderAiGenerationInput, seed: number): string => {
+export const buildWanderAiUserPayload = (input: WanderAiGenerationInput, seed: number): {
+  promptNoiseHash: string;
+  player: {
+    nickname: string;
+    realm: string;
+    mapName: string;
+    hasTeam: boolean;
+  };
+  story: {
+    activeTheme: string | null;
+    activePremise: string | null;
+    storySummary: string | null;
+    nextEpisodeIndex: number;
+    maxEpisodeIndex: number;
+    canEndThisEpisode: boolean;
+    endingMode: WanderAiEndingMode;
+    previousEpisodes: WanderAiPreviousEpisodeContext[];
+  };
+  outputRules: WanderAiPromptRuleSet['outputRules'];
+} => {
   const promptNoiseHash = buildTextModelPromptNoiseHash('wander-story', seed);
   const endingMode = resolveWanderAiEndingMode(input);
-  return JSON.stringify({
+  const ruleSet = buildWanderAiPromptRuleSet(endingMode);
+  return {
     promptNoiseHash,
     player: {
       nickname: input.nickname,
       realm: input.realm,
       mapName: input.mapName,
-      mainQuestName: input.mainQuestName,
       hasTeam: input.hasTeam,
     },
     story: {
@@ -318,16 +404,12 @@ const buildWanderAiUserMessage = (input: WanderAiGenerationInput, seed: number):
       endingMode,
       previousEpisodes: input.previousEpisodes,
     },
-    outputRules: {
-      optionCount: WANDER_OPTION_COUNT,
-      openingLengthRange: '80-420',
-      summaryLengthRange: '20-160',
-      rewardTitleNameLengthRange: '2-8',
-      rewardTitleDescLengthRange: '8-40',
-      endingTypeValues: WANDER_ENDING_TYPE_VALUES,
-      endingRule: buildWanderAiEndingRuleText(endingMode),
-    },
-  });
+    outputRules: ruleSet.outputRules,
+  };
+};
+
+const buildWanderAiUserMessage = (input: WanderAiGenerationInput, seed: number): string => {
+  return JSON.stringify(buildWanderAiUserPayload(input, seed));
 };
 
 const buildWanderAiRepairUserMessage = (
@@ -337,18 +419,11 @@ const buildWanderAiRepairUserMessage = (
   validationReason: string,
 ): string => {
   const endingMode = resolveWanderAiEndingMode(input);
+  const ruleSet = buildWanderAiPromptRuleSet(endingMode);
   return JSON.stringify({
     task: '你上一轮输出的 JSON 未通过校验，请基于同一幕剧情进行修正，并完整重写整个 JSON 对象。',
     validationReason,
-    outputRules: {
-      optionCount: WANDER_OPTION_COUNT,
-      openingLengthRange: '80-420',
-      summaryLengthRange: '20-160',
-      rewardTitleNameLengthRange: '2-8',
-      rewardTitleDescLengthRange: '8-40',
-      endingTypeValues: WANDER_ENDING_TYPE_VALUES,
-      endingRule: buildWanderAiEndingRuleText(endingMode),
-    },
+    outputRules: ruleSet.outputRules,
     originalTask: JSON.parse(buildWanderAiUserMessage(input, seed)),
     previousOutput: previousContent,
   });
@@ -382,7 +457,7 @@ const requestWanderAiContent = async (params: {
   seed: number;
 }): Promise<string> => {
   const callResult = await callConfiguredTextModel({
-    modelScope: 'technique',
+    modelScope: 'wander',
     responseFormat: params.responseFormat,
     systemMessage: params.systemMessage,
     userMessage: params.userMessage,
@@ -398,7 +473,7 @@ const requestWanderAiContent = async (params: {
 };
 
 export const isWanderAiAvailable = (): boolean => {
-  return readTextModelConfig('technique') !== null;
+  return readTextModelConfig('wander') !== null;
 };
 
 export const generateWanderAiEpisodeDraft = async (

@@ -3,7 +3,7 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1) 做什么：按作用域读取文本模型环境变量，并统一读取共享图片模型环境变量，把 OpenAI SDK 所需 baseURL、DashScope 生图 endpoint、provider 判定等配置归一化。
- * 2) 做什么：给功法文本生成、伙伴文本生成、技能图标、伙伴头像等 AI 调用链提供单一配置入口，避免每个业务模块各自解析环境变量。
+ * 2) 做什么：给功法文本生成、伙伴文本生成、云游奇遇文本生成、技能图标、伙伴头像等 AI 调用链提供单一配置入口，避免每个业务模块各自解析环境变量。
  * 3) 不做什么：不发起模型请求、不构造业务 prompt，也不解析模型响应内容。
  *
  * 输入/输出：
@@ -21,7 +21,7 @@
 
 export type ImageProvider = 'openai' | 'dashscope';
 export type TextModelProvider = 'openai' | 'anthropic';
-export type TextModelScope = 'technique' | 'partner';
+export type TextModelScope = 'technique' | 'partner' | 'wander';
 
 export type TextModelConfig = {
   provider: TextModelProvider;
@@ -67,6 +67,12 @@ const TEXT_MODEL_ENV_KEYS: Record<TextModelScope, {
     url: 'AI_PARTNER_MODEL_URL',
     key: 'AI_PARTNER_MODEL_KEY',
     name: 'AI_PARTNER_MODEL_NAME',
+  },
+  wander: {
+    provider: 'AI_WANDER_MODEL_PROVIDER',
+    url: 'AI_WANDER_MODEL_URL',
+    key: 'AI_WANDER_MODEL_KEY',
+    name: 'AI_WANDER_MODEL_NAME',
   },
 };
 
