@@ -54,7 +54,6 @@ import {
 import {
   appendIdleRewardWindowBatch,
   createIdleRewardWindowState,
-  getIdleRewardWindowFlushPayload,
   resetIdleRewardWindowDelta,
   shouldFlushIdleRewardWindow,
   type IdleRewardWindowBatch,
@@ -70,6 +69,7 @@ import {
   logIdleFlushFailure,
   resolveIdleTerminationFlushDecision,
 } from './idleFlushControl.js';
+import { partitionIdleWorkerFlushBatches } from './idleWorkerFlushPartition.js';
 import { getWorkerPool } from '../../workers/workerPool.js';
 
 // ============================================
@@ -158,15 +158,40 @@ async function flushBuffer(
   userId: number,
   buffer: BatchBuffer,
 ): Promise<boolean> {
-  const flushPayload = getIdleRewardWindowFlushPayload(buffer.rewardWindow);
-  if (flushPayload.batches.length === 0) return true;
-
-  const batches = flushPayload.batches;
-  const nextSummaryState = createIdleSessionSummaryState(buffer.summaryState.snapshot);
-  const participant = buildIdleRewardParticipant(session, userId);
+  const batches = buffer.rewardWindow.batches;
+  if (batches.length === 0) return true;
 
   try {
-    await withTransactionAuto(async () => {
+    const flushState = await withTransactionAuto(async () => {
+      const persistedBatchQueryResult = await query(
+        `SELECT id
+         FROM idle_battle_batches
+         WHERE id = ANY($1::uuid[])`,
+        [batches.map((batch) => batch.id)],
+      );
+      const persistedBatchIds = new Set(
+        (persistedBatchQueryResult.rows as Array<{ id: string }>).map((row) => String(row.id)),
+      );
+      const partition = partitionIdleWorkerFlushBatches(batches, persistedBatchIds);
+      let summarySeed: Pick<IdleSessionRow, 'rewardItems' | 'bagFullFlag'> = buffer.summaryState.snapshot;
+
+      if (partition.hasPersistedBatches) {
+        const latestSession = await idleSessionService.getIdleSessionById(session.id);
+        if (!latestSession) {
+          throw new Error(`挂机会话不存在，无法同步 flush 汇总基线: ${session.id}`);
+        }
+        summarySeed = latestSession;
+      }
+
+      const currentSummaryState = createIdleSessionSummaryState(summarySeed);
+      if (partition.pendingBatches.length === 0) {
+        return {
+          nextSummaryState: currentSummaryState,
+          flushedAt: Date.now(),
+        };
+      }
+
+      const participant = buildIdleRewardParticipant(session, userId);
       const settledBatches: Array<
         IdleRewardWindowBatch & {
           expGained: number;
@@ -176,7 +201,7 @@ async function flushBuffer(
         }
       > = [];
 
-      for (const batch of batches) {
+      for (const batch of partition.pendingBatches) {
         const settledReward = await settleIdleBattleRewardSettlementPlan(
           participant,
           {
@@ -186,7 +211,7 @@ async function flushBuffer(
             dropPlans: batch.dropPlans,
           },
         );
-        appendBattleResultToIdleSessionSummary(nextSummaryState, {
+        appendBattleResultToIdleSessionSummary(currentSummaryState, {
           ...settledReward,
           result: batch.result,
         });
@@ -199,8 +224,8 @@ async function flushBuffer(
         });
       }
 
-      const summaryPayload = getIdleSessionSummaryFlushPayload(nextSummaryState);
-      const values = batches
+      const summaryPayload = getIdleSessionSummaryFlushPayload(currentSummaryState);
+      const values = settledBatches
         .map(
           (b, i) =>
             `($${i * 11 + 1}, $${i * 11 + 2}, $${i * 11 + 3}, $${i * 11 + 4}, $${i * 11 + 5}, $${i * 11 + 6}, $${i * 11 + 7}, $${i * 11 + 8}, $${i * 11 + 9}, $${i * 11 + 10}, $${i * 11 + 11}, NOW())`,
@@ -234,10 +259,14 @@ async function flushBuffer(
         summaryPayload.delta,
         summaryPayload.snapshot,
       );
+      return {
+        nextSummaryState: currentSummaryState,
+        flushedAt: Date.now(),
+      };
     });
-    buffer.summaryState.snapshot = nextSummaryState.snapshot;
+    buffer.summaryState.snapshot = flushState.nextSummaryState.snapshot;
     resetIdleSessionSummaryDelta(buffer.summaryState);
-    resetIdleRewardWindowDelta(buffer.rewardWindow, Date.now());
+    resetIdleRewardWindowDelta(buffer.rewardWindow, flushState.flushedAt);
   } catch (err) {
     if (err instanceof Error) {
       logIdleFlushFailure('IdleBattleExecutor', err);
