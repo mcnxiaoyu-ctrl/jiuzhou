@@ -400,6 +400,33 @@
       ]
     },
     {
+      "id": "cons-partner-rebone-001",
+      "name": "归元洗髓露",
+      "category": "consumable",
+      "sub_category": "function",
+      "quality": "地",
+      "stack_max": 9999,
+      "bind_type": "pickup",
+      "tradeable": false,
+      "disassemblable": false,
+      "icon": "/assets/items/gui_yuan_xi_sui_dan.webp",
+      "description": "可为招募得来的伙伴再洗根骨，重塑先天资质。",
+      "long_desc": "只能在招募伙伴的详情界面使用。使用后会依照该伙伴最初的来历与神韵，重新洗练基础属性与每级成长；头像、名字、当前描述与功法都不会改变。若洗髓失败，归元洗髓露会退回背包。",
+      "tags": [
+        "伙伴",
+        "洗髓",
+        "功能道具"
+      ],
+      "use_type": "target",
+      "effect_defs": [
+        {
+          "trigger": "use",
+          "target": "partner",
+          "effect_type": "reroll_partner_base_attrs"
+        }
+      ]
+    },
+    {
       "id": "cons-monthcard-001",
       "name": "修行月卡",
       "category": "other",

@@ -621,6 +621,7 @@ model characters {
   sect_quest_progress                                                               sect_quest_progress[]
   partner_recruit_job                                                               partner_recruit_job[]
   partner_fusion_job                                                                partner_fusion_job[]
+  partner_rebone_job                                                                partner_rebone_job[]
   partner_fusion_job_material                                                       partner_fusion_job_material[]
   team_applications                                                                 team_applications[]
   team_invitations_team_invitations_invitee_idTocharacters                          team_invitations[]              @relation("team_invitations_invitee_idTocharacters")
@@ -1290,6 +1291,26 @@ model partner_fusion_job_material {
   @@unique([fusion_job_id, material_order])
   @@index([partner_id], map: "idx_partner_fusion_job_material_partner")
   @@index([character_id, created_at(sort: Desc)], map: "idx_partner_fusion_job_material_character")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model partner_rebone_job {
+  id            String     @id @db.VarChar(64)
+  character_id  Int
+  partner_id    Int
+  status        String     @db.VarChar(32)
+  item_def_id   String     @db.VarChar(64)
+  item_qty      Int        @default(1)
+  error_message String?
+  viewed_at     DateTime?  @db.Timestamptz(6)
+  finished_at   DateTime?  @db.Timestamptz(6)
+  created_at    DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime   @default(now()) @db.Timestamptz(6)
+  characters    characters @relation(fields: [character_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([character_id, created_at(sort: Desc)], map: "idx_partner_rebone_job_character_time")
+  @@index([partner_id, created_at(sort: Desc)], map: "idx_partner_rebone_job_partner_time")
+  @@index([status, created_at], map: "idx_partner_rebone_job_status")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

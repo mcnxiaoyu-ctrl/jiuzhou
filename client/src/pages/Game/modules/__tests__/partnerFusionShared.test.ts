@@ -118,6 +118,7 @@ const createPartner = (overrides: Partial<PartnerDetailDto> = {}): PartnerDetail
   },
   techniques: [],
   isActive: false,
+  isGenerated: false,
   tradeStatus: 'none',
   marketListingId: null,
   fusionStatus: 'none',

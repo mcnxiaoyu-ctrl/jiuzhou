@@ -1160,10 +1160,33 @@
   align-items: center;
 }
 
+.partner-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .partner-action-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.partner-overview-action-row {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.partner-overview-action-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding-inline: 12px;
+  padding-block: 0;
+  line-height: 1;
 }
 
 .partner-list-action-row {
@@ -1237,6 +1260,11 @@
     height: 30px;
     padding-inline: 10px;
     font-size: 12px;
+  }
+
+  .partner-overview-action-row .ant-btn,
+  .partner-overview-action-tag {
+    height: 30px;
   }
 
   .ant-input-number {
@@ -1366,11 +1394,28 @@
     width: 100%;
   }
 
+  .partner-section-header {
+    flex-wrap: nowrap;
+    align-items: flex-start;
+  }
+
+  .partner-overview-action-row {
+    width: auto;
+    margin-left: auto;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+
   .partner-action-row .ant-btn,
   .partner-quick-actions .ant-btn,
   .partner-book-card .ant-btn,
   .partner-technique-upgrade .ant-btn {
     width: 100%;
+  }
+
+  .partner-overview-action-row .ant-btn {
+    width: auto;
   }
 
   .partner-quick-actions {
@@ -1481,6 +1526,15 @@
 
   .partner-inline-summary {
     padding: 0 0 10px;
+  }
+
+  .partner-section-header {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .partner-overview-action-row {
+    gap: 6px;
   }
 
   .partner-quick-actions {

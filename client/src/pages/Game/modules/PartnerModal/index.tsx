@@ -13,19 +13,23 @@ import {
   getBagInventorySnapshot,
   getPartnerFusionStatus,
   getPartnerOverview,
+  getPartnerReboneStatus,
   getPartnerRecruitStatus,
   getPartnerSkillPolicy,
   getPartnerTechniqueDetail,
   getPartnerTechniqueUpgradeCost,
   injectPartnerExp,
+  inventoryUseItem,
   learnPartnerTechnique,
   markPartnerFusionResultViewed,
+  markPartnerReboneResultViewed,
   markPartnerRecruitResultViewed,
   startPartnerFusion,
   type PartnerBookDto,
   type PartnerDetailDto,
   type PartnerFusionStatusDto,
   type PartnerOverviewDto,
+  type PartnerReboneStatusDto,
   type PartnerRecruitPreviewDto,
   type PartnerRecruitStatusDto,
   type PartnerSkillPolicyDto,
@@ -72,6 +76,7 @@ import {
   resolvePartnerAvatar,
   resolvePartnerBookLabel,
   resolvePartnerNextSelectedId,
+  resolvePartnerReboneElixirItem,
   resolvePartnerStatusTagDescriptors,
   togglePartnerSkillPolicyEntry,
   type PartnerPanelKey,
@@ -99,6 +104,10 @@ import {
   resolvePartnerFusionSelectedQuality,
   togglePartnerFusionMaterialSelection,
 } from './partnerFusionShared';
+import {
+  resolvePartnerReboneActionState,
+  resolvePartnerReboneUnreadResultJob,
+} from './partnerReboneShared';
 import TechniqueDetailPanel from '../../shared/TechniqueDetailPanel';
 import {
   buildTechniqueDetailView,
@@ -169,6 +178,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const [overview, setOverview] = useState<PartnerOverviewDto | null>(null);
   const [recruitStatus, setRecruitStatus] = useState<PartnerRecruitStatusDto | null>(null);
   const [fusionStatus, setFusionStatus] = useState<PartnerFusionStatusDto | null>(null);
+  const [reboneStatus, setReboneStatus] = useState<PartnerReboneStatusDto | null>(null);
   const [skillPolicy, setSkillPolicy] = useState<PartnerSkillPolicyDto | null>(null);
   const [skillPolicyDraftEntries, setSkillPolicyDraftEntries] = useState<PartnerSkillPolicyEntryDto[]>([]);
   const [skillPolicyLoading, setSkillPolicyLoading] = useState(false);
@@ -187,6 +197,8 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const [pendingTechniqueLearnPreview, setPendingTechniqueLearnPreview] = useState<PendingTechniqueLearnPreview | null>(null);
   const markingRecruitViewedRef = useRef(false);
   const markingFusionViewedRef = useRef(false);
+  const markingReboneViewedRef = useRef(false);
+  const shownReboneResultRef = useRef<string | null>(null);
   const techniqueDetailCacheRef = useRef(new Map<string, PartnerTechniqueDetailDto>());
   const techniqueDetailRequestIdRef = useRef(0);
 
@@ -196,6 +208,10 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
 
   const applyFusionStatus = useCallback((status: PartnerFusionStatusDto | null) => {
     setFusionStatus(status);
+  }, []);
+
+  const applyReboneStatus = useCallback((status: PartnerReboneStatusDto | null) => {
+    setReboneStatus(status);
   }, []);
 
   const refreshOverview = useCallback(async () => {
@@ -244,6 +260,21 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     }
   }, [applyFusionStatus, open]);
 
+  const refreshReboneStatus = useCallback(async (mode: RecruitStatusRefreshMode = 'background') => {
+    if (!open) return;
+    try {
+      const res = await getPartnerReboneStatus();
+      if (!res.success || !res.data) {
+        throw new Error(getUnifiedApiErrorMessage(res, '获取归元洗髓状态失败'));
+      }
+      applyReboneStatus(res.data);
+    } catch {
+      if (mode === 'initial') {
+        applyReboneStatus(null);
+      }
+    }
+  }, [applyReboneStatus, open]);
+
   const refreshSkillPolicy = useCallback(async (partnerId: number) => {
     if (!open) return;
     setSkillPolicyLoading(true);
@@ -268,6 +299,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       setOverview(null);
       setRecruitStatus(null);
       setFusionStatus(null);
+      setReboneStatus(null);
       setSkillPolicy(null);
       setSkillPolicyDraftEntries([]);
       setSkillPolicyLoading(false);
@@ -285,14 +317,16 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       setTechniqueDetail(null);
       setPendingTechniqueLearnPreview(null);
       setActionKey('');
+      shownReboneResultRef.current = null;
       return;
     }
     void Promise.all([
       refreshOverview(),
       refreshRecruitStatus('initial'),
       refreshFusionStatus('initial'),
+      refreshReboneStatus('initial'),
     ]);
-  }, [open, refreshFusionStatus, refreshOverview, refreshRecruitStatus]);
+  }, [open, refreshFusionStatus, refreshOverview, refreshReboneStatus, refreshRecruitStatus]);
 
   useEffect(() => {
     setSelectedPartnerId(resolvePartnerNextSelectedId(overview, selectedPartnerId));
@@ -335,6 +369,28 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   }, [overview, selectedPartnerId]);
   const selectedPartnerActionLocked = selectedPartner?.tradeStatus === 'market_listed'
     || selectedPartner?.fusionStatus === 'fusion_locked';
+  const selectedPartnerReboneElixirItem = useMemo(
+    () => resolvePartnerReboneElixirItem(selectedPartner, overview),
+    [overview, selectedPartner],
+  );
+  const reboneActionState = useMemo(
+    () => resolvePartnerReboneActionState({
+      status: reboneStatus,
+      partnerId: selectedPartner?.id ?? null,
+      hasConsumable: Boolean(selectedPartnerReboneElixirItem),
+      partnerLocked: Boolean(selectedPartnerActionLocked),
+    }),
+    [reboneStatus, selectedPartner?.id, selectedPartnerActionLocked, selectedPartnerReboneElixirItem],
+  );
+  const reboneUnreadResultJob = useMemo(
+    () => resolvePartnerReboneUnreadResultJob(reboneStatus),
+    [reboneStatus],
+  );
+  const shouldShowReboneAction = useMemo(
+    () => Boolean(selectedPartnerReboneElixirItem)
+      || Boolean(reboneActionState.pendingJob && selectedPartner && reboneActionState.pendingJob.partnerId === selectedPartner.id),
+    [reboneActionState.pendingJob, selectedPartner, selectedPartnerReboneElixirItem],
+  );
   const closeTechniqueDetail = useCallback(() => {
     techniqueDetailRequestIdRef.current += 1;
     setTechniqueDetailOpen(false);
@@ -493,6 +549,11 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       if (!currentCharacterId || payload.characterId !== currentCharacterId) return;
       applyFusionStatus(payload.status);
     });
+    const unsubscribeReboneStatus = gameSocket.onPartnerReboneStatusUpdate((payload) => {
+      const currentCharacterId = gameSocket.getCharacter()?.id ?? null;
+      if (!currentCharacterId || payload.characterId !== currentCharacterId) return;
+      applyReboneStatus(payload.status);
+    });
     const unsubscribe = gameSocket.onPartnerRecruitResult((payload) => {
       const currentCharacterId = gameSocket.getCharacter()?.id ?? null;
       if (!currentCharacterId || payload.characterId !== currentCharacterId) return;
@@ -514,10 +575,11 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     return () => {
       unsubscribeStatus();
       unsubscribeFusionStatus();
+      unsubscribeReboneStatus();
       unsubscribe();
       unsubscribeFusion();
     };
-  }, [applyFusionStatus, applyRecruitStatus, message, open]);
+  }, [applyFusionStatus, applyReboneStatus, applyRecruitStatus, message, open]);
 
   useEffect(() => {
     if (!open || panel !== 'recruit' || !recruitStatus?.hasUnreadResult || markingRecruitViewedRef.current) {
@@ -552,6 +614,38 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       }
     })();
   }, [fusionStatus?.hasUnreadResult, open, panel, refreshFusionStatus]);
+
+  useEffect(() => {
+    if (!open || !reboneUnreadResultJob) {
+      return;
+    }
+    const resultMarker = `${reboneUnreadResultJob.reboneId}:${reboneUnreadResultJob.status}`;
+    if (shownReboneResultRef.current !== resultMarker) {
+      shownReboneResultRef.current = resultMarker;
+      if (reboneUnreadResultJob.status === 'succeeded') {
+        message.success('归元洗髓完成');
+      } else {
+        message.warning(reboneUnreadResultJob.errorMessage || '归元洗髓失败');
+      }
+      void refreshOverview();
+      dispatchPartnerChangedEvent();
+      window.dispatchEvent(new Event('inventory:changed'));
+    }
+    if (markingReboneViewedRef.current) {
+      return;
+    }
+    markingReboneViewedRef.current = true;
+    void (async () => {
+      try {
+        await markPartnerReboneResultViewed();
+        await refreshReboneStatus();
+      } catch {
+        void 0;
+      } finally {
+        markingReboneViewedRef.current = false;
+      }
+    })();
+  }, [message, open, reboneUnreadResultJob, refreshOverview, refreshReboneStatus]);
 
   useEffect(() => {
     if (!open || panel !== 'technique' || !selectedPartner) {
@@ -675,6 +769,45 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       setActionKey('');
     }
   }, [injectExpValue, message, refreshOverview, selectedPartner]);
+
+  const handleRebonePartner = useCallback(() => {
+    if (!selectedPartner || !selectedPartnerReboneElixirItem) {
+      message.warning('当前没有可用的归元洗髓露');
+      return;
+    }
+    if (reboneActionState.disabled) {
+      if (reboneActionState.disabledReason) {
+        message.warning(reboneActionState.disabledReason);
+      }
+      return;
+    }
+    modal.confirm({
+      title: `确认对${getPartnerDisplayName(selectedPartner)}使用归元洗髓露？`,
+      content: '将创建一个异步洗髓任务，按该伙伴的原始描述重生成基础属性与每级成长；头像、当前描述、名字与功法均保持不变。任务失败时会自动退回本次消耗的归元洗髓露。',
+      okText: '开始洗髓',
+      cancelText: '暂不使用',
+      onOk: async () => {
+        setActionKey(`rebone-${selectedPartner.id}`);
+        try {
+          const res = await inventoryUseItem({
+            itemInstanceId: selectedPartnerReboneElixirItem.itemInstanceId,
+            qty: 1,
+            partnerId: selectedPartner.id,
+          });
+          if (!res.success) {
+            throw new Error(getUnifiedApiErrorMessage(res, '归元洗髓失败'));
+          }
+          message.success(res.message || '归元洗髓任务已提交');
+          await Promise.all([refreshOverview(), refreshReboneStatus()]);
+          window.dispatchEvent(new Event('inventory:changed'));
+        } catch (error) {
+          message.error(getUnifiedApiErrorMessage(error, '归元洗髓失败'));
+        } finally {
+          setActionKey('');
+        }
+      },
+    });
+  }, [message, modal, reboneActionState, refreshOverview, refreshReboneStatus, selectedPartner, selectedPartnerReboneElixirItem]);
 
   const applyTechniqueLearnOutcome = useCallback(async (
     outcome: TechniqueLearnOutcome,
@@ -1096,7 +1229,27 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     return (
       <div className="partner-pane-card">
         {renderPartnerSummaryCard('partner-inline-summary')}
-        <div className="partner-section-title">当前战斗属性</div>
+        <div className="partner-section-header">
+          <div className="partner-section-title">当前战斗属性</div>
+          {shouldShowReboneAction ? (
+            <div className="partner-action-row partner-overview-action-row">
+              <Tooltip title={reboneActionState.disabledReason || `消耗 1 份${selectedPartnerReboneElixirItem?.name || '归元洗髓露'}，创建异步洗髓任务后重新生成基础属性`}>
+                <Button
+                  onClick={() => {
+                    handleRebonePartner();
+                  }}
+                  loading={actionKey === `rebone-${selectedPartner.id}`}
+                  disabled={reboneActionState.disabled}
+                >
+                  {reboneActionState.buttonText}
+                </Button>
+              </Tooltip>
+              {selectedPartnerReboneElixirItem ? (
+                <Tag color="blue" className="partner-overview-action-tag">剩余 {selectedPartnerReboneElixirItem.qty}</Tag>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
         <div className="partner-combat-grid">
           {combatAttrs.map((entry) => (
             <div key={entry.key} className="partner-stat-item">

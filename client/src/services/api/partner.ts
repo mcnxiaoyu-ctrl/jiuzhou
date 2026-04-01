@@ -140,6 +140,7 @@ export type PartnerDisplayDto = {
   nextLevelCostExp: number;
   slotCount: number;
   isActive: boolean;
+  isGenerated: boolean;
   obtainedFrom: string | null;
   growth: PartnerGrowthDto;
   levelAttrGains: PartnerBaseAttrsDto;
@@ -204,6 +205,14 @@ export type PartnerRecruitJobDto = {
   errorMessage: string | null;
 };
 
+export type PartnerConsumableDto = {
+  itemDefId: string;
+  itemInstanceId: number;
+  name: string;
+  icon: string | null;
+  qty: number;
+};
+
 export type PartnerRecruitStatusDto = {
   featureCode: CharacterFeatureCode;
   unlockRealm: string;
@@ -261,6 +270,30 @@ export type PartnerFusionStatusDto = {
   resultStatus: 'generated_preview' | 'failed' | null;
 };
 
+export type PartnerReboneJobStatusDto =
+  | 'pending'
+  | 'succeeded'
+  | 'failed';
+
+export type PartnerReboneJobDto = {
+  reboneId: string;
+  status: PartnerReboneJobStatusDto;
+  partnerId: number;
+  itemDefId: string;
+  itemQty: number;
+  startedAt: string;
+  finishedAt: string | null;
+  errorMessage: string | null;
+};
+
+export type PartnerReboneStatusDto = {
+  featureCode: CharacterFeatureCode;
+  unlocked: true;
+  currentJob: PartnerReboneJobDto | null;
+  hasUnreadResult: boolean;
+  resultStatus: 'succeeded' | 'failed' | null;
+};
+
 export type PartnerFusionConfirmResponseDto = {
   fusionId: string;
   partnerId: number;
@@ -276,6 +309,7 @@ export type PartnerOverviewDto = {
   characterExp: number;
   partners: PartnerDetailDto[];
   books: PartnerBookDto[];
+  partnerConsumables: PartnerConsumableDto[];
 };
 
 export type PartnerSkillPolicySlotDto = {
@@ -486,6 +520,20 @@ export interface PartnerFusionViewedResponse {
   };
 }
 
+export interface PartnerReboneStatusResponse {
+  success: boolean;
+  message: string;
+  data?: PartnerReboneStatusDto;
+}
+
+export interface PartnerReboneViewedResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    reboneId: string | null;
+  };
+}
+
 export interface PartnerSkillPolicyResponse {
   success: boolean;
   message: string;
@@ -656,4 +704,12 @@ export const confirmPartnerFusionPreview = (
 
 export const markPartnerFusionResultViewed = (): Promise<PartnerFusionViewedResponse> => {
   return api.post('/partner/fusion/mark-result-viewed');
+};
+
+export const getPartnerReboneStatus = (): Promise<PartnerReboneStatusResponse> => {
+  return api.get('/partner/rebone/status');
+};
+
+export const markPartnerReboneResultViewed = (): Promise<PartnerReboneViewedResponse> => {
+  return api.post('/partner/rebone/mark-result-viewed');
 };

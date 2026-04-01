@@ -25,11 +25,16 @@ import {
   getTechniqueDefinitions,
   refreshGeneratedPartnerSnapshots,
   refreshGeneratedTechniqueSnapshots,
+  type PartnerBaseAttrConfig,
   type PartnerDefConfig,
 } from '../staticConfigLoader.js';
 import {
+  buildTechniqueTextModelJsonSchemaResponseFormat,
   generateTechniqueTextModelSeed,
   parseTechniqueTextModelJsonObject,
+  type TechniqueTextModelJsonSchema,
+  type TechniqueTextModelJsonSchemaProperties,
+  type TechniqueTextModelResponseFormat,
 } from './techniqueTextModelShared.js';
 import { resolveTechniqueGenerationRequestFailure } from './techniqueGenerationRequestFailure.js';
 import {
@@ -113,12 +118,30 @@ export type GeneratedPartnerTextAttemptResult =
   | GeneratedPartnerTextAttemptFailure
   | GeneratedPartnerTextAttemptSuccess;
 
+export type GeneratedPartnerBaseAttrRefreshDraft = {
+  partner: {
+    combatStyle: PartnerRecruitCombatStyle;
+    baseAttrs: PartnerRecruitBaseAttrs;
+    levelAttrGains: PartnerRecruitBaseAttrs;
+  };
+};
+
 const PARTNER_GENERATION_PROMPT_SYSTEM_MESSAGE = [
   '你是《九州修仙录》的伙伴创作引擎。',
   '你必须返回严格 JSON，不得输出 markdown、解释、注释。',
   '你要生成一个可招募的仙侠伙伴草稿，字段必须完整且满足输入约束。',
   '字段名必须与输入约束和 response schema 完全一致，不得自创别名。',
   '不要生成现代词汇、科幻词汇、英文名、阿拉伯数字名。',
+  ...PARTNER_RECRUIT_BASE_MODEL_INSTRUCTION_REJECTION_RULES,
+  ...PARTNER_RECRUIT_FORM_RULES,
+].join('\n');
+
+const PARTNER_BASE_ATTR_REFRESH_PROMPT_SYSTEM_MESSAGE = [
+  '你是《九州修仙录》的伙伴属性重塑引擎。',
+  '你必须返回严格 JSON，不得输出 markdown、解释、注释。',
+  '你要根据既有伙伴档案，只重新生成基础属性与每级成长。',
+  '不得改写名字、描述、元素、定位、槽位，也不得生成头像、功法或任何额外字段。',
+  '字段名必须与输入约束和 response schema 完全一致，不得自创别名。',
   ...PARTNER_RECRUIT_BASE_MODEL_INSTRUCTION_REJECTION_RULES,
   ...PARTNER_RECRUIT_FORM_RULES,
 ].join('\n');
@@ -162,6 +185,139 @@ const resolveGeneratedPartnerDefaultSkillIcon = (
   if (kind === 'attack') return DEFAULT_ATTACK_SKILL_ICON;
   if (kind === 'support') return DEFAULT_SUPPORT_SKILL_ICON;
   return DEFAULT_GUARD_SKILL_ICON;
+};
+
+const buildPartnerBaseAttrRefreshPartnerJsonSchema = (): TechniqueTextModelResponseFormat => {
+  const baseAttrProperties: TechniqueTextModelJsonSchemaProperties = {
+    max_qixue: { type: 'integer', minimum: 1 },
+    max_lingqi: { type: 'integer', minimum: 0 },
+    wugong: { type: 'integer', minimum: 1 },
+    fagong: { type: 'integer', minimum: 1 },
+    wufang: { type: 'integer', minimum: 1 },
+    fafang: { type: 'integer', minimum: 1 },
+    sudu: { type: 'integer', minimum: 1 },
+    mingzhong: { type: 'number', minimum: 0 },
+    shanbi: { type: 'number', minimum: 0 },
+    zhaojia: { type: 'number', minimum: 0 },
+    baoji: { type: 'number', minimum: 0 },
+    baoshang: { type: 'number', minimum: 0 },
+    jianbaoshang: { type: 'number', minimum: 0 },
+    jianfantan: { type: 'number', minimum: 0 },
+    kangbao: { type: 'number', minimum: 0 },
+    zengshang: { type: 'number', minimum: 0 },
+    zhiliao: { type: 'number', minimum: 0 },
+    jianliao: { type: 'number', minimum: 0 },
+    xixue: { type: 'number', minimum: 0 },
+    lengque: { type: 'number', minimum: 0 },
+    kongzhi_kangxing: { type: 'number', minimum: 0 },
+    jin_kangxing: { type: 'number', minimum: 0 },
+    mu_kangxing: { type: 'number', minimum: 0 },
+    shui_kangxing: { type: 'number', minimum: 0 },
+    huo_kangxing: { type: 'number', minimum: 0 },
+    tu_kangxing: { type: 'number', minimum: 0 },
+    qixue_huifu: { type: 'integer', minimum: 0 },
+    lingqi_huifu: { type: 'integer', minimum: 0 },
+  };
+  const levelAttrGainProperties: TechniqueTextModelJsonSchemaProperties = {
+    ...baseAttrProperties,
+    max_qixue: { type: 'number', minimum: 0 },
+    max_lingqi: { type: 'number', minimum: 0 },
+    wugong: { type: 'number', minimum: 0 },
+    fagong: { type: 'number', minimum: 0 },
+    wufang: { type: 'number', minimum: 0 },
+    fafang: { type: 'number', minimum: 0 },
+    sudu: { type: 'number', minimum: 0 },
+    qixue_huifu: { type: 'number', minimum: 0 },
+    lingqi_huifu: { type: 'number', minimum: 0 },
+  };
+  const baseAttrSchema: TechniqueTextModelJsonSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'max_qixue',
+      'max_lingqi',
+      'wugong',
+      'fagong',
+      'wufang',
+      'fafang',
+      'sudu',
+      'mingzhong',
+      'shanbi',
+      'zhaojia',
+      'baoji',
+      'baoshang',
+      'jianbaoshang',
+      'jianfantan',
+      'kangbao',
+      'zengshang',
+      'zhiliao',
+      'jianliao',
+      'xixue',
+      'lengque',
+      'kongzhi_kangxing',
+      'jin_kangxing',
+      'mu_kangxing',
+      'shui_kangxing',
+      'huo_kangxing',
+      'tu_kangxing',
+      'qixue_huifu',
+      'lingqi_huifu',
+    ],
+    properties: baseAttrProperties,
+  };
+
+  return buildTechniqueTextModelJsonSchemaResponseFormat({
+    name: 'partner_base_attr_refresh',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['partner'],
+      properties: {
+        partner: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['combatStyle', 'baseAttrs', 'levelAttrGains'],
+          properties: {
+            combatStyle: {
+              type: 'string',
+              enum: ['physical', 'magic'],
+            },
+            baseAttrs: baseAttrSchema,
+            levelAttrGains: {
+              ...baseAttrSchema,
+              properties: levelAttrGainProperties,
+            },
+          },
+        },
+      },
+    },
+  });
+};
+
+const validateGeneratedPartnerBaseAttrRefreshDraft = (
+  raw: unknown,
+): GeneratedPartnerBaseAttrRefreshDraft | null => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const topLevel = raw as Record<string, unknown>;
+  const partner = topLevel.partner;
+  if (!partner || typeof partner !== 'object' || Array.isArray(partner)) return null;
+  const partnerRecord = partner as Record<string, unknown>;
+  const combatStyleRaw = String(partnerRecord.combatStyle || '').trim();
+  if (combatStyleRaw !== 'physical' && combatStyleRaw !== 'magic') {
+    return null;
+  }
+  const baseAttrs = fillPartnerRecruitBaseAttrs(partnerRecord.baseAttrs as Partial<PartnerBaseAttrConfig> | null | undefined);
+  const levelAttrGains = fillPartnerRecruitBaseAttrs(partnerRecord.levelAttrGains as Partial<PartnerBaseAttrConfig> | null | undefined);
+  if (baseAttrs.max_qixue <= 0 || baseAttrs.wugong <= 0 || baseAttrs.fagong <= 0 || baseAttrs.wufang <= 0 || baseAttrs.fafang <= 0 || baseAttrs.sudu <= 0) {
+    return null;
+  }
+  return {
+    partner: {
+      combatStyle: combatStyleRaw,
+      baseAttrs,
+      levelAttrGains,
+    },
+  };
 };
 
 const buildGeneratedPartnerTechniquePromptContext = (params: {
@@ -366,6 +522,145 @@ export const buildGeneratedPartnerTextModelRequest = (params: {
     requestedBaseModel: baseModelSelection.requestedBaseModel,
     baseModel: baseModelSelection.baseModel,
   };
+};
+
+export const buildGeneratedPartnerBaseAttrRefreshRequest = (params: {
+  quality: PartnerRecruitQuality;
+  baseModel: string;
+  isPlayerProvidedBaseModel?: boolean;
+  promptNoiseHash: string;
+  primaryAttackGrowthTarget: number;
+  partner: {
+    name: string;
+    description: string;
+    role: string;
+    attributeElement: string;
+    maxTechniqueSlots: number;
+  };
+}): {
+  responseFormat: TechniqueTextModelResponseFormat;
+  systemMessage: string;
+  userMessage: string;
+  baseModel: string;
+  timeoutMs: number;
+} => {
+  return {
+    responseFormat: buildPartnerBaseAttrRefreshPartnerJsonSchema(),
+    systemMessage: PARTNER_BASE_ATTR_REFRESH_PROMPT_SYSTEM_MESSAGE,
+    userMessage: JSON.stringify({
+      ...buildPartnerRecruitPromptInput(params.quality, {
+        baseModel: params.baseModel,
+        isPlayerProvidedBaseModel: params.isPlayerProvidedBaseModel,
+        promptNoiseHash: params.promptNoiseHash,
+        primaryAttackGrowthTarget: params.primaryAttackGrowthTarget,
+      }),
+      task: 'reroll_existing_partner_base_attrs',
+      lockedFields: ['name', 'description', 'attributeElement', 'role', 'maxTechniqueSlots'],
+      targetPartnerProfile: {
+        name: params.partner.name,
+        originalDescription: params.partner.description,
+        attributeElement: params.partner.attributeElement,
+        role: params.partner.role,
+        maxTechniqueSlots: params.partner.maxTechniqueSlots,
+      },
+    }),
+    baseModel: params.baseModel,
+    timeoutMs: 300_000,
+  };
+};
+
+export const tryGenerateGeneratedPartnerBaseAttrs = async (params: {
+  quality: PartnerRecruitQuality;
+  requestedBaseModel?: string | null;
+  partner: {
+    name: string;
+    description: string;
+    role: string;
+    attributeElement: string;
+    maxTechniqueSlots: number;
+  };
+}): Promise<GeneratedPartnerTextAttemptFailure | {
+  success: true;
+  draft: GeneratedPartnerBaseAttrRefreshDraft;
+  modelName: string;
+}> => {
+  const requestedBaseModelValidation: PartnerRecruitRequestedBaseModelValidationResult =
+    await guardPartnerRecruitRequestedBaseModel(params.requestedBaseModel);
+  if (!requestedBaseModelValidation.success) {
+    return {
+      success: false,
+      reason: requestedBaseModelValidation.message,
+      modelName: 'gpt-4o-mini',
+    };
+  }
+
+  const seed = generateTechniqueTextModelSeed();
+  const promptNoiseHash = buildPartnerRecruitPromptNoiseHash(seed);
+  const baseModelSelection = resolvePartnerRecruitBaseModel({
+    seed,
+    requestedBaseModel: requestedBaseModelValidation.value,
+  });
+  const primaryAttackGrowthTarget = rollPartnerRecruitPrimaryAttackGrowthTarget(params.quality, seed);
+  const request = buildGeneratedPartnerBaseAttrRefreshRequest({
+    quality: params.quality,
+    baseModel: baseModelSelection.baseModel,
+    isPlayerProvidedBaseModel: baseModelSelection.requestedBaseModel !== null,
+    promptNoiseHash,
+    primaryAttackGrowthTarget,
+    partner: params.partner,
+  });
+  const external = await callConfiguredTextModel({
+    modelScope: 'partner',
+    responseFormat: request.responseFormat,
+    systemMessage: request.systemMessage,
+    userMessage: request.userMessage,
+    timeoutMs: request.timeoutMs,
+    seed,
+  });
+  if (!external) {
+    return {
+      success: false,
+      reason: '缺少 AI_PARTNER_MODEL_URL 或 AI_PARTNER_MODEL_KEY 配置',
+      modelName: 'gpt-4o-mini',
+    };
+  }
+
+  try {
+    const parsed = parseTechniqueTextModelJsonObject(external.content, {
+      preferredTopLevelKeys: ['partner'],
+    });
+    if (!parsed.success) {
+      return {
+        success: false,
+        reason: parsed.reason === 'empty_content' ? '伙伴属性重生成模型返回空内容' : '伙伴属性重生成模型未返回合法 JSON',
+        modelName: external.modelName,
+      };
+    }
+    const draft = validateGeneratedPartnerBaseAttrRefreshDraft(parsed.data);
+    if (!draft) {
+      return {
+        success: false,
+        reason: '伙伴属性重生成模型返回结构非法或超出约束',
+        modelName: external.modelName,
+      };
+    }
+    return {
+      success: true,
+      draft,
+      modelName: external.modelName,
+    };
+  } catch (error) {
+    const failure = resolveTechniqueGenerationRequestFailure({
+      error,
+      didTimeout: false,
+      timeoutMs: request.timeoutMs,
+    });
+    return {
+      success: false,
+      reason: failure.reason,
+      modelName: external.modelName,
+    };
+  }
 };
 
 export const tryCallGeneratedPartnerTextModel = async (params: {

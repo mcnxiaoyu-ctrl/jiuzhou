@@ -39,6 +39,7 @@ import { getGemLevel, isGemItemDefinition } from './shared/gemItemSemantics.js';
 import { unbindEquipmentBindingByInstanceId } from './inventory/equipmentUnbind.js';
 import type { PartnerLearnTechniqueResultDto } from './partnerService.js';
 import { partnerService } from './partnerService.js';
+import { partnerReboneService } from './partnerReboneService.js';
 import { recoverStaminaByCharacterId } from './staminaService.js';
 
 // 物品定义接口
@@ -124,6 +125,10 @@ export interface ItemUseResult {
   character?: CharacterComputedRow | null;
   lootResults?: ItemUseLootResult[];
   partnerTechniqueResult?: PartnerLearnTechniqueResultDto;
+  partnerReboneJob?: {
+    reboneId: string;
+    partnerId: number;
+  };
 }
 
 export interface ItemInstanceDetail {
@@ -531,6 +536,8 @@ class ItemService {
     let hasLearnPartnerTechnique = false;
     let hasExpandEffect = false;
     let hasEquipmentUnbindEffect = false;
+    let hasPartnerBaseAttrRerollEffect = false;
+    let partnerReboneJob: ItemUseResult['partnerReboneJob'];
     let partnerTechniqueResult: PartnerLearnTechniqueResultDto | undefined;
     const normalizedEffects: ItemUseEffect[] = [];
     const lootResults: ItemUseLootResult[] = [];
@@ -566,6 +573,25 @@ class ItemService {
           return { success: false, message: unbindResult.message };
         }
         hasEquipmentUnbindEffect = true;
+        continue;
+      }
+
+      if (effectType === 'reroll_partner_base_attrs') {
+        const partnerId = Number(options.partnerId);
+        if (!Number.isInteger(partnerId) || partnerId <= 0) {
+          return { success: false, message: '请选择目标伙伴' };
+        }
+        const rerollResult = await partnerReboneService.createPendingReboneJob({
+          characterId,
+          itemDefId,
+          itemQty: qty,
+          partnerId,
+        });
+        if (!rerollResult.success || !rerollResult.data) {
+          return { success: false, message: rerollResult.message };
+        }
+        partnerReboneJob = rerollResult.data;
+        hasPartnerBaseAttrRerollEffect = true;
         continue;
       }
 
@@ -843,7 +869,8 @@ class ItemService {
       !hasLearnTechnique &&
       !hasLearnPartnerTechnique &&
       !hasExpandEffect &&
-      !hasEquipmentUnbindEffect
+      !hasEquipmentUnbindEffect &&
+      !hasPartnerBaseAttrRerollEffect
     ) {
       return { success: false, message: '该物品暂不支持使用效果' };
     }
@@ -961,6 +988,7 @@ class ItemService {
       character: updatedChar,
       lootResults: lootResults.length > 0 ? lootResults : undefined,
       partnerTechniqueResult,
+      partnerReboneJob,
     };
   }
 

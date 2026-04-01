@@ -203,6 +203,7 @@ export interface PartnerDisplayDto {
   nextLevelCostExp: number;
   slotCount: number;
   isActive: boolean;
+  isGenerated: boolean;
   obtainedFrom: string | null;
   growth: PartnerGrowthDto;
   levelAttrGains: PartnerBaseAttrsDto;
@@ -815,6 +816,7 @@ export const buildPartnerDisplay = (params: {
     ),
     slotCount: Math.max(0, normalizeInteger(definition.max_technique_slots)),
     isActive: Boolean(row.is_active),
+    isGenerated: Boolean(normalizeText(definition.source_job_id)) || definition.id.startsWith('partner-gen-'),
     obtainedFrom: normalizeText(row.obtained_from) || null,
     growth: toPartnerGrowthDto(growth),
     levelAttrGains: toPartnerBaseAttrsDto(definition.level_attr_gains),

@@ -7,6 +7,7 @@ import type {
   GameTimeSnapshotDto,
   MailUnreadResponse,
   PartnerFusionStatusResponse,
+  PartnerReboneStatusResponse,
   PartnerRecruitStatusResponse,
   TechniqueResearchStatusResponse,
 } from "./api";
@@ -293,6 +294,23 @@ export type PartnerFusionStatusPayload = {
 };
 type PartnerFusionStatusListener = (data: PartnerFusionStatusPayload) => void;
 
+export interface PartnerReboneResultPayload {
+  characterId: number;
+  reboneId: string;
+  partnerId: number;
+  status: 'succeeded' | 'failed';
+  hasUnreadResult: true;
+  message: string;
+  errorMessage?: string;
+}
+
+type PartnerReboneResultListener = (data: PartnerReboneResultPayload) => void;
+export type PartnerReboneStatusPayload = {
+  characterId: number;
+  status: NonNullable<PartnerReboneStatusResponse["data"]>;
+};
+type PartnerReboneStatusListener = (data: PartnerReboneStatusPayload) => void;
+
 export interface OnlinePlayerDto {
   id: number;
   nickname: string;
@@ -337,6 +355,9 @@ class GameSocketService {
   private partnerFusionResultListeners: Set<PartnerFusionResultListener> = new Set();
   private partnerFusionStatusListeners: Set<PartnerFusionStatusListener> =
     new Set();
+  private partnerReboneResultListeners: Set<PartnerReboneResultListener> = new Set();
+  private partnerReboneStatusListeners: Set<PartnerReboneStatusListener> =
+    new Set();
   private currentCharacter: CharacterData | null = null;
   private currentSectIndicator: SectIndicatorPayload | null = null;
   private currentOnlinePlayers: OnlinePlayersPayloadDto | null = null;
@@ -347,6 +368,7 @@ class GameSocketService {
     null;
   private currentPartnerRecruitStatus: PartnerRecruitStatusPayload | null = null;
   private currentPartnerFusionStatus: PartnerFusionStatusPayload | null = null;
+  private currentPartnerReboneStatus: PartnerReboneStatusPayload | null = null;
   private currentBattleUpdate: BattleRealtimePayload | null = null;
   private currentBattleCooldownState: BattleCooldownState | null = null;
   /** 本地在线玩家索引，用于增量合并 delta 消息 */
@@ -393,6 +415,7 @@ class GameSocketService {
       this.currentTechniqueResearchStatus = null;
       this.currentPartnerRecruitStatus = null;
       this.currentPartnerFusionStatus = null;
+      this.currentPartnerReboneStatus = null;
       this.currentBattleUpdate = null;
       this.currentBattleCooldownState = null;
     });
@@ -543,6 +566,18 @@ class GameSocketService {
       },
     );
 
+    this.socket.on("partnerReboneResult", (data: PartnerReboneResultPayload) => {
+      this.notifyPartnerReboneResultListeners(data);
+    });
+
+    this.socket.on(
+      "partnerRebone:update",
+      (data: PartnerReboneStatusPayload) => {
+        this.currentPartnerReboneStatus = data;
+        this.notifyPartnerReboneStatusListeners(data);
+      },
+    );
+
     this.socket.on("chat:message", (data: ChatMessageDto) => {
       if (!data || typeof data !== "object") return;
       this.notifyChatMessageListeners(data);
@@ -679,6 +714,7 @@ class GameSocketService {
       this.currentTechniqueResearchStatus = null;
       this.currentPartnerRecruitStatus = null;
       this.currentPartnerFusionStatus = null;
+      this.currentPartnerReboneStatus = null;
       this.currentBattleUpdate = null;
       this.currentBattleCooldownState = null;
       this.onlinePlayersMap.clear();
@@ -865,6 +901,21 @@ class GameSocketService {
     return () => this.partnerFusionStatusListeners.delete(listener);
   }
 
+  onPartnerReboneResult(listener: PartnerReboneResultListener): () => void {
+    this.partnerReboneResultListeners.add(listener);
+    return () => this.partnerReboneResultListeners.delete(listener);
+  }
+
+  onPartnerReboneStatusUpdate(
+    listener: PartnerReboneStatusListener,
+  ): () => void {
+    this.partnerReboneStatusListeners.add(listener);
+    if (this.currentPartnerReboneStatus) {
+      listener(this.currentPartnerReboneStatus);
+    }
+    return () => this.partnerReboneStatusListeners.delete(listener);
+  }
+
   onChatMessage(listener: ChatMessageListener): () => void {
     this.chatMessageListeners.add(listener);
     return () => this.chatMessageListeners.delete(listener);
@@ -1036,6 +1087,16 @@ class GameSocketService {
     data: PartnerFusionStatusPayload,
   ): void {
     this.partnerFusionStatusListeners.forEach((listener) => listener(data));
+  }
+
+  private notifyPartnerReboneResultListeners(data: PartnerReboneResultPayload): void {
+    this.partnerReboneResultListeners.forEach((listener) => listener(data));
+  }
+
+  private notifyPartnerReboneStatusListeners(
+    data: PartnerReboneStatusPayload,
+  ): void {
+    this.partnerReboneStatusListeners.forEach((listener) => listener(data));
   }
 
   private notifyChatMessageListeners(message: ChatMessageDto): void {

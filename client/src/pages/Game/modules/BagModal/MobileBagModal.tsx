@@ -1604,6 +1604,10 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
       setEquipmentUnbindOpen(true);
       return;
     }
+    if (activeItem.useTargetType === 'partnerDetailOnly') {
+      message.warning('请前往伙伴详情界面使用该道具');
+      return;
+    }
     const useCount = activeItem.category === 'consumable' ? clampUseQty(useQty) : 1;
     setActionLoading(true);
     try {

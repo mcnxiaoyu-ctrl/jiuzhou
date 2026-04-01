@@ -68,6 +68,21 @@ test('易名符应识别为角色改名交互道具', () => {
   assert.equal(useTargetType, 'characterRename');
 });
 
+test('归元洗髓露应识别为只能在伙伴详情页使用的交互道具', () => {
+  const useTargetType = resolveBagItemUseTargetType({
+    use_type: 'target',
+    effect_defs: [
+      {
+        trigger: 'use',
+        target: 'partner',
+        effect_type: 'reroll_partner_base_attrs',
+      },
+    ],
+  });
+
+  assert.equal(useTargetType, 'partnerDetailOnly');
+});
+
 test('解绑候选列表只应包含已绑定装备', () => {
   const candidates = collectEquipmentUnbindCandidates([
     {

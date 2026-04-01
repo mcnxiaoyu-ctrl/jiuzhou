@@ -22,6 +22,8 @@
 import { describe, expect, it } from 'vitest';
 import type { PartnerDetailDto, PartnerOverviewDto } from '../../../../services/api/partner';
 import {
+  PARTNER_REBONE_ELIXIR_ITEM_DEF_ID,
+  resolvePartnerReboneElixirItem,
   resolvePartnerActionLabel,
   resolvePartnerNextSelectedId,
   resolvePartnerStatusTagDescriptors,
@@ -31,6 +33,7 @@ const createPartner = (params: {
   id: number;
   isActive: boolean;
   name: string;
+  isGenerated?: boolean;
   tradeStatus?: PartnerDetailDto['tradeStatus'];
   fusionStatus?: PartnerDetailDto['fusionStatus'];
 }): PartnerDetailDto => ({
@@ -43,6 +46,7 @@ const createPartner = (params: {
   marketListingId: null,
   fusionStatus: params.fusionStatus ?? 'none',
   fusionJobId: null,
+  isGenerated: params.isGenerated ?? false,
   avatar: null,
   element: 'mu',
   role: '剑修',
@@ -130,12 +134,14 @@ const createPartner = (params: {
 const createOverview = (params: {
   activePartnerId: number | null;
   partners: PartnerDetailDto[];
+  partnerConsumables?: PartnerOverviewDto['partnerConsumables'];
 }): PartnerOverviewDto => ({
   featureCode: 'partner_system',
   activePartnerId: params.activePartnerId,
   characterExp: 0,
   partners: params.partners,
   books: [],
+  partnerConsumables: params.partnerConsumables ?? [],
 });
 
 describe('partnerShared 出战动作', () => {
@@ -219,5 +225,47 @@ describe('resolvePartnerNextSelectedId', () => {
     });
 
     expect(resolvePartnerNextSelectedId(overview, null)).toBe(22);
+  });
+});
+
+describe('resolvePartnerReboneElixirItem', () => {
+  it('动态伙伴存在归元洗髓露时应返回可用道具', () => {
+    const partner = createPartner({ id: 41, isActive: false, name: '玄槐', isGenerated: true });
+    const overview = createOverview({
+      activePartnerId: null,
+      partners: [partner],
+      partnerConsumables: [{
+        itemDefId: PARTNER_REBONE_ELIXIR_ITEM_DEF_ID,
+        itemInstanceId: 9001,
+        name: '归元洗髓露',
+        icon: '/assets/items/pill_xisui.png',
+        qty: 2,
+      }],
+    });
+
+    expect(resolvePartnerReboneElixirItem(partner, overview)).toEqual({
+      itemDefId: PARTNER_REBONE_ELIXIR_ITEM_DEF_ID,
+      itemInstanceId: 9001,
+      name: '归元洗髓露',
+      icon: '/assets/items/pill_xisui.png',
+      qty: 2,
+    });
+  });
+
+  it('静态伙伴即使存在归元洗髓露也不应返回可用道具', () => {
+    const partner = createPartner({ id: 42, isActive: false, name: '青萝', isGenerated: false });
+    const overview = createOverview({
+      activePartnerId: null,
+      partners: [partner],
+      partnerConsumables: [{
+        itemDefId: PARTNER_REBONE_ELIXIR_ITEM_DEF_ID,
+        itemInstanceId: 9002,
+        name: '归元洗髓露',
+        icon: '/assets/items/pill_xisui.png',
+        qty: 1,
+      }],
+    });
+
+    expect(resolvePartnerReboneElixirItem(partner, overview)).toBeNull();
   });
 });

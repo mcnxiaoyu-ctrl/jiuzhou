@@ -21,6 +21,7 @@
 
 import type {
   PartnerBookDto,
+  PartnerConsumableDto,
   PartnerDetailDto,
   PartnerOverviewDto,
   PartnerPassiveAttrsDto,
@@ -31,6 +32,7 @@ import type {
 } from '../../../../services/api';
 import { formatTechniquePassiveAmount } from '../../shared/techniquePassiveDisplay';
 import { getPartnerAttrLabel } from '../../shared/partnerDisplay';
+import { PARTNER_REBONE_ELIXIR_ITEM_DEF_ID } from '../../shared/partnerReboneElixir';
 
 export {
   buildPartnerCombatAttrRows,
@@ -66,6 +68,8 @@ export const PARTNER_GROWTH_ATTRS: Array<keyof PartnerDetailDto['growth']> = [
   'fafang',
   'sudu',
 ];
+
+export { PARTNER_REBONE_ELIXIR_ITEM_DEF_ID } from '../../shared/partnerReboneElixir';
 
 export type PartnerStatusTagKey = 'market_listed' | 'active' | 'idle' | 'fusion_locked';
 type PartnerStatusTagVariant = 'list' | 'summary';
@@ -158,6 +162,14 @@ export const resolvePartnerNextSelectedId = (
     return selectedPartnerId;
   }
   return overview.activePartnerId ?? overview.partners[0]?.id ?? null;
+};
+
+export const resolvePartnerReboneElixirItem = (
+  partner: Pick<PartnerDetailDto, 'isGenerated'> | null,
+  overview: Pick<PartnerOverviewDto, 'partnerConsumables'> | null,
+): PartnerConsumableDto | null => {
+  if (!partner?.isGenerated) return null;
+  return overview?.partnerConsumables.find((item) => item.itemDefId === PARTNER_REBONE_ELIXIR_ITEM_DEF_ID) ?? null;
 };
 
 export const getPartnerEmptySlotCount = (partner: PartnerDetailDto): number => {

@@ -2,7 +2,7 @@
  * 交互型道具使用目标前端共享规则
  *
  * 作用（做什么 / 不做什么）：
- * - 做什么：集中解析“哪些道具在使用前还需要额外交互”，目前覆盖装备解绑与易名符改名。
+ * - 做什么：集中解析“哪些道具在使用前还需要额外交互”，目前覆盖装备解绑、易名符改名与归元洗髓露的伙伴页专用入口。
  * - 做什么：提供可解绑装备候选列表筛选函数，避免桌面端和移动端背包各写一套判断。
  * - 不做什么：不发请求、不管理弹窗状态、不渲染具体桌面/移动端 UI。
  *
@@ -20,8 +20,9 @@
  */
 import type { ItemDefLite, InventoryLocation } from '../../../../services/api';
 import { isRenameCardItemDefinitionLike } from '../../shared/renameCard';
+import { isPartnerReboneElixirItemDefinitionLike } from '../../shared/partnerReboneElixir';
 
-export type BagItemUseTargetType = 'none' | 'boundEquipment' | 'characterRename';
+export type BagItemUseTargetType = 'none' | 'boundEquipment' | 'characterRename' | 'partnerDetailOnly';
 
 type EffectDef = Record<string, unknown>;
 
@@ -56,6 +57,10 @@ export const resolveBagItemUseTargetType = (
 
   if (isRenameCardItemDefinitionLike(def)) {
     return 'characterRename';
+  }
+
+  if (isPartnerReboneElixirItemDefinitionLike(def)) {
+    return 'partnerDetailOnly';
   }
 
   if (String(def.use_type || '').trim() !== 'target') return 'none';

@@ -14,6 +14,9 @@ import {
 import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { getSingleQueryValue, parseNonEmptyText, parsePositiveInt } from '../services/shared/httpParam.js';
 import { getCharacterComputedByCharacterId } from '../services/characterComputedService.js';
+import { enqueuePartnerReboneJob } from '../services/partnerReboneJobRunner.js';
+import { notifyPartnerReboneStatus } from '../services/partnerRebonePush.js';
+import { partnerReboneService } from '../services/partnerReboneService.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
 
@@ -354,6 +357,30 @@ router.post('/use', asyncHandler(async (req, res) => {
     });
     if (!result.success) {
       return sendResult(res, result);
+    }
+
+    if (result.partnerReboneJob) {
+      try {
+        await enqueuePartnerReboneJob({
+          reboneId: result.partnerReboneJob.reboneId,
+          characterId,
+          userId,
+        });
+        await notifyPartnerReboneStatus(characterId, userId);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : '未知异常';
+        await partnerReboneService.forceFailPendingReboneJob(
+          characterId,
+          result.partnerReboneJob.reboneId,
+          `归元洗髓任务投递失败：${reason}`,
+        );
+        await notifyPartnerReboneStatus(characterId, userId);
+        await safePushCharacterUpdate(userId);
+        return sendResult(res, {
+          success: false,
+          message: '归元洗髓启动失败，道具已退回背包',
+        });
+      }
     }
 
     await safePushCharacterUpdate(userId);

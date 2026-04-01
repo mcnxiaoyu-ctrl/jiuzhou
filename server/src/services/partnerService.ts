@@ -104,6 +104,7 @@ import {
   normalizeManagedAvatarValue,
 } from './uploadService.js';
 import { consumeSpecificItemInstance } from './inventory/shared/consume.js';
+import { executeGeneratedPartnerRebone } from './shared/partnerReboneExecution.js';
 import {
   getTechniqueDetailByIdForPartner,
   type SkillDefRow,
@@ -127,6 +128,7 @@ export type {
 export type { PartnerBattleMember } from './shared/partnerBattleMember.js';
 
 const STARTER_PARTNER_DEF_ID = 'partner-qingmu-xiaoou';
+const PARTNER_REBONE_ELIXIR_ITEM_DEF_ID = 'cons-partner-rebone-001';
 
 type CharacterPartnerContextRow = {
   characterId: number;
@@ -171,6 +173,14 @@ export interface PartnerBookDto {
   qty: number;
 }
 
+export interface PartnerConsumableDto {
+  itemDefId: string;
+  itemInstanceId: number;
+  name: string;
+  icon: string | null;
+  qty: number;
+}
+
 export interface PartnerOverviewDto {
   unlocked: true;
   featureCode: string;
@@ -178,6 +188,7 @@ export interface PartnerOverviewDto {
   activePartnerId: number | null;
   partners: PartnerDetailDto[];
   books: PartnerBookDto[];
+  partnerConsumables: PartnerConsumableDto[];
 }
 
 export interface PartnerInjectResultDto {
@@ -775,6 +786,36 @@ const loadPartnerBooks = async (characterId: number): Promise<PartnerBookDto[]> 
   return books;
 };
 
+const loadPartnerConsumables = async (
+  characterId: number,
+): Promise<PartnerConsumableDto[]> => {
+  const result = await query(
+    `
+      SELECT id, item_def_id, qty, location, location_slot
+      FROM item_instance
+      WHERE owner_character_id = $1
+        AND location = 'bag'
+        AND qty > 0
+        AND item_def_id = $2
+      ORDER BY location_slot ASC NULLS LAST, id ASC
+    `,
+    [characterId, PARTNER_REBONE_ELIXIR_ITEM_DEF_ID],
+  );
+
+  const itemDef = getItemDefinitionById(PARTNER_REBONE_ELIXIR_ITEM_DEF_ID);
+  if (!itemDef) {
+    return [];
+  }
+
+  return (result.rows as PartnerItemInstanceRow[]).map((row) => ({
+    itemDefId: PARTNER_REBONE_ELIXIR_ITEM_DEF_ID,
+    itemInstanceId: normalizeInteger(row.id, 1),
+    name: normalizeText(itemDef.name) || PARTNER_REBONE_ELIXIR_ITEM_DEF_ID,
+    icon: normalizeText(itemDef.icon) || null,
+    qty: normalizeInteger(row.qty, 1),
+  }));
+};
+
 const buildTechniqueStateList = (
   definition: PartnerDefConfig,
   techniqueRows: PartnerTechniqueRow[],
@@ -1003,6 +1044,7 @@ class PartnerService {
         fusionStateMap,
       });
       const books = await loadPartnerBooks(characterId);
+      const partnerConsumables = await loadPartnerConsumables(characterId);
 
       return {
         success: true,
@@ -1015,6 +1057,7 @@ class PartnerService {
             partners.find((entry) => entry.isActive)?.id ?? null,
           partners,
           books,
+          partnerConsumables,
         },
       };
     } catch (error) {
@@ -1471,6 +1514,19 @@ class PartnerService {
       const reason = error instanceof Error ? error.message : '未知错误';
       return { success: false, message: `伙伴改名失败：${reason}` };
     }
+  }
+
+  @Transactional
+  async rerollGeneratedPartnerBaseAttrsByItem(params: {
+    characterId: number;
+    partnerId: number;
+  }): Promise<PartnerResult<PartnerDetailDto>> {
+    return executeGeneratedPartnerRebone({
+      characterId: params.characterId,
+      partnerId: params.partnerId,
+      refreshGeneratedSnapshots: true,
+      includePartnerDetail: true,
+    });
   }
 
   async getTechniqueUpgradeCost(

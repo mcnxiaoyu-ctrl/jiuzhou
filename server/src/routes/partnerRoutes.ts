@@ -24,6 +24,8 @@ import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { enqueuePartnerFusionJob } from '../services/partnerFusionJobRunner.js';
 import { notifyPartnerFusionStatus } from '../services/partnerFusionPush.js';
 import { partnerFusionService } from '../services/partnerFusionService.js';
+import { notifyPartnerReboneStatus } from '../services/partnerRebonePush.js';
+import { partnerReboneService } from '../services/partnerReboneService.js';
 import { enqueuePartnerRecruitJob } from '../services/partnerRecruitJobRunner.js';
 import { notifyPartnerRecruitStatus } from '../services/partnerRecruitPush.js';
 import { partnerRecruitService } from '../services/partnerRecruitService.js';
@@ -213,6 +215,12 @@ router.get('/fusion/status', asyncHandler(async (req, res) => {
   return sendResult(res, result);
 }));
 
+router.get('/rebone/status', asyncHandler(async (req, res) => {
+  const characterId = req.characterId!;
+  const result = await partnerReboneService.getStatus(characterId);
+  return sendResult(res, result);
+}));
+
 router.post('/fusion/start', asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const characterId = req.characterId!;
@@ -271,6 +279,15 @@ router.post('/fusion/mark-result-viewed', asyncHandler(async (req, res) => {
   const result = await partnerFusionService.markResultViewed(characterId);
   if (result.success) {
     await notifyPartnerFusionStatus(characterId, req.userId);
+  }
+  return sendResult(res, result);
+}));
+
+router.post('/rebone/mark-result-viewed', asyncHandler(async (req, res) => {
+  const characterId = req.characterId!;
+  const result = await partnerReboneService.markResultViewed(characterId);
+  if (result.success) {
+    await notifyPartnerReboneStatus(characterId, req.userId);
   }
   return sendResult(res, result);
 }));

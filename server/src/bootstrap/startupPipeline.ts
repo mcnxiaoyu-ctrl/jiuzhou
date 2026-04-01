@@ -45,6 +45,10 @@ import {
   shutdownPartnerFusionJobRunner,
 } from "../services/partnerFusionJobRunner.js";
 import {
+  initializePartnerReboneJobRunner,
+  shutdownPartnerReboneJobRunner,
+} from "../services/partnerReboneJobRunner.js";
+import {
   initializeWanderJobRunner,
   shutdownWanderJobRunner,
 } from "../services/wanderJobRunner.js";
@@ -138,6 +142,8 @@ export const startServerWithPipeline = async (
   console.log("✓ AI 伙伴招募 worker 协调器已就绪\n");
   await runStartupStep("三魂归契 worker 协调器初始化", initializePartnerFusionJobRunner);
   console.log("✓ 三魂归契 worker 协调器已就绪\n");
+  await runStartupStep("归元洗髓 worker 协调器初始化", initializePartnerReboneJobRunner);
+  console.log("✓ 归元洗髓 worker 协调器已就绪\n");
   await runStartupStep("云游奇遇 worker 协调器初始化", initializeWanderJobRunner);
   console.log("✓ 云游奇遇 worker 协调器已就绪\n");
   const expiredDungeonCleanupSummary = await runStartupStep(
@@ -248,6 +254,9 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
 
       await shutdownPartnerFusionJobRunner();
       console.log("✓ 三魂归契 worker 协调器已关闭");
+
+      await shutdownPartnerReboneJobRunner();
+      console.log("✓ 归元洗髓 worker 协调器已关闭");
 
       await shutdownWanderJobRunner();
       console.log("✓ 云游奇遇 worker 协调器已关闭");
