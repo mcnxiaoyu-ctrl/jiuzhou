@@ -2251,7 +2251,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       title="功法详情"
       centered
       width="min(720px, calc(100vw - 16px))"
-      className="tech-submodal"
+      className="tech-submodal tech-detail-submodal"
       destroyOnHidden
     >
       {techniqueDetailLoading ? (

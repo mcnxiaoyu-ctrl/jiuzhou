@@ -46,7 +46,7 @@ export type TechniqueSkillDetailLike = {
 
 export type TechniqueResearchPreviewSkill = NonNullable<TechniqueResearchJobDto['preview']>['skills'][number];
 
-type SkillDetailItem = {
+export type SkillDetailItem = {
   label: string;
   value: string;
   isEffect?: boolean;
@@ -56,6 +56,11 @@ export type SkillCardSection = {
   metaItems: Array<{ label: string; value: string }>;
   gridItems: Array<{ label: string; value: string; valueClassName?: string }>;
   summaryItems: SkillDetailItem[];
+};
+
+export type SkillMobileDetailContent = {
+  summary: string;
+  detailItems: SkillDetailItem[];
 };
 
 const TARGET_TYPE_LABEL: Record<string, string> = {
@@ -208,6 +213,19 @@ export const getSkillInlineSummary = (skill: TechniqueSkillDetailLike): string =
     .join(' · ');
 };
 
+export const getSkillMobileDetailContent = (skill: TechniqueSkillDetailLike): SkillMobileDetailContent => {
+  const detailItems = getSkillInlineDetailItems(skill);
+
+  return {
+    summary: detailItems.length > 0
+      ? detailItems
+        .map((item) => (item.label === '描述' || item.isEffect ? item.value : `${item.label}:${item.value}`))
+        .join(' · ')
+      : '暂无详细信息',
+    detailItems,
+  };
+};
+
 export const renderSkillCardDetails = (skill: TechniqueSkillDetailLike): ReactNode => {
   const sections = getSkillCardSections(skill);
 
@@ -260,8 +278,7 @@ export const renderSkillCardDetails = (skill: TechniqueSkillDetailLike): ReactNo
   );
 };
 
-export const renderSkillInlineDetails = (skill: TechniqueSkillDetailLike): ReactNode => {
-  const detailItems = getSkillInlineDetailItems(skill);
+export const renderSkillInlineDetailItems = (detailItems: SkillDetailItem[]): ReactNode => {
   if (detailItems.length === 0) {
     return <div className="skill-inline-empty">暂无详细信息</div>;
   }
@@ -287,6 +304,10 @@ export const renderSkillInlineDetails = (skill: TechniqueSkillDetailLike): React
       })}
     </div>
   );
+};
+
+export const renderSkillInlineDetails = (skill: TechniqueSkillDetailLike): ReactNode => {
+  return renderSkillInlineDetailItems(getSkillInlineDetailItems(skill));
 };
 
 export const renderSkillTooltip = (skill: TechniqueSkillDetailLike): ReactNode => {

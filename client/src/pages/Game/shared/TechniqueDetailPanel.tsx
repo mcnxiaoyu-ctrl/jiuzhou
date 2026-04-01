@@ -20,12 +20,17 @@
  *
  * 关键边界条件与坑点：
  * 1. `detail` 为空时必须明确展示空态，不能渲染半个表头，否则用户会误以为请求还没结束。
- * 2. 移动端技能摘要必须走单行摘要而不是完整卡片，否则每层技能列表会过高，导致滚动体验明显变差。
+ * 2. 移动端技能默认保持折叠，只展示标题与查看入口；完整内容按需展开，避免层卡片被冗余文案撑高。
  */
 import { Table, Tag, Tooltip } from 'antd';
 import type { FC } from 'react';
+import { useEffect, useState } from 'react';
 import { getItemQualityLabel, getItemQualityTagClassName } from './itemQuality';
-import { getSkillInlineSummary, renderSkillTooltip } from '../modules/TechniqueModal/skillDetailShared';
+import {
+  getSkillInlineDetailItems,
+  renderSkillInlineDetailItems,
+  renderSkillTooltip,
+} from '../modules/TechniqueModal/skillDetailShared';
 import type { TechniqueDetailBonus, TechniqueDetailSkill, TechniqueDetailView } from './techniqueDetailView';
 import './TechniqueDetailPanel.scss';
 
@@ -56,13 +61,13 @@ const buildLayerRows = (detail: TechniqueDetailView): TechniqueLayerRow[] => {
   }));
 };
 
-const renderBonusList = (bonuses: TechniqueDetailBonus[]) => {
+const renderBonusList = (bonuses: TechniqueDetailBonus[], useMobileGrid = false) => {
   if (bonuses.length <= 0) {
     return <span className="tech-layer-cell-empty">无</span>;
   }
 
   return (
-    <div className="tech-layer-cell">
+    <div className={`tech-layer-cell${useMobileGrid ? ' is-mobile-grid' : ''}`}>
       {bonuses.map((bonus) => (
         <div key={`${bonus.key}-${bonus.amount}`} className="tech-layer-cell-line">
           <span className="tech-layer-cell-k">{bonus.label}</span>
@@ -92,22 +97,46 @@ const renderDesktopSkillList = (skills: TechniqueDetailSkill[]) => {
   );
 };
 
-const renderMobileSkillList = (skills: TechniqueDetailSkill[]) => {
+const renderMobileSkillList = (
+  layer: number,
+  skills: TechniqueDetailSkill[],
+  expandedSkillKey: string | null,
+  onToggleSkill: (skillKey: string) => void,
+) => {
   if (skills.length <= 0) {
     return <span className="tech-layer-cell-empty">无</span>;
   }
 
   return (
     <div className="tech-layer-mobile-skills">
-      {skills.map((skill) => (
-        <div key={skill.id} className="tech-layer-mobile-skill">
-          <div className="tech-layer-mobile-skill-top">
-            <img className="tech-layer-mobile-skill-icon" src={skill.icon} alt={skill.name} />
-            <span className="tech-layer-mobile-skill-name">{skill.name}</span>
+      {skills.map((skill) => {
+        const skillKey = `${layer}:${skill.id}`;
+        const detailItems = getSkillInlineDetailItems(skill);
+        const expanded = expandedSkillKey === skillKey;
+
+        return (
+          <div key={skill.id} className={`tech-layer-mobile-skill ${expanded ? 'is-expanded' : ''}`}>
+            <button
+              type="button"
+              className="tech-layer-mobile-skill-trigger"
+              aria-expanded={expanded}
+              onClick={() => onToggleSkill(skillKey)}
+            >
+              <div className="tech-layer-mobile-skill-top">
+                <img className="tech-layer-mobile-skill-icon" src={skill.icon} alt={skill.name} />
+                <span className="tech-layer-mobile-skill-name">{skill.name}</span>
+              </div>
+              <span className="tech-layer-mobile-skill-action">{expanded ? '收起' : '查看完整内容'}</span>
+            </button>
+
+            {expanded ? (
+              <div className="tech-layer-mobile-skill-detail">
+                {renderSkillInlineDetailItems(detailItems)}
+              </div>
+            ) : null}
           </div>
-          <div className="tech-layer-mobile-skill-desc">{getSkillInlineSummary(skill)}</div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -117,11 +146,20 @@ const TechniqueDetailPanel: FC<TechniqueDetailPanelProps> = ({
   isMobile,
   emptyText = '未找到功法',
 }) => {
+  const [expandedSkillKey, setExpandedSkillKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    setExpandedSkillKey(null);
+  }, [detail?.id, isMobile]);
+
   if (!detail) {
     return <div className="tech-empty">{emptyText}</div>;
   }
 
   const layerRows = buildLayerRows(detail);
+  const handleToggleSkill = (skillKey: string) => {
+    setExpandedSkillKey((current) => (current === skillKey ? null : skillKey));
+  };
 
   return (
     <div className="tech-detail">
@@ -159,12 +197,12 @@ const TechniqueDetailPanel: FC<TechniqueDetailPanelProps> = ({
 
               <div className="tech-layer-mobile-section">
                 <div className="tech-layer-mobile-label">加成</div>
-                {renderBonusList(row.bonuses)}
+                {renderBonusList(row.bonuses, true)}
               </div>
 
               <div className="tech-layer-mobile-section">
                 <div className="tech-layer-mobile-label">技能变化</div>
-                {renderMobileSkillList(row.skills)}
+                {renderMobileSkillList(row.layer, row.skills, expandedSkillKey, handleToggleSkill)}
               </div>
             </div>
           ))}

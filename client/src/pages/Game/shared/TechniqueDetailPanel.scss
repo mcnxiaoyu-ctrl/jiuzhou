@@ -9,6 +9,12 @@
   }
 }
 
+.tech-detail-submodal {
+  .ant-modal-body {
+    padding: 12px;
+  }
+}
+
 .tech-detail {
   display: flex;
   flex-direction: column;
@@ -102,6 +108,12 @@
   min-width: 0;
 }
 
+.tech-layer-cell.is-mobile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
 .tech-layer-cell-line {
   display: flex;
   align-items: center;
@@ -171,14 +183,14 @@
 .tech-layer-mobile-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .tech-layer-mobile-item {
   border: 1px solid var(--border-color-soft);
   border-radius: 12px;
   background: var(--panel-bg-soft);
-  padding: 10px;
+  padding: 8px;
 }
 
 .tech-layer-mobile-item.is-unlocked {
@@ -190,7 +202,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .tech-layer-mobile-title {
@@ -200,19 +212,19 @@
 }
 
 .tech-layer-mobile-section + .tech-layer-mobile-section {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .tech-layer-mobile-label {
   font-size: 11px;
   color: var(--text-tertiary);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .tech-layer-mobile-skills {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .tech-layer-mobile-skill {
@@ -222,10 +234,34 @@
   padding: 6px 8px;
 }
 
+.tech-layer-mobile-skill-trigger {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tech-layer-mobile-skill-trigger:focus,
+.tech-layer-mobile-skill-trigger:focus-visible,
+.tech-layer-mobile-skill-trigger:active {
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+}
+
 .tech-layer-mobile-skill-top {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .tech-layer-mobile-skill-icon {
@@ -240,22 +276,43 @@
 }
 
 .tech-layer-mobile-skill-name {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-color);
   min-width: 0;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
-.tech-layer-mobile-skill-desc {
-  margin-top: 4px;
-  font-size: 10px;
-  color: var(--text-tertiary);
-  line-height: 1.35;
+.tech-layer-mobile-skill-action {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--primary-color);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.tech-layer-mobile-skill-detail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color-soft);
+}
+
+.tech-layer-mobile-skill-detail .skill-inline-lines {
+  gap: 6px;
+}
+
+.tech-layer-mobile-skill-detail .skill-inline-row {
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 @media screen and (max-width: 900px) {
+  .tech-detail-submodal {
+    .ant-modal-body {
+      padding: 10px;
+    }
+  }
+
   .tech-submodal {
     .ant-modal-body {
       height: 66vh;
@@ -303,20 +360,23 @@
     border-radius: 10px;
     padding: 8px;
   }
-
-  .tech-layer-mobile-skill-desc {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
 }
 
 @media screen and (max-width: 520px) {
+  .tech-detail-submodal {
+    .ant-modal-body {
+      padding: 8px;
+    }
+  }
+
   .tech-submodal {
     .ant-modal-body {
       padding: 8px;
     }
+  }
+
+  .tech-detail {
+    gap: 8px;
   }
 
   .tech-detail-icon {
@@ -324,11 +384,65 @@
     height: 42px;
   }
 
+  .tech-detail-desc {
+    padding: 7px 8px;
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .tech-layer-cell-line {
+    padding: 5px 7px;
+    border-radius: 8px;
+  }
+
+  .tech-layer-cell-k,
+  .tech-layer-cell-v {
+    font-size: 10px;
+  }
+
+  .tech-layer-cell.is-mobile-grid {
+    gap: 5px;
+  }
+
   .tech-layer-mobile-title {
     font-size: 11px;
   }
 
-  .tech-layer-mobile-skill-desc {
-    -webkit-line-clamp: 1;
+  .tech-layer-mobile-item {
+    padding: 7px;
+    border-radius: 9px;
+  }
+
+  .tech-layer-mobile-head {
+    margin-bottom: 5px;
+  }
+
+  .tech-layer-mobile-section + .tech-layer-mobile-section {
+    margin-top: 5px;
+  }
+
+  .tech-layer-mobile-label {
+    margin-bottom: 3px;
+    font-size: 10px;
+  }
+
+  .tech-layer-mobile-skill {
+    padding: 5px 6px;
+    border-radius: 8px;
+  }
+
+  .tech-layer-mobile-skill-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .tech-layer-mobile-skill-action,
+  .tech-layer-mobile-skill-detail .skill-inline-row {
+    font-size: 10px;
+  }
+
+  .tech-layer-mobile-skill-detail {
+    margin-top: 6px;
+    padding-top: 6px;
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TechniqueResearchJobDto } from '../../../../../services/api/technique';
 import {
+  getSkillMobileDetailContent,
   getSkillCardSections,
   getSkillInlineDetailItems,
   mapResearchPreviewSkillToDetail,
@@ -77,7 +78,7 @@ describe('skillDetailShared', () => {
       { label: '目标', value: '单体敌人' },
       { label: '数量', value: '1' },
       { label: '伤害', value: '物理' },
-      { label: '五行', value: '金' },
+      { label: '五行', value: '金', valueClassName: 'game-element-text game-element--jin' },
     ]);
 
     expect(sections.summaryItems.map((item) => item.value)).toStrictEqual([
@@ -96,5 +97,26 @@ describe('skillDetailShared', () => {
       '造成物理伤害，金属性，倍率 92%（物攻）',
       '施加月痕印记（每次+1层，上限3层，持续2回合；被消耗时返还灵气并强化下一次技能）',
     ]);
+  });
+
+  it('getSkillMobileDetailContent: 应同时输出紧凑摘要与可展开的完整详情', () => {
+    const content = getSkillMobileDetailContent(mapResearchPreviewSkillToDetail(createPreviewSkill()));
+
+    expect(content.summary).toBe(
+      '惊鸿步的第1式。 · 灵气消耗:12 + 15%最大灵气 · 冷却回合:1回合 · 目标类型:单体敌人 · 目标数量:1 · 施加增益：下一次闪避（数值 1），持续2回合 · 造成物理伤害，金属性，倍率 92%（物攻） · 施加月痕印记（每次+1层，上限3层，持续2回合；被消耗时返还灵气并强化下一次技能）',
+    );
+    expect(content.detailItems.map((item) => item.label)).toStrictEqual([
+      '描述',
+      '灵气消耗',
+      '冷却回合',
+      '目标类型',
+      '目标数量',
+      '效果1',
+      '效果2',
+      '效果3',
+    ]);
+    expect(content.detailItems.map((item) => item.value)).toContain('惊鸿步的第1式。');
+    expect(content.detailItems.map((item) => item.value)).toContain('12 + 15%最大灵气');
+    expect(content.detailItems.map((item) => item.value)).toContain('造成物理伤害，金属性，倍率 92%（物攻）');
   });
 });

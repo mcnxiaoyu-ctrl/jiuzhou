@@ -1385,7 +1385,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
         title="功法详情"
         centered
         width="min(720px, calc(100vw - 16px))"
-        className="tech-submodal"
+        className="tech-submodal tech-detail-submodal"
         destroyOnHidden
       >
         <TechniqueDetailPanel detail={detailTechnique} isMobile={isMobile} />
