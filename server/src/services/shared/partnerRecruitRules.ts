@@ -152,8 +152,6 @@ const PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_GUIDE_BY_QUALITY: Record<
   天: { ceiling: 50, preferredMin: 25 },
 };
 
-const PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_MIN_WEIGHT_RATIO = 0.4;
-
 const normalizePartnerRecruitRandomSeed = (seed: number): number => {
   if (!Number.isFinite(seed)) {
     throw new Error('伙伴招募主攻成长随机 seed 非法');
@@ -173,24 +171,82 @@ const normalizePartnerRecruitPrimaryAttackGrowthTarget = (
   return Math.min(guide.ceiling, Math.max(guide.preferredMin, normalizedTarget));
 };
 
+/**
+ * 伙伴主攻成长随机权重
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1) 做什么：集中定义主攻成长在区间内的单点权重，让中低段成为主分布，高段退化为少见长尾。
+ * 2) 不做什么：不改变品质上下界，不做额外保底，不覆盖提示词导向。
+ *
+ * 输入/输出：
+ * - 输入：当前品质区间总长度，以及当前值距离最低值的偏移量。
+ * - 输出：该偏移量对应的正整数权重。
+ *
+ * 数据流/状态流：
+ * quality 区间 -> 单点权重 -> 累加总权重 -> seed 命中某个 offset -> 主攻成长目标值。
+ *
+ * 复用设计说明：
+ * - 主攻成长分布只允许由这一处决定，避免招募与三魂归契以后再各写一套“高值稀有”算法。
+ * - 后续若还要继续压缩尾部，只需要调这一处权重曲线，不需要同步改调用方。
+ *
+ * 关键边界条件与坑点：
+ * 1) 必须保证所有 offset 权重都 > 0，否则最高值会变成永远不可能出现。
+ * 2) 不能直接砍掉上界；这次目标是保留区间、压低尾部，而不是缩短品质天花板。
+ */
+const getPartnerRecruitPrimaryAttackGrowthWeight = (
+  span: number,
+  offset: number,
+): number => {
+  return span - offset;
+};
+
+type PartnerRecruitPrimaryAttackGrowthDistribution = {
+  weights: number[];
+  totalWeight: number;
+};
+
+const buildPartnerRecruitPrimaryAttackGrowthDistribution = (
+  quality: PartnerRecruitQuality,
+): PartnerRecruitPrimaryAttackGrowthDistribution => {
+  const guide = PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_GUIDE_BY_QUALITY[quality];
+  const span = guide.ceiling - guide.preferredMin + 1;
+  const weights: number[] = [];
+  let totalWeight = 0;
+
+  for (let offset = 0; offset < span; offset += 1) {
+    const weight = getPartnerRecruitPrimaryAttackGrowthWeight(span, offset);
+    weights.push(weight);
+    totalWeight += weight;
+  }
+
+  return { weights, totalWeight };
+};
+
+const PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_DISTRIBUTION_BY_QUALITY: Record<
+  PartnerRecruitQuality,
+  PartnerRecruitPrimaryAttackGrowthDistribution
+> = {
+  黄: buildPartnerRecruitPrimaryAttackGrowthDistribution('黄'),
+  玄: buildPartnerRecruitPrimaryAttackGrowthDistribution('玄'),
+  地: buildPartnerRecruitPrimaryAttackGrowthDistribution('地'),
+  天: buildPartnerRecruitPrimaryAttackGrowthDistribution('天'),
+};
+
 export const rollPartnerRecruitPrimaryAttackGrowthTarget = (
   quality: PartnerRecruitQuality,
   seed: number,
 ): number => {
   const guide = PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_GUIDE_BY_QUALITY[quality];
+  const distribution = PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_DISTRIBUTION_BY_QUALITY[quality];
   const normalizedSeed = normalizePartnerRecruitRandomSeed(seed);
   const scopedSeed = buildDeterministicScopedSeed(
     'partner-recruit-primary-attack-growth',
     `${quality}:${normalizedSeed}`,
   );
-  const span = guide.ceiling - guide.preferredMin + 1;
-  const minWeight = Math.max(3, Math.round(span * PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_MIN_WEIGHT_RATIO));
-  const totalWeight = Array.from({ length: span }, (_, offset) => minWeight + (span - 1 - offset))
-    .reduce((sum, weight) => sum + weight, 0);
-  let rolledWeight = hashTextUnitFloat(scopedSeed) * totalWeight;
+  let rolledWeight = hashTextUnitFloat(scopedSeed) * distribution.totalWeight;
 
-  for (let offset = 0; offset < span; offset += 1) {
-    rolledWeight -= minWeight + (span - 1 - offset);
+  for (let offset = 0; offset < distribution.weights.length; offset += 1) {
+    rolledWeight -= distribution.weights[offset];
     if (rolledWeight < 0) {
       return guide.preferredMin + offset;
     }
