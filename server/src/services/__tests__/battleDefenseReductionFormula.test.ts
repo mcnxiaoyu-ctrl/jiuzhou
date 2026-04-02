@@ -62,12 +62,16 @@ function createAttrs(overrides: Partial<BattleAttrs> = {}): BattleAttrs {
   };
 }
 
-function createUnit(id: string, overrides: Partial<BattleAttrs> = {}): BattleUnit {
+function createUnit(
+  id: string,
+  overrides: Partial<BattleAttrs> = {},
+  unitType: BattleUnit['type'] = 'player',
+): BattleUnit {
   const attrs = createAttrs(overrides);
   return {
     id,
     name: id,
-    type: 'player',
+    type: unitType,
     sourceId: Number(id.replace(/\D/g, '')) || 1,
     baseAttrs: { ...attrs },
     currentAttrs: { ...attrs },
@@ -284,4 +288,58 @@ test('暴伤减免高于暴伤收益时，暴击伤害应被钳制为1倍', () =
 
   assert.equal(result.isCrit, true);
   assert.equal(result.damage, 200);
+});
+
+test('怪物暴伤高于 300% 时，最终暴击倍率应按 300% 上限结算', () => {
+  const attacker = createUnit(
+    'monster-attacker-10',
+    {
+      mingzhong: 1,
+      baoji: 1,
+      baoshang: 3.6,
+      wugong: 200,
+    },
+    'monster',
+  );
+  const defender = createUnit('defender-10', {
+    shanbi: 0,
+    zhaojia: 0,
+    kangbao: 0,
+    wufang: 0,
+  });
+  const state = createState(attacker, defender);
+
+  const result = calculateDamage(state, attacker, defender, {
+    damageType: 'physical',
+    element: 'none',
+    baseDamage: 200,
+  });
+
+  assert.equal(result.isCrit, true);
+  assert.equal(result.damage, 600);
+});
+
+test('玩家暴伤高于 300% 时，不应被怪物专属上限误钳制', () => {
+  const attacker = createUnit('attacker-11', {
+    mingzhong: 1,
+    baoji: 1,
+    baoshang: 3.6,
+    wugong: 200,
+  });
+  const defender = createUnit('defender-11', {
+    shanbi: 0,
+    zhaojia: 0,
+    kangbao: 0,
+    wufang: 0,
+  });
+  const state = createState(attacker, defender);
+
+  const result = calculateDamage(state, attacker, defender, {
+    damageType: 'physical',
+    element: 'none',
+    baseDamage: 200,
+  });
+
+  assert.equal(result.isCrit, true);
+  assert.equal(result.damage, 720);
 });

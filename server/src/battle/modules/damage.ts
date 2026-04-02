@@ -20,12 +20,20 @@ const clamp = (value: number, min: number, max: number): number => {
   return Math.max(min, Math.min(max, value));
 };
 
+const getCritDamageCap = (attacker: BattleUnit): number => {
+  if (attacker.type === 'monster') {
+    return BATTLE_CONSTANTS.MONSTER_MAX_CRIT_DAMAGE_MULTIPLIER;
+  }
+  return Number.POSITIVE_INFINITY;
+};
+
 const calculateCritDamageMultiplier = (
   attacker: BattleUnit,
   defender: BattleUnit,
 ): number => {
+  const cappedCritDamage = Math.min(attacker.currentAttrs.baoshang, getCritDamageCap(attacker));
   const reducedCritDamage =
-    attacker.currentAttrs.baoshang - defender.currentAttrs.jianbaoshang;
+    cappedCritDamage - defender.currentAttrs.jianbaoshang;
   return Math.max(1, reducedCritDamage);
 };
 
