@@ -23,7 +23,10 @@ import {
   buildTechniqueGenerationRetryPromptContext,
   buildTechniqueGenerationTextModelRequest,
 } from '../shared/techniqueGenerationCandidateCore.js';
-import { buildTechniqueAuraAttackPercentSoftRangePromptRule } from '../shared/techniqueGenerationConstraints.js';
+import {
+  buildTechniqueAuraAttackPercentSoftRangePromptRule,
+  buildTechniqueAuraPolarityPromptRule,
+} from '../shared/techniqueGenerationConstraints.js';
 import {
   TECHNIQUE_BURNING_WORD_PROMPT_GENERAL_RULE,
   TECHNIQUE_BURNING_WORD_PROMPT_SCOPE_GENERAL_RULE,
@@ -447,6 +450,12 @@ test('buildTechniqueGenerationTextModelRequest: 主提示应明确升级链路�
     true,
   );
   assert.equal(
+    parsedUserMessage.constraints?.generalRules?.includes(
+      buildTechniqueAuraPolarityPromptRule(),
+    ),
+    true,
+  );
+  assert.equal(
     parsedUserMessage.constraints?.outputChecklist?.includes(
       'buffKind=aura 若包含多个进攻类百分比 attr Buff，请参考 numericRanges.effect.auraAttackPercentSuggestedRange 设计总和，不要再按品质拆固定上限',
     ),
@@ -455,6 +464,12 @@ test('buildTechniqueGenerationTextModelRequest: 主提示应明确升级链路�
   assert.equal(
     parsedUserMessage.constraints?.outputChecklist?.includes(
       buildTechniqueAuraAttackPercentSoftRangePromptRule(),
+    ),
+    true,
+  );
+  assert.equal(
+    parsedUserMessage.constraints?.outputChecklist?.includes(
+      buildTechniqueAuraPolarityPromptRule(),
     ),
     true,
   );

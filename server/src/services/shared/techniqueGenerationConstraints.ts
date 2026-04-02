@@ -216,6 +216,7 @@ export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   '禁止输出 null/undefined 与空字符串占位；无意义的可选字段直接省略',
   '当 triggerType=passive 时，技能必须为自目标常驻被动：targetType=self、targetCount=1、cooldown=0、costLingqi=0、costLingqiRate=0、costQixue=0、costQixueRate=0',
   'buffKind=aura 时必须提供 auraTarget 和 auraEffects，auraEffects 中每个子效果遵循对应 type 的标准校验规则，子效果不允许嵌套光环',
+  buildTechniqueAuraPolarityPromptRule(),
   'buffKind=aura 的 auraEffects 若包含进攻类百分比 attr 增益（如法攻/物攻/暴击/暴伤/增伤），请参考接近天品强度的建议范围设计总和，不要再按品质拆固定上限，也不要为了凑满范围硬塞数值。',
   'buffKind=aura 的光环效果只能用于 triggerType=passive 的被动技能，costLingqi/costQixue/cooldown 必须为 0，进场自动生效，永久存在',
 ] as const;
@@ -280,6 +281,10 @@ export const TECHNIQUE_AURA_ATTACK_PERCENT_SUGGESTED_RANGE = Object.freeze({
 export const buildTechniqueAuraAttackPercentSoftRangePromptRule = (): string => {
   return `buffKind=aura 的 auraEffects 中，attrKey 属于 ${TECHNIQUE_AURA_ATTACK_PERCENT_ATTR_KEYS.join('/')} 的正向百分比 buff 可以自由组合；这些 value 的总和建议大致控制在 ${TECHNIQUE_AURA_ATTACK_PERCENT_SUGGESTED_RANGE.min}~${TECHNIQUE_AURA_ATTACK_PERCENT_SUGGESTED_RANGE.max}，这是接近天品上限的参考区间，由你结合覆盖范围、附带代价与机制复杂度自行决定，不要求固定档位。`;
 };
+
+export function buildTechniqueAuraPolarityPromptRule(): string {
+  return 'buffKind=aura 时，光环外层 type/buffKey 必须与 auraEffects 的实际语义一致，而不是只看 auraTarget：整体为正向常驻效果时使用 type=buff + buff-aura；整体为负向常驻效果时使用 type=debuff + debuff-aura。允许给敌方施加增益光环，也允许给自身/友方施加负面光环，但禁止返回“外层 buff-aura，auraEffects 却全是 debuff/持续伤害/禁疗/减资源等负向效果”这类自相矛盾结构。';
+}
 
 const buildTechniquePromptBuffConfigRules = () => {
   const catalog = getTechniqueStructuredBuffCatalog();
@@ -585,6 +590,7 @@ export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
       'buffKind=aura 时必须提供 auraTarget（all_ally/all_enemy/self）和 auraEffects（子效果数组，长度 ≤ 4）',
       'buffKind=aura 时不需要 duration，光环永久存在直到施法者死亡',
       'auraEffects 子效果不需要 duration；光环每回合自动续上子效果',
+      'buff 类型的 aura 用于表达整体正向的常驻效果；即使 auraTarget=all_enemy，只要子效果整体是增益也允许继续使用 type=buff + buff-aura',
       'auraEffects 若同时给多个进攻类百分比 attr Buff（如法攻/物攻/暴击/暴伤/增伤），请参考 numericRanges.effect.auraAttackPercentSuggestedRange 设计总和，不要再按品质拆固定档位，也不要为了凑满范围硬塞数值',
     ],
     defaultTemplate: {
@@ -612,6 +618,7 @@ export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
       'buffKind=aura 时必须提供 auraTarget（all_ally/all_enemy/self）和 auraEffects（子效果数组，长度 ≤ 4）',
       'buffKind=aura 时不需要 duration，光环永久存在直到施法者死亡',
       'auraEffects 子效果不需要 duration；光环每回合自动续上子效果',
+      'debuff 类型的 aura 用于表达整体负向的常驻效果；只要子效果整体是削弱、持续伤害、禁疗、减资源等负向语义，外层就必须保持 type=debuff + debuff-aura，而不是误写成 buff-aura',
     ],
     defaultTemplate: {
       type: 'debuff',
@@ -865,6 +872,7 @@ export const TECHNIQUE_PROMPT_OUTPUT_CHECKLIST = [
   '仅 random_enemy/random_ally 允许 targetCount > 1；self/single_*/all_* 的 targetCount 必须为 1',
   'layers.passives[].key 必须来自 allowedPassiveKeys，且 value 必须满足 passiveValueGuideByKey 的单层/累计上限',
   'buffKind=aura 时必须提供 auraTarget 和 auraEffects，子效果不允许嵌套光环',
+  buildTechniqueAuraPolarityPromptRule(),
   'buffKind=aura 若包含多个进攻类百分比 attr Buff，请参考 numericRanges.effect.auraAttackPercentSuggestedRange 设计总和，不要再按品质拆固定上限',
 ] as const;
 
