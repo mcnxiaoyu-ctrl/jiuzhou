@@ -102,7 +102,7 @@ const formatScaledValue = (effect: Record<string, unknown>, kind: 'damage' | 'he
     const rate = scaleRate ?? value;
     if (rate === null || rate <= 0) return '';
     return scaleAttrText
-      ? `倍率 ${formatPercent(rate)}%（${scaleAttrText}）`
+      ? `倍率 ${formatPercent(rate)}% ${scaleAttrText}`
       : `倍率 ${formatPercent(rate)}%`;
   }
 
@@ -143,12 +143,13 @@ const formatDamageEffect = (effect: Record<string, unknown>, context: SkillEffec
   const scaled = formatScaledValue(effect, 'damage');
   const hitCount = Math.max(1, toPositiveInt(effect.hit_count) || 1);
 
-  const prefix = damageType ? `造成${damageType}伤害` : '造成伤害';
-  const suffixes: string[] = [];
-  if (element && element !== '无') suffixes.push(`${element}属性`);
-  if (scaled) suffixes.push(scaled);
-  if (hitCount > 1) suffixes.push(`连击${hitCount}次`);
-  return suffixes.length > 0 ? `${prefix}，${suffixes.join('，')}` : prefix;
+  const damageNoun = damageType ? `${damageType}伤害` : '伤害';
+  const typedDamageNoun = element && element !== '无'
+    ? `${element}属性${damageNoun}`
+    : damageNoun;
+  let text = scaled ? `造成 ${scaled}的${typedDamageNoun}` : `造成${typedDamageNoun}`;
+  if (hitCount > 1) text += `，连击${hitCount}次`;
+  return text;
 };
 
 const formatHealEffect = (effect: Record<string, unknown>): string => {
@@ -445,7 +446,14 @@ const formatCompactBuffDetail = (detail: string): string => {
   if (!detail) return '';
   if (detail.startsWith('幅度 ')) return detail.slice('幅度 '.length);
   if (detail.startsWith('数值 ')) return detail.slice('数值 '.length);
+  if (detail.startsWith('倍率 ')) return detail.slice('倍率 '.length);
   return detail;
+};
+
+const formatCompactBuffSummary = (buffKind: string, name: string, valueText: string): string => {
+  if (!valueText) return name;
+  if (buffKind === 'dot' || buffKind === 'hot') return `${valueText}的${name}效果`;
+  return `${name} ${valueText}`;
 };
 
 const formatBuffEffect = (
@@ -462,7 +470,8 @@ const formatBuffEffect = (
   const buffKind = normalizeBuffKind(effect.buffKind);
   const { name, attr, buffKey } = formatBuffName(effect, effectType);
   const rawValueText = formatBuffDetail(effect, buffKey, buffKind, attr, applyType);
-  const valueText = options.compactValueText ? formatCompactBuffDetail(rawValueText) : rawValueText;
+  const shouldCompactValueText = options.compactValueText || buffKind === 'dot' || buffKind === 'hot';
+  const valueText = shouldCompactValueText ? formatCompactBuffDetail(rawValueText) : rawValueText;
   const duration = toPositiveInt(effect.duration);
   const rawTarget = toText(effect.target);
   if (buffKind === 'aura') {
@@ -480,9 +489,18 @@ const formatBuffEffect = (
       ? `${targetPrefix}${actionText}：${name}`
       : `${actionText}：${name}`;
   if (valueText) {
-    text += options.compactValueText && options.omitActionText
-      ? ` ${valueText}`
-      : `（${valueText}）`;
+    if (shouldCompactValueText) {
+      if (options.omitActionText) {
+        text += ` ${valueText}`;
+      } else {
+        const compactSummary = formatCompactBuffSummary(buffKind, name, valueText);
+        text = targetPrefix
+          ? `${targetPrefix}${actionText}：${compactSummary}`
+          : `${actionText}：${compactSummary}`;
+      }
+    } else {
+      text += `（${valueText}）`;
+    }
   }
   // 光环永久存在，不显示外层 duration
   if (duration > 0 && buffKind !== 'aura' && !options.ignoreDuration) text += `，持续${duration}回合`;

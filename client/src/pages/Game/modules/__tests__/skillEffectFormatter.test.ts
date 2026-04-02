@@ -92,6 +92,41 @@ describe('skillEffectFormatter', () => {
     ]);
   });
 
+  it('伤害倍率描述不应再用括号包裹属性来源', () => {
+    const lines = formatSkillEffectLines([
+      {
+        type: 'damage',
+        valueType: 'scale',
+        scaleAttr: 'fagong',
+        scaleRate: 1.2,
+        damageType: 'magic',
+        element: 'huo',
+      },
+    ]);
+
+    expect(lines).toEqual([
+      '造成 120% 法攻的火属性法术伤害',
+    ]);
+  });
+
+  it('灼烧减益应直接展示倍率与属性来源，不再额外套括号', () => {
+    const lines = formatSkillEffectLines([
+      {
+        type: 'debuff',
+        duration: 2,
+        buffKey: 'debuff-burn',
+        buffKind: 'dot',
+        valueType: 'scale',
+        scaleAttr: 'fagong',
+        scaleRate: 0.3,
+      },
+    ]);
+
+    expect(lines).toEqual([
+      '对敌方目标施加减益：30% 法攻的灼烧效果，持续2回合',
+    ]);
+  });
+
   it('应将 mirror_crack 印记格式化为包含追击语义的中文文案', () => {
     const lines = formatSkillEffectLines([
       {
