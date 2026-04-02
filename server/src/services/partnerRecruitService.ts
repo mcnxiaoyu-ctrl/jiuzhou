@@ -83,6 +83,7 @@ import { lockPartnerRecruitCreationMutex } from './shared/characterOperationMute
 import { loadCharacterRealmSnapshot } from './shared/characterRealm.js';
 import { broadcastHeavenPartnerAcquired } from './shared/partnerWorldBroadcast.js';
 import { reviewPartnerRecruitCustomBaseModel } from './shared/partnerRecruitBaseModelReview.js';
+import { buildPartnerRecruitRefundMailMarkdown } from './shared/generationRefundMail.js';
 
 export type ServiceResult<T = undefined> = {
   success: boolean;
@@ -152,17 +153,6 @@ const getPartnerRecruitCustomBaseModelTokenName = (): string => {
     throw new Error(`伙伴招募自定义底模消耗道具未配置：${PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID}`);
   }
   return itemName;
-};
-
-const buildPartnerRecruitRefundMailContent = (reason: string): string => {
-  const lines = [
-    '本次伙伴招募未能成形，系统已将本次消耗通过邮件退回。',
-  ];
-  const normalizedReason = reason.trim();
-  if (normalizedReason) {
-    lines.push(`失败原因：${normalizedReason}`);
-  }
-  return lines.join('\n');
 };
 
 export const appendPartnerRecruitRefundHint = (reason: string): string => {
@@ -718,7 +708,7 @@ class PartnerRecruitService {
       senderName: '系统',
       mailType: 'reward',
       title: PARTNER_RECRUIT_REFUND_MAIL_TITLE,
-      content: buildPartnerRecruitRefundMailContent(reason),
+      content: buildPartnerRecruitRefundMailMarkdown(reason),
       attachSpiritStones: spiritStonesCost,
       attachItems: usedCustomBaseModelToken
         ? [

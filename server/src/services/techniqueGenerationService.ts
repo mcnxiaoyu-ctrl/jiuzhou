@@ -102,6 +102,7 @@ import {
   type TechniqueRecentSuccessfulDescriptionPromptContext,
 } from './shared/techniqueRecentSuccessfulDescriptionPrompt.js';
 import { buildTechniqueResearchCreativeDirectionPromptContext } from './shared/techniqueResearchCreativeDirectionPrompt.js';
+import { buildTechniqueResearchRefundMailMarkdown } from './shared/generationRefundMail.js';
 
 export type TechniqueGenerationStatus =
   | 'pending'
@@ -272,23 +273,6 @@ const DEFAULT_GENERATED_SKILL_ICON = '/assets/skills/icon_skill_44.png';
 const TECHNIQUE_RESEARCH_REFUND_MAIL_TITLE = '洞府研修退款通知';
 const TECHNIQUE_RESEARCH_REFUND_HINT = '对应返还已通过邮件发放，请前往邮箱领取。';
 const TECHNIQUE_RESEARCH_EXPIRED_DRAFT_MESSAGE = '草稿已过期，系统已通过邮件返还一半功法残页，请重新领悟';
-
-const buildTechniqueResearchRefundMailContent = (
-  reason: string,
-  refundCooldownBypassToken: boolean,
-): string => {
-  const lines = [
-    '本次洞府研修未能成法，系统已将本次返还通过邮件发放。',
-  ];
-  if (refundCooldownBypassToken) {
-    lines.push('本次额外消耗的顿悟符也已一并返还。');
-  }
-  const normalizedReason = reason.trim();
-  if (normalizedReason) {
-    lines.push(`结算原因：${normalizedReason}`);
-  }
-  return lines.join('\n');
-};
 
 export const appendTechniqueResearchRefundHint = (reason: string): string => {
   const normalizedReason = reason.trim();
@@ -704,7 +688,7 @@ class TechniqueGenerationService {
       senderName: '系统',
       mailType: 'reward',
       title: TECHNIQUE_RESEARCH_REFUND_MAIL_TITLE,
-      content: buildTechniqueResearchRefundMailContent(reason, refundCooldownBypassToken),
+      content: buildTechniqueResearchRefundMailMarkdown(reason, refundCooldownBypassToken),
       attachRewards: refundRewards,
       expireDays: 30,
       source: 'technique_research_refund',

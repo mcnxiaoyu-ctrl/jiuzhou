@@ -30,6 +30,10 @@ import {
 } from './shared/cacheVersion.js';
 import { lockCharacterRowsInOrder } from './shared/characterRowLock.js';
 import {
+  cancelActivePartnerMarketListing,
+  invalidatePartnerMarketListingsCache,
+} from './shared/partnerMarketListingLifecycle.js';
+import {
   loadPartnerDisplayById,
   loadSinglePartnerRow,
   loadSinglePartnerRowById,
@@ -131,8 +135,19 @@ const parseMaybeString = (v: string | null | undefined): string =>
 
 const partnerMarketListingsCacheVersion = createCacheVersionManager('partner-market:listings');
 
-const invalidatePartnerMarketListingsCache = async (): Promise<void> => {
-  await partnerMarketListingsCacheVersion.bumpVersion();
+const partnerMarketListingsCache = createCacheLayer<string, PartnerListingsCacheData>({
+  keyPrefix: 'partner-market:listings:',
+  redisTtlSec: PARTNER_MARKET_LISTINGS_CACHE_REDIS_TTL_SEC,
+  memoryTtlMs: PARTNER_MARKET_LISTINGS_CACHE_MEMORY_TTL_MS,
+  loader: async (versionedKey) => {
+    const queryParams = parseVersionedCacheBaseKey<PartnerListingsQuery>(versionedKey);
+    if (!queryParams) return null;
+    return loadPartnerListingsCacheData(queryParams);
+  },
+});
+
+const invalidatePartnerMarketListingsCacheAndMemory = async (): Promise<void> => {
+  await invalidatePartnerMarketListingsCache();
   partnerMarketListingsCache.invalidateAll();
 };
 
@@ -253,17 +268,6 @@ const loadPartnerListingsCacheData = async (
     total: Number(countResult.rows[0]?.cnt ?? 0),
   };
 };
-
-const partnerMarketListingsCache = createCacheLayer<string, PartnerListingsCacheData>({
-  keyPrefix: 'partner-market:listings:',
-  redisTtlSec: PARTNER_MARKET_LISTINGS_CACHE_REDIS_TTL_SEC,
-  memoryTtlMs: PARTNER_MARKET_LISTINGS_CACHE_MEMORY_TTL_MS,
-  loader: async (versionedKey) => {
-    const queryParams = parseVersionedCacheBaseKey<PartnerListingsQuery>(versionedKey);
-    if (!queryParams) return null;
-    return loadPartnerListingsCacheData(queryParams);
-  },
-});
 
 const buildTradeRecordDto = async (
   row: PartnerTradeRecordRow,
@@ -610,7 +614,7 @@ class PartnerMarketService {
         listingFeeSilver.toString(),
       ],
     );
-    await invalidatePartnerMarketListingsCache();
+    await invalidatePartnerMarketListingsCacheAndMemory();
     return {
       success: true,
       message: `上架成功，已收取${listingFeeSilver.toString()}银两手续费（未卖出下架将退还）`,
@@ -628,56 +632,16 @@ class PartnerMarketService {
     const listingId = parsePositiveInt(params.listingId);
     if (listingId === null) return { success: false, message: 'listingId参数错误' };
 
-    const listingResult = await query(
-      `
-        SELECT id, seller_character_id, status, listing_fee_silver
-        FROM market_partner_listing
-        WHERE id = $1
-        FOR UPDATE
-      `,
-      [listingId],
-    );
-    if (listingResult.rows.length <= 0) {
-      return { success: false, message: '上架记录不存在' };
+    const cancelResult = await cancelActivePartnerMarketListing({
+      listingId,
+      expectedSellerCharacterId: params.characterId,
+    });
+    if (!cancelResult.success) {
+      return { success: false, message: cancelResult.message };
     }
-    const listing = listingResult.rows[0] as {
-      id: number;
-      seller_character_id: number;
-      status: string;
-      listing_fee_silver: string | number | bigint;
-    };
-    if (Number(listing.seller_character_id) !== params.characterId) {
-      return { success: false, message: '无权限操作该上架记录' };
-    }
-    if (String(listing.status) !== 'active') {
-      return { success: false, message: '该上架记录不可下架' };
-    }
-
-    await query(
-      `
-        UPDATE market_partner_listing
-        SET status = 'cancelled',
-            cancelled_at = NOW(),
-            updated_at = NOW()
-        WHERE id = $1
-      `,
-      [listingId],
-    );
-
-    const refundFeeSilver = BigInt(listing.listing_fee_silver ?? 0);
-    if (refundFeeSilver > 0n) {
-      const addResult = await addCharacterCurrenciesExact(params.characterId, {
-        silver: refundFeeSilver,
-      });
-      if (!addResult.success) {
-        return { success: false, message: addResult.message };
-      }
-    }
-
-    await invalidatePartnerMarketListingsCache();
     return {
       success: true,
-      message: `下架成功，已退还${refundFeeSilver.toString()}银两手续费`,
+      message: `下架成功，已退还${cancelResult.refundFeeSilver.toString()}银两手续费`,
     };
   }
 
@@ -855,7 +819,7 @@ class PartnerMarketService {
     );
 
     await schedulePartnerRankSnapshotRefreshByCharacterId(params.buyerCharacterId);
-    await invalidatePartnerMarketListingsCache();
+    await invalidatePartnerMarketListingsCacheAndMemory();
     return {
       success: true,
       message: '购买成功，伙伴已转入麾下',

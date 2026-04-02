@@ -1,15 +1,15 @@
 #!/usr/bin/env tsx
 
 /**
- * 按伙伴招募底模批量回收伙伴脚本。
+ * 按伙伴招募目标批量回收伙伴脚本。
  *
  * 作用（做什么 / 不做什么）：
- * 1) 做什么：按 `partner_recruit_job.requested_base_model` 定位已确认收下的伙伴，输出 dry run 预览，并在显式 `--execute` 时执行回收与补偿。
+ * 1) 做什么：按 `partner_recruit_job.requested_base_model` 或 `partner_recruit_job.id` 定位已确认收下的伙伴，输出 dry run 预览，并在显式 `--execute` 时执行回收与补偿。
  * 2) 做什么：统一汇总伙伴灌注消耗经验、当前保留的已学功法书、当前保留功法的升层消耗，以及当前完整计算后属性，避免人工逐个查库。
- * 3) 不做什么：不处理坊市挂单中或三魂归契占用中的伙伴，不绕过现有占用约束，也不追溯已被覆盖掉的历史打书记录。
+ * 3) 不做什么：不绕过三魂归契占用约束，也不追溯已被覆盖掉的历史打书记录；坊市 active 挂单会在执行事务里先强制下架后再回收。
  *
  * 输入/输出：
- * - 输入：脚本内 `TARGET_BASE_MODELS` 常量数组，以及固定生成时间截止线 `PARTNER_RECLAIM_GENERATION_CUTOFF_AT`；默认 dry run，可用 `--execute` 真正执行。
+ * - 输入：脚本内 `DEFAULT_TARGET_MODE` 对应的目标常量数组，以及固定生成时间截止线 `PARTNER_RECLAIM_GENERATION_CUTOFF_AT`；默认 dry run，可用 `--execute` 真正执行。
  * - 输出：控制台摘要，以及可选 `--report-file` JSON 报告；摘要与报告都会包含伙伴完整计算属性。执行模式会把高级招募令、灌注经验、功法升级消耗与功法书统一通过系统邮件返还后再删除伙伴。
  *
  * 数据流/状态流：
@@ -17,7 +17,7 @@
  *
  * 关键边界条件与坑点：
  * 1) 只有当前仍存在于 `character_partner`，且来源为 `partner_recruit` 的伙伴才会被处理；仅有预览、已放弃、已退款的招募任务不会命中。
- * 2) 生成时间筛选按 `partner_recruit_job.created_at < PARTNER_RECLAIM_GENERATION_CUTOFF_AT` 执行，业务口径是“中国时区 2026-03-23 18:00:00 前”；等于 18:00:00 的记录不会命中。
+ * 2) 仅按底模模式会追加 `partner_recruit_job.created_at < PARTNER_RECLAIM_GENERATION_CUTOFF_AT` 筛选，业务口径是“中国时区 2026-03-23 18:00:00 前”；显式招募任务 ID 模式不走这个时间截断。
  * 3) `character_partner_technique.learned_from_item_def_id` 只保留当前仍挂在伙伴身上的后天功法书来源；历史上已被覆盖的打书记录无法从现有表结构中精确追溯。
  */
 import '../bootstrap/installConsoleLogger.js';
@@ -26,6 +26,7 @@ import path from 'node:path';
 import { pool, query, withTransaction } from '../config/database.js';
 import { invalidateCharacterComputedCache } from '../services/characterComputedService.js';
 import { mailService } from '../services/mailService.js';
+import { cancelActivePartnerMarketListing } from '../services/shared/partnerMarketListingLifecycle.js';
 import {
     PARTNER_RECLAIM_GENERATION_CUTOFF_AT,
     PARTNER_RECLAIM_GENERATION_CUTOFF_LABEL,
@@ -38,6 +39,7 @@ import {
 import {
     buildPartnerReclaimTargetSelector,
     buildPartnerReclaimTargetSummary,
+    parseRecruitJobIdsArg,
     parsePartnerIdsArg,
     type PartnerReclaimTargetSelector,
 } from './shared/partnerReclaimTargetSelector.js';
@@ -67,9 +69,12 @@ type ScriptMode = 'dry-run' | 'execute';
 
 type CliOptions = {
     mode: ScriptMode;
+    recruitJobIds: string[];
     partnerIds: number[];
     reportFilePath: string | null;
 };
+
+type DefaultTargetMode = Exclude<PartnerReclaimTargetSelector['mode'], 'partner-ids'>;
 
 type BackupRow = Record<string, unknown>;
 
@@ -228,11 +233,13 @@ type ReclaimReport = {
     compensationItemName: string;
     compensationQtyPerPartner: number;
     baseModels: string[];
+    recruitJobIds: string[];
     partnerIds: number[];
     matchedPartnerCount: number;
     reclaimablePartnerCount: number;
     blockedPartnerCount: number;
     unmatchedBaseModels: string[];
+    unmatchedRecruitJobIds: string[];
     unmatchedPartnerIds: number[];
     partners: PartnerTargetSummary[];
     executionResults: PartnerExecutionResult[];
@@ -246,6 +253,51 @@ const SCRIPT_OBTAINED_FROM = 'partner_reclaim_script';
 const PARTNER_RECLAIM_MAIL_EXPIRE_DAYS = 30;
 const RECHECK_EXECUTABLE_PARTNER_LOCK_SQL = 'FOR UPDATE OF cp';
 const DEFAULT_BACKUP_DIR = path.resolve(process.cwd(), '.tmp', 'partner-reclaim-backups');
+const DEFAULT_TARGET_MODE: DefaultTargetMode = 'recruit-job-ids';
+const TARGET_RECRUIT_JOB_IDS = [
+    'partner-recruit-mnhm9f50-dd85662e',
+    'partner-recruit-mnhm8pb8-3b9bade8',
+    'partner-recruit-mnhm6wtu-838f160c',
+    'partner-recruit-mnhm6hef-cbcbbb4a',
+    'partner-recruit-mnhm5v2l-94dfcd71',
+    'partner-recruit-mnhm5qkk-9af80bc5',
+    'partner-recruit-mnhm5id7-c812edb6',
+    'partner-recruit-mnhm47h9-4238967a',
+    'partner-recruit-mnhm3i3z-7b8cc14e',
+    'partner-recruit-mnhm2vfk-c71cad0d',
+    'partner-recruit-mnhm2lkb-e882c260',
+    'partner-recruit-mnhm1vvg-a6132340',
+    'partner-recruit-mnhm0swt-ed481755',
+    'partner-recruit-mnhm0rz1-0d4ee0b2',
+    'partner-recruit-mnhlze33-99bedc87',
+    'partner-recruit-mnhlzah2-d22b3542',
+    'partner-recruit-mnhlyap8-df749597',
+    'partner-recruit-mnhlxy1t-f18aadaf',
+    'partner-recruit-mnhlwv5n-3bd12956',
+    'partner-recruit-mnhlwglo-64a5a123',
+    'partner-recruit-mnhlwd4x-906d2594',
+    'partner-recruit-mnhlve0e-03de5c0f',
+    'partner-recruit-mnhluxdh-3ecc62e5',
+    'partner-recruit-mnhlmxbu-144d5c61',
+    'partner-recruit-mnhlid6w-63f5add0',
+    'partner-recruit-mnhledez-112f47a4',
+    'partner-recruit-mnhl1q1a-3515f8b4',
+    'partner-recruit-mnhkxp9s-9ea2df12',
+    'partner-recruit-mnhks04y-db8f913c',
+    'partner-recruit-mng5jiio-b8e27483',
+    'partner-recruit-mng5fu2h-d55d90f8',
+    'partner-recruit-mng5awkg-945748f2',
+    'partner-recruit-mng516c5-a4794fcc',
+    'partner-recruit-mng4wpo5-17c444f9',
+    'partner-recruit-mng4t1mk-d59f3f11',
+    'partner-recruit-mng4p3mp-eee8d6d2',
+    'partner-recruit-mng4m36x-af9199a0',
+    'partner-recruit-mng4i3lw-93df199f',
+    'partner-recruit-mng4eq13-748bcba9',
+    'partner-recruit-mng48j7h-1e7d63ef',
+    'partner-recruit-mng44hr2-134fc23a',
+    'partner-recruit-mng3svq2-89b9ce79',
+] as const;
 const TARGET_BASE_MODELS = [
     '群体六连十万血六万攻女',
     '法术群体六连击三千法攻',
@@ -288,21 +340,26 @@ const TARGET_BASE_MODELS = [
     '万攻万闪避万吸血群体六连',
 ] as const;
 const HELP_TEXT = [
-    '按伙伴招募底模批量回收伙伴脚本',
+    '按伙伴招募目标批量回收伙伴脚本',
     '',
     '用法：',
     '  pnpm --filter ./server partner:reclaim',
     '  pnpm --filter ./server partner:reclaim -- --report-file=/tmp/reclaim-report.json',
     '  pnpm --filter ./server partner:reclaim -- --execute',
+    '  pnpm --filter ./server partner:reclaim -- --recruit-job-ids=partner-recruit-xxx-1234abcd,partner-recruit-yyy-5678efab',
     '  pnpm --filter ./server partner:reclaim -- --partner-ids=101,102,103',
     '',
     '说明：',
-    '  - 底模词列表直接写在脚本内的 TARGET_BASE_MODELS 数组中，需变更时请手动修改脚本。',
-    '  - 传入 --partner-ids=1,2,3 后，脚本只按这些伙伴ID查询，并忽略 TARGET_BASE_MODELS。',
+    `  - 默认目标模式由 DEFAULT_TARGET_MODE 控制；当前为 ${DEFAULT_TARGET_MODE}。`,
+    '  - 按招募任务ID模式时，目标列表直接写在脚本内的 TARGET_RECRUIT_JOB_IDS 数组中；需变更时请手动修改脚本。',
+    '  - 按底模模式时，目标列表直接写在脚本内的 TARGET_BASE_MODELS 数组中；需变更时请手动修改脚本。',
+    '  - 传入 --recruit-job-ids=... 后，脚本只按这些招募任务ID查询，并忽略默认目标配置。',
+    '  - 传入 --partner-ids=1,2,3 后，脚本只按这些伙伴ID查询，并忽略默认目标配置。',
+    '  - --recruit-job-ids 与 --partner-ids 不能同时传入。',
     '  - 默认 dry run，只输出预览和返还明细，不写数据库。',
     '  - 传入 --execute 后才会真正发送返还邮件并删除目标伙伴。',
     '  - 执行模式会在删除前把相关表行写入 .tmp/partner-reclaim-backups 下的备份文件。',
-    '  - TARGET_BASE_MODELS 中即使有重复项，脚本也会自动去重。',
+    '  - TARGET_RECRUIT_JOB_IDS 与 TARGET_BASE_MODELS 中即使有重复项，脚本也会自动去重。',
 ].join('\n');
 
 const normalizeText = (value: string | null | undefined): string => {
@@ -322,6 +379,7 @@ const resolveCompensationItemName = (): string => {
 
 const parseCliOptions = (argv: string[]): CliOptions => {
     let mode: ScriptMode = 'dry-run';
+    let recruitJobIds: string[] = [];
     let partnerIds: number[] = [];
     let reportFilePath: string | null = null;
 
@@ -346,6 +404,11 @@ const parseCliOptions = (argv: string[]): CliOptions => {
             reportFilePath = value;
             continue;
         }
+        if (arg.startsWith('--recruit-job-ids=')) {
+            const value = normalizeText(arg.slice('--recruit-job-ids='.length));
+            recruitJobIds = parseRecruitJobIdsArg(value);
+            continue;
+        }
         if (arg.startsWith('--partner-ids=')) {
             const value = normalizeText(arg.slice('--partner-ids='.length));
             partnerIds = parsePartnerIdsArg(value);
@@ -355,8 +418,13 @@ const parseCliOptions = (argv: string[]): CliOptions => {
         throw new Error(`不支持的参数：${arg}\n\n${HELP_TEXT}`);
     }
 
+    if (recruitJobIds.length > 0 && partnerIds.length > 0) {
+        throw new Error(`--recruit-job-ids 与 --partner-ids 不能同时传入。\n\n${HELP_TEXT}`);
+    }
+
     return {
         mode,
+        recruitJobIds,
         partnerIds,
         reportFilePath,
     };
@@ -402,6 +470,29 @@ const loadBaseModels = (): string[] => {
         throw new Error(`TARGET_BASE_MODELS 为空，请先在脚本里填写要回收的底模词。\n\n${HELP_TEXT}`);
     }
     return deduped;
+};
+
+const loadRecruitJobIds = (): string[] => {
+    const deduped = dedupeTexts([...TARGET_RECRUIT_JOB_IDS]);
+    if (deduped.length <= 0) {
+        throw new Error(`TARGET_RECRUIT_JOB_IDS 为空，请先在脚本里填写要回收的招募任务ID。\n\n${HELP_TEXT}`);
+    }
+    return deduped;
+};
+
+const loadConfiguredTargetSelector = (): PartnerReclaimTargetSelector => {
+    if (DEFAULT_TARGET_MODE === 'recruit-job-ids') {
+        return buildPartnerReclaimTargetSelector({
+            baseModels: [],
+            recruitJobIds: loadRecruitJobIds(),
+            partnerIds: [],
+        });
+    }
+    return buildPartnerReclaimTargetSelector({
+        baseModels: loadBaseModels(),
+        recruitJobIds: [],
+        partnerIds: [],
+    });
 };
 
 const asBackupRow = (value: unknown): BackupRow | null => {
@@ -623,11 +714,82 @@ const loadTargetPartnersByIds = async (partnerIds: number[]): Promise<TargetPart
     return result.rows;
 };
 
+const loadTargetPartnersByRecruitJobIds = async (recruitJobIds: string[]): Promise<TargetPartnerRow[]> => {
+    const normalizedRecruitJobIds = dedupeTexts(recruitJobIds);
+    if (normalizedRecruitJobIds.length <= 0) return [];
+
+    const result = await query<TargetPartnerRow>(
+        `
+      SELECT
+        cp.id AS partner_id,
+        cp.partner_def_id,
+        cp.nickname AS partner_nickname,
+        cp.description AS partner_description,
+        cp.avatar AS partner_avatar,
+        cp.level AS partner_level,
+        cp.progress_exp AS partner_progress_exp,
+        cp.growth_max_qixue AS partner_growth_max_qixue,
+        cp.growth_wugong AS partner_growth_wugong,
+        cp.growth_fagong AS partner_growth_fagong,
+        cp.growth_wufang AS partner_growth_wufang,
+        cp.growth_fafang AS partner_growth_fafang,
+        cp.growth_sudu AS partner_growth_sudu,
+        cp.is_active AS partner_is_active,
+        cp.obtained_from AS partner_obtained_from,
+        cp.obtained_ref_id AS partner_obtained_ref_id,
+        cp.created_at AS partner_created_at,
+        cp.updated_at AS partner_updated_at,
+        c.user_id AS owner_user_id,
+        c.id AS owner_character_id,
+        c.nickname AS owner_nickname,
+        c.realm AS owner_realm,
+        c.sub_realm AS owner_sub_realm,
+        prj.id AS recruit_job_id,
+        prj.requested_base_model,
+        prj.created_at AS recruit_created_at,
+        mpl.id AS active_market_listing_id,
+        pfj.fusion_job_id AS active_fusion_job_id,
+        pfj.status AS active_fusion_status
+      FROM character_partner cp
+      JOIN partner_recruit_job prj
+        ON cp.obtained_from = 'partner_recruit'
+       AND cp.obtained_ref_id = prj.id
+      JOIN characters c
+        ON c.id = cp.character_id
+      LEFT JOIN LATERAL (
+        SELECT id
+        FROM market_partner_listing
+        WHERE partner_id = cp.id
+          AND status = 'active'
+        ORDER BY id DESC
+        LIMIT 1
+      ) mpl ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT j.id AS fusion_job_id, j.status
+        FROM partner_fusion_job_material m
+        JOIN partner_fusion_job j
+          ON j.id = m.fusion_job_id
+        WHERE m.partner_id = cp.id
+          AND j.status = ANY($2::text[])
+        ORDER BY j.created_at DESC
+        LIMIT 1
+      ) pfj ON TRUE
+      WHERE prj.id = ANY($1::text[])
+      ORDER BY array_position($1::text[], prj.id), cp.created_at DESC, cp.id DESC
+    `,
+        [normalizedRecruitJobIds, ACTIVE_FUSION_JOB_STATUSES],
+    );
+    return result.rows;
+};
+
 const loadTargetPartnersBySelector = async (
     selector: PartnerReclaimTargetSelector,
 ): Promise<TargetPartnerRow[]> => {
     if (selector.mode === 'partner-ids') {
         return loadTargetPartnersByIds(selector.partnerIds);
+    }
+    if (selector.mode === 'recruit-job-ids') {
+        return loadTargetPartnersByRecruitJobIds(selector.recruitJobIds);
     }
     return loadTargetPartners(selector.baseModels);
 };
@@ -785,9 +947,6 @@ const buildTrainingRefundSummary = (row: TargetPartnerRow, techniqueRows: Partne
 
 const buildBlockedReasons = (row: TargetPartnerRow): string[] => {
     const blockedReasons: string[] = [];
-    if (row.active_market_listing_id !== null) {
-        blockedReasons.push(`坊市挂单中（listingId=${row.active_market_listing_id}）`);
-    }
     if (row.active_fusion_job_id !== null) {
         const fusionStatus = normalizeText(row.active_fusion_status) || 'unknown';
         blockedReasons.push(`三魂归契占用中（fusionJobId=${row.active_fusion_job_id}, status=${fusionStatus}）`);
@@ -890,6 +1049,7 @@ const printReportSummary = (report: ReclaimReport): void => {
     const targetSummary = buildPartnerReclaimTargetSummary({
         selector: report.targetSelector,
         unmatchedBaseModels: report.unmatchedBaseModels,
+        unmatchedRecruitJobIds: report.unmatchedRecruitJobIds,
         unmatchedPartnerIds: report.unmatchedPartnerIds,
     });
     console.log(targetSummary.targetCountLine);
@@ -911,9 +1071,11 @@ const printReportSummary = (report: ReclaimReport): void => {
             [
                 '',
                 `- 伙伴 #${partner.partnerId}【${partner.partnerNickname}】/${partner.partnerName}`,
+                `  招募任务：${partner.generationId}`,
                 `  所属角色：#${partner.ownerCharacterId} ${partner.ownerNickname}`,
                 `  底模：${partner.baseModel}`,
                 `  状态：${statusLabel}`,
+                '  坊市挂单：若存在 active 挂单则执行时强制下架',
                 `  伙伴灌注经验：${partner.trainingRefund.partnerSpentExp}`,
                 `  当前保留功法书：${partner.trainingRefund.learnedTechniqueBooks.length === 0
                     ? '无'
@@ -949,8 +1111,10 @@ const buildReport = async (params: {
     const techniqueMap = await loadPartnerTechniques(partnerRows.map((row) => row.partner_id));
     const partners = await buildPartnerSummaries(partnerRows, techniqueMap);
     const matchedBaseModelSet = new Set(partners.map((partner) => partner.baseModel));
+    const matchedRecruitJobIdSet = new Set(partners.map((partner) => partner.generationId));
     const matchedPartnerIdSet = new Set(partners.map((partner) => partner.partnerId));
     const baseModels = params.targetSelector.mode === 'base-models' ? params.targetSelector.baseModels : [];
+    const recruitJobIds = params.targetSelector.mode === 'recruit-job-ids' ? params.targetSelector.recruitJobIds : [];
     const partnerIds = params.targetSelector.mode === 'partner-ids' ? params.targetSelector.partnerIds : [];
 
     return {
@@ -961,11 +1125,13 @@ const buildReport = async (params: {
         compensationItemName: resolveCompensationItemName(),
         compensationQtyPerPartner: COMPENSATION_ITEM_QTY,
         baseModels,
+        recruitJobIds,
         partnerIds,
         matchedPartnerCount: partners.length,
         reclaimablePartnerCount: partners.filter((partner) => partner.reclaimable).length,
         blockedPartnerCount: partners.filter((partner) => !partner.reclaimable).length,
         unmatchedBaseModels: baseModels.filter((baseModel) => !matchedBaseModelSet.has(baseModel)),
+        unmatchedRecruitJobIds: recruitJobIds.filter((recruitJobId) => !matchedRecruitJobIdSet.has(recruitJobId)),
         unmatchedPartnerIds: partnerIds.filter((partnerId) => !matchedPartnerIdSet.has(partnerId)),
         partners,
         executionResults: [],
@@ -1134,6 +1300,16 @@ const executeReclaim = async (
                 };
             }
 
+            if (lockedRow.active_market_listing_id !== null) {
+                const cancelListingResult = await cancelActivePartnerMarketListing({
+                    listingId: lockedRow.active_market_listing_id,
+                    expectedSellerCharacterId: lockedRow.owner_character_id,
+                });
+                if (!cancelListingResult.success) {
+                    throw new Error(`强制下架伙伴挂单失败：${cancelListingResult.message}`);
+                }
+            }
+
             const rewardMailResult = await sendPartnerReclaimRewardMail({
                 partner,
                 ownerUserId: lockedRow.owner_user_id,
@@ -1202,11 +1378,19 @@ const ensureCompensationItemConfigured = (): void => {
 const main = async (): Promise<void> => {
     ensureCompensationItemConfigured();
     const options = parseCliOptions(process.argv.slice(2));
-    const baseModels = options.partnerIds.length > 0 ? [] : loadBaseModels();
-    const targetSelector = buildPartnerReclaimTargetSelector({
-        baseModels,
-        partnerIds: options.partnerIds,
-    });
+    const targetSelector = options.partnerIds.length > 0
+        ? buildPartnerReclaimTargetSelector({
+            baseModels: [],
+            recruitJobIds: [],
+            partnerIds: options.partnerIds,
+        })
+        : options.recruitJobIds.length > 0
+            ? buildPartnerReclaimTargetSelector({
+                baseModels: [],
+                recruitJobIds: options.recruitJobIds,
+                partnerIds: [],
+            })
+            : loadConfiguredTargetSelector();
     const backupFilePath = options.mode === 'execute' ? buildDefaultBackupFilePath() : null;
     if (backupFilePath) {
         await ensureParentDirectory(backupFilePath);
