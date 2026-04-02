@@ -44,8 +44,7 @@ import {
 } from '../../../../services/api';
 import { gameSocket } from '../../../../services/gameSocket';
 import { getUnifiedApiErrorMessage } from '../../../../services/api';
-import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../shared/imageAssets';
-import { resolveIconUrl, DEFAULT_ICON as partnerIcon } from '../../shared/resolveIcon';
+import { DEFAULT_ICON as partnerIcon } from '../../shared/resolveIcon';
 import { dispatchPartnerChangedEvent, PARTNER_CHANGED_EVENT } from '../../shared/partnerTradeEvents';
 import { useIsMobile } from '../../shared/responsive';
 import { findRenameCardInventoryItem } from '../../shared/renameCard';
@@ -109,10 +108,8 @@ import {
   resolvePartnerReboneUnreadResultJob,
 } from './partnerReboneShared';
 import TechniqueDetailPanel from '../../shared/TechniqueDetailPanel';
-import {
-  buildTechniqueDetailView,
-  type TechniqueDetailView,
-} from '../../shared/techniqueDetailView';
+import { buildPartnerTechniqueDetailView } from '../../shared/partnerTechniqueDetailView';
+import { type TechniqueDetailView } from '../../shared/techniqueDetailView';
 import './index.scss';
 
 interface PartnerModalProps {
@@ -134,21 +131,6 @@ const PARTNER_SKILL_TOOLTIP_CLASS_NAMES = {
   root: 'skill-tooltip-overlay game-tooltip-surface-root',
   container: 'skill-tooltip-overlay-container game-tooltip-surface-container',
 } as const;
-
-const buildPartnerTechniqueDetailView = (
-  detail: PartnerTechniqueDetailDto,
-): TechniqueDetailView => {
-  return buildTechniqueDetailView({
-    technique: detail.technique,
-    currentLayer: detail.currentLayer,
-    layers: detail.layers,
-    skills: detail.skills,
-    resolveIcon: resolveIconUrl,
-    spiritStoneIcon: lingshiIcon,
-    expIcon: tongqianIcon,
-    extraTags: [detail.isInnate ? '天生功法' : '后天功法'],
-  });
-};
 
 /**
  * 伙伴系统主弹窗。

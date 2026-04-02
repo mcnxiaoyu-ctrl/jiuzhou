@@ -5,7 +5,7 @@ import type {
   CaptchaResponse,
   UnifiedCaptchaPayload,
 } from './auth-character';
-import type { PartnerDisplayDto } from './partner';
+import type { PartnerDisplayDto, PartnerTechniqueDetailResponse } from './partner';
 import type { GrantedRewardResultDto } from '../reward';
 
 export type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
@@ -195,6 +195,15 @@ export const getPartnerMarketTradeRecords = (params?: {
   pageSize?: number;
 }): Promise<MarketPartnerTradeRecordsResponse> => {
   return api.get('/market/partner-records', { params });
+};
+
+export const getMarketPartnerTechniqueDetail = (
+  listingId: number,
+  techniqueId: string,
+): Promise<PartnerTechniqueDetailResponse> => {
+  return api.get('/market/partner/technique-detail', {
+    params: { listingId, techniqueId },
+  });
 };
 
 export interface MarketPurchaseCaptchaVerifyResponse {

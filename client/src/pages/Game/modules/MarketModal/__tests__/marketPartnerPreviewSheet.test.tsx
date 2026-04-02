@@ -144,6 +144,7 @@ describe('MarketPartnerPreviewSheet', () => {
     const html = renderToStaticMarkup(
       <MarketPartnerPreviewSheet
         partner={createPartner()}
+        detailSource={{ kind: 'listing', listingId: 1 }}
         unitPrice={1}
         sellerCharacterId={2}
         myCharacterId={1}

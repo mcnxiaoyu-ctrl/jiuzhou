@@ -46,6 +46,7 @@ const marketBuyMutationQpsLimit = createMarketQpsLimit('buy', MARKET_MUTATION_QP
 const partnerMarketListingsQpsLimit = createMarketQpsLimit('partner-listings', MARKET_QUERY_QPS_LIMIT);
 const partnerMarketMyListingsQpsLimit = createMarketQpsLimit('partner-my-listings', MARKET_QUERY_QPS_LIMIT);
 const partnerMarketRecordsQpsLimit = createMarketQpsLimit('partner-records', MARKET_QUERY_QPS_LIMIT);
+const partnerMarketTechniqueDetailQpsLimit = createMarketQpsLimit('partner-technique-detail', MARKET_QUERY_QPS_LIMIT);
 const partnerMarketListMutationQpsLimit = createMarketQpsLimit('partner-list', MARKET_MUTATION_QPS_LIMIT);
 const partnerMarketCancelMutationQpsLimit = createMarketQpsLimit('partner-cancel', MARKET_MUTATION_QPS_LIMIT);
 const partnerMarketBuyMutationQpsLimit = createMarketQpsLimit('partner-buy', MARKET_MUTATION_QPS_LIMIT);
@@ -251,6 +252,27 @@ router.get('/partner-records', ...marketCharacterGuards, partnerMarketRecordsQps
     characterId,
     page,
     pageSize,
+  });
+  return sendResult(res, result);
+}));
+
+router.get('/partner/technique-detail', ...marketCharacterGuards, partnerMarketTechniqueDetailQpsLimit, asyncHandler(async (req, res) => {
+  const characterId = req.characterId!;
+  const listingId = parseFiniteNumber(getSingleQueryValue(req.query.listingId));
+  const techniqueId = parseNonEmptyText(getSingleQueryValue(req.query.techniqueId));
+  if (!listingId) {
+    sendResult(res, { success: false, message: 'listingId 参数无效' });
+    return;
+  }
+  if (!techniqueId) {
+    sendResult(res, { success: false, message: 'techniqueId 参数无效' });
+    return;
+  }
+
+  const result = await partnerMarketService.getPartnerTechniqueDetail({
+    characterId,
+    listingId,
+    techniqueId,
   });
   return sendResult(res, result);
 }));

@@ -28,6 +28,7 @@ import type { PartnerDisplayDto } from '../../../services/api';
 import { createPortal } from 'react-dom';
 import MarketPartnerBuyModal from '../modules/MarketModal/MarketPartnerBuyModal';
 import MarketPartnerPreviewSheet from '../modules/MarketModal/MarketPartnerPreviewSheet';
+import type { MarketPartnerTechniqueDetailSource } from '../modules/MarketModal/marketPartnerTechniqueDetailShared';
 
 interface PartnerPreviewOverlayProps {
   partner: PartnerDisplayDto | null;
@@ -41,15 +42,22 @@ const PartnerPreviewOverlay = ({
   onClose,
 }: PartnerPreviewOverlayProps) => {
   if (!partner) return null;
+  const detailSource: MarketPartnerTechniqueDetailSource = {
+    kind: 'partner',
+    partnerId: partner.id,
+  };
 
   if (isMobile) {
     if (typeof document === 'undefined') {
       return null;
     }
-    return createPortal(<MarketPartnerPreviewSheet partner={partner} onClose={onClose} />, document.body);
+    return createPortal(
+      <MarketPartnerPreviewSheet partner={partner} detailSource={detailSource} onClose={onClose} />,
+      document.body,
+    );
   }
 
-  return <MarketPartnerBuyModal partner={partner} onClose={onClose} />;
+  return <MarketPartnerBuyModal partner={partner} detailSource={detailSource} onClose={onClose} />;
 };
 
 export default PartnerPreviewOverlay;

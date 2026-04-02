@@ -57,6 +57,7 @@ import MarketPartnerPreviewSheet from './MarketPartnerPreviewSheet';
 import MarketPartnerBuyModal from './MarketPartnerBuyModal';
 import MarketPartnerTechniqueList from './MarketPartnerTechniqueList';
 import MarketEquipmentSummary from './MarketEquipmentSummary';
+import type { MarketPartnerTechniqueDetailSource } from './marketPartnerTechniqueDetailShared';
 import { usePagedRequestController } from './usePagedRequestController';
 import {
   buildMarketEquipmentSummary,
@@ -343,7 +344,11 @@ const PartnerListSheet: React.FC<PartnerListSheetProps> = ({
           </div>
           <div className="market-list-sheet-section">
             <div className="market-list-sheet-section-title">功法</div>
-            <MarketPartnerTechniqueList techniques={partner.techniques} skillDisplayMode="drawer" />
+            <MarketPartnerTechniqueList
+              techniques={partner.techniques}
+              detailDisplayMode="drawer"
+              detailSource={buildPartnerTechniqueDetailSource(partner)}
+            />
           </div>
         </div>
 
@@ -534,6 +539,20 @@ const buildPartnerListingItem = (dto: MarketPartnerListingDto): PartnerListingIt
     seller: String(dto.sellerName ?? ''),
     sellerCharacterId: Number(dto.sellerCharacterId) || 0,
     listedAt: Number(dto.listedAt) || 0,
+  };
+};
+
+const buildPartnerTechniqueDetailSource = (partner: PartnerDisplayDto): MarketPartnerTechniqueDetailSource => {
+  return {
+    kind: 'partner',
+    partnerId: partner.id,
+  };
+};
+
+const buildListingTechniqueDetailSource = (listing: PartnerListingItem): MarketPartnerTechniqueDetailSource => {
+  return {
+    kind: 'listing',
+    listingId: listing.id,
   };
 };
 
@@ -2406,7 +2425,11 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                       </div>
                       <div className="market-list-detail-section">
                         <div className="market-list-detail-title">功法</div>
-                        <MarketPartnerTechniqueList techniques={selectedPartner.techniques} skillDisplayMode="tooltip" />
+                        <MarketPartnerTechniqueList
+                          techniques={selectedPartner.techniques}
+                          detailDisplayMode="modal"
+                          detailSource={buildPartnerTechniqueDetailSource(selectedPartner)}
+                        />
                       </div>
                     </div>
 
@@ -2732,6 +2755,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
           isMobile ? (
             <MarketPartnerPreviewSheet
               partner={previewPartnerListing.partner}
+              detailSource={buildListingTechniqueDetailSource(previewPartnerListing)}
               unitPrice={previewPartnerListing.unitPrice}
               sellerCharacterId={previewPartnerListing.sellerCharacterId}
               myCharacterId={characterId}
@@ -2743,6 +2767,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
           ) : (
             <MarketPartnerBuyModal
               partner={previewPartnerListing.partner}
+              detailSource={buildListingTechniqueDetailSource(previewPartnerListing)}
               unitPrice={previewPartnerListing.unitPrice}
               sellerCharacterId={previewPartnerListing.sellerCharacterId}
               myCharacterId={characterId}

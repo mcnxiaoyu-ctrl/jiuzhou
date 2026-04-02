@@ -48,6 +48,8 @@ import { loadActivePartnerMarketListing } from './shared/partnerMarketState.js';
 import { loadActivePartnerFusionMaterial } from './shared/partnerFusionState.js';
 import { getPartnerDefinitionById } from './staticConfigLoader.js';
 import { schedulePartnerRankSnapshotRefreshByCharacterId } from './partnerRankSnapshotService.js';
+import { getTechniqueDetailByIdForPartner } from './techniqueService.js';
+import type { PartnerTechniqueDetailDto } from './partnerService.js';
 
 export type PartnerMarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'levelDesc';
 
@@ -102,6 +104,12 @@ type PartnerTradeRecordRow = {
   buyer_name: string;
   seller_name: string;
   created_at: Date | string;
+};
+
+type PartnerTechniqueDetailListingRow = {
+  seller_character_id: number;
+  status: string;
+  partner_snapshot: PartnerDisplayDto | null;
 };
 
 type CharacterWalletRow = {
@@ -441,6 +449,73 @@ class PartnerMarketService {
         total: Number(countResult.rows[0]?.cnt ?? 0),
       },
     };
+  }
+
+  async getPartnerTechniqueDetail(params: {
+    characterId: number;
+    listingId: number;
+    techniqueId: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    data?: PartnerTechniqueDetailDto;
+  }> {
+    const listingId = parsePositiveInt(params.listingId);
+    const techniqueId = parseMaybeString(params.techniqueId);
+    if (listingId === null) return { success: false, message: 'listingId参数错误' };
+    if (!techniqueId) return { success: false, message: 'techniqueId参数错误' };
+
+    try {
+      const listingResult = await query<PartnerTechniqueDetailListingRow>(
+        `
+          SELECT seller_character_id, status, partner_snapshot
+          FROM market_partner_listing
+          WHERE id = $1
+          LIMIT 1
+        `,
+        [listingId],
+      );
+      const listing = listingResult.rows[0] ?? null;
+      if (!listing) {
+        return { success: false, message: '伙伴挂单不存在' };
+      }
+
+      const canViewListing = listing.status === 'active'
+        || normalizeInteger(listing.seller_character_id) === params.characterId;
+      if (!canViewListing) {
+        return { success: false, message: '当前挂单不可查看功法详情' };
+      }
+
+      const partner = await readPartnerSnapshot(listing.partner_snapshot);
+      if (!partner) {
+        return { success: false, message: '伙伴快照不存在' };
+      }
+
+      const technique = partner.techniques.find((entry) => entry.techniqueId === techniqueId) ?? null;
+      if (!technique) {
+        return { success: false, message: '伙伴未学习该功法' };
+      }
+
+      const detail = await getTechniqueDetailByIdForPartner(techniqueId);
+      if (!detail) {
+        return { success: false, message: '伙伴功法详情不存在' };
+      }
+
+      return {
+        success: true,
+        message: '获取成功',
+        data: {
+          technique: detail.technique,
+          layers: detail.layers,
+          skills: detail.skills,
+          currentLayer: technique.currentLayer,
+          isInnate: technique.isInnate,
+        },
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '未知错误';
+      return { success: false, message: `伙伴坊市功法详情读取失败：${reason}` };
+    }
   }
 
   @Transactional

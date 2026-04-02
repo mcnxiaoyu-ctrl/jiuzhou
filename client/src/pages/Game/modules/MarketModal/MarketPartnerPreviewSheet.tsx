@@ -10,10 +10,12 @@ import {
 import { getElementToneClassName } from '../../shared/elementTheme';
 import { getItemQualityTagClassName } from '../../shared/itemQuality';
 import MarketPartnerTechniqueList from './MarketPartnerTechniqueList';
+import type { MarketPartnerTechniqueDetailSource } from './marketPartnerTechniqueDetailShared';
 import './index.scss';
 
 interface MarketPartnerPreviewSheetProps {
   partner: PartnerDisplayDto | null;
+  detailSource: MarketPartnerTechniqueDetailSource;
   unitPrice?: number;
   sellerCharacterId?: number;
   myCharacterId?: number | null;
@@ -23,6 +25,7 @@ interface MarketPartnerPreviewSheetProps {
 
 const MarketPartnerPreviewSheet: React.FC<MarketPartnerPreviewSheetProps> = ({
   partner,
+  detailSource,
   unitPrice,
   sellerCharacterId,
   myCharacterId,
@@ -92,7 +95,11 @@ const MarketPartnerPreviewSheet: React.FC<MarketPartnerPreviewSheetProps> = ({
           </div>
           <div className="market-list-sheet-section">
             <div className="market-list-sheet-section-title">功法</div>
-            <MarketPartnerTechniqueList techniques={partner.techniques} skillDisplayMode="drawer" />
+            <MarketPartnerTechniqueList
+              techniques={partner.techniques}
+              detailDisplayMode="drawer"
+              detailSource={detailSource}
+            />
           </div>
         </div>
 

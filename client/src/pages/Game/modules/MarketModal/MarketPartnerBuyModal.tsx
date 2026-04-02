@@ -10,10 +10,12 @@ import {
 import { getElementToneClassName } from '../../shared/elementTheme';
 import { getItemQualityTagClassName } from '../../shared/itemQuality';
 import MarketPartnerTechniqueList from './MarketPartnerTechniqueList';
+import type { MarketPartnerTechniqueDetailSource } from './marketPartnerTechniqueDetailShared';
 import './index.scss';
 
 interface MarketPartnerBuyModalProps {
   partner: PartnerDisplayDto | null;
+  detailSource: MarketPartnerTechniqueDetailSource;
   unitPrice?: number;
   sellerCharacterId?: number;
   myCharacterId?: number | null;
@@ -23,6 +25,7 @@ interface MarketPartnerBuyModalProps {
 
 const MarketPartnerBuyModal: React.FC<MarketPartnerBuyModalProps> = ({
   partner,
+  detailSource,
   unitPrice,
   sellerCharacterId,
   myCharacterId,
@@ -85,7 +88,12 @@ const MarketPartnerBuyModal: React.FC<MarketPartnerBuyModalProps> = ({
           </div>
           <div className="market-list-detail-section" style={{ flex: 1, paddingRight: '8px', borderLeft: '1px solid var(--border-color-soft)', paddingLeft: '24px' }}>
             <div className="market-list-detail-title">功法</div>
-            <MarketPartnerTechniqueList techniques={partner.techniques} skillDisplayMode="tooltip" singleColumn />
+            <MarketPartnerTechniqueList
+              techniques={partner.techniques}
+              detailDisplayMode="modal"
+              detailSource={detailSource}
+              singleColumn
+            />
           </div>
         </div>
 
