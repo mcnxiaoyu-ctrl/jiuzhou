@@ -49,6 +49,8 @@ export interface WanderEpisodeDto {
   endingType: WanderEndingType;
   rewardTitleName: string | null;
   rewardTitleDesc: string | null;
+  rewardTitleColor: string | null;
+  rewardTitleEffects: Record<string, number>;
   createdAt: string;
   chosenAt: string | null;
 }

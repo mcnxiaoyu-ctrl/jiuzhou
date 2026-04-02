@@ -8,6 +8,7 @@ import {
 } from '../../../../services/api';
 import { SILENT_API_REQUEST_CONFIG } from '../../../../services/api/requestConfig';
 import { formatGameCooldownRemaining } from '../../shared/cooldownText';
+import WanderRewardTitleCard from './RewardTitleCard';
 import { buildWanderStoryReaderModel } from './storyReader';
 import { WANDER_PENDING_JOB_POLL_INTERVAL_MS } from './wanderShared';
 import './index.scss';
@@ -295,10 +296,13 @@ const WanderModal: React.FC<WanderModalProps> = ({ open, onClose, onOverviewChan
                           </div>
                         ) : null}
                         {currentEpisode.isEnding && currentEpisode.rewardTitleName && !isCurrentEpisodeResolving ? (
-                          <div className="wander-choice-reward">
-                            结局称号：{currentEpisode.rewardTitleName}
-                            {currentEpisode.rewardTitleDesc ? ` · ${currentEpisode.rewardTitleDesc}` : ''}
-                          </div>
+                          <WanderRewardTitleCard
+                            label="获得称号"
+                            name={currentEpisode.rewardTitleName}
+                            description={currentEpisode.rewardTitleDesc}
+                            color={currentEpisode.rewardTitleColor}
+                            effects={currentEpisode.rewardTitleEffects}
+                          />
                         ) : null}
                       </div>
                     )}
@@ -313,7 +317,6 @@ const WanderModal: React.FC<WanderModalProps> = ({ open, onClose, onOverviewChan
                 </div>
                 {storyReader ? (
                   <div className="wander-story-reader">
-                    <p className="wander-story-premise">{storyReader.premise}</p>
                     <div className="wander-story-flow">
                       {storyReader.entries.map((entry) => (
                         <article key={entry.key} className="wander-story-entry">
@@ -330,6 +333,15 @@ const WanderModal: React.FC<WanderModalProps> = ({ open, onClose, onOverviewChan
                             <div className="wander-story-aftermath">
                               <p className="wander-story-aftermath-text">{entry.aftermath}</p>
                             </div>
+                          ) : null}
+                          {entry.rewardTitle ? (
+                            <WanderRewardTitleCard
+                              label="获得称号"
+                              name={entry.rewardTitle.name}
+                              description={entry.rewardTitle.description}
+                              color={entry.rewardTitle.color}
+                              effects={entry.rewardTitle.effects}
+                            />
                           ) : null}
                         </article>
                       ))}

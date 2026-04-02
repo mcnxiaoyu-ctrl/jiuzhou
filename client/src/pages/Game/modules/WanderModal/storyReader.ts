@@ -4,13 +4,13 @@ import type { WanderStoryDto } from '../../../../services/api';
  * 云游故事阅读流视图模型
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：把 `WanderStoryDto` 收敛成“引子 + 分幕正文 + 抉择尾句 + 选择后收束”的连续阅读结构，供故事回顾区直接渲染。
+ * 1. 做什么：把 `WanderStoryDto` 收敛成“分幕正文 + 抉择尾句 + 选择后收束”的连续阅读结构，供故事回顾区直接渲染。
  * 2. 做什么：集中维护每幕正文尾句与收束段显示规则，避免 JSX、测试或后续复用入口各自手写一遍文案拼装。
  * 3. 不做什么：不改写后端返回内容，不推导冷却状态，也不决定视觉样式。
  *
  * 输入 / 输出：
  * - 输入：单个 `WanderStoryDto`。
- * - 输出：稳定的故事阅读流对象，包含故事引子与按幕排序的正文条目。
+ * - 输出：稳定的故事阅读流对象，包含按幕排序的正文条目。
  *
  * 数据流 / 状态流：
  * - `WanderModal` 读取 `storyForHistory`
@@ -33,12 +33,17 @@ export interface WanderStoryReaderEntry {
   content: string;
   choiceLine: string;
   aftermath: string | null;
+  rewardTitle: {
+    name: string;
+    description: string | null;
+    color: string | null;
+    effects: Record<string, number>;
+  } | null;
   isEnding: boolean;
   isChoicePending: boolean;
 }
 
 export interface WanderStoryReaderModel {
-  premise: string;
   entries: WanderStoryReaderEntry[];
 }
 
@@ -56,7 +61,6 @@ const buildWanderStoryAftermath = (params: {
 
 export const buildWanderStoryReaderModel = (story: WanderStoryDto): WanderStoryReaderModel => {
   return {
-    premise: story.premise,
     entries: story.episodes.map((episode) => {
       const isChoicePending = episode.chosenOptionText === null;
       const aftermath = buildWanderStoryAftermath({
@@ -73,6 +77,14 @@ export const buildWanderStoryReaderModel = (story: WanderStoryDto): WanderStoryR
           ? `你在此处选择了「${episode.chosenOptionText}」。`
           : '此幕抉择尚未落定。',
         aftermath,
+        rewardTitle: episode.rewardTitleName
+          ? {
+            name: episode.rewardTitleName,
+            description: episode.rewardTitleDesc,
+            color: episode.rewardTitleColor,
+            effects: episode.rewardTitleEffects,
+          }
+          : null,
         isEnding: episode.isEnding,
         isChoicePending,
       };

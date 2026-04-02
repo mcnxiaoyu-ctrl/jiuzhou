@@ -55,6 +55,8 @@ const buildStory = (): WanderStoryDto => ({
       endingType: 'none',
       rewardTitleName: null,
       rewardTitleDesc: null,
+      rewardTitleColor: null,
+      rewardTitleEffects: {},
       createdAt: '2026-04-02T00:00:00.000Z',
       chosenAt: '2026-04-02T00:05:00.000Z',
     },
@@ -76,6 +78,8 @@ const buildStory = (): WanderStoryDto => ({
       endingType: 'none',
       rewardTitleName: null,
       rewardTitleDesc: null,
+      rewardTitleColor: null,
+      rewardTitleEffects: {},
       createdAt: '2026-04-03T00:00:00.000Z',
       chosenAt: null,
     },
@@ -100,10 +104,24 @@ describe('buildWanderStoryReaderModel', () => {
       endingType: 'good',
       rewardTitleName: '断桥镇潮',
       rewardTitleDesc: '断桥一战后，余威仍镇河潮。',
+      rewardTitleColor: '#faad14',
+      rewardTitleEffects: {
+        wugong: 60,
+        baoji: 0.03,
+      },
     };
 
     const model = buildWanderStoryReaderModel(story);
 
     expect(model.entries[1].aftermath).toContain('雨夜因而收束');
+    expect(model.entries[1].rewardTitle).toEqual({
+      name: '断桥镇潮',
+      description: '断桥一战后，余威仍镇河潮。',
+      color: '#faad14',
+      effects: {
+        wugong: 60,
+        baoji: 0.03,
+      },
+    });
   });
 });

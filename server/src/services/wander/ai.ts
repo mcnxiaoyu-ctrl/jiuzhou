@@ -43,6 +43,7 @@ import type {
   WanderAiEpisodeSetupDraft,
   WanderEndingType,
 } from './types.js';
+import type { WanderStoryLocation } from './location.js';
 
 type WanderAiJsonValue =
   | string
@@ -54,16 +55,19 @@ type WanderAiJsonValue =
 
 export interface WanderAiPreviousEpisodeContext {
   dayIndex: number;
+  locationName: string;
   title: string;
-  choice: string;
+  opening: string;
+  chosenOptionText: string;
   summary: string;
+  isEnding: boolean;
 }
 
 export interface WanderAiEpisodeSetupInput {
   nickname: string;
   realm: string;
-  mapName: string;
   hasTeam: boolean;
+  storyLocation: WanderStoryLocation;
   activeTheme: string | null;
   activePremise: string | null;
   storySummary: string | null;
@@ -76,8 +80,8 @@ export interface WanderAiEpisodeSetupInput {
 export interface WanderAiEpisodeResolutionInput {
   nickname: string;
   realm: string;
-  mapName: string;
   hasTeam: boolean;
+  storyLocation: WanderStoryLocation;
   activeTheme: string | null;
   activePremise: string | null;
   storySummary: string | null;
@@ -304,6 +308,8 @@ export const buildWanderAiEpisodeSetupPromptRuleSet = (isEndingEpisode: boolean)
       '你必须输出严格 JSON，不得输出 markdown、解释、额外注释。',
       '剧情必须是东方修仙语境，禁止现代梗、科幻设定、英文名、阿拉伯数字名。',
       '本阶段只负责生成待玩家选择的幕次，不负责结算结果。',
+      'storyLocation 是本幕固定发生地点，opening 必须自然落在该地区、该地图与该区域中展开，不能无视或替换地点。',
+      'previousEpisodes 会按幕次顺序提供已经发生的完整前文，每一幕都包含标题、正文、玩家已选选项和选择后的结果；续写时必须严格承接这些既成事实，不得遗忘、改写或跳过已经发生的因果。',
       WANDER_STORY_THEME_STYLE_RULE,
       `storyTheme 示例：${WANDER_STORY_THEME_EXAMPLE}`,
       WANDER_STORY_PREMISE_STYLE_RULE,
@@ -428,9 +434,9 @@ export const buildWanderAiEpisodeSetupUserPayload = (
   player: {
     nickname: string;
     realm: string;
-    mapName: string;
     hasTeam: boolean;
   };
+  storyLocation: WanderStoryLocation;
   story: {
     activeTheme: string | null;
     activePremise: string | null;
@@ -447,9 +453,9 @@ export const buildWanderAiEpisodeSetupUserPayload = (
     player: {
       nickname: input.nickname,
       realm: input.realm,
-      mapName: input.mapName,
       hasTeam: input.hasTeam,
     },
+    storyLocation: input.storyLocation,
     story: {
       activeTheme: input.activeTheme,
       activePremise: input.activePremise,
@@ -494,6 +500,8 @@ export const buildWanderAiEpisodeResolutionPromptRuleSet = (
       '你必须输出严格 JSON，不得输出 markdown、解释、额外注释。',
       '剧情必须是东方修仙语境，禁止现代梗、科幻设定、英文名、阿拉伯数字名。',
       '本阶段只负责根据玩家已经选定的选项，生成这一幕真正发生的余波与收束。',
+      'storyLocation 是本幕固定发生地点，summary 必须承接该地点，不得把本幕结果写到其他地图或区域。',
+      'previousEpisodes 会按幕次顺序提供已经发生的完整前文，每一幕都包含标题、正文、玩家已选选项和选择后的结果；你必须把当前这一幕放在这些既有经历之后承接，不能忽略已发生的因果。',
       WANDER_SUMMARY_STYLE_RULE,
       `summary 示例：${WANDER_SUMMARY_EXAMPLE}`,
       WANDER_TITLE_COLOR_STYLE_RULE,
@@ -697,9 +705,9 @@ export const buildWanderAiEpisodeResolutionUserPayload = (
   player: {
     nickname: string;
     realm: string;
-    mapName: string;
     hasTeam: boolean;
   };
+  storyLocation: WanderStoryLocation;
   story: {
     activeTheme: string | null;
     activePremise: string | null;
@@ -721,9 +729,9 @@ export const buildWanderAiEpisodeResolutionUserPayload = (
     player: {
       nickname: input.nickname,
       realm: input.realm,
-      mapName: input.mapName,
       hasTeam: input.hasTeam,
     },
+    storyLocation: input.storyLocation,
     story: {
       activeTheme: input.activeTheme,
       activePremise: input.activePremise,

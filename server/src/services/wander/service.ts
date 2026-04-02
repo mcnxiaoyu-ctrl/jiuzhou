@@ -21,7 +21,6 @@
 import { randomUUID } from 'crypto';
 import { query } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
-import { getMapDefinitions } from '../staticConfigLoader.js';
 import { normalizeTitleEffects } from '../achievement/shared.js';
 import { grantPermanentTitleTx } from '../achievement/titleOwnership.js';
 import { lockWanderGenerationCreationMutex } from '../shared/characterOperationMutex.js';
@@ -32,6 +31,7 @@ import {
   type WanderAiPreviousEpisodeContext,
 } from './ai.js';
 import { resolveWanderTargetEpisodeCount } from './episodePlan.js';
+import { resolveWanderStoryLocation } from './location.js';
 import {
   buildDateKey,
   buildWanderCooldownState,
@@ -64,7 +64,6 @@ type CharacterContextRow = {
   nickname: string;
   realm: string | null;
   sub_realm: string | null;
-  current_map_id: string | null;
   has_team: boolean;
 };
 
@@ -126,7 +125,6 @@ type WanderGenerationJobRow = {
   finished_at: Date | string | null;
 };
 
-const WANDER_MAX_CONTEXT_EPISODES = 10;
 const WANDER_SOURCE_TYPE = 'wander_story';
 
 const toIsoString = (value: Date | string | null): string | null => {
@@ -163,13 +161,6 @@ const buildRealmText = (realm: string | null, subRealm: string | null): string =
   return `${baseRealm}·${baseSubRealm}`;
 };
 
-const getMapName = (mapId: string | null): string => {
-  const normalizedMapId = (mapId ?? '').trim();
-  if (!normalizedMapId) return '未知地域';
-  const map = getMapDefinitions().find((entry) => entry.id === normalizedMapId);
-  return (map?.name ?? '').trim() || normalizedMapId;
-};
-
 const normalizeGeneratedTitleColor = (color: string | null): string | null => {
   const normalized = (color ?? '').trim();
   if (!normalized) return null;
@@ -200,6 +191,8 @@ const buildEpisodeDto = (row: WanderEpisodeRow): WanderEpisodeDto => {
     endingType: normalizeEndingType(row.ending_type),
     rewardTitleName: row.reward_title_name,
     rewardTitleDesc: row.reward_title_desc,
+    rewardTitleColor: normalizeGeneratedTitleColor(row.reward_title_color),
+    rewardTitleEffects: normalizeGeneratedTitleEffects(row.reward_title_effects),
     createdAt: toRequiredIsoString(row.created_at),
     chosenAt: toIsoString(row.chosen_at),
   };
@@ -287,7 +280,7 @@ class WanderService {
   private async loadCharacterContext(characterId: number): Promise<CharacterContextRow | null> {
     const result = await query<CharacterContextRow>(
       `
-        SELECT c.id, c.nickname, c.realm, c.sub_realm, c.current_map_id,
+        SELECT c.id, c.nickname, c.realm, c.sub_realm,
                EXISTS(SELECT 1 FROM team_members tm WHERE tm.character_id = c.id) AS has_team
         FROM characters c
         WHERE c.id = $1
@@ -499,7 +492,10 @@ class WanderService {
     );
   }
 
-  private async loadRecentEpisodeContext(storyId: string): Promise<WanderAiPreviousEpisodeContext[]> {
+  private async loadResolvedEpisodeContext(
+    storyId: string,
+    storySeed: number,
+  ): Promise<WanderAiPreviousEpisodeContext[]> {
     const result = await query<WanderEpisodeRow>(
       `
         SELECT id, story_id, character_id, day_key, day_index, episode_title, opening, option_texts,
@@ -508,20 +504,23 @@ class WanderService {
         FROM character_wander_story_episode
         WHERE story_id = $1
           AND chosen_option_index IS NOT NULL
-        ORDER BY day_index DESC
-        LIMIT $2
+        ORDER BY day_index ASC
       `,
-      [storyId, WANDER_MAX_CONTEXT_EPISODES],
+      [storyId],
     );
 
     return result.rows
-      .slice()
-      .reverse()
       .map((row) => ({
         dayIndex: row.day_index,
+        locationName: resolveWanderStoryLocation({
+          storySeed,
+          episodeIndex: row.day_index,
+        }).fullName,
         title: row.episode_title,
-        choice: row.chosen_option_text ?? '',
+        opening: row.opening,
+        chosenOptionText: row.chosen_option_text ?? '',
         summary: row.episode_summary,
+        isEnding: row.is_ending,
       }));
   }
 
@@ -640,15 +639,21 @@ class WanderService {
     }
 
     const activeStory = await this.loadActiveStoryRow(characterId);
-    const previousEpisodes = activeStory ? await this.loadRecentEpisodeContext(activeStory.id) : [];
+    const previousEpisodes = activeStory
+      ? await this.loadResolvedEpisodeContext(activeStory.id, activeStory.story_seed)
+      : [];
     const nextEpisodeIndex = activeStory ? activeStory.episode_count + 1 : 1;
     const storySeed = activeStory?.story_seed ?? Math.max(1, Math.floor(Date.now() % 2_147_483_647));
     const targetEpisodeCount = resolveWanderTargetEpisodeCount(storySeed);
+    const storyLocation = resolveWanderStoryLocation({
+      storySeed,
+      episodeIndex: nextEpisodeIndex,
+    });
     const aiDraft = await generateWanderAiEpisodeSetupDraft({
       nickname: character.nickname,
       realm: buildRealmText(character.realm, character.sub_realm),
-      mapName: getMapName(character.current_map_id),
       hasTeam: character.has_team,
+      storyLocation,
       activeTheme: activeStory?.story_theme ?? null,
       activePremise: activeStory?.story_premise ?? null,
       storySummary: activeStory?.story_summary.trim() ? activeStory.story_summary : null,
@@ -910,13 +915,10 @@ class WanderService {
         };
       }
 
-      const [character, storyRow, previousEpisodes] = await Promise.all([
+      const [character, storyRow] = await Promise.all([
         this.loadCharacterContext(characterId),
         this.loadStoryRowById(targetEpisode.story_id),
-        this.loadRecentEpisodeContext(targetEpisode.story_id),
       ]);
-
-      const resolvedPreviousEpisodes = previousEpisodes.filter((entry) => entry.dayIndex !== targetEpisode.day_index);
 
       if (!character || !storyRow) {
         const reason = !character ? '角色不存在' : '奇遇故事不存在';
@@ -932,12 +934,19 @@ class WanderService {
         };
       }
 
+      const previousEpisodes = await this.loadResolvedEpisodeContext(targetEpisode.story_id, storyRow.story_seed);
+      const resolvedPreviousEpisodes = previousEpisodes.filter((entry) => entry.dayIndex !== targetEpisode.day_index);
+      const storyLocation = resolveWanderStoryLocation({
+        storySeed: storyRow.story_seed,
+        episodeIndex: targetEpisode.day_index,
+      });
+
       try {
         const resolutionDraft = await generateWanderAiEpisodeResolutionDraft({
           nickname: character.nickname,
           realm: buildRealmText(character.realm, character.sub_realm),
-          mapName: getMapName(character.current_map_id),
           hasTeam: character.has_team,
+          storyLocation,
           activeTheme: storyRow.story_theme,
           activePremise: storyRow.story_premise,
           storySummary: storyRow.story_summary.trim() ? storyRow.story_summary : null,
