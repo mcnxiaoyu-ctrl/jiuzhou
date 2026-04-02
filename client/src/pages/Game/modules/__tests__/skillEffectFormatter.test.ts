@@ -146,7 +146,7 @@ describe('skillEffectFormatter', () => {
     ]);
 
     expect(lines).toEqual([
-      '施加增益：增益光环（光环·自身：施加增益：闪避提升（幅度 20%））',
+      '自身增益光环：闪避提升 20%',
     ]);
   });
 
@@ -175,7 +175,33 @@ describe('skillEffectFormatter', () => {
     ]);
 
     expect(lines).toEqual([
-      '施加增益：增益光环（光环·全体友方：施加增益：增伤提升（幅度 8%）；恢复灵气 4）',
+      '全体友方增益光环：增伤提升 8%；恢复灵气 4',
+    ]);
+  });
+
+  it('减益光环详情不应误写成对自身施加减益', () => {
+    const lines = formatSkillEffectLines([
+      {
+        type: 'debuff',
+        target: 'self',
+        buffKind: 'aura',
+        buffKey: 'debuff-aura',
+        auraTarget: 'all_enemy',
+        auraEffects: [
+          {
+            type: 'debuff',
+            buffKind: 'attr',
+            buffKey: 'debuff-fagong-down',
+            attrKey: 'fagong',
+            applyType: 'percent',
+            value: 0.12,
+          },
+        ],
+      },
+    ]);
+
+    expect(lines).toEqual([
+      '全体敌方减益光环：法攻降低 12%',
     ]);
   });
 });

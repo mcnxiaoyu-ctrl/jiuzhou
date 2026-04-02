@@ -1374,6 +1374,8 @@ function executeBuffEffect(
   const buffType = effect.type === 'buff' ? 'buff' : 'debuff';
   const stacks = Math.max(1, Math.floor(toFiniteNumber(effect.stacks, 1)));
   const isAura = normalizeBuffKind(effect.buffKind) === 'aura';
+  // 光环宿主只承载范围效果，不应因为“减益光环”而被当作施法者自身的 debuff。
+  const runtimeBuffType = isAura ? 'buff' : buffType;
   const buffDefId = isAura
     ? buildAuraHostRuntimeBuffKey({
       sourceUnitId: caster.id,
@@ -1391,7 +1393,7 @@ function executeBuffEffect(
     id: `${buffDefId}-${Date.now()}`,
     buffDefId,
     name: baseBuffDefId,
-    type: buffType,
+    type: runtimeBuffType,
     category: 'skill',
     sourceUnitId: caster.id,
     maxStacks: stacks,

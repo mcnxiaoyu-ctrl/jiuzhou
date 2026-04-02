@@ -438,3 +438,70 @@ test('升级后的光环子效果进入战斗时应按升级值生效', () => {
     ['法攻提升+6%', '增伤提升+10%'],
   );
 });
+
+test('减益光环宿主不应计入自身减益，但仍应正常压制敌方', () => {
+  const caster = createUnit({
+    id: 'player-debuff-aura-owner',
+    name: '潮幕使',
+  });
+  const enemy = createUnit({
+    id: 'monster-debuff-aura-target',
+    name: '噬潮妖',
+    type: 'monster',
+    attrs: {
+      fagong: 200,
+    },
+  });
+
+  const debuffAuraSkill: BattleSkill = {
+    id: 'skill-debuff-aura-host-type',
+    name: '阑潮蝶幕',
+    source: 'technique',
+    cost: {},
+    cooldown: 0,
+    targetType: 'self',
+    targetCount: 1,
+    damageType: 'magic',
+    element: 'shui',
+    effects: [
+      {
+        type: 'debuff',
+        target: 'self',
+        buffKind: 'aura',
+        buffKey: 'debuff-aura',
+        auraTarget: 'all_enemy',
+        auraEffects: [
+          {
+            type: 'debuff',
+            buffKind: 'attr',
+            buffKey: 'debuff-fagong-down',
+            attrKey: 'fagong',
+            applyType: 'percent',
+            value: 0.12,
+          },
+        ],
+      },
+    ],
+    triggerType: 'passive',
+    aiPriority: 80,
+  };
+  caster.skills = [debuffAuraSkill];
+
+  const state = createState({
+    attacker: [caster],
+    defender: [enemy],
+  });
+  const engine = new BattleEngine(state);
+
+  engine.startBattle();
+
+  const auraHostBuff = caster.buffs.find((buff) => Boolean(buff.aura));
+  assert.ok(auraHostBuff, '应成功挂载光环宿主 Buff');
+  assert.equal(auraHostBuff.type, 'buff', '减益光环宿主只作为范围效果容器，不应记为自身减益');
+  assert.equal(
+    caster.buffs.filter((buff) => buff.type === 'debuff').length,
+    0,
+    '宿主身上不应因为减益光环额外增加 debuff 计数',
+  );
+  assert.equal(enemy.currentAttrs.fagong, 176, '敌方应正常吃到 12% 法攻压制');
+});

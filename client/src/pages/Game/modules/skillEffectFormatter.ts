@@ -305,7 +305,7 @@ const BUFF_EFFECT_TARGET_PREFIX_LABEL: Record<string, string> = {
  *
  * 作用：将光环的 auraEffects 子效果数组转为可读文案，复用已有的子效果格式化函数。
  * 输入：effect 对象（含 auraTarget、auraEffects）。
- * 输出：形如"光环·全体友方：物防提升（幅度 15%），持续1回合"的完整描述。
+ * 输出：形如"物防提升 15%；恢复灵气 4"的扁平描述片段，由外层统一补上“全体友方增益光环”这类标题。
  *
  * 坑点：
  * 1) 子效果可能包含 damage/heal/buff/debuff/resource/restore_lingqi 多种类型，需逐一分发。
@@ -313,7 +313,6 @@ const BUFF_EFFECT_TARGET_PREFIX_LABEL: Record<string, string> = {
  */
 const formatAuraDetail = (effect: Record<string, unknown>): string => {
   const auraTarget = toText(effect.auraTarget);
-  const targetLabel = AURA_TARGET_LABEL[auraTarget] || auraTarget || '范围';
   const auraEffects = Array.isArray(effect.auraEffects) ? effect.auraEffects : [];
 
   const subLines: string[] = [];
@@ -326,9 +325,19 @@ const formatAuraDetail = (effect: Record<string, unknown>): string => {
     } else if (subType === 'heal') {
       subLines.push(formatHealEffect(subEffect));
     } else if (subType === 'buff') {
-      subLines.push(formatBuffEffect(subEffect, 'buff', { ignoreDuration: true, useImplicitTargetPrefix: false }));
+      subLines.push(formatBuffEffect(subEffect, 'buff', {
+        ignoreDuration: true,
+        useImplicitTargetPrefix: false,
+        omitActionText: true,
+        compactValueText: true,
+      }));
     } else if (subType === 'debuff') {
-      subLines.push(formatBuffEffect(subEffect, 'debuff', { ignoreDuration: true, useImplicitTargetPrefix: false }));
+      subLines.push(formatBuffEffect(subEffect, 'debuff', {
+        ignoreDuration: true,
+        useImplicitTargetPrefix: false,
+        omitActionText: true,
+        compactValueText: true,
+      }));
     } else if (subType === 'resource') {
       subLines.push(formatResourceEffect(subEffect, { targetType: auraTarget }));
     } else if (subType === 'restore_lingqi') {
@@ -336,8 +345,7 @@ const formatAuraDetail = (effect: Record<string, unknown>): string => {
     }
   }
 
-  if (subLines.length === 0) return `光环·${targetLabel}`;
-  return `光环·${targetLabel}：${subLines.join('；')}`;
+  return subLines.join('；');
 };
 
 const BUFF_DETAIL_RESOLVER_BY_KIND: Record<string, BuffDetailResolver> = {
@@ -433,23 +441,44 @@ const formatBuffDetail = (
   return [baseValueText, extraValueText].filter((part) => part.length > 0).join(' + ');
 };
 
+const formatCompactBuffDetail = (detail: string): string => {
+  if (!detail) return '';
+  if (detail.startsWith('幅度 ')) return detail.slice('幅度 '.length);
+  if (detail.startsWith('数值 ')) return detail.slice('数值 '.length);
+  return detail;
+};
+
 const formatBuffEffect = (
   effect: Record<string, unknown>,
   effectType: 'buff' | 'debuff',
-  options: { ignoreDuration?: boolean; useImplicitTargetPrefix?: boolean } = {},
+  options: {
+    ignoreDuration?: boolean;
+    useImplicitTargetPrefix?: boolean;
+    omitActionText?: boolean;
+    compactValueText?: boolean;
+  } = {},
 ): string => {
   const applyType = normalizeBuffApplyType(effect.applyType);
   const buffKind = normalizeBuffKind(effect.buffKind);
   const { name, attr, buffKey } = formatBuffName(effect, effectType);
-  const valueText = formatBuffDetail(effect, buffKey, buffKind, attr, applyType);
+  const rawValueText = formatBuffDetail(effect, buffKey, buffKind, attr, applyType);
+  const valueText = options.compactValueText ? formatCompactBuffDetail(rawValueText) : rawValueText;
   const duration = toPositiveInt(effect.duration);
   const rawTarget = toText(effect.target);
+  if (buffKind === 'aura') {
+    const auraTarget = AURA_TARGET_LABEL[toText(effect.auraTarget)] || toText(effect.auraTarget) || '范围';
+    return valueText ? `${auraTarget}${name}：${valueText}` : `${auraTarget}${name}`;
+  }
   const targetPrefix = BUFF_EFFECT_TARGET_PREFIX_LABEL[
     rawTarget || (options.useImplicitTargetPrefix === false ? '' : (effectType === 'buff' ? 'self' : 'enemy'))
   ];
   const actionText = effectType === 'buff' ? '施加增益' : '施加减益';
 
-  let text = targetPrefix ? `${targetPrefix}${actionText}：${name}` : `${actionText}：${name}`;
+  let text = options.omitActionText
+    ? name
+    : targetPrefix
+      ? `${targetPrefix}${actionText}：${name}`
+      : `${actionText}：${name}`;
   if (valueText) text += `（${valueText}）`;
   // 光环永久存在，不显示外层 duration
   if (duration > 0 && buffKind !== 'aura' && !options.ignoreDuration) text += `，持续${duration}回合`;
