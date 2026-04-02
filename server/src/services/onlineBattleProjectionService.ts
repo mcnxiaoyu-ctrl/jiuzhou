@@ -252,6 +252,43 @@ export type DeferredSettlementTask = {
   errorMessage: string | null;
 };
 
+/**
+ * 判断延迟结算任务当前是否仍允许进入 runner。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把“pending 直接可跑、failed 仅在未耗尽重试次数时可跑”的规则收敛成单一纯函数，避免调度层和测试各自复制状态判断。
+ * 2. 做什么：让 `maxAttempts` 真正参与调度筛选，阻止已经耗尽额度的失败任务无限重试、无限刷日志。
+ * 3. 不做什么：不修改任务状态，不增加重试次数，也不删除 Redis 中的任务。
+ *
+ * 输入/输出：
+ * - 输入：单条 `DeferredSettlementTask`。
+ * - 输出：布尔值，表示当前是否应继续进入 runner。
+ *
+ * 数据流/状态流：
+ * task snapshot -> 本函数判定 runnable
+ * -> `listPendingDeferredSettlementTasks` / 测试复用同一规则
+ * -> runner 只调度仍可执行的任务。
+ *
+ * 复用设计说明：
+ * 1. 高频变化点是“哪些状态还能跑”和“失败上限怎么判”，抽成纯函数后，调度代码与回归测试不需要各写一套条件。
+ * 2. `maxAttempts` 属于任务元数据，最适合在投影服务层集中解释，避免业务 runner 直接散落读取任务字段。
+ *
+ * 关键边界条件与坑点：
+ * 1. `pending` 任务即便 `attempts` 已有历史值也必须允许继续执行，因为恢复场景下可能先写回过中间态。
+ * 2. `failed` 任务必须严格使用 `< maxAttempts`，不能写成 `<=`，否则会比配置上限多跑一轮。
+ */
+export const isDeferredSettlementTaskRunnable = (
+  task: DeferredSettlementTask,
+): boolean => {
+  if (task.status === 'pending') {
+    return true;
+  }
+  if (task.status !== 'failed') {
+    return false;
+  }
+  return task.attempts < task.maxAttempts;
+};
+
 export type BattleSettlementRewardsPreview = {
   exp: number;
   silver: number;
@@ -2662,7 +2699,7 @@ export const listDeferredSettlementTasks = (): DeferredSettlementTask[] => {
 export const listPendingDeferredSettlementTasks = (): DeferredSettlementTask[] => {
   requireOnlineBattleProjectionReady();
   return [...deferredSettlementTaskById.values()]
-    .filter((task) => task.status === 'pending' || task.status === 'failed')
+    .filter(isDeferredSettlementTaskRunnable)
     .sort((left, right) => left.updatedAt - right.updatedAt);
 };
 

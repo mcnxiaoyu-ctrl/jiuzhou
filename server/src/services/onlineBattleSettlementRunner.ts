@@ -70,6 +70,8 @@ type DeferredSettlementMonsterSnapshot = DeferredSettlementTask['payload']['mons
 type DeferredSettlementDungeonStartConsumption = NonNullable<
   DeferredSettlementTask['payload']['dungeonStartConsumption']
 >;
+type DeferredSettlementExecutionResult = 'applied' | 'discarded';
+type DungeonClearSettlementResult = 'settled' | 'discarded_missing_instance';
 
 const collectUniqueParticipantCharacterIds = (
   participants: DeferredSettlementTask['payload']['participants'],
@@ -527,12 +529,13 @@ const settleArenaBattleInDb = async (
  *
  * 输入/输出：
  * - 输入：单条延迟结算任务，要求 payload 中存在 dungeonSettlement。
- * - 输出：无；副作用是完成奖励发放、记录落库与任务事件推进。
+ * - 输出：`settled` 表示真实发奖已完成；`discarded_missing_instance` 表示实例已丢失，任务应被直接丢弃。
  *
  * 数据流/状态流：
  * - runner 取到 dungeon-clear 任务；
  * - 外层事务包裹本函数；
  * - 本函数先统一加锁，再执行奖励入包、补发邮件、记录 dungeon_record；
+ * - 若实例已不存在则直接返回丢弃信号，不再把事务异常冒泡给 runner；
  * - 事务提交后由 runner 删除任务。
  *
  * 关键边界条件与坑点：
@@ -541,9 +544,9 @@ const settleArenaBattleInDb = async (
  */
 const settleDungeonClearInDbInTransaction = async (
   task: DeferredSettlementTask,
-): Promise<void> => {
+): Promise<DungeonClearSettlementResult> => {
   const dungeonSettlement = task.payload.dungeonSettlement;
-  if (!dungeonSettlement) return;
+  if (!dungeonSettlement) return 'settled';
 
   const difficultyDef = getDungeonDifficultyById(dungeonSettlement.difficultyId);
   const firstClearRewardConfig = difficultyDef?.first_clear_rewards ?? {};
@@ -578,7 +581,7 @@ const settleDungeonClearInDbInTransaction = async (
     [dungeonSettlement.instanceId],
   );
   if (instanceLockResult.rows.length <= 0) {
-    throw new Error(`秘境实例不存在，无法执行通关结算: ${dungeonSettlement.instanceId}`);
+    return 'discarded_missing_instance';
   }
 
   if (participantCharacterIds.length > 0) {
@@ -843,22 +846,23 @@ const settleDungeonClearInDbInTransaction = async (
   }
 
   await applyCharacterRewardDeltas(pendingCharacterRewardDeltas);
+  return 'settled';
 };
 
 const settleDungeonClearInDb = async (
   task: DeferredSettlementTask,
-): Promise<void> => {
-  await withTransaction(async () => {
-    await settleDungeonClearInDbInTransaction(task);
+): Promise<DungeonClearSettlementResult> => {
+  return withTransaction(async () => {
+    return settleDungeonClearInDbInTransaction(task);
   });
 };
 
 const executeDeferredSettlementTask = async (
   task: DeferredSettlementTask,
-): Promise<void> => {
+): Promise<DeferredSettlementExecutionResult> => {
   if (task.payload.dungeonStartConsumption) {
     await settleDungeonStartConsumptionInDb(task);
-    return;
+    return 'applied';
   }
 
   if (task.payload.battleType === 'pve') {
@@ -885,13 +889,20 @@ const executeDeferredSettlementTask = async (
     }
 
     if (task.payload.dungeonSettlement && task.payload.result === 'attacker_win') {
-      await settleDungeonClearInDb(task);
+      const result = await settleDungeonClearInDb(task);
+      if (result === 'discarded_missing_instance') {
+        return 'discarded';
+      }
     }
+    return 'applied';
   }
 
   if (task.payload.battleType === 'pvp') {
     await settleArenaBattleInDb(task);
+    return 'applied';
   }
+
+  return 'applied';
 };
 
 class OnlineBattleSettlementRunner {
@@ -966,7 +977,7 @@ class OnlineBattleSettlementRunner {
    * 处理单条延迟结算任务。
    *
    * 作用（做什么 / 不做什么）：
-   * 1. 做什么：统一封装“标记 running -> 执行真实结算 -> 成功删任务 / 失败回写状态”的单任务生命周期。
+ * 1. 做什么：统一封装“标记 running -> 执行真实结算 -> 成功删任务 / 陈旧任务丢弃 / 失败回写状态”的单任务生命周期。
    * 2. 做什么：给并发 drain 提供可组合的最小执行单元，避免批量调度层再次复制错误处理逻辑。
    * 3. 不做什么：不决定批次大小，不调度其他任务，也不管理定时器。
    *
@@ -977,11 +988,12 @@ class OnlineBattleSettlementRunner {
    * 数据流/状态流：
    * - 外层 drain 先把 taskId 放入 `activeTaskIds`；
    * - 本函数拉取最新任务实体并执行真实结算；
+   * - 成功或识别为陈旧任务时都会删除任务，只有真正异常才回写 failed；
    * - 结束后统一从 `activeTaskIds` 释放 claim。
    *
    * 关键边界条件与坑点：
    * 1. 即便 Redis 中的任务已经被其他链路删除，本函数也必须安全返回 `skipped`，不能把 drain 整体打断。
-   * 2. `activeTaskIds` 的释放必须放在 finally，避免任务异常后永久卡住同一个 taskId。
+   * 2. “前置实体已不存在”的陈旧任务必须删除而不是回写 failed，否则会在后续 tick 里持续重复报错。
    */
   private async processTask(
     task: DeferredSettlementTask,
@@ -998,8 +1010,17 @@ class OnlineBattleSettlementRunner {
         status: 'running',
         incrementAttempt: true,
       });
-      await executeDeferredSettlementTask(freshTask);
+      const executionResult = await executeDeferredSettlementTask(freshTask);
       await deleteDeferredSettlementTask(freshTask.taskId);
+      if (executionResult === 'discarded') {
+        settlementRunnerLogger.warn({
+          taskId: freshTask.taskId,
+          battleId: freshTask.battleId,
+          serializationKey,
+          instanceId: freshTask.payload.dungeonSettlement?.instanceId ?? null,
+        }, '延迟结算任务因秘境实例已不存在被直接丢弃');
+        return 'skipped';
+      }
       await pushCharacterUpdatesAfterDeferredSettlement(freshTask);
       return 'success';
     } catch (error) {
