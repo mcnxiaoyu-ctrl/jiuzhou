@@ -33,7 +33,7 @@ describe('skillEffectFormatter', () => {
     ]);
 
     expect(lines).toEqual([
-      '施加增益：受击反震（反震本次实际受击伤害 30%），持续3回合',
+      '对自身施加增益：受击反震（反震本次实际受击伤害 30%），持续3回合',
     ]);
   });
 
@@ -53,6 +53,42 @@ describe('skillEffectFormatter', () => {
 
     expect(lines).toEqual([
       '对自身施加增益：增伤提升（幅度 15%），持续2回合',
+    ]);
+  });
+
+  it('缺省目标的增益 Buff 文案应默认展示为施加给自身', () => {
+    const lines = formatSkillEffectLines([
+      {
+        type: 'buff',
+        duration: 2,
+        value: 0.15,
+        buffKey: 'buff-zengshang-up',
+        buffKind: 'attr',
+        attrKey: 'zengshang',
+        applyType: 'percent',
+      },
+    ]);
+
+    expect(lines).toEqual([
+      '对自身施加增益：增伤提升（幅度 15%），持续2回合',
+    ]);
+  });
+
+  it('缺省目标的减益 Buff 文案应默认展示为施加给敌方目标', () => {
+    const lines = formatSkillEffectLines([
+      {
+        type: 'debuff',
+        duration: 2,
+        value: 0.2,
+        buffKey: 'debuff-wufang-down',
+        buffKind: 'attr',
+        attrKey: 'wufang',
+        applyType: 'percent',
+      },
+    ]);
+
+    expect(lines).toEqual([
+      '对敌方目标施加减益：物防降低（幅度 20%），持续2回合',
     ]);
   });
 

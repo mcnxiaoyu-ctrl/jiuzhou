@@ -204,12 +204,15 @@ function buildSkillEffectTargetTeamContext(
   };
 }
 
-function resolveSkillEffectTargetMode(raw: SkillEffect['target']): SkillEffectTargetMode {
+function resolveSkillEffectTargetMode(
+  raw: SkillEffect['target'],
+  effectType: 'buff' | 'debuff',
+): SkillEffectTargetMode {
   if (raw === 'self') return 'self';
   if (raw === 'enemy') return 'enemy';
   if (raw === 'ally') return 'ally';
   if (raw === 'target') return 'target';
-  return 'target';
+  return effectType === 'buff' ? 'self' : 'enemy';
 }
 
 function applyContextBonus(value: number, bonusRate: number): number {
@@ -1249,7 +1252,7 @@ function resolveBuffEffectRecipientsForCurrentTarget(
   effect: BuffOrDebuffEffect,
   effectTargetTeamContext: SkillEffectTargetTeamContext,
 ): BattleUnit[] {
-  const targetMode = resolveSkillEffectTargetMode(effect.target);
+  const targetMode = resolveSkillEffectTargetMode(effect.target, effect.type);
   if (targetMode === 'self') {
     return [caster];
   }
@@ -1282,7 +1285,7 @@ function resolveBuffEffectRecipientsForCurrentTarget(
  *
  * 关键边界条件与坑点：
  * 1) `target=self` 在群攻技能里必须整次施法只结算一次，不能按敌人数量重复叠加。
- * 2) 旧技能未填写 target 时必须继续命中当前技能目标，避免历史配置整体迁移。
+ * 2) 旧技能未填写 target 时，Buff 默认自身、Debuff 默认敌方目标，兼容历史 AI 生成配置缺省目标。
  */
 function executeBuffEffectWithResolvedTarget(
   state: BattleState,

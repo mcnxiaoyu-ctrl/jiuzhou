@@ -326,9 +326,9 @@ const formatAuraDetail = (effect: Record<string, unknown>): string => {
     } else if (subType === 'heal') {
       subLines.push(formatHealEffect(subEffect));
     } else if (subType === 'buff') {
-      subLines.push(formatBuffEffect(subEffect, 'buff', { ignoreDuration: true }));
+      subLines.push(formatBuffEffect(subEffect, 'buff', { ignoreDuration: true, useImplicitTargetPrefix: false }));
     } else if (subType === 'debuff') {
-      subLines.push(formatBuffEffect(subEffect, 'debuff', { ignoreDuration: true }));
+      subLines.push(formatBuffEffect(subEffect, 'debuff', { ignoreDuration: true, useImplicitTargetPrefix: false }));
     } else if (subType === 'resource') {
       subLines.push(formatResourceEffect(subEffect, { targetType: auraTarget }));
     } else if (subType === 'restore_lingqi') {
@@ -436,14 +436,17 @@ const formatBuffDetail = (
 const formatBuffEffect = (
   effect: Record<string, unknown>,
   effectType: 'buff' | 'debuff',
-  options: { ignoreDuration?: boolean } = {},
+  options: { ignoreDuration?: boolean; useImplicitTargetPrefix?: boolean } = {},
 ): string => {
   const applyType = normalizeBuffApplyType(effect.applyType);
   const buffKind = normalizeBuffKind(effect.buffKind);
   const { name, attr, buffKey } = formatBuffName(effect, effectType);
   const valueText = formatBuffDetail(effect, buffKey, buffKind, attr, applyType);
   const duration = toPositiveInt(effect.duration);
-  const targetPrefix = BUFF_EFFECT_TARGET_PREFIX_LABEL[toText(effect.target)];
+  const rawTarget = toText(effect.target);
+  const targetPrefix = BUFF_EFFECT_TARGET_PREFIX_LABEL[
+    rawTarget || (options.useImplicitTargetPrefix === false ? '' : (effectType === 'buff' ? 'self' : 'enemy'))
+  ];
   const actionText = effectType === 'buff' ? '施加增益' : '施加减益';
 
   let text = targetPrefix ? `${targetPrefix}${actionText}：${name}` : `${actionText}：${name}`;
