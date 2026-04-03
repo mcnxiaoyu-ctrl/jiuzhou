@@ -438,6 +438,7 @@ model character_wander_story {
   story_summary   String                         @db.Text
   episode_count   Int                            @default(0)
   story_seed      Int
+  story_partner_snapshot Json?
   reward_title_id String?                        @db.VarChar(64)
   finished_at     DateTime?                      @db.Timestamptz(6)
   created_at      DateTime                       @default(now()) @db.Timestamptz(6)

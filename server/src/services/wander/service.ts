@@ -33,6 +33,11 @@ import {
 import { resolveWanderTargetEpisodeCount } from './episodePlan.js';
 import { resolveWanderStoryLocation } from './location.js';
 import {
+  loadActiveWanderStoryPartnerSnapshot,
+  normalizeWanderStoryPartnerSnapshot,
+  shouldIncludeWanderStoryPartner,
+} from './partner.js';
+import {
   buildDateKey,
   buildWanderCooldownState,
   formatWanderCooldownRemaining,
@@ -50,6 +55,7 @@ import type {
   WanderAiEpisodeSetupDraft,
   WanderOverviewDto,
   WanderStoryDto,
+  WanderStoryPartnerSnapshot,
   WanderStoryStatus,
 } from './types.js';
 
@@ -76,6 +82,7 @@ type WanderStoryRow = {
   story_summary: string;
   episode_count: number;
   story_seed: number;
+  story_partner_snapshot: WanderStoryPartnerSnapshot | null;
   reward_title_id: string | null;
   finished_at: Date | string | null;
   created_at: Date | string;
@@ -343,7 +350,7 @@ class WanderService {
     const result = await query<WanderStoryRow>(
       `
         SELECT id, character_id, status, story_theme, story_premise, story_summary, episode_count,
-               story_seed, reward_title_id, finished_at, created_at, updated_at
+               story_seed, story_partner_snapshot, reward_title_id, finished_at, created_at, updated_at
         FROM character_wander_story
         WHERE id = $1
         LIMIT 1
@@ -357,7 +364,7 @@ class WanderService {
     const result = await query<WanderStoryRow>(
       `
         SELECT id, character_id, status, story_theme, story_premise, story_summary, episode_count,
-               story_seed, reward_title_id, finished_at, created_at, updated_at
+               story_seed, story_partner_snapshot, reward_title_id, finished_at, created_at, updated_at
         FROM character_wander_story
         WHERE character_id = $1
           AND status = 'active'
@@ -373,7 +380,7 @@ class WanderService {
     const result = await query<WanderStoryRow>(
       `
         SELECT id, character_id, status, story_theme, story_premise, story_summary, episode_count,
-               story_seed, reward_title_id, finished_at, created_at, updated_at
+               story_seed, story_partner_snapshot, reward_title_id, finished_at, created_at, updated_at
         FROM character_wander_story
         WHERE character_id = $1
           AND status = 'finished'
@@ -643,6 +650,11 @@ class WanderService {
       : [];
     const nextEpisodeIndex = activeStory ? activeStory.episode_count + 1 : 1;
     const storySeed = activeStory?.story_seed ?? Math.max(1, Math.floor(Date.now() % 2_147_483_647));
+    const storyPartner = activeStory
+      ? normalizeWanderStoryPartnerSnapshot(activeStory.story_partner_snapshot)
+      : (shouldIncludeWanderStoryPartner(storySeed)
+        ? await loadActiveWanderStoryPartnerSnapshot(characterId)
+        : null);
     const targetEpisodeCount = resolveWanderTargetEpisodeCount(storySeed);
     const storyLocation = resolveWanderStoryLocation({
       storySeed,
@@ -651,6 +663,7 @@ class WanderService {
       nickname: character.nickname,
       realm: buildRealmText(character.realm, character.sub_realm),
       hasTeam: character.has_team,
+      storyPartner,
       storyLocation,
       activeTheme: activeStory?.story_theme ?? null,
       activePremise: activeStory?.story_premise ?? null,
@@ -666,6 +679,7 @@ class WanderService {
       dayKey,
       aiDraft,
       storySeed,
+      storyPartner,
     });
   }
 
@@ -675,8 +689,9 @@ class WanderService {
     dayKey: string;
     aiDraft: WanderAiEpisodeSetupDraft;
     storySeed: number;
+    storyPartner: WanderStoryPartnerSnapshot | null;
   }): Promise<ServiceResult<{ story: WanderStoryDto; episode: WanderEpisodeDto }>> {
-    const { characterId, dayKey, aiDraft, storySeed } = params;
+    const { characterId, dayKey, aiDraft, storySeed, storyPartner } = params;
     await lockWanderGenerationCreationMutex(characterId);
 
     const existingEpisode = await this.loadEpisodeRowByDayKey(characterId, dayKey);
@@ -698,11 +713,19 @@ class WanderService {
         `
           INSERT INTO character_wander_story (
             id, character_id, status, story_theme, story_premise, story_summary, episode_count,
-            story_seed, reward_title_id, finished_at, created_at, updated_at
+            story_seed, story_partner_snapshot, reward_title_id, finished_at, created_at, updated_at
           )
-          VALUES ($1, $2, 'active', $3, $4, $5, 1, $6, NULL, NULL, NOW(), NOW())
+          VALUES ($1, $2, 'active', $3, $4, $5, 1, $6, $7::jsonb, NULL, NULL, NOW(), NOW())
         `,
-        [storyId, characterId, aiDraft.storyTheme, aiDraft.storyPremise, '', storySeed],
+        [
+          storyId,
+          characterId,
+          aiDraft.storyTheme,
+          aiDraft.storyPremise,
+          '',
+          storySeed,
+          storyPartner ? JSON.stringify(storyPartner) : null,
+        ],
       );
     } else {
       await query(
@@ -943,6 +966,7 @@ class WanderService {
           nickname: character.nickname,
           realm: buildRealmText(character.realm, character.sub_realm),
           hasTeam: character.has_team,
+          storyPartner: normalizeWanderStoryPartnerSnapshot(storyRow.story_partner_snapshot),
           storyLocation,
           activeTheme: storyRow.story_theme,
           activePremise: storyRow.story_premise,
@@ -1180,7 +1204,7 @@ class WanderService {
     const storyResult = await query<WanderStoryRow>(
       `
         SELECT id, character_id, status, story_theme, story_premise, story_summary, episode_count,
-               story_seed, reward_title_id, finished_at, created_at, updated_at
+               story_seed, story_partner_snapshot, reward_title_id, finished_at, created_at, updated_at
         FROM character_wander_story
         WHERE id = $1
         LIMIT 1

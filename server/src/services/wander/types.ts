@@ -22,6 +22,16 @@ export type WanderStoryStatus = 'active' | 'finished';
 export type WanderEndingType = 'none' | 'good' | 'neutral' | 'tragic' | 'bizarre';
 export type WanderGenerationJobStatus = 'pending' | 'generated' | 'failed';
 
+export interface WanderStoryPartnerSnapshot {
+  partnerId: number;
+  partnerDefId: string;
+  nickname: string;
+  name: string;
+  description: string | null;
+  role: string;
+  quality: string;
+}
+
 export interface WanderGenerationJobDto {
   generationId: string;
   status: WanderGenerationJobStatus;
