@@ -83,29 +83,47 @@ const collectUniqueParticipantCharacterIds = (
   )].sort((left, right) => left - right);
 };
 
+const shouldSerializeDeferredSettlementRewardTargets = (
+  task: DeferredSettlementTask,
+): boolean => {
+  if (task.payload.battleType !== 'pve' || task.payload.result !== 'attacker_win') {
+    return false;
+  }
+  if (task.payload.rewardParticipants.length <= 0) {
+    return false;
+  }
+
+  return task.payload.battleRewardPlan !== null || task.payload.dungeonSettlement !== null;
+};
+
 /**
  * 提取延迟结算任务的串行化资源键。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：把同一秘境实例的 `dungeon-start` / `dungeon-clear` 任务收敛到同一个资源键，供 runner 做实例级串行调度。
- * 2. 做什么：把资源键解析逻辑集中在单一入口，避免 pick / dispatch / finally 各自复制一套 instanceId 提取规则。
+ * 1. 做什么：把同一秘境实例与同一领奖角色的任务都收敛成稳定资源键，供 runner 在调度层提前串行化。
+ * 2. 做什么：把资源键解析逻辑集中在单一入口，避免 pick / dispatch / finally 各自复制 instanceId / characterId 提取规则。
  * 3. 不做什么：不修改任务状态，不访问 Redis/数据库，也不决定任务是否成功。
  *
  * 输入/输出：
  * - 输入：单条延迟结算任务。
- * - 输出：需要串行执行时返回稳定资源键；否则返回 `null`。
+ * - 输出：需要串行执行时返回稳定资源键数组；否则返回空数组。
  *
  * 数据流/状态流：
- * pending task -> runner 读取任务 -> 本函数提取资源键
- * -> 同一资源键任务在同一时刻只允许一个进入真实落库。
+ * pending task -> runner 读取任务 -> 本函数提取全部资源键
+ * -> 任一资源键被占用时，该任务不能进入真实落库。
+ *
+ * 复用设计说明：
+ * 1. 秘境实例串行和领奖角色串行共用同一份资源键集合，pick / dispatch / finally 都只消费这一份结果，避免并发规则散落。
+ * 2. 高频变化点是“哪些任务需要 claim 哪些资源”，不是 claim/release 流程，因此把规则集中在这里，后续扩展新资源键只改单一入口。
  *
  * 关键边界条件与坑点：
- * 1. `dungeon-start` 与 `dungeon-clear` 必须映射到同一个键，否则仍会并发冲到 `dungeon_instance` / `dungeon_record`。
- * 2. 空字符串 `instanceId` 必须视为无效，不能生成伪键污染串行队列。
+ * 1. `dungeon-start` 与 `dungeon-clear` 必须映射到同一个实例键，否则仍会并发冲到 `dungeon_instance` / `dungeon_record`。
+ * 2. 奖励角色键只应覆盖真实会进入奖励落库的胜利 PVE 任务；失败战斗或无奖励任务不能平白降低 runner 并发度。
  */
-const getDeferredSettlementSerializationKey = (
+const getDeferredSettlementSerializationKeys = (
   task: DeferredSettlementTask,
-): string | null => {
+): string[] => {
+  const serializationKeys = new Set<string>();
   const candidates = [
     task.payload.dungeonStartConsumption?.instanceId ?? null,
     task.payload.dungeonSettlement?.instanceId ?? null,
@@ -116,10 +134,17 @@ const getDeferredSettlementSerializationKey = (
     if (typeof candidate !== 'string') continue;
     const instanceId = candidate.trim();
     if (!instanceId) continue;
-    return `dungeon-instance:${instanceId}`;
+    serializationKeys.add(`dungeon-instance:${instanceId}`);
+    break;
   }
 
-  return null;
+  if (shouldSerializeDeferredSettlementRewardTargets(task)) {
+    for (const characterId of collectUniqueParticipantCharacterIds(task.payload.rewardParticipants)) {
+      serializationKeys.add(`reward-character:${characterId}`);
+    }
+  }
+
+  return [...serializationKeys];
 };
 
 /**
@@ -978,23 +1003,21 @@ class OnlineBattleSettlementRunner {
       if (
         options?.onlyArena
         && !(task.payload.battleType === 'pvp' && task.payload.arenaDelta !== null)
-      ) {
+        ) {
         continue;
       }
 
-      const serializationKey = getDeferredSettlementSerializationKey(task);
-      if (
-        serializationKey
-        && (
-          this.activeSerializationKeys.has(serializationKey)
-          || claimedSerializationKeys.has(serializationKey)
-        )
-      ) {
+      const serializationKeys = getDeferredSettlementSerializationKeys(task);
+      const hasSerializationConflict = serializationKeys.some((serializationKey) => (
+        this.activeSerializationKeys.has(serializationKey)
+        || claimedSerializationKeys.has(serializationKey)
+      ));
+      if (hasSerializationConflict) {
         continue;
       }
 
       selectedTasks.push(task);
-      if (serializationKey) {
+      for (const serializationKey of serializationKeys) {
         claimedSerializationKeys.add(serializationKey);
       }
       if (selectedTasks.length >= limit) {
@@ -1030,7 +1053,7 @@ class OnlineBattleSettlementRunner {
   private async processTask(
     task: DeferredSettlementTask,
   ): Promise<'success' | 'failed' | 'skipped'> {
-    const serializationKey = getDeferredSettlementSerializationKey(task);
+    const serializationKeys = getDeferredSettlementSerializationKeys(task);
     try {
       const freshTask = await getDeferredSettlementTask(task.taskId);
       if (!freshTask) {
@@ -1048,7 +1071,7 @@ class OnlineBattleSettlementRunner {
         settlementRunnerLogger.warn({
           taskId: freshTask.taskId,
           battleId: freshTask.battleId,
-          serializationKey,
+          serializationKeys,
           instanceId: freshTask.payload.dungeonSettlement?.instanceId ?? null,
         }, '延迟结算任务因秘境实例已不存在被直接丢弃');
         return 'skipped';
@@ -1065,7 +1088,7 @@ class OnlineBattleSettlementRunner {
       return 'failed';
     } finally {
       this.activeTaskIds.delete(task.taskId);
-      if (serializationKey) {
+      for (const serializationKey of serializationKeys) {
         this.activeSerializationKeys.delete(serializationKey);
       }
     }
@@ -1149,8 +1172,8 @@ class OnlineBattleSettlementRunner {
             const tasksToStart = this.pickRunnableTasks(availableSlots, options);
             for (const task of tasksToStart) {
               this.activeTaskIds.add(task.taskId);
-              const serializationKey = getDeferredSettlementSerializationKey(task);
-              if (serializationKey) {
+              const serializationKeys = getDeferredSettlementSerializationKeys(task);
+              for (const serializationKey of serializationKeys) {
                 this.activeSerializationKeys.add(serializationKey);
               }
               const taskPromise = this.processTask(task).then((outcome) => ({
