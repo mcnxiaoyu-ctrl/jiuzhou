@@ -57,6 +57,14 @@ const buildRecoveredSnapshots = (
   return nextSnapshots;
 };
 
+const persistRecoveredSnapshots = async (
+  snapshots: Iterable<OnlineBattleCharacterSnapshot>,
+  buildNextState: (computed: CharacterComputedRow) => CharacterResourceState,
+): Promise<void> => {
+  const nextSnapshots = buildRecoveredSnapshots(snapshots, buildNextState);
+  await persistOnlineBattleCharacterSnapshotsBatch(nextSnapshots);
+};
+
 export const buildBattleStartRecoveredResourceState = (
   computed: CharacterComputedRow,
 ): CharacterResourceState => {
@@ -102,20 +110,36 @@ export const restoreCharacterResourcesAfterVictoryByCharacterIds = async (
   characterIds: number[],
 ): Promise<void> => {
   const computedMap = await getOnlineBattleCharacterSnapshotsByCharacterIds(characterIds);
-  const nextSnapshots = buildRecoveredSnapshots(
+  await persistRecoveredSnapshots(
     computedMap.values(),
     buildVictoryRecoveredResourceState,
   );
-  await persistOnlineBattleCharacterSnapshotsBatch(nextSnapshots);
+};
+
+export const restoreCharacterResourcesAfterVictoryBySnapshots = async (
+  snapshots: Iterable<OnlineBattleCharacterSnapshot>,
+): Promise<void> => {
+  await persistRecoveredSnapshots(
+    snapshots,
+    buildVictoryRecoveredResourceState,
+  );
 };
 
 export const applyBattleFailureResourceLossByCharacterIds = async (
   characterIds: number[],
 ): Promise<void> => {
   const computedMap = await getOnlineBattleCharacterSnapshotsByCharacterIds(characterIds);
-  const nextSnapshots = buildRecoveredSnapshots(
+  await persistRecoveredSnapshots(
     computedMap.values(),
     buildFailureReducedResourceState,
   );
-  await persistOnlineBattleCharacterSnapshotsBatch(nextSnapshots);
+};
+
+export const applyBattleFailureResourceLossBySnapshots = async (
+  snapshots: Iterable<OnlineBattleCharacterSnapshot>,
+): Promise<void> => {
+  await persistRecoveredSnapshots(
+    snapshots,
+    buildFailureReducedResourceState,
+  );
 };

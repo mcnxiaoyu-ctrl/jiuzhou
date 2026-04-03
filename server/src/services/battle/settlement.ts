@@ -33,6 +33,7 @@ import {
   getArenaProjection,
   getDungeonProjectionByBattleId,
   getOnlineBattleCharacterSnapshotsByCharacterIds,
+  type OnlineBattleCharacterSnapshot,
   getTowerProjection,
   upsertTowerProjection,
 } from "../onlineBattleProjectionService.js";
@@ -72,8 +73,8 @@ import {
   TOWER_PVE_BATTLE_START_POLICY,
 } from "./shared/startPolicy.js";
 import {
-  applyBattleFailureResourceLossByCharacterIds,
-  restoreCharacterResourcesAfterVictoryByCharacterIds,
+  applyBattleFailureResourceLossBySnapshots,
+  restoreCharacterResourcesAfterVictoryBySnapshots,
 } from "./shared/resourceRecovery.js";
 import { getTowerBattleRuntime } from "../tower/runtime.js";
 import { createScopedLogger } from "../../utils/logger.js";
@@ -87,6 +88,7 @@ import { resolveDungeonRewardMultiplier } from "../dungeon/shared/difficulty.js"
 const battleSettlementLogger = createScopedLogger("battle.settlement");
 
 type ResolvedSettlementParticipants = {
+  attackerSnapshots: OnlineBattleCharacterSnapshot[];
   participants: BattleParticipant[];
   notificationUserIds: number[];
 };
@@ -183,6 +185,7 @@ const resolveSettlementParticipants = async (
     ),
   ];
   const computedMap = await getOnlineBattleCharacterSnapshotsByCharacterIds(attackerCharacterIds);
+  const attackerSnapshots: OnlineBattleCharacterSnapshot[] = [];
   const participants: BattleParticipant[] = [];
   const notificationUserIdSet = new Set<number>();
 
@@ -195,6 +198,7 @@ const resolveSettlementParticipants = async (
   for (const characterId of attackerCharacterIds) {
     const snapshot = computedMap.get(characterId);
     if (!snapshot) continue;
+    attackerSnapshots.push(snapshot);
     participants.push({
       userId: snapshot.userId,
       characterId: snapshot.characterId,
@@ -208,6 +212,7 @@ const resolveSettlementParticipants = async (
   }
 
   return {
+    attackerSnapshots,
     participants,
     notificationUserIds: [...notificationUserIdSet],
   };
@@ -252,7 +257,7 @@ async function finishBattleCore(
   const finalLogCursor = getBattleLogCursor(battleId);
 
   const participantUserIds = (battleParticipants.get(battleId) || []).slice();
-  const { participants, notificationUserIds } = await resolveSettlementParticipants(
+  const { attackerSnapshots, participants, notificationUserIds } = await resolveSettlementParticipants(
     state,
     participantUserIds,
   );
@@ -337,8 +342,8 @@ async function finishBattleCore(
         });
 
         rewardsPreviewData = buildBattleRewardsPreviewFromDistributeResult(dropResult);
-        await restoreCharacterResourcesAfterVictoryByCharacterIds(
-          participants.map((participant) => participant.characterId),
+        await restoreCharacterResourcesAfterVictoryBySnapshots(
+          attackerSnapshots,
         );
         slowLogger.mark("restoreCharacterResourcesAfterVictory");
       }
@@ -350,8 +355,8 @@ async function finishBattleCore(
         );
       }
       if (!isTowerBattle) {
-        await applyBattleFailureResourceLossByCharacterIds(
-          participants.map((participant) => participant.characterId),
+        await applyBattleFailureResourceLossBySnapshots(
+          attackerSnapshots,
         );
         slowLogger.mark("applyFailureResourceLoss");
       }
