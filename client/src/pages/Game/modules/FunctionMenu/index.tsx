@@ -75,12 +75,12 @@ const FunctionMenu: React.FC<FunctionMenuProps> = ({ onAction, indicators, itemS
       { key: 'market', icon: <ShopOutlined />, label: '坊市' },
       { key: 'team', icon: <TeamOutlined />, label: '组队' },
       { key: 'monthcard', icon: <CreditCardOutlined />, label: '月卡' },
-      { key: 'battlepass', icon: <SafetyCertificateOutlined />, label: '战令' },
+      // { key: 'battlepass', icon: <SafetyCertificateOutlined />, label: '战令' },
       { key: 'arena', icon: <TrophyOutlined />, label: '竞技' },
       { key: 'rank', icon: <BarChartOutlined />, label: '排行' },
       { key: 'achievement', icon: <CrownOutlined />, label: '成就' },
-      { key: 'change-log', icon: <ReadOutlined />, label: '更新' },
       { key: 'idle', icon: <ClockCircleOutlined />, label: '挂机' },
+      { key: 'change-log', icon: <ReadOutlined />, label: '更新' },
     ];
     if (isMobile) {
       items.unshift({ key: 'battle-report', icon: <MessageOutlined />, label: '战况' });
@@ -166,10 +166,10 @@ const FunctionMenu: React.FC<FunctionMenuProps> = ({ onAction, indicators, itemS
                       size="small"
                       overflowCount={99}
                       offset={[-2, 2]}
-                  >
-                    {item.icon}
-                  </Badge>
-                </span>
+                    >
+                      {item.icon}
+                    </Badge>
+                  </span>
                   <span className={`menu-more-label${itemStates?.[item.key]?.locked ? ' is-locked' : ''}`}>{item.label}</span>
                 </Button>
               </Tooltip>

@@ -34,7 +34,7 @@ export const CHANGE_LOG_ENTRIES: readonly ChangeLogEntrySource[] = [
     sections: [
       '开放证道期相关内容',
       '洞府研修模型调整，停用 GPT 5.4、Claude Opus 4.6、GLM 5 Turbo',
-      '所有装基础物攻、法攻数值翻倍',
+      '所有装备基础物攻、法攻数值翻倍',
       '<div class="text-red-500">针对近期产出的血量百分比倍率技能后续将会进行适当的调整</div> ',
     ],
   },
