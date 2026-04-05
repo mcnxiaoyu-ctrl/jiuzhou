@@ -30,6 +30,7 @@ export type TaskEvent =
   | { type: 'talk_npc'; npcId: string }
   | { type: 'kill_monster'; monsterId: string; count: number }
   | { type: 'gather_resource'; resourceId: string; count: number }
+  | { type: 'collect'; itemId: string; count: number }
   | { type: 'dungeon_clear'; dungeonId: string; difficultyId?: string; count: number }
   | { type: 'craft_item'; recipeId?: string; recipeType?: string; craftKind?: string; itemId?: string; count: number };
 
@@ -95,6 +96,13 @@ export const objectiveMatchesTaskEvent = (
     if (type !== 'gather_resource') return { matched: false, delta: 0 };
     const resourceId = normalizeText(params.resource_id);
     if (!resourceId || resourceId !== event.resourceId) return { matched: false, delta: 0 };
+    return { matched: true, delta: normalizePositiveCount(event.count) };
+  }
+
+  if (event.type === 'collect') {
+    if (type !== 'collect') return { matched: false, delta: 0 };
+    const itemId = normalizeText(params.item_id);
+    if (!itemId || itemId !== event.itemId) return { matched: false, delta: 0 };
     return { matched: true, delta: normalizePositiveCount(event.count) };
   }
 

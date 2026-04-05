@@ -1195,8 +1195,9 @@ export const submitTask = async (
 const applyTaskEvent = async (
   characterId: number,
   event: TaskEvent,
+  characterRealmState?: CharacterTaskRealmState,
 ): Promise<boolean> => {
-  return applyTaskEvents(characterId, [event]);
+  return applyTaskEvents(characterId, [event], characterRealmState);
 };
 
 type TaskProgressEventMutation = {
@@ -1228,12 +1229,13 @@ type TaskProgressEventMutation = {
 const applyTaskEvents = async (
   characterId: number,
   events: readonly TaskEvent[],
+  characterRealmState?: CharacterTaskRealmState,
 ): Promise<boolean> => {
   if (events.length <= 0) return false;
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return false;
-  const characterRealmState = await loadCharacterTaskRealmState(cid);
-  if (!characterRealmState) return false;
+  const resolvedCharacterRealmState = characterRealmState ?? await loadCharacterTaskRealmState(cid);
+  if (!resolvedCharacterRealmState) return false;
 
   const recurringTaskDefs = getStaticTaskDefinitions().map((def) => ({
     id: def.id,
@@ -1246,7 +1248,7 @@ const applyTaskEvents = async (
   for (const event of events) {
     const matchedRecurringTaskIds = collectMatchedRecurringTaskIds(
       recurringTaskDefs,
-      characterRealmState,
+      resolvedCharacterRealmState,
       event,
     );
     for (const taskId of matchedRecurringTaskIds) {
@@ -1286,7 +1288,7 @@ const applyTaskEvents = async (
     if (!taskId) continue;
     const taskDef = taskDefMap.get(taskId);
     if (!taskDef) continue;
-    if (!isTaskDefinitionUnlockedForCharacter(taskDef, characterRealmState)) continue;
+    if (!isTaskDefinitionUnlockedForCharacter(taskDef, resolvedCharacterRealmState)) continue;
     const status = asTaskProgressStatusDb(row?.status);
     if (status === 'claimed') continue;
 
@@ -1558,20 +1560,26 @@ const normalizeCollectItemEvents = (
 /**
  * 批量记录收集物品事件，供掉落/邮件等多物品入口复用。
  *
- * 作用（做什么 / 不做什么）：
- * 1. 做什么：把同一角色的一批收集事件聚合成一次主线批量推进和一次成就批量推进，减少逐物品事务开销。
- * 2. 不做什么：不处理 recurring 任务，也不主动推送任务总览；收集事件当前只影响主线与成就。
+ * 作用：
+ * 1. 把同一角色的一批收集事件聚合成一次 recurring 任务推进、一次主线批量推进和一次成就批量推进，减少掉落热路径的重复读写。
+ * 2. 统一让战斗掉落、邮件补发等所有“获得物品”入口都走同一套任务命中口径，避免某些收集型周常永远不加进度。
  *
- * 输入/输出：
- * - 输入：`characterId` 与一组物品收集事件。
- * - 输出：无；副作用是批量更新主线与成就。
+ * 输入 / 输出：
+ * - 输入：角色 ID 与一组可能重复的 `itemId/count` 收集事件。
+ * - 输出：无；副作用是推进 recurring 任务、主线章节收集目标与物品获取成就。
  *
- * 数据流/状态流：
- * 多条 collect 事件 -> 先按 itemId 聚合 -> updateSectionProgressBatch -> updateAchievementProgressBatch。
+ * 数据流 / 状态流：
+ * 收集事件数组 -> 先按 itemId 聚合 -> recurring 周期任务重置检查
+ * -> `applyTaskEvents` 命中收集目标 -> `updateSectionProgressBatch` 回填主线
+ * -> `updateAchievementProgressBatch` 推进成就 -> 按需推送任务总览。
+ *
+ * 复用设计说明：
+ * 1. recurring 任务推进继续复用 `applyTaskEvents`，不额外新写一套 collect 判定分支，避免 kill/gather/collect 三条链路规则漂移。
+ * 2. 主线与成就仍复用既有批量入口，让同一批物品只做一次聚合，减少重复遍历与数据库交互。
  *
  * 关键边界条件与坑点：
- * 1. 同一批里重复 itemId 必须先合并，避免主线与成就各自重复累加。
- * 2. 空 itemId 或非法 count 会被丢弃，保持和单条入口一致的脏数据处理语义。
+ * 1. 同一批里重复 itemId 必须先合并，否则 recurring / 主线 / 成就都会被重复累加。
+ * 2. 收集事件也可能发生在新周期开始后的第一场掉落前，因此必须先做 recurring 重置检查，避免写进过期周常。
  */
 export const recordCollectItemEvents = async (
   characterId: number,
@@ -2058,6 +2066,20 @@ class TaskService {
     const normalizedEvents = normalizeCollectItemEvents(events);
     if (normalizedEvents.length <= 0) return;
 
+    const characterRealmState = await loadCharacterTaskRealmState(characterId);
+    if (!characterRealmState) return;
+
+    await resetRecurringTaskProgressIfNeeded(characterId, undefined, characterRealmState);
+    const taskOverviewChanged = await applyTaskEvents(
+      characterId,
+      normalizedEvents.map((event) => ({
+        type: 'collect' as const,
+        itemId: event.itemId,
+        count: event.count,
+      })),
+      characterRealmState,
+    );
+
     await updateSectionProgressBatch(
       characterId,
       normalizedEvents.map((event) => ({
@@ -2074,6 +2096,10 @@ class TaskService {
         increment: event.count,
       })),
     );
+
+    if (taskOverviewChanged) {
+      await notifyTaskOverviewUpdate(characterId, ['task']);
+    }
   }
 }
 
