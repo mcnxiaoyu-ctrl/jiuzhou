@@ -50,6 +50,8 @@ type PersistedBattleStaticUnit = Pick<
   | "name"
   | "type"
   | "sourceId"
+  | "formationOrder"
+  | "ownerUnitId"
   | "baseAttrs"
   | "skills"
   | "setBonusEffects"
@@ -141,6 +143,8 @@ const buildPersistedBattleStaticUnit = (
   name: unit.name,
   type: unit.type,
   sourceId: unit.sourceId,
+  formationOrder: unit.formationOrder,
+  ownerUnitId: unit.ownerUnitId,
   baseAttrs: unit.baseAttrs,
   skills: unit.skills,
   setBonusEffects: unit.setBonusEffects,

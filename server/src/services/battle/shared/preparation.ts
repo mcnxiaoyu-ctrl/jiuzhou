@@ -18,7 +18,10 @@
  * 2) prepareTeamBattleParticipants 发现“队伍成员挂机中”时直接拒绝整场战斗，不允许以“跳过该成员”方式继续开战
  */
 
-import type { CharacterData, SkillData } from "../../../battle/battleFactory.js";
+import type {
+  CharacterData,
+  PveBattleTeamMember,
+} from "../../../battle/battleFactory.js";
 import type { PoolClient } from "pg";
 import { getGameServer } from "../../../game/gameServer.js";
 import { idleSessionService } from "../../idle/idleSessionService.js";
@@ -39,7 +42,7 @@ import {
 
 type QueryExecutor = Pick<PoolClient, "query">;
 
-export type TeamBattleMember = { data: CharacterData; skills: SkillData[] };
+export type TeamBattleMember = PveBattleTeamMember;
 
 export type TeamBattlePreparationResult =
   | {
@@ -76,6 +79,28 @@ const getTeamBattleMemberCharacterId = (member: TeamBattleMember): number => {
 const getTeamBattleMemberNickname = (member: TeamBattleMember): string => {
   return String(member.data.nickname || '').trim();
 };
+
+const buildBattleMemberData = (
+  snapshot: OnlineBattleCharacterSnapshot,
+  applyBattleStartResources: boolean,
+): CharacterData => {
+  const computed = applyBattleStartResources
+    ? withBattleStartResources(snapshot.computed)
+    : snapshot.computed;
+  return {
+    ...computed,
+    setBonusEffects: snapshot.loadout.setBonusEffects,
+  };
+};
+
+const buildTeamBattleMemberFromSnapshot = (
+  snapshot: OnlineBattleCharacterSnapshot,
+  applyBattleStartResources: boolean,
+): TeamBattleMember => ({
+  data: buildBattleMemberData(snapshot, applyBattleStartResources),
+  skills: snapshot.loadout.skills,
+  partnerMember: snapshot.activePartner,
+});
 
 // ------ 挂机检查 ------
 
@@ -209,13 +234,7 @@ export async function getTeamMembersData(
     orderedMemberCharacterIds.map(async (memberCharacterId) => {
       const snapshot = computedMemberMap.get(memberCharacterId);
       if (!snapshot) return null;
-      const data: CharacterData = {
-        ...snapshot.computed,
-        setBonusEffects: snapshot.loadout.setBonusEffects,
-      };
-      const skills = snapshot.loadout.skills;
-      const teamMember: TeamBattleMember = { data, skills };
-      return teamMember;
+      return buildTeamBattleMemberFromSnapshot(snapshot, false);
     }),
   );
 
@@ -351,11 +370,7 @@ export const prepareFixedTeamBattleParticipants = (params: {
     }
 
     validTeamMembers.push({
-      data: {
-        ...withBattleStartResources(snapshot.computed),
-        setBonusEffects: snapshot.loadout.setBonusEffects,
-      },
-      skills: snapshot.loadout.skills,
+      ...buildTeamBattleMemberFromSnapshot(snapshot, true),
     });
   }
 

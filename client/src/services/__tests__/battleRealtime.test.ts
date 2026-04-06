@@ -60,16 +60,16 @@ const createStatePayload = (): BattleRealtimeStatePayload => ({
         totalSpeed: 100,
         units: [
           createUnit({
-            id: 'player-1',
-            name: '主角',
-            type: 'player',
-            avatar: '/uploads/avatar/player-1.png',
-          }),
-          createUnit({
             id: 'partner-7',
             name: '青木小鸥',
             type: 'partner',
             avatar: '/assets/partner/partner-qingmu-xiaoou.webp',
+          }),
+          createUnit({
+            id: 'player-1',
+            name: '主角',
+            type: 'player',
+            avatar: '/uploads/avatar/player-1.png',
           }),
         ],
       },
@@ -182,10 +182,10 @@ describe('normalizeBattleRealtimePayload', () => {
       throw new Error('预期返回战斗状态 payload');
     }
 
-    expect(normalized.state.teams.attacker.units[1]?.avatar).toBe(
+    expect(normalized.state.teams.attacker.units[0]?.avatar).toBe(
       '/assets/partner/partner-qingmu-xiaoou.webp',
     );
-    expect(normalized.state.teams.attacker.units[1]?.qixue).toBe(88);
+    expect(normalized.state.teams.attacker.units[0]?.qixue).toBe(88);
     expect(normalized.state.currentUnitId).toBe('partner-7');
   });
 
@@ -274,10 +274,10 @@ describe('normalizeBattleRealtimePayload', () => {
     }
 
     expect(normalized.state.teams.attacker.units.map((unit) => unit.id)).toEqual([
-      'player-1',
       'partner-7',
+      'player-1',
     ]);
-    expect(normalized.state.teams.attacker.units[0]?.qixue).toBe(90);
-    expect(normalized.state.teams.attacker.units[1]?.qixue).toBe(88);
+    expect(normalized.state.teams.attacker.units[0]?.qixue).toBe(88);
+    expect(normalized.state.teams.attacker.units[1]?.qixue).toBe(90);
   });
 });

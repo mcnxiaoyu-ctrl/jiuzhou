@@ -45,13 +45,78 @@ test('createPVEBattle 应透传玩家与伙伴头像，并保持怪物无头像'
     },
   );
 
-  const [playerUnit, partnerUnit] = state.teams.attacker.units;
+  const [partnerUnit, playerUnit] = state.teams.attacker.units;
   const [monsterUnit] = state.teams.defender.units;
 
-  assert.equal(playerUnit.type, 'player');
-  assert.equal(playerUnit.avatar, '/uploads/avatars/player-1001.png');
   assert.equal(partnerUnit.type, 'partner');
   assert.equal(partnerUnit.avatar, '/assets/partners/spirit-fox.png');
+  assert.equal(playerUnit.type, 'player');
+  assert.equal(playerUnit.avatar, '/uploads/avatars/player-1001.png');
   assert.equal(monsterUnit.type, 'monster');
   assert.equal(monsterUnit.avatar, undefined);
+});
+
+test('createPVEBattle: 组队时应按玩家与各自伙伴的配对顺序装配攻击方单位', () => {
+  const state = createPVEBattle(
+    'battle-team-partner-order-test',
+    createCharacterData(1001, {
+      nickname: '主角',
+      avatar: '/uploads/avatars/player-1001.png',
+    }),
+    [],
+    [createMonsterData('gray-wolf')],
+    { 'gray-wolf': [] },
+    {
+      partnerMember: {
+        data: createCharacterData(2001, {
+          nickname: '主角伙伴',
+          avatar: '/assets/partners/partner-2001.png',
+        }),
+        skills: [],
+        skillPolicy: { slots: [] },
+      },
+      teamMembers: [
+        {
+          data: createCharacterData(1002, {
+            nickname: '队友甲',
+            avatar: '/uploads/avatars/player-1002.png',
+          }),
+          skills: [],
+          partnerMember: {
+            data: createCharacterData(2002, {
+              nickname: '队友甲伙伴',
+              avatar: '/assets/partners/partner-2002.png',
+            }),
+            skills: [],
+            skillPolicy: { slots: [] },
+          },
+        },
+        {
+          data: createCharacterData(1003, {
+            nickname: '队友乙',
+            avatar: '/uploads/avatars/player-1003.png',
+          }),
+          skills: [],
+        },
+      ] as Array<{
+        data: ReturnType<typeof createCharacterData>;
+        skills: [];
+      }>,
+    },
+  );
+
+  assert.deepEqual(
+    state.teams.attacker.units.map((unit) => `${unit.type}:${unit.name}`),
+    ['partner:主角伙伴', 'player:主角', 'partner:队友甲伙伴', 'player:队友甲', 'player:队友乙'],
+  );
+  assert.deepEqual(
+    state.teams.attacker.units.map((unit) => unit.avatar ?? null),
+    [
+      '/assets/partners/partner-2001.png',
+      '/uploads/avatars/player-1001.png',
+      '/assets/partners/partner-2002.png',
+      '/uploads/avatars/player-1002.png',
+      '/uploads/avatars/player-1003.png',
+    ],
+  );
 });

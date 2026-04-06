@@ -26,6 +26,8 @@ export type BattleUnit = {
   id: string;
   name: string;
   unitType?: 'player' | 'monster' | 'npc' | 'summon' | 'partner';
+  formationOrder?: number;
+  ownerUnitId?: string;
   avatar?: string | null;
   tag?: string;
   hp: number;

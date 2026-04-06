@@ -34,6 +34,10 @@ export type BattleFieldFormation = {
 
 const BATTLE_FORMATION_MAX_COLUMNS = 5;
 const BATTLE_FORMATION_FIXED_ROWS = 2;
+type BattleFieldColumn = {
+  firstRowUnit: BattleUnit | null;
+  secondRowUnit: BattleUnit | null;
+};
 
 const resolveCenteredSlots = (count: number): number[] => {
   if (count <= 0) return [];
@@ -44,45 +48,132 @@ const resolveCenteredSlots = (count: number): number[] => {
   return [0, 1, 2, 3, 4];
 };
 
-const padRow = (row: BattleUnit[], columns: number): Array<BattleUnit | null> => {
-  const padded: Array<BattleUnit | null> = Array.from({ length: columns }, () => null);
-  const slots = resolveCenteredSlots(Math.min(row.length, columns));
+const isPartnerUnit = (unit: BattleUnit): boolean => unit.unitType === 'partner';
 
-  row.slice(0, columns).forEach((unit, index) => {
-    const slotIndex = slots[index];
-    padded[slotIndex] = unit;
-  });
-
-  return padded;
+const buildStandaloneColumn = (
+  team: BattleTeamSide,
+  unit: BattleUnit,
+): BattleFieldColumn => {
+  if (team === 'ally') {
+    return isPartnerUnit(unit)
+      ? { firstRowUnit: unit, secondRowUnit: null }
+      : { firstRowUnit: null, secondRowUnit: unit };
+  }
+  return isPartnerUnit(unit)
+    ? { firstRowUnit: null, secondRowUnit: unit }
+    : { firstRowUnit: unit, secondRowUnit: null };
 };
 
-const splitBattleUnits = (units: BattleUnit[]): { partners: BattleUnit[]; others: BattleUnit[] } => {
-  const partners: BattleUnit[] = [];
-  const others: BattleUnit[] = [];
+const buildPairedColumn = (
+  team: BattleTeamSide,
+  partnerUnit: BattleUnit,
+  ownerUnit: BattleUnit,
+): BattleFieldColumn => {
+  return team === 'ally'
+    ? { firstRowUnit: partnerUnit, secondRowUnit: ownerUnit }
+    : { firstRowUnit: ownerUnit, secondRowUnit: partnerUnit };
+};
 
-  for (const unit of units) {
-    if (unit.unitType === 'partner') {
-      partners.push(unit);
+const buildColumnFromOwnerAndPartner = (
+  team: BattleTeamSide,
+  ownerUnit: BattleUnit,
+  partnerUnit: BattleUnit | null,
+): BattleFieldColumn => {
+  if (!partnerUnit) {
+    return buildStandaloneColumn(team, ownerUnit);
+  }
+  return buildPairedColumn(team, partnerUnit, ownerUnit);
+};
+
+const resolveBattleFieldColumns = (
+  team: BattleTeamSide,
+  units: BattleUnit[],
+): BattleFieldColumn[] => {
+  const orderedUnits = units.slice().sort((leftUnit, rightUnit) => {
+    const leftOrder = Number.isFinite(leftUnit.formationOrder)
+      ? Number(leftUnit.formationOrder)
+      : Number.MAX_SAFE_INTEGER;
+    const rightOrder = Number.isFinite(rightUnit.formationOrder)
+      ? Number(rightUnit.formationOrder)
+      : Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    return 0;
+  });
+  const ownerPartnerMap = new Map<string, BattleUnit[]>();
+  const standalonePartners: BattleUnit[] = [];
+
+  for (const unit of orderedUnits) {
+    if (!isPartnerUnit(unit)) {
       continue;
     }
-    others.push(unit);
+    const ownerUnitId = typeof unit.ownerUnitId === 'string' ? unit.ownerUnitId.trim() : '';
+    if (!ownerUnitId) {
+      standalonePartners.push(unit);
+      continue;
+    }
+    const ownerPartners = ownerPartnerMap.get(ownerUnitId) ?? [];
+    ownerPartners.push(unit);
+    ownerPartnerMap.set(ownerUnitId, ownerPartners);
   }
 
-  return { partners, others };
+  const columns: BattleFieldColumn[] = [];
+
+  for (let index = 0; index < orderedUnits.length; index += 1) {
+    const currentUnit = orderedUnits[index];
+    if (!currentUnit) {
+      continue;
+    }
+    if (isPartnerUnit(currentUnit)) {
+      continue;
+    }
+    const ownedPartners = ownerPartnerMap.get(currentUnit.id) ?? [];
+    const matchedPartner = ownedPartners.shift() ?? null;
+    if (ownedPartners.length <= 0) {
+      ownerPartnerMap.delete(currentUnit.id);
+    } else {
+      ownerPartnerMap.set(currentUnit.id, ownedPartners);
+    }
+    columns.push(buildColumnFromOwnerAndPartner(team, currentUnit, matchedPartner));
+  }
+
+  for (const partnerUnit of standalonePartners) {
+    columns.push(buildStandaloneColumn(team, partnerUnit));
+  }
+  for (const partnerUnits of ownerPartnerMap.values()) {
+    for (const partnerUnit of partnerUnits) {
+      columns.push(buildStandaloneColumn(team, partnerUnit));
+    }
+  }
+
+  return columns;
 };
 
 export const resolveBattleFieldFormation = (
   team: BattleTeamSide,
   units: BattleUnit[],
 ): BattleFieldFormation => {
-  const { partners, others } = splitBattleUnits(units);
-  const preferredFirstRow = team === 'ally' ? partners : others;
-  const preferredSecondRow = team === 'ally' ? others : partners;
-  const firstRow = preferredFirstRow.slice(0, BATTLE_FORMATION_MAX_COLUMNS);
-  const firstRowOverflow = preferredFirstRow.slice(BATTLE_FORMATION_MAX_COLUMNS);
-  const secondRow = [...firstRowOverflow, ...preferredSecondRow].slice(0, BATTLE_FORMATION_MAX_COLUMNS);
-  const firstRowCells = padRow(firstRow, BATTLE_FORMATION_MAX_COLUMNS);
-  const secondRowCells = padRow(secondRow, BATTLE_FORMATION_MAX_COLUMNS);
+  const orderedColumns = resolveBattleFieldColumns(team, units).slice(0, BATTLE_FORMATION_MAX_COLUMNS);
+  const centeredSlots = resolveCenteredSlots(orderedColumns.length);
+  const firstRowCells: Array<BattleUnit | null> = Array.from(
+    { length: BATTLE_FORMATION_MAX_COLUMNS },
+    () => null,
+  );
+  const secondRowCells: Array<BattleUnit | null> = Array.from(
+    { length: BATTLE_FORMATION_MAX_COLUMNS },
+    () => null,
+  );
+
+  orderedColumns.forEach((column, index) => {
+    const slotIndex = centeredSlots[index];
+    if (slotIndex === undefined) {
+      return;
+    }
+    firstRowCells[slotIndex] = column.firstRowUnit;
+    secondRowCells[slotIndex] = column.secondRowUnit;
+  });
+
   const occupiedColumnIndexes = Array.from({ length: BATTLE_FORMATION_MAX_COLUMNS }, (_, columnIndex) => columnIndex)
     .filter((columnIndex) => firstRowCells[columnIndex] || secondRowCells[columnIndex]);
   const occupiedColumnCount = occupiedColumnIndexes.length;

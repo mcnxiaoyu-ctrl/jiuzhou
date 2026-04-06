@@ -233,12 +233,7 @@ export async function startPVEBattle(
       return preparedTeam.result;
     }
     const { validTeamMembers, participantUserIds } = preparedTeam;
-
-    const partnerMemberPromise = Promise.resolve(
-      validTeamMembers.length <= 0
-        ? (characterSnapshot.activePartner ?? null)
-        : null,
-    );
+    const partnerMember = characterSnapshot.activePartner ?? null;
     scheduleBattleStartResourcesSyncForUsers(participantUserIds, {
       context: "同步战前资源（普通战斗）",
     });
@@ -285,8 +280,6 @@ export async function startPVEBattle(
     const monsterSkillsMap = monsterResolveResult.monsterSkillsMap;
 
     const battleId = `battle-${userId}-${Date.now()}`;
-
-    const partnerMember = await partnerMemberPromise;
     slowLogger.mark("buildConfiguredPartnerBattleMember");
 
     const battleState = createPVEBattle(
@@ -445,17 +438,10 @@ export const startResolvedPVEBattleByPolicy = async (params: {
     const preparedTeam = await validTeamMembersPromise;
     if (!preparedTeam.success) return preparedTeam.result;
     const { validTeamMembers, participantUserIds } = preparedTeam;
-
-    const partnerMemberPromise = Promise.resolve(
-      validTeamMembers.length <= 0
-        ? (baseCharacterSnapshot.activePartner ?? null)
-        : null,
-    );
+    const partnerMember = baseCharacterSnapshot.activePartner ?? null;
     scheduleBattleStartResourcesSyncForUsers(participantUserIds, {
       context: params.syncResourceContext,
     });
-
-    const partnerMember = await partnerMemberPromise;
     const playerCount = validTeamMembers.length + 1;
 
     const battleState = createPVEBattle(

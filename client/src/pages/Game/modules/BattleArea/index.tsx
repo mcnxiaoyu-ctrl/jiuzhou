@@ -144,6 +144,8 @@ const toClientUnit = (u: BattleUnitDto): BattleUnit => {
     id: u.id,
     name: u.name,
     unitType: u.type,
+    formationOrder: u.formationOrder,
+    ownerUnitId: u.ownerUnitId,
     avatar: u.avatar ?? null,
     tag: u.currentAttrs?.realm || (u.type === 'monster' ? '凡兽' : u.type === 'partner' ? '伙伴' : '凡人'),
     hp: Number(u.qixue) || 0,

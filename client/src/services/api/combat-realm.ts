@@ -22,6 +22,8 @@ export type BattleUnitDto = {
   id: string;
   name: string;
   type: 'player' | 'monster' | 'npc' | 'summon' | 'partner';
+  formationOrder?: number;
+  ownerUnitId?: string;
   monthCardActive?: boolean;
   avatar?: string | null;
   qixue: number;

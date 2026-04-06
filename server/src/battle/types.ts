@@ -44,6 +44,8 @@ export interface BattleUnit {
   name: string;
   type: 'player' | 'partner' | 'monster' | 'npc' | 'summon';
   sourceId: number | string;  // 原始数据ID（角色ID/怪物定义ID）
+  formationOrder?: number;
+  ownerUnitId?: string;
   monthCardActive?: boolean;
   avatar?: string | null;
 

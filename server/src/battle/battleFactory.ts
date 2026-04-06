@@ -194,6 +194,20 @@ function applyMonsterEncounterScaling(state: BattleState, base: BattleAttrs, mon
 // 技能数据接口
 export interface SkillData extends BattleSkillDataInput {}
 
+export interface PveBattlePartnerMember {
+  data: CharacterData;
+  skills: SkillData[];
+  skillPolicy: { slots: PartnerSkillPolicySlotDto[] };
+}
+
+export interface PveBattleTeamMember {
+  data: CharacterData;
+  skills: SkillData[];
+  partnerMember?: PveBattlePartnerMember | null;
+}
+
+type CharacterUnitKind = 'player' | 'partner' | 'npc';
+
 /**
  * 创建PVE战斗状态（支持单人或组队多人）
  */
@@ -204,35 +218,64 @@ export function createPVEBattle(
   monsters: MonsterData[],
   monsterSkillsMap: Record<string, SkillData[]>,
   options?: {
-    teamMembers?: Array<{ data: CharacterData; skills: SkillData[] }>;
-    partnerMember?: {
-      data: CharacterData;
-      skills: SkillData[];
-      skillPolicy: { slots: PartnerSkillPolicySlotDto[] };
-    };
+    teamMembers?: PveBattleTeamMember[];
+    partnerMember?: PveBattlePartnerMember;
   },
 ): BattleState {
   const randomSeed = generateBattleSeed();
   // 创建玩家单位列表
   const playerUnits: BattleUnit[] = [];
+  let formationOrderSeed = 0;
+  const nextFormationOrder = (): number => {
+    const currentOrder = formationOrderSeed;
+    formationOrderSeed += 1;
+    return currentOrder;
+  };
   
   // 主玩家（队长或单人）
-  const mainPlayerUnit = createPlayerUnit(playerData, playerSkills);
-  playerUnits.push(mainPlayerUnit);
-
+  const mainPlayerUnitId = `player-${playerData.id}`;
   if (options?.partnerMember) {
     const partnerUnit = createPartnerUnit(
       options.partnerMember.data,
       options.partnerMember.skills,
       options.partnerMember.skillPolicy,
+      nextFormationOrder(),
+      mainPlayerUnitId,
     );
     playerUnits.push(partnerUnit);
   }
+  const mainPlayerUnit = createPlayerUnit(
+    playerData,
+    playerSkills,
+    nextFormationOrder(),
+  );
+  playerUnits.push(mainPlayerUnit);
   
   // 队友单位
   if (options?.teamMembers && options.teamMembers.length > 0) {
     for (const member of options.teamMembers) {
-      const memberUnit = createPlayerUnit(member.data, member.skills);
+      if (!member.partnerMember) {
+        const memberUnit = createPlayerUnit(
+          member.data,
+          member.skills,
+          nextFormationOrder(),
+        );
+        playerUnits.push(memberUnit);
+        continue;
+      }
+      const partnerUnit = createPartnerUnit(
+        member.partnerMember.data,
+        member.partnerMember.skills,
+        member.partnerMember.skillPolicy,
+        nextFormationOrder(),
+        `player-${member.data.id}`,
+      );
+      playerUnits.push(partnerUnit);
+      const memberUnit = createPlayerUnit(
+        member.data,
+        member.skills,
+        nextFormationOrder(),
+      );
       playerUnits.push(memberUnit);
     }
   }
@@ -283,11 +326,11 @@ export function createPVPBattle(
   player2Skills: SkillData[],
   options?: { defenderUnitType?: 'player' | 'npc' }
 ): BattleState {
-  const player1Unit = createPlayerUnit(player1Data, player1Skills);
+  const player1Unit = createPlayerUnit(player1Data, player1Skills, 0);
   const defenderUnitType = options?.defenderUnitType ?? 'player';
   const player2Unit = defenderUnitType === 'npc'
-    ? createNpcUnit(player2Data, player2Skills)
-    : createPlayerUnit(player2Data, player2Skills);
+    ? createNpcUnit(player2Data, player2Skills, 0)
+    : createPlayerUnit(player2Data, player2Skills, 0);
   
   const state: BattleState = {
     battleId,
@@ -320,27 +363,39 @@ export function createPVPBattle(
 /**
  * 创建玩家战斗单位
  */
-function createPlayerUnit(data: CharacterData, skills: SkillData[]): BattleUnit {
-  return createCharacterUnit(data, skills, 'player');
+function createPlayerUnit(
+  data: CharacterData,
+  skills: SkillData[],
+  formationOrder: number,
+): BattleUnit {
+  return createCharacterUnit(data, skills, 'player', formationOrder);
 }
 
 function createPartnerUnit(
   data: CharacterData,
   skills: SkillData[],
   skillPolicy: { slots: PartnerSkillPolicySlotDto[] },
+  formationOrder: number,
+  ownerUnitId: string,
 ): BattleUnit {
-  return createCharacterUnit(data, skills, 'partner', skillPolicy);
+  return createCharacterUnit(data, skills, 'partner', formationOrder, skillPolicy, ownerUnitId);
 }
 
-function createNpcUnit(data: CharacterData, skills: SkillData[]): BattleUnit {
-  return createCharacterUnit(data, skills, 'npc');
+function createNpcUnit(
+  data: CharacterData,
+  skills: SkillData[],
+  formationOrder: number,
+): BattleUnit {
+  return createCharacterUnit(data, skills, 'npc', formationOrder);
 }
 
 function createCharacterUnit(
   data: CharacterData,
   skills: SkillData[],
-  type: 'player' | 'partner' | 'npc',
+  type: CharacterUnitKind,
+  formationOrder: number,
   partnerSkillPolicy?: { slots: PartnerSkillPolicySlotDto[] },
+  ownerUnitId?: string,
 ): BattleUnit {
   const attrs = extractAttrs(data);
   if (type === 'partner') {
@@ -364,6 +419,8 @@ function createCharacterUnit(
     monthCardActive: data.monthCardActive,
     avatar: type === 'player' || type === 'partner' ? data.avatar ?? null : undefined,
     sourceId: data.id,
+    formationOrder,
+    ownerUnitId,
     baseAttrs: { ...attrs },
     currentAttrs: attrs,
     qixue: data.qixue,

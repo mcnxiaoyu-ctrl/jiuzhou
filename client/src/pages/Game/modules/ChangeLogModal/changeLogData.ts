@@ -32,6 +32,9 @@ export const CHANGE_LOG_ENTRIES: readonly ChangeLogEntrySource[] = [
   {
     releasedAt: '2026-04-06',
     sections: [
+      '组队现在伙伴也会出战了',
+      '调整了AI功法生成的系统提示词，主要针对气血类伤害倍率的生成，期望能让输出更合理一些',
+      '<div class="my-4 border-t border-gray-200 dark:border-gray-700"></div>',
       '现在伙伴普通招募也可以输入自定底模了',
       '修复伙伴学习功法可通过刷新页面取消并且不会消耗功法书的问题',
     ],

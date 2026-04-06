@@ -8,6 +8,7 @@ import {
 import type { OnlineBattleCharacterSnapshot } from '../onlineBattleProjectionService.js';
 import type { CharacterComputedRow } from '../characterComputedService.js';
 import type { CharacterBattleLoadout } from '../battle/shared/profileCache.js';
+import type { PartnerBattleMember } from '../shared/partnerBattleMember.js';
 
 const createComputedRow = (
   characterId: number,
@@ -77,6 +78,21 @@ const createBattleLoadout = (): CharacterBattleLoadout => ({
   skills: [],
 });
 
+const createPartnerBattleMember = (
+  partnerId: number,
+  userId: number,
+  nickname: string,
+): PartnerBattleMember => ({
+  data: {
+    ...createComputedRow(partnerId, userId, nickname),
+    nickname,
+    realm: '',
+    sub_realm: null,
+  },
+  skills: [],
+  skillPolicy: { slots: [] },
+});
+
 /**
  * 固定参战名单准备回归测试
  *
@@ -102,12 +118,13 @@ const createSnapshot = (
   characterId: number,
   userId: number,
   nickname: string,
+  activePartner: PartnerBattleMember | null = null,
 ): OnlineBattleCharacterSnapshot => ({
   characterId,
   userId,
   computed: createComputedRow(characterId, userId, nickname),
   loadout: createBattleLoadout(),
-  activePartner: null,
+  activePartner,
   teamId: 'team-1',
   isTeamLeader: characterId === 1001,
 });
@@ -188,4 +205,37 @@ test('prepareFixedTeamBattleParticipants: 当前角色不在固定名单中时�
     assert.fail('预期当前角色缺失时直接失败');
   }
   assert.equal(result.result.message, '当前角色不在秘境参战名单中');
+});
+
+test('prepareFixedTeamBattleParticipants: 固定名单中的每个队员都应保留自己的出战伙伴', () => {
+  const participants: FixedBattleParticipant[] = [
+    { userId: 101, characterId: 1001 },
+    { userId: 102, characterId: 1002 },
+    { userId: 103, characterId: 1003 },
+  ];
+  const snapshots = new Map<number, OnlineBattleCharacterSnapshot>([
+    [1001, createSnapshot(1001, 101, '甲', createPartnerBattleMember(2001, 101, '甲伙伴'))],
+    [1002, createSnapshot(1002, 102, '乙', createPartnerBattleMember(2002, 102, '乙伙伴'))],
+    [1003, createSnapshot(1003, 103, '丙', null)],
+  ]);
+
+  const result = prepareFixedTeamBattleParticipants({
+    selfCharacterId: 1001,
+    participants,
+    snapshotsByCharacterId: snapshots,
+  });
+
+  assert.equal(result.success, true);
+  if (!result.success) {
+    assert.fail('预期固定参战名单构建成功');
+  }
+
+  const teammatePartners = result.validTeamMembers.map((member) => {
+    return (member as { partnerMember?: PartnerBattleMember | null }).partnerMember ?? null;
+  });
+
+  assert.deepEqual(
+    teammatePartners.map((partner) => partner?.data.nickname ?? null),
+    ['乙伙伴', null],
+  );
 });
