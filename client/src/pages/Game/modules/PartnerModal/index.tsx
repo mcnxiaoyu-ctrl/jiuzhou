@@ -167,7 +167,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const [dragOverSkillId, setDragOverSkillId] = useState<string | null>(null);
   const [injectExpValue, setInjectExpValue] = useState<number | null>(null);
   const [techniqueResultText, setTechniqueResultText] = useState('');
-  const [customBaseModelEnabled, setCustomBaseModelEnabled] = useState(false);
+  const [advancedRecruitEnabled, setAdvancedRecruitEnabled] = useState(false);
   const [recruitBaseModelInput, setRecruitBaseModelInput] = useState('');
   const [selectedFusionMaterialIds, setSelectedFusionMaterialIds] = useState<number[]>([]);
   const [techniqueUpgradeCosts, setTechniqueUpgradeCosts] = useState<Record<string, PartnerTechniqueUpgradeCostDto | null>>({});
@@ -288,7 +288,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       setDragOverSkillId(null);
       setInjectExpValue(null);
       setTechniqueResultText('');
-      setCustomBaseModelEnabled(false);
+      setAdvancedRecruitEnabled(false);
       setRecruitBaseModelInput('');
       setSelectedFusionMaterialIds([]);
       setTechniqueUpgradeCosts({});
@@ -454,16 +454,16 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const recruitPanelView = useMemo(() => resolvePartnerRecruitPanelView(recruitStatus), [recruitStatus]);
   const fusionPanelView = useMemo(() => resolvePartnerFusionPanelView(fusionStatus), [fusionStatus]);
   const recruitActionState = useMemo(
-    () => resolvePartnerRecruitActionState(recruitStatus, customBaseModelEnabled),
-    [customBaseModelEnabled, recruitStatus],
+    () => resolvePartnerRecruitActionState(recruitStatus, advancedRecruitEnabled),
+    [advancedRecruitEnabled, recruitStatus],
   );
   const recruitSubmitState = useMemo(
-    () => resolvePartnerRecruitSubmitState(recruitStatus, customBaseModelEnabled),
-    [customBaseModelEnabled, recruitStatus],
+    () => resolvePartnerRecruitSubmitState(recruitStatus, advancedRecruitEnabled),
+    [advancedRecruitEnabled, recruitStatus],
   );
   const recruitCooldownDisplay = useMemo(
-    () => resolvePartnerRecruitCooldownDisplay(recruitStatus, customBaseModelEnabled),
-    [customBaseModelEnabled, recruitStatus],
+    () => resolvePartnerRecruitCooldownDisplay(recruitStatus, advancedRecruitEnabled),
+    [advancedRecruitEnabled, recruitStatus],
   );
   const recruitQualityRateItems = useMemo(
     () => resolvePartnerRecruitQualityRateItems(recruitStatus),
@@ -494,10 +494,10 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   );
 
   useEffect(() => {
-    if (!hasCustomBaseModelToken && customBaseModelEnabled) {
-      setCustomBaseModelEnabled(false);
+    if (!hasCustomBaseModelToken && advancedRecruitEnabled) {
+      setAdvancedRecruitEnabled(false);
     }
-  }, [customBaseModelEnabled, hasCustomBaseModelToken]);
+  }, [advancedRecruitEnabled, hasCustomBaseModelToken]);
 
   const characterExp = overview?.characterExp ?? 0;
 
@@ -978,8 +978,8 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     setActionKey('recruit-generate');
     try {
       const res = await generatePartnerRecruitDraft({
-        customBaseModelEnabled,
-        requestedBaseModel: customBaseModelEnabled ? recruitBaseModelInputTrimmed || undefined : undefined,
+        customBaseModelEnabled: advancedRecruitEnabled,
+        requestedBaseModel: recruitBaseModelInputTrimmed || undefined,
       });
       if (!res.success) throw new Error(getUnifiedApiErrorMessage(res, '开始招募失败'));
       message.success(res.message || '伙伴招募已开始');
@@ -990,7 +990,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     } finally {
       setActionKey('');
     }
-  }, [canSubmitRecruit, customBaseModelEnabled, message, recruitBaseModelInputTrimmed, refreshRecruitStatus]);
+  }, [advancedRecruitEnabled, canSubmitRecruit, message, recruitBaseModelInputTrimmed, refreshRecruitStatus]);
 
   const handleToggleFusionMaterial = useCallback((partnerId: number) => {
     setSelectedFusionMaterialIds((currentIds) => togglePartnerFusionMaterialSelection(currentIds, partnerId));
@@ -1670,7 +1670,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
                   <div className="partner-stat-label">招募规则</div>
                   <div className="partner-meta">每次招募会生成一名专属伙伴预览，确认后才会正式入队。</div>
                   {hasCustomBaseModelCapability ? (
-                    <div className="partner-meta">自定义底模默认关闭，勾选启用后需额外消耗高级招募令。</div>
+                    <div className="partner-meta">普通招募也可直接填写底模；高级招募令仅负责无视当前冷却并额外消耗令牌。</div>
                   ) : null}
                 </div>
                 <div className="partner-recruit-summary-item">
@@ -1765,7 +1765,8 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
           <div className="partner-recruit-state-card partner-recruit-operation-card">
             <div className="partner-section-title">
               <span>招募操作</span>
-              {customBaseModelEnabled ? <Tag color="geekblue">自定义底模已启用</Tag> : null}
+              {recruitBaseModelInputTrimmed ? <Tag color="geekblue">已填写指定底模</Tag> : null}
+              {advancedRecruitEnabled ? <Tag color="gold">高级招募令已启用</Tag> : null}
             </div>
             <div className="partner-recruit-operation-copy">
               <div className="partner-stat-label">开始招募</div>
@@ -1779,40 +1780,46 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
               <div className="partner-recruit-option-block">
                 <div className="partner-recruit-option-row">
                   <div className="partner-recruit-option-copy">
-                    <div className="partner-stat-label">自定义底模</div>
+                    <div className="partner-stat-label">指定底模</div>
+                    <div className="partner-meta">
+                      普通招募与高级招募令模式都可填写；留空则按系统随机底模生成。
+                    </div>
+                  </div>
+                </div>
+                <div className="partner-recruit-base-model-form">
+                  <Input
+                    value={recruitBaseModelInput}
+                    onChange={(event) => setRecruitBaseModelInput(event.target.value)}
+                    placeholder="留空则随机，例如：狐、龙、雪女"
+                    maxLength={recruitStatus.customBaseModelMaxLength}
+                    disabled={actionKey === 'recruit-generate'}
+                  />
+                  <div className="partner-recruit-base-model-meta">
+                    <div className="partner-meta">
+                      当前输入 {recruitBaseModelInputLength}/{recruitStatus.customBaseModelMaxLength}
+                    </div>
+                  </div>
+                </div>
+                <div className="partner-recruit-option-row">
+                  <div className="partner-recruit-option-copy">
+                    <div className="partner-stat-label">{recruitStatus.customBaseModelTokenItemName}</div>
                     <div className="partner-meta">
                       {!hasCustomBaseModelToken
-                        ? `${recruitStatus.customBaseModelTokenItemName}不足，当前无法启用自定义底模。`
-                        : `启用后需消耗 ${recruitStatus.customBaseModelTokenItemName} x${recruitStatus.customBaseModelTokenCost}，留空则随机底模。`}
+                        ? `${recruitStatus.customBaseModelTokenItemName}不足，当前仅有 ${recruitStatus.customBaseModelTokenAvailableQty} 枚，无法启用无视冷却模式。`
+                        : `启用后需额外消耗 ${recruitStatus.customBaseModelTokenItemName} x${recruitStatus.customBaseModelTokenCost}，本次招募无视当前冷却且不会重置或新增冷却。`}
                     </div>
                   </div>
                   <Switch
-                    checked={customBaseModelEnabled}
-                    onChange={setCustomBaseModelEnabled}
+                    checked={advancedRecruitEnabled}
+                    onChange={setAdvancedRecruitEnabled}
                     disabled={!hasCustomBaseModelToken}
                     checkedChildren="开"
                     unCheckedChildren="关"
                   />
                 </div>
-                {customBaseModelEnabled ? (
-                  <div className="partner-recruit-base-model-form">
-                    <Input
-                      value={recruitBaseModelInput}
-                      onChange={(event) => setRecruitBaseModelInput(event.target.value)}
-                      placeholder="留空则随机，例如：狐、龙、雪女"
-                      maxLength={recruitStatus.customBaseModelMaxLength}
-                      disabled={!recruitActionState.canGenerate}
-                    />
-                    <div className="partner-recruit-base-model-meta">
-                      <div className="partner-meta">
-                        当前输入 {recruitBaseModelInputLength}/{recruitStatus.customBaseModelMaxLength}
-                      </div>
-                      {!customBaseModelTokenEnough ? (
-                        <div className="partner-meta">
-                          {recruitStatus.customBaseModelTokenItemName}不足，当前仅有 {recruitStatus.customBaseModelTokenAvailableQty} 枚。
-                        </div>
-                      ) : null}
-                    </div>
+                {advancedRecruitEnabled && !customBaseModelTokenEnough ? (
+                  <div className="partner-meta">
+                    {recruitStatus.customBaseModelTokenItemName}不足，当前仅有 {recruitStatus.customBaseModelTokenAvailableQty} 枚。
                   </div>
                 ) : null}
               </div>

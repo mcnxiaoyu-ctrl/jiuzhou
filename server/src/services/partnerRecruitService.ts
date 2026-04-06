@@ -517,10 +517,9 @@ class PartnerRecruitService {
     await lockPartnerRecruitCreationMutex(characterId);
     await this.discardExpiredDraftJobsTx(characterId);
 
-    const requestedBaseModelValidation = await validatePartnerRecruitRequestedBaseModelSelection({
-      enabled: customBaseModelEnabled,
+    const requestedBaseModelValidation = await validatePartnerRecruitRequestedBaseModelSelection(
       requestedBaseModel,
-    });
+    );
     if (!requestedBaseModelValidation.success) {
       return {
         success: false,

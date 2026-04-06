@@ -63,7 +63,7 @@ describe('partnerRecruitShared', () => {
       cooldownRemainingSeconds: 3_600,
     }), true);
 
-    expect(cooldownDisplay.statusText).toContain('本次招募不受影响');
+    expect(cooldownDisplay.statusText).toContain('本次招募无冷却');
     expect(cooldownDisplay.ruleText).toContain('不会重置或新增招募冷却');
     expect(cooldownDisplay.bypassedByCustomBaseModel).toBe(true);
   });
@@ -87,6 +87,15 @@ describe('partnerRecruitShared', () => {
 
     expect(submitState.canSubmit).toBe(false);
     expect(submitState.disabledReason).toContain('高级招募令不足');
+  });
+
+  it('普通招募即使没有高级招募令也应允许提交', () => {
+    const submitState = resolvePartnerRecruitSubmitState(buildRecruitStatus({
+      customBaseModelTokenAvailableQty: 0,
+    }), false);
+
+    expect(submitState.canSubmit).toBe(true);
+    expect(submitState.disabledReason).toBeNull();
   });
 
   it('应把服务端下发的品质概率格式化为招募面板展示项', () => {

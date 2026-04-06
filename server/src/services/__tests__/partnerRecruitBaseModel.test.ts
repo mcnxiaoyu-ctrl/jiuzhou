@@ -21,7 +21,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   PARTNER_RECRUIT_CUSTOM_BASE_MODEL_BYPASSES_COOLDOWN,
-  PARTNER_RECRUIT_CUSTOM_BASE_MODEL_ENABLE_REQUIRED_MESSAGE,
   PARTNER_RECRUIT_CUSTOM_BASE_MODEL_SENSITIVE_MESSAGE,
   guardPartnerRecruitRequestedBaseModel,
   shouldPartnerRecruitBypassCooldownWithCustomBaseModel,
@@ -54,22 +53,17 @@ test('guardPartnerRecruitRequestedBaseModel: 敏感词应被拦截', async () =>
   assert.equal(result.message, PARTNER_RECRUIT_CUSTOM_BASE_MODEL_SENSITIVE_MESSAGE);
 });
 
-test('validatePartnerRecruitRequestedBaseModelSelection: 未勾选时提交底模应被拦截', async () => {
-  const result = await validatePartnerRecruitRequestedBaseModelSelection({
-    enabled: false,
-    requestedBaseModel: '雪狐',
-  });
+test('validatePartnerRecruitRequestedBaseModelSelection: 普通招募提交合法底模也应通过', async () => {
+  const result = await validatePartnerRecruitRequestedBaseModelSelection('雪狐');
 
-  assert.equal(result.success, false);
-  if (result.success) return;
-  assert.equal(result.message, PARTNER_RECRUIT_CUSTOM_BASE_MODEL_ENABLE_REQUIRED_MESSAGE);
+  assert.deepEqual(result, {
+    success: true,
+    value: '雪狐',
+  });
 });
 
-test('validatePartnerRecruitRequestedBaseModelSelection: 勾选后留空应允许走随机底模', async () => {
-  const result = await validatePartnerRecruitRequestedBaseModelSelection({
-    enabled: true,
-    requestedBaseModel: '   ',
-  });
+test('validatePartnerRecruitRequestedBaseModelSelection: 留空应允许走随机底模', async () => {
+  const result = await validatePartnerRecruitRequestedBaseModelSelection('   ');
 
   assert.deepEqual(result, {
     success: true,
