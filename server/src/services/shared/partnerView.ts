@@ -688,6 +688,13 @@ export const buildEffectivePartnerTechniqueEntries = (
   return entries;
 };
 
+export const countEffectivePartnerTechniqueEntries = (
+  definition: PartnerDefConfig,
+  techniqueRows: PartnerTechniqueRow[],
+): number => {
+  return buildEffectivePartnerTechniqueEntries(definition, techniqueRows).length;
+};
+
 export const findEffectivePartnerTechniqueEntry = (
   definition: PartnerDefConfig,
   techniqueRows: PartnerTechniqueRow[],

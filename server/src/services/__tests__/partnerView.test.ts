@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   buildPartnerBattleSkillData,
   buildPartnerDisplay,
+  countEffectivePartnerTechniqueEntries,
   toPartnerBattleSkillData,
   type PartnerEffectiveSkillEntry,
   type PartnerRow,
@@ -264,4 +265,44 @@ test('buildPartnerDisplay: 伙伴超出当前境界等级上限时，属性按�
     partner.computedAttrs.max_qixue,
     Number(definition.base_attrs.max_qixue) + Number(definition.level_attr_gains?.max_qixue ?? 0) * 9,
   );
+});
+
+test('countEffectivePartnerTechniqueEntries: 天生功法未落库时也应计入有效槽位数', async () => {
+  const definition = await getPartnerDefinitionById('partner-qingmu-xiaoou');
+  assert.ok(definition, '测试依赖的伙伴模板 partner-qingmu-xiaoou 不存在');
+  assert.ok(
+    Array.isArray(definition.innate_technique_ids) && definition.innate_technique_ids.length > 0,
+    '测试依赖的伙伴模板必须至少包含一门天生功法',
+  );
+
+  const firstInnateTechniqueId = String(definition.innate_technique_ids[0]);
+  const innateTechniqueCount = new Set(
+    definition.innate_technique_ids.map((techniqueId) => String(techniqueId)),
+  ).size;
+
+  assert.equal(countEffectivePartnerTechniqueEntries(definition, []), innateTechniqueCount);
+  assert.equal(countEffectivePartnerTechniqueEntries(definition, [
+    {
+      id: 1,
+      partner_id: 1001,
+      technique_id: 'tech-extra-book',
+      current_layer: 1,
+      is_innate: false,
+      learned_from_item_def_id: 'item-tech-book',
+      created_at: new Date('2026-04-07T00:00:00.000Z'),
+      updated_at: new Date('2026-04-07T00:00:00.000Z'),
+    },
+  ]), innateTechniqueCount + 1);
+  assert.equal(countEffectivePartnerTechniqueEntries(definition, [
+    {
+      id: 2,
+      partner_id: 1001,
+      technique_id: firstInnateTechniqueId,
+      current_layer: 3,
+      is_innate: true,
+      learned_from_item_def_id: null,
+      created_at: new Date('2026-04-07T00:00:00.000Z'),
+      updated_at: new Date('2026-04-07T00:00:00.000Z'),
+    },
+  ]), innateTechniqueCount);
 });

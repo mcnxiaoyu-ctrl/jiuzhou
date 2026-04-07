@@ -406,10 +406,12 @@ const loadPartnerTechniqueLearnContext = async (params: {
   }
 
   const maxTechniqueSlots = normalizeInteger(partnerDef.max_technique_slots);
+  const currentTechniqueStates = buildTechniqueStateList(partnerDef, currentTechniqueRows);
   const replaceableTechniqueIds = listReplaceablePartnerTechniqueIds(
-    buildTechniqueStateList(partnerDef, currentTechniqueRows),
+    currentTechniqueStates,
     maxTechniqueSlots,
   );
+  const currentEffectiveTechniqueCount = currentTechniqueStates.length;
   const learnedTechnique = buildPartnerTechniqueDto(
     buildPartnerTechniqueLearnedEntry({
       techniqueId: params.techniqueId,
@@ -426,6 +428,7 @@ const loadPartnerTechniqueLearnContext = async (params: {
       partnerRow,
       partnerDef,
       currentTechniqueRows,
+      currentEffectiveTechniqueCount,
       learnedTechnique,
       maxTechniqueSlots,
       replaceableTechniqueIds,
@@ -593,7 +596,7 @@ const applyPartnerTechniqueLearn = async (params: {
   }
 
   const context = contextResult.data;
-  if (context.currentTechniqueRows.length < context.maxTechniqueSlots) {
+  if (context.currentEffectiveTechniqueCount < context.maxTechniqueSlots) {
     await query(
       `
         INSERT INTO character_partner_technique (
@@ -711,6 +714,7 @@ type PartnerTechniqueLearnContext = {
   partnerRow: PartnerRow;
   partnerDef: PartnerDefConfig;
   currentTechniqueRows: PartnerTechniqueRow[];
+  currentEffectiveTechniqueCount: number;
   learnedTechnique: PartnerTechniqueDto;
   maxTechniqueSlots: number;
   replaceableTechniqueIds: string[];
@@ -2120,7 +2124,7 @@ class PartnerService {
       }
 
       const context = contextResult.data;
-      if (context.currentTechniqueRows.length < context.maxTechniqueSlots) {
+      if (context.currentEffectiveTechniqueCount < context.maxTechniqueSlots) {
         const consumeResult = await consumeSpecificItemInstance(
           params.characterId,
           params.itemInstanceId,
