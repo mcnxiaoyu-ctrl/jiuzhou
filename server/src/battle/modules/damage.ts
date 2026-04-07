@@ -37,6 +37,10 @@ const calculateCritDamageMultiplier = (
   return Math.max(1, reducedCritDamage);
 };
 
+const canDamageTypeCrit = (damageType: DamageProfile['damageType']): boolean => {
+  return damageType !== 'true';
+};
+
 /**
  * 计算伤害
  */
@@ -95,17 +99,19 @@ export function calculateDamage(
     damage *= BATTLE_CONSTANTS.PARRY_REDUCTION;
   }
 
-  // 5. 暴击判定
-  const critRate = clamp(
-    attacker.currentAttrs.baoji - defender.currentAttrs.kangbao,
-    0,
-    BATTLE_CONSTANTS.MAX_CRIT_RATE
-  );
+  // 5. 暴击判定（真实伤害不参与暴击）
+  if (canDamageTypeCrit(profile.damageType)) {
+    const critRate = clamp(
+      attacker.currentAttrs.baoji - defender.currentAttrs.kangbao,
+      0,
+      BATTLE_CONSTANTS.MAX_CRIT_RATE
+    );
 
-  if (rollChance(state, critRate)) {
-    result.isCrit = true;
-    const critDamageMultiplier = calculateCritDamageMultiplier(attacker, defender);
-    damage *= critDamageMultiplier;
+    if (rollChance(state, critRate)) {
+      result.isCrit = true;
+      const critDamageMultiplier = calculateCritDamageMultiplier(attacker, defender);
+      damage *= critDamageMultiplier;
+    }
   }
 
   // 6. 增伤加成

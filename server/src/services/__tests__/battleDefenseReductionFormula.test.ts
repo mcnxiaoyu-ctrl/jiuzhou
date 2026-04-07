@@ -208,6 +208,34 @@ test('真实伤害不受防御减伤影响', () => {
   assert.equal(result.damage, 200);
 });
 
+test('真实伤害即使暴击率足够也不应触发暴击', () => {
+  const attacker = createUnit('attacker-6-crit', {
+    mingzhong: 1,
+    baoji: 1,
+    baoshang: 3.6,
+    wugong: 300,
+    fagong: 300,
+  });
+  const defender = createUnit('defender-6-crit', {
+    shanbi: 0,
+    zhaojia: 0,
+    kangbao: 0,
+    wufang: 999,
+    fafang: 999,
+  });
+  const state = createState(attacker, defender);
+
+  const result = calculateDamage(state, attacker, defender, {
+    damageType: 'true',
+    element: 'none',
+    baseDamage: 200,
+  });
+
+  assert.equal(result.isMiss, false);
+  assert.equal(result.isCrit, false);
+  assert.equal(result.damage, 200);
+});
+
 test('法术伤害应读取 fagong/fafang，不应混用物理攻防', () => {
   const attacker = createUnit('attacker-7', {
     mingzhong: 1,
