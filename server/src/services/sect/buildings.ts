@@ -12,6 +12,7 @@ import {
   getSectBuildingUpgradeConfig,
   HALL_BUILDING_TYPE,
 } from "./buildingConfig.js";
+import { ensureSectDefaultBuildings } from "./defaultBuildings.js";
 import type {
   Result,
   SectBuildingRow,
@@ -40,6 +41,7 @@ class SectBuildingService {
     characterId: number,
   ): Promise<{ success: boolean; message: string; data?: SectBuildingView[] }> {
     const member = await assertMember(characterId);
+    await ensureSectDefaultBuildings(member.sectId);
     const res = await query(
       "SELECT * FROM sect_building WHERE sect_id = $1 ORDER BY building_type",
       [member.sectId],

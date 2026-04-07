@@ -2,6 +2,60 @@
  * 九州修仙录 - boardgame.io 游戏状态定义
  */
 
+export interface CharacterGlobalBuffSnapshot {
+  id: string;
+  buffKey: string;
+  label: string;
+  iconText: string;
+  effectText: string;
+  startedAt: string;
+  expireAt: string;
+  totalDurationMs: number;
+}
+
+const normalizeCharacterGlobalBuffSnapshots = (
+  raw: unknown,
+): CharacterGlobalBuffSnapshot[] => {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const snapshots: CharacterGlobalBuffSnapshot[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+
+    const candidate = entry as Record<string, unknown>;
+    const id = typeof candidate.id === 'string' ? candidate.id : '';
+    const buffKey = typeof candidate.buffKey === 'string' ? candidate.buffKey : '';
+    const label = typeof candidate.label === 'string' ? candidate.label : '';
+    const iconText = typeof candidate.iconText === 'string' ? candidate.iconText : '';
+    const effectText = typeof candidate.effectText === 'string' ? candidate.effectText : '';
+    const startedAt = typeof candidate.startedAt === 'string' ? candidate.startedAt : '';
+    const expireAt = typeof candidate.expireAt === 'string' ? candidate.expireAt : '';
+    const totalDurationMs = Math.max(
+      0,
+      Math.floor(Number(candidate.totalDurationMs) || 0),
+    );
+
+    if (!id || !buffKey || !label || !iconText || !effectText || !startedAt || !expireAt) {
+      continue;
+    }
+
+    snapshots.push({
+      id,
+      buffKey,
+      label,
+      iconText,
+      effectText,
+      startedAt,
+      expireAt,
+      totalDurationMs,
+    });
+  }
+
+  return snapshots;
+};
+
 // 角色属性接口
 export interface CharacterAttributes {
   id: number;
@@ -61,6 +115,7 @@ export interface CharacterAttributes {
   currentMapId: string;
   currentRoomId: string;
   featureUnlocks: string[];
+  globalBuffs: CharacterGlobalBuffSnapshot[];
 }
 
 // 数据库字段到驼峰命名的转换
@@ -126,4 +181,5 @@ export const dbToCharacterAttributes = (dbRow: Record<string, unknown>): Charact
         .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
         .filter((entry): entry is string => entry.length > 0)
     : [],
+  globalBuffs: normalizeCharacterGlobalBuffSnapshots(dbRow.global_buffs),
 });

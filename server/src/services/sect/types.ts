@@ -112,6 +112,20 @@ export interface SectInfo {
   buildings: SectBuildingView[];
 }
 
+export interface SectBlessingStatus {
+  today: string;
+  blessedToday: boolean;
+  canBless: boolean;
+  active: boolean;
+  expireAt: string | null;
+  fuyuanBonus: number;
+  durationHours: number;
+}
+
+export interface CharacterSectInfo extends SectInfo {
+  blessingStatus: SectBlessingStatus;
+}
+
 export interface SectBonuses {
   attrBonus: Record<string, number>;
   expBonus: number;

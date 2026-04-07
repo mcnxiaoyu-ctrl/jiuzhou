@@ -27,10 +27,11 @@ import {
   handleSectApplication,
   kickSectMember,
   leaveSect as leaveSectApi,
+  offerSectBlessing,
   searchSects,
   submitSectQuest,
   transferSectLeader,
-  type SectInfoDto,
+  type MySectInfoDto,
   type SectMemberDto,
   type SectMyApplicationDto,
   updateSectAnnouncement,
@@ -38,7 +39,9 @@ import {
 } from '../../../../../services/api';
 import {
   APPOINTABLE_POSITION_OPTIONS,
+  BLESSING_HALL_BUILDING_TYPE,
   BUILDING_META_MAP,
+  getBlessingBuildingFuyuanBonus,
   POSITION_LABEL_MAP,
   getBuildingEffectText,
 } from '../constants';
@@ -127,7 +130,7 @@ export const useSectData = ({ open, spiritStones, playerName }: UseSectDataArgs)
   const [shopItems, setShopItems] = useState<UseSectDataState['shopItems']>([]);
   const [quests, setQuests] = useState<UseSectDataState['quests']>([]);
   const [logs, setLogs] = useState<UseSectDataState['logs']>([]);
-  const [mySectInfo, setMySectInfo] = useState<SectInfoDto | null>(null);
+  const [mySectInfo, setMySectInfo] = useState<MySectInfoDto | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
@@ -185,6 +188,7 @@ export const useSectData = ({ open, spiritStones, playerName }: UseSectDataArgs)
   const buildings = useMemo<SectBuildingVm[]>(() => {
     const sectFunds = Number(mySectInfo?.sect.funds) || 0;
     const sectBuildPoints = Number(mySectInfo?.sect.build_points) || 0;
+    const blessingStatus = mySectInfo?.blessingStatus ?? null;
 
     return (mySectInfo?.buildings ?? []).map((building) => {
       const level = Number(building.level) || 1;
@@ -203,6 +207,17 @@ export const useSectData = ({ open, spiritStones, playerName }: UseSectDataArgs)
       const fundsGap = requirement.upgradable ? Math.max(0, fundsNeed - sectFunds) : 0;
       const buildPointsGap = requirement.upgradable ? Math.max(0, buildPointsNeed - sectBuildPoints) : 0;
       const meta = BUILDING_META_MAP[building.building_type] ?? { name: building.building_type, desc: '—' };
+      const blessing = building.building_type === BLESSING_HALL_BUILDING_TYPE && blessingStatus
+        ? {
+          active: blessingStatus.active === true,
+          canBless: blessingStatus.canBless === true,
+          blessedToday: blessingStatus.blessedToday === true,
+          expireAt: blessingStatus.expireAt,
+          fuyuanBonus: Number(blessingStatus.fuyuanBonus) || 0,
+          availableFuyuanBonus: getBlessingBuildingFuyuanBonus(level),
+          durationHours: Number(blessingStatus.durationHours) || 3,
+        }
+        : null;
 
       return {
         id: Number(building.id),
@@ -216,6 +231,7 @@ export const useSectData = ({ open, spiritStones, playerName }: UseSectDataArgs)
         canAfford,
         fundsGap,
         buildPointsGap,
+        blessing,
       };
     });
   }, [mySectInfo]);
@@ -230,7 +246,7 @@ export const useSectData = ({ open, spiritStones, playerName }: UseSectDataArgs)
   }, [donateSpiritStonesAmount, spiritStones]);
 
   const syncJoinState = useCallback(
-    (nextSectInfo: SectInfoDto | null, nextMyApplications: SectMyApplicationDto[], resetPanel: boolean) => {
+    (nextSectInfo: MySectInfoDto | null, nextMyApplications: SectMyApplicationDto[], resetPanel: boolean) => {
       if (nextSectInfo?.sect?.id) {
         setJoinState('joined');
         setActiveSectId(nextSectInfo.sect.id);
@@ -282,7 +298,7 @@ export const useSectData = ({ open, spiritStones, playerName }: UseSectDataArgs)
     await refreshListByKeyword(searchKeyword);
   }, [refreshListByKeyword, searchKeyword]);
 
-  const loadMySectInfo = useCallback(async (): Promise<SectInfoDto | null> => {
+  const loadMySectInfo = useCallback(async (): Promise<MySectInfoDto | null> => {
     try {
       const res = await getMySect();
       const data = res.success ? (res.data ?? null) : null;
@@ -527,6 +543,20 @@ export const useSectData = ({ open, spiritStones, playerName }: UseSectDataArgs)
     },
     [fetchLogs, loadMySectInfo, message]
   );
+
+  const offerBlessingAction = useCallback(async () => {
+    setActionLoadingKey(`bless-${BLESSING_HALL_BUILDING_TYPE}`);
+    try {
+      const res = await offerSectBlessing();
+      if (!res.success) throw new Error(res.message || '祈福失败');
+      message.success(res.message || '祈福成功');
+      await Promise.all([loadMySectInfo(), fetchLogs()]);
+    } catch (error) {
+      void 0;
+    } finally {
+      setActionLoadingKey(null);
+    }
+  }, [fetchLogs, loadMySectInfo, message]);
 
   const buyShopItemAction = useCallback(
     async (itemId: string, quantity: number) => {
@@ -822,6 +852,7 @@ export const useSectData = ({ open, spiritStones, playerName }: UseSectDataArgs)
     createSectAction,
     donateAction,
     upgradeBuildingAction,
+    offerBlessingAction,
     buyShopItemAction,
     acceptQuestAction,
     submitQuestAction,

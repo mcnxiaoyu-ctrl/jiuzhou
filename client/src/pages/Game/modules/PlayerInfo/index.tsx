@@ -25,6 +25,7 @@ import {
   getAttributePointActionLabel,
   type AttributePointStep,
 } from './attributePointStep';
+import PlayerGlobalBuffList from './PlayerGlobalBuffList';
 import './index.scss';
 
 const CHARACTER_REFRESH_INTERVAL_MS = 30_000;
@@ -409,6 +410,8 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({
           </div>
         </div>
       </div>
+
+      <PlayerGlobalBuffList buffs={character.globalBuffs} />
 
       {shouldShowPhoneBindingSection ? (
         <div className="attr-section">

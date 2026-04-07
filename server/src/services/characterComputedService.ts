@@ -37,6 +37,12 @@ import { convertRatingToPercent, getEffectiveLevelByRealm, resolveRatingBaseAttr
 import { buildInsightPctBonusByLevel } from './shared/insightRules.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import {
+  applyCharacterGlobalBuffValuesToStats,
+  buildCharacterGlobalBuffSignaturePart,
+  loadActiveCharacterGlobalBuffValuesByCharacterIds,
+  type CharacterGlobalBuffValues,
+} from './shared/characterGlobalBuff.js';
+import {
   applyMonthCardFuyuanBonus,
   getMonthCardActiveMapByCharacterIds,
   getMonthCardFuyuanBonus,
@@ -445,7 +451,11 @@ const getRealmRewardSummaryByRealmText = async (): Promise<Map<
   return summaryByRealmText;
 };
 
-const buildSignature = (base: CharacterBaseRow, monthCardFuyuanBonus: number): string => {
+const buildSignature = (
+  base: CharacterBaseRow,
+  monthCardFuyuanBonus: number,
+  globalBuffValues: CharacterGlobalBuffValues,
+): string => {
   return [
     base.jing,
     base.qi,
@@ -456,6 +466,7 @@ const buildSignature = (base: CharacterBaseRow, monthCardFuyuanBonus: number): s
     base.attribute_type,
     base.attribute_element,
     monthCardFuyuanBonus,
+    buildCharacterGlobalBuffSignaturePart(globalBuffValues),
   ].join('|');
 };
 
@@ -489,7 +500,7 @@ const normalizeStats = (stats: CharacterComputedStats): CharacterComputedStats =
   next.wufang = Math.max(0, Math.floor(next.wufang));
   next.fafang = Math.max(0, Math.floor(next.fafang));
   next.sudu = Math.max(1, Math.floor(next.sudu));
-  next.fuyuan = Math.max(1, Math.floor(next.fuyuan));
+  next.fuyuan = Math.max(1, Math.round(next.fuyuan * 10) / 10);
   next.qixue_huifu = Math.max(0, Math.floor(next.qixue_huifu));
   next.lingqi_huifu = Math.max(0, Math.floor(next.lingqi_huifu));
 
@@ -1084,6 +1095,7 @@ type StaticAttrComputationDependencies = {
 const computeStaticAttrsFromDependencies = async (
   base: CharacterBaseRow,
   monthCardFuyuanBonus: number,
+  globalBuffValues: CharacterGlobalBuffValues,
   dependencies: StaticAttrComputationDependencies,
 ): Promise<ResolvedStaticAttrs> => {
   const stats = emptyStats();
@@ -1124,6 +1136,7 @@ const computeStaticAttrsFromDependencies = async (
   if (monthCardFuyuanBonus > 0) {
     stats.fuyuan = applyMonthCardFuyuanBonus(stats.fuyuan, monthCardFuyuanBonus);
   }
+  applyCharacterGlobalBuffValuesToStats(stats, globalBuffValues);
 
   return {
     attrs: normalizeStats(stats),
@@ -1134,6 +1147,7 @@ const computeStaticAttrsFromDependencies = async (
 const computeStaticAttrs = async (
   base: CharacterBaseRow,
   monthCardFuyuanBonus: number,
+  globalBuffValues: CharacterGlobalBuffValues,
 ): Promise<ResolvedStaticAttrs> => {
   const effectiveLevel = getEffectiveLevelByRealm(base.realm, base.sub_realm);
 
@@ -1143,7 +1157,7 @@ const computeStaticAttrs = async (
     loadTechniquePassives(base.id),
   ]);
 
-  return computeStaticAttrsFromDependencies(base, monthCardFuyuanBonus, {
+  return computeStaticAttrsFromDependencies(base, monthCardFuyuanBonus, globalBuffValues, {
     equipBonuses,
     titleEffects,
     techniquePassives,
@@ -1486,8 +1500,9 @@ const resolveStaticAttrs = async (
   base: CharacterBaseRow,
   bypassStaticCache: boolean,
   monthCardFuyuanBonus: number,
+  globalBuffValues: CharacterGlobalBuffValues,
 ): Promise<ResolvedStaticAttrs> => {
-  const signature = buildSignature(base, monthCardFuyuanBonus);
+  const signature = buildSignature(base, monthCardFuyuanBonus, globalBuffValues);
   if (!bypassStaticCache) {
     const cached = await readStaticAttrsFromCache(base.id);
     if (cached && cached.signature === signature) {
@@ -1497,7 +1512,7 @@ const resolveStaticAttrs = async (
       };
     }
   }
-  const resolved = await computeStaticAttrs(base, monthCardFuyuanBonus);
+  const resolved = await computeStaticAttrs(base, monthCardFuyuanBonus, globalBuffValues);
   await writeStaticAttrsCache(base.id, {
     signature,
     attrs: resolved.attrs,
@@ -1508,7 +1523,11 @@ const resolveStaticAttrs = async (
 
 const resolveStaticAttrsMap = async (
   bases: CharacterBaseRow[],
-  options?: { bypassStaticCache?: boolean; monthCardFuyuanBonusByCharacterId?: ReadonlyMap<number, number> },
+  options?: {
+    bypassStaticCache?: boolean;
+    monthCardFuyuanBonusByCharacterId?: ReadonlyMap<number, number>;
+    globalBuffValuesByCharacterId?: ReadonlyMap<number, CharacterGlobalBuffValues>;
+  },
 ): Promise<Map<number, ResolvedStaticAttrs>> => {
   const result = new Map<number, ResolvedStaticAttrs>();
   if (bases.length <= 0) {
@@ -1517,11 +1536,16 @@ const resolveStaticAttrsMap = async (
 
   const bypassStaticCache = options?.bypassStaticCache === true;
   const monthCardFuyuanBonusByCharacterId = options?.monthCardFuyuanBonusByCharacterId ?? new Map<number, number>();
+  const globalBuffValuesByCharacterId = options?.globalBuffValuesByCharacterId ?? new Map<number, CharacterGlobalBuffValues>();
   const signatureByCharacterId = new Map<number, string>();
   for (const base of bases) {
     signatureByCharacterId.set(
       base.id,
-      buildSignature(base, monthCardFuyuanBonusByCharacterId.get(base.id) ?? 0),
+      buildSignature(
+        base,
+        monthCardFuyuanBonusByCharacterId.get(base.id) ?? 0,
+        globalBuffValuesByCharacterId.get(base.id) ?? {},
+      ),
     );
   }
 
@@ -1566,6 +1590,7 @@ const resolveStaticAttrsMap = async (
     const resolved = await computeStaticAttrsFromDependencies(
       base,
       monthCardFuyuanBonusByCharacterId.get(base.id) ?? 0,
+      globalBuffValuesByCharacterId.get(base.id) ?? {},
       {
         equipBonuses: equipBonusesByCharacterId.get(base.id) ?? createEmptyEquippedAttrBonuses(),
         titleEffects: titleEffectsByCharacterId.get(base.id) ?? {},
@@ -1589,10 +1614,19 @@ const resolveStaticAttrsMap = async (
 
 const buildComputedRow = async (
   base: CharacterBaseRow,
-  options?: { bypassStaticCache?: boolean; monthCardFuyuanBonus?: number },
+  options?: {
+    bypassStaticCache?: boolean;
+    monthCardFuyuanBonus?: number;
+    globalBuffValues?: CharacterGlobalBuffValues;
+  },
 ): Promise<CharacterComputedRow> => {
   const bypassStaticCache = options?.bypassStaticCache === true;
-  const staticSnapshot = await resolveStaticAttrs(base, bypassStaticCache, options?.monthCardFuyuanBonus ?? 0);
+  const staticSnapshot = await resolveStaticAttrs(
+    base,
+    bypassStaticCache,
+    options?.monthCardFuyuanBonus ?? 0,
+    options?.globalBuffValues ?? {},
+  );
   const resources = await ensureResourceState(
     base.id,
     staticSnapshot.attrs.max_qixue,
@@ -1661,6 +1695,12 @@ const loadMonthCardFuyuanBonusMap = async (characterIds: number[]): Promise<Map<
   return result;
 };
 
+const loadCharacterGlobalBuffValueMap = async (
+  characterIds: number[],
+): Promise<Map<number, CharacterGlobalBuffValues>> => {
+  return loadActiveCharacterGlobalBuffValuesByCharacterIds(characterIds);
+};
+
 const buildCharacterComputedRowMap = async (
   rows: CharacterBaseRow[],
   options?: { bypassStaticCache?: boolean },
@@ -1670,10 +1710,14 @@ const buildCharacterComputedRowMap = async (
     return result;
   }
 
-  const monthCardFuyuanBonusMap = await loadMonthCardFuyuanBonusMap(rows.map((row) => row.id));
+  const [monthCardFuyuanBonusMap, globalBuffValuesByCharacterId] = await Promise.all([
+    loadMonthCardFuyuanBonusMap(rows.map((row) => row.id)),
+    loadCharacterGlobalBuffValueMap(rows.map((row) => row.id)),
+  ]);
   const staticAttrsByCharacterId = await resolveStaticAttrsMap(rows, {
     bypassStaticCache: options?.bypassStaticCache === true,
     monthCardFuyuanBonusByCharacterId: monthCardFuyuanBonusMap,
+    globalBuffValuesByCharacterId,
   });
   const resourceStateByCharacterId = await ensureResourceStateMap(
     rows.map((row) => {
@@ -1718,10 +1762,14 @@ export const getCharacterComputedByUserId = async (
   if (!Number.isFinite(uid) || uid <= 0) return null;
   const base = await selectBaseCharacterByUserId(uid);
   if (!base) return null;
-  const monthCardFuyuanBonusMap = await loadMonthCardFuyuanBonusMap([base.id]);
+  const [monthCardFuyuanBonusMap, globalBuffValuesByCharacterId] = await Promise.all([
+    loadMonthCardFuyuanBonusMap([base.id]),
+    loadCharacterGlobalBuffValueMap([base.id]),
+  ]);
   return buildComputedRow(base, {
     ...options,
     monthCardFuyuanBonus: monthCardFuyuanBonusMap.get(base.id) ?? 0,
+    globalBuffValues: globalBuffValuesByCharacterId.get(base.id) ?? {},
   });
 };
 
@@ -1733,10 +1781,14 @@ export const getCharacterComputedByCharacterId = async (
   if (!Number.isFinite(cid) || cid <= 0) return null;
   const base = await selectBaseCharacterByCharacterId(cid);
   if (!base) return null;
-  const monthCardFuyuanBonusMap = await loadMonthCardFuyuanBonusMap([base.id]);
+  const [monthCardFuyuanBonusMap, globalBuffValuesByCharacterId] = await Promise.all([
+    loadMonthCardFuyuanBonusMap([base.id]),
+    loadCharacterGlobalBuffValueMap([base.id]),
+  ]);
   return buildComputedRow(base, {
     ...options,
     monthCardFuyuanBonus: monthCardFuyuanBonusMap.get(base.id) ?? 0,
+    globalBuffValues: globalBuffValuesByCharacterId.get(base.id) ?? {},
   });
 };
 

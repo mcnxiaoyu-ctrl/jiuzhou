@@ -37,6 +37,10 @@ import { notifyPartnerRecruitStatus } from "../services/partnerRecruitPush.js";
 import { getSectIndicatorByCharacterId } from "../services/sect/indicator.js";
 import { notifyTechniqueResearchStatus } from "../services/techniqueResearchPush.js";
 import { getMonthCardActiveMapByCharacterIds } from "../services/shared/monthCardBenefits.js";
+import {
+  areCharacterGlobalBuffSnapshotsEqual,
+  loadActiveCharacterGlobalBuffSnapshotsByCharacterIds,
+} from "../services/shared/characterGlobalBuff.js";
 import { assertChatPhoneBindingReady } from "../services/marketPhoneBindingService.js";
 import { AsyncShutdownGate } from "../utils/asyncShutdownGate.js";
 import { emitLatestGameTimeSnapshot } from "../services/gameTimeService.js";
@@ -119,6 +123,7 @@ const buildCharacterAttributesFromOnlineBattleSnapshot = (
     month_card_active: previousCharacter?.monthCardActive ?? false,
     dungeon_no_stamina_cost: previousCharacter?.dungeonNoStaminaCost ?? false,
     feature_unlocks: previousCharacter?.featureUnlocks ?? [],
+    global_buffs: previousCharacter?.globalBuffs ?? [],
   });
 };
 
@@ -857,11 +862,15 @@ class GameServer {
       await applyStaminaRecoveryByUserId(userId);
       const computed = await getCharacterComputedByUserId(userId);
       if (!computed) return null;
-      const monthCardActiveMap = await getMonthCardActiveMapByCharacterIds([computed.id]);
+      const [monthCardActiveMap, globalBuffSnapshotsByCharacterId] = await Promise.all([
+        getMonthCardActiveMapByCharacterIds([computed.id]),
+        loadActiveCharacterGlobalBuffSnapshotsByCharacterIds([computed.id]),
+      ]);
       const characterWithUnlockedFeatures = await withUnlockedFeatures(
         {
           ...computed,
           month_card_active: monthCardActiveMap.get(computed.id) ?? false,
+          global_buffs: globalBuffSnapshotsByCharacterId.get(computed.id) ?? [],
         },
       );
       const character = dbToCharacterAttributes(
@@ -1002,6 +1011,15 @@ class GameServer {
     for (const k of keys) {
       const prevValue = prev[k];
       const nextValue = next[k];
+      if (
+        k === "globalBuffs"
+        && areCharacterGlobalBuffSnapshotsEqual(
+          prevValue as CharacterAttributes["globalBuffs"],
+          nextValue as CharacterAttributes["globalBuffs"],
+        )
+      ) {
+        continue;
+      }
       const sameArray =
         Array.isArray(prevValue) &&
         Array.isArray(nextValue) &&

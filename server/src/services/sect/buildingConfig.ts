@@ -41,10 +41,12 @@ export interface SectBuildingUpgradeConfig {
 export const SECT_BUILDING_MAX_LEVEL = 50;
 export const HALL_BUILDING_TYPE = "hall";
 export const FORGE_HOUSE_BUILDING_TYPE = "forge_house";
+export const BLESSING_HALL_BUILDING_TYPE = "blessing_hall";
 
 type UpgradableSectBuildingType =
   | typeof HALL_BUILDING_TYPE
-  | typeof FORGE_HOUSE_BUILDING_TYPE;
+  | typeof FORGE_HOUSE_BUILDING_TYPE
+  | typeof BLESSING_HALL_BUILDING_TYPE;
 
 const FORGE_HOUSE_COST_DISCOUNT_PER_LEVEL = 0.005;
 const FORGE_HOUSE_MAX_COST_DISCOUNT =
@@ -74,6 +76,11 @@ const BUILDING_UPGRADE_CONFIG_MAP: Record<
     maxLevel: SECT_BUILDING_MAX_LEVEL,
     getUpgradeCost: buildQuadraticUpgradeCost,
   },
+  [BLESSING_HALL_BUILDING_TYPE]: {
+    name: "祈福殿",
+    maxLevel: SECT_BUILDING_MAX_LEVEL,
+    getUpgradeCost: buildQuadraticUpgradeCost,
+  },
 };
 
 export const clampSectBuildingLevel = (level: number): number => {
@@ -89,6 +96,9 @@ export const getSectBuildingUpgradeConfig = (
   }
   if (buildingType === FORGE_HOUSE_BUILDING_TYPE) {
     return BUILDING_UPGRADE_CONFIG_MAP[FORGE_HOUSE_BUILDING_TYPE];
+  }
+  if (buildingType === BLESSING_HALL_BUILDING_TYPE) {
+    return BUILDING_UPGRADE_CONFIG_MAP[BLESSING_HALL_BUILDING_TYPE];
   }
   return null;
 };

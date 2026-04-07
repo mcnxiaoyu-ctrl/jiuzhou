@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  BLESSING_HALL_BUILDING_TYPE,
   FORGE_HOUSE_BUILDING_TYPE,
   getForgeHouseEquipmentCostDiscountRate,
   getSectBuildingDisplayName,
@@ -18,14 +19,17 @@ test('铁匠铺折扣应按等级每级 0.5% 递增并在 50 级封顶', () => {
   assert.equal(getForgeHouseEquipmentCostDiscountRate(99), 0.25);
 });
 
-test('铁匠铺与宗门大殿都应进入可升级建筑配置', () => {
+test('铁匠铺、祈福殿与宗门大殿都应进入可升级建筑配置', () => {
   const hallConfig = getSectBuildingUpgradeConfig(HALL_BUILDING_TYPE);
   const forgeConfig = getSectBuildingUpgradeConfig(FORGE_HOUSE_BUILDING_TYPE);
+  const blessingConfig = getSectBuildingUpgradeConfig(BLESSING_HALL_BUILDING_TYPE);
 
   assert.ok(hallConfig);
   assert.ok(forgeConfig);
+  assert.ok(blessingConfig);
   assert.equal(getSectBuildingDisplayName(FORGE_HOUSE_BUILDING_TYPE), '铁匠铺');
   assert.equal(getSectBuildingDisplayName(HALL_BUILDING_TYPE), '宗门大殿');
+  assert.equal(getSectBuildingDisplayName(BLESSING_HALL_BUILDING_TYPE), '祈福殿');
 });
 
 test('铁匠铺升级需求应开放到 50 级，其他未开放建筑仍保持关闭', () => {

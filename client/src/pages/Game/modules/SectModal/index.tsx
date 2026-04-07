@@ -164,6 +164,9 @@ const SectModal: React.FC<SectModalProps> = ({ open, onClose, spiritStones = 0, 
           onUpgrade={(buildingType) => {
             void data.upgradeBuildingAction(buildingType);
           }}
+          onBless={() => {
+            void data.offerBlessingAction();
+          }}
         />
       );
     }

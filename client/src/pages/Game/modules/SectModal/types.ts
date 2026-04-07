@@ -6,8 +6,8 @@
  */
 import type {
   AppointableSectPositionDto,
+  MySectInfoDto,
   SectApplicationDto,
-  SectInfoDto,
   SectLogDto,
   SectMyApplicationDto,
   SectPositionDto,
@@ -83,6 +83,15 @@ export interface SectBuildingVm {
   canAfford: boolean;
   fundsGap: number;
   buildPointsGap: number;
+  blessing: {
+    active: boolean;
+    canBless: boolean;
+    blessedToday: boolean;
+    expireAt: string | null;
+    fuyuanBonus: number;
+    availableFuyuanBonus: number;
+    durationHours: number;
+  } | null;
 }
 
 export interface SectPermissionState {
@@ -127,7 +136,7 @@ export interface UseSectDataState {
   shopItems: SectShopItemDto[];
   quests: SectQuestDto[];
   logs: SectLogDto[];
-  mySectInfo: SectInfoDto | null;
+  mySectInfo: MySectInfoDto | null;
 
   joinedSect: SectJoinedSummary | null;
   members: SectMemberVm[];
@@ -173,6 +182,7 @@ export interface UseSectDataState {
   createSectAction: () => Promise<void>;
   donateAction: () => Promise<void>;
   upgradeBuildingAction: (buildingType: string) => Promise<void>;
+  offerBlessingAction: () => Promise<void>;
   buyShopItemAction: (itemId: string, quantity: number) => Promise<void>;
   acceptQuestAction: (questId: string) => Promise<void>;
   submitQuestAction: (questId: string) => Promise<void>;

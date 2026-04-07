@@ -10,6 +10,10 @@ import { App, Button, Tag, Tooltip } from 'antd';
 import {
   ArrowRightOutlined,
 } from '@ant-design/icons';
+import {
+  BLESSING_HALL_BUILDING_TYPE,
+  formatBlessingBuildingFuyuanBonus,
+} from '../constants';
 import type { SectBuildingVm, SectPermissionState } from '../types';
 
 interface BuildingsPanelProps {
@@ -17,9 +21,23 @@ interface BuildingsPanelProps {
   permissions: SectPermissionState;
   actionLoadingKey: string | null;
   onUpgrade: (buildingType: string) => void;
+  onBless: () => void;
 }
 
-const BuildingsPanel: React.FC<BuildingsPanelProps> = ({ buildings, permissions, actionLoadingKey, onUpgrade }) => {
+const formatBlessingExpireAt = (expireAt: string | null): string => {
+  if (!expireAt) return '';
+  const parsed = new Date(expireAt);
+  if (!Number.isFinite(parsed.getTime())) return '';
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(parsed);
+};
+
+const BuildingsPanel: React.FC<BuildingsPanelProps> = ({ buildings, permissions, actionLoadingKey, onUpgrade, onBless }) => {
   const { modal } = App.useApp();
 
   const handleUpgradeClick = (building: SectBuildingVm) => {
@@ -32,6 +50,19 @@ const BuildingsPanel: React.FC<BuildingsPanelProps> = ({ buildings, permissions,
       cancelText: '取消',
       onOk: async () => {
         await onUpgrade(building.buildingType);
+      },
+    });
+  };
+
+  const handleBlessClick = (building: SectBuildingVm) => {
+    if (!building.blessing?.canBless) return;
+    modal.confirm({
+      title: `确认在「${building.name}」祈福？`,
+      content: `本次将获得 ${building.blessing.durationHours} 小时福源 +${formatBlessingBuildingFuyuanBonus(building.blessing.availableFuyuanBonus)} 全局 Buff，今日仅可进行 1 次。`,
+      okText: '确认祈福',
+      cancelText: '取消',
+      onOk: async () => {
+        await onBless();
       },
     });
   };
@@ -50,6 +81,7 @@ const BuildingsPanel: React.FC<BuildingsPanelProps> = ({ buildings, permissions,
           {buildings.map((building) => {
             const canTriggerUpgrade = building.requirement.upgradable && permissions.canUpgradeBuilding && building.canAfford;
             const loadingKey = `upgrade-${building.buildingType}`;
+            const blessLoadingKey = `bless-${building.buildingType}`;
             
             const upgradeLabel = !building.requirement.upgradable
               ? building.requirement.reason || '已达上限'
@@ -58,6 +90,14 @@ const BuildingsPanel: React.FC<BuildingsPanelProps> = ({ buildings, permissions,
                 : !building.canAfford
                   ? '资源不足'
                   : '提升等级';
+            const blessingStatusText = building.blessing
+              ? building.blessing.active && building.blessing.expireAt
+                ? `当前祈福：福源 +${formatBlessingBuildingFuyuanBonus(building.blessing.fuyuanBonus)}，至 ${formatBlessingExpireAt(building.blessing.expireAt)} 结束`
+                : building.blessing.blessedToday
+                  ? '今日祈福已完成，本次福源加成已结束'
+                  : `今日可祈福 1 次，持续 ${building.blessing.durationHours} 小时`
+              : '';
+            const blessLabel = building.blessing?.canBless ? '立即祈福' : '今日已祈福';
 
             return (
               <div key={building.id} className={`sect-building-card${building.requirement.upgradable ? '' : ' is-maxed'}`}>
@@ -130,6 +170,22 @@ const BuildingsPanel: React.FC<BuildingsPanelProps> = ({ buildings, permissions,
                     </div>
                   )}
                 </div>
+
+                {building.buildingType === BLESSING_HALL_BUILDING_TYPE && building.blessing ? (
+                  <div className="sect-building-action-zone">
+                    <div className="sect-building-action-text">{blessingStatusText}</div>
+                    <Button
+                      type="default"
+                      size="middle"
+                      className="sect-building-action-btn"
+                      disabled={!building.blessing.canBless}
+                      loading={actionLoadingKey === blessLoadingKey}
+                      onClick={() => handleBlessClick(building)}
+                    >
+                      {blessLabel}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             );
           })}

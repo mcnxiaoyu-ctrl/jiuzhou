@@ -23,6 +23,7 @@ import {
   leaveSect,
   listApplications,
   listMyApplications,
+  offerSectBlessing,
   searchSects,
   submitSectQuest,
   transferLeader,
@@ -259,6 +260,16 @@ router.post('/buildings/upgrade', asyncHandler(async (req, res) => {
   const buildingType = typeof body?.buildingType === 'string' ? body.buildingType.trim() : '';
   if (!buildingType) throw new BusinessError('参数错误');
   const result = await upgradeBuilding(characterId, buildingType);
+  return sendResult(res, result);
+}));
+
+router.post('/buildings/bless', asyncHandler(async (req, res) => {
+  const userId = req.userId!;
+  const characterId = req.characterId!;
+  const result = await offerSectBlessing(characterId);
+  if (result.success) {
+    await safePushCharacterUpdate(userId);
+  }
   return sendResult(res, result);
 }));
 

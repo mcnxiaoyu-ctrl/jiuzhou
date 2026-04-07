@@ -12,6 +12,7 @@ import {
 } from './sect/core.js';
 import { applyToSect, cancelMyApplication, handleApplication, listApplications, listMyApplications } from './sect/applications.js';
 import { donate } from './sect/economy.js';
+import { offerSectBlessing } from './sect/blessing.js';
 import { getBuildings, upgradeBuilding } from './sect/buildings.js';
 import { getSectBonuses } from './sect/bonuses.js';
 import { acceptSectQuest, claimSectQuest, getSectQuests, submitSectQuest } from './sect/quests.js';
@@ -35,6 +36,7 @@ export {
   disbandSect,
   updateSectAnnouncement,
   donate,
+  offerSectBlessing,
   getBuildings,
   upgradeBuilding,
   getSectBonuses,

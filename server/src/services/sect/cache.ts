@@ -24,6 +24,7 @@ import { createCacheLayer } from '../shared/cacheLayer.js';
 import { getMonthCardActiveMapByCharacterIds } from '../shared/monthCardBenefits.js';
 import { withBuildingRequirement } from './buildingRequirement.js';
 import { toNumber } from './db.js';
+import { ensureSectDefaultBuildings } from './defaultBuildings.js';
 import { VISIBLE_PENDING_APPLICATION_CONDITION } from './pendingApplications.js';
 import type {
   MySectApplicationListItem,
@@ -73,6 +74,7 @@ const MY_SECT_APPLICATIONS_CACHE_MEMORY_TTL_MS = 2_000;
 const loadSectInfo = async (sectId: string): Promise<SectInfo | null> => {
   const sectRes = await query('SELECT * FROM sect_def WHERE id = $1', [sectId]);
   if (sectRes.rows.length === 0) return null;
+  await ensureSectDefaultBuildings(sectId);
   const sect = sectRes.rows[0] as SectDefRow;
 
   const membersRes = await query<SectMemberInfoRow>(

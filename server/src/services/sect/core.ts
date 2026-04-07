@@ -16,21 +16,13 @@
 import { query } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
 import { consumeCharacterCurrencies } from '../inventory/shared/consume.js';
+import { getSectBlessingStatus } from './blessing.js';
 import { assertMember, generateSectId, getCharacterSectId, hasPermission, positionRank, toNumber } from './db.js';
 import { getCachedSectInfo, invalidateSectApplicationCachesBySectIds, invalidateSectInfoCache } from './cache.js';
+import { ensureSectDefaultBuildings } from './defaultBuildings.js';
 import { cancelVisiblePendingApplicationsByCharacterId } from './pendingApplications.js';
-import type { CreateResult, Result, SectDefRow, SectInfo, SectListResult, SectPosition } from './types.js';
+import type { CharacterSectInfo, CreateResult, Result, SectDefRow, SectInfo, SectListResult, SectPosition } from './types.js';
 import { updateAchievementProgress } from '../achievementService.js';
-
-const DEFAULT_BUILDINGS: string[] = [
-  'hall',
-  'library',
-  'training_hall',
-  'alchemy_room',
-  'forge_house',
-  'spirit_array',
-  'defense_array',
-];
 
 /**
  * 宗门核心服务类
@@ -111,16 +103,7 @@ class SectCoreService {
       [sectId, characterId]
     );
 
-    for (const buildingType of DEFAULT_BUILDINGS) {
-      await query(
-        `
-          INSERT INTO sect_building (sect_id, building_type, level, status)
-          VALUES ($1, $2, 1, 'normal')
-          ON CONFLICT (sect_id, building_type) DO NOTHING
-        `,
-        [sectId, buildingType]
-      );
-    }
+    await ensureSectDefaultBuildings(sectId);
 
     await this.upsertLog(sectId, 'create', characterId, null, `创建宗门：${name}`);
     await Promise.all([
@@ -149,13 +132,23 @@ class SectCoreService {
    */
   async getCharacterSect(
     characterId: number
-  ): Promise<{ success: boolean; message: string; data?: SectInfo | null }> {
+  ): Promise<{ success: boolean; message: string; data?: CharacterSectInfo | null }> {
     const sectIdRes = await query('SELECT sect_id FROM sect_member WHERE character_id = $1', [characterId]);
     if (sectIdRes.rows.length === 0) return { success: true, message: 'ok', data: null };
     const sectId = sectIdRes.rows[0]?.sect_id as string;
-    const res = await this.getSectInfo(sectId);
+    const [res, blessingStatus] = await Promise.all([
+      this.getSectInfo(sectId),
+      getSectBlessingStatus(characterId),
+    ]);
     if (!res.success) return { success: false, message: res.message };
-    return { success: true, message: 'ok', data: res.data! };
+    return {
+      success: true,
+      message: 'ok',
+      data: {
+        ...res.data!,
+        blessingStatus,
+      },
+    };
   }
 
   /**

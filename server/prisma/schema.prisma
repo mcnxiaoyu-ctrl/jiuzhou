@@ -582,6 +582,7 @@ model characters {
   character_achievement_points                                                      character_achievement_points?
   character_insight_progress                                                        character_insight_progress?
   character_main_quest_progress                                                     character_main_quest_progress?
+  character_global_buff                                                             character_global_buff[]
   character_rank_snapshot                                                           character_rank_snapshot?
   character_research_points                                                         character_research_points?
   character_room_resource_state                                                     character_room_resource_state[]
@@ -631,6 +632,25 @@ model characters {
   team_members                                                                      team_members?
   teams                                                                             teams[]
   technique_generation_job                                                          technique_generation_job[]
+}
+
+model character_global_buff {
+  id          BigInt     @id @default(autoincrement())
+  character_id Int
+  buff_key    String     @db.VarChar(64)
+  source_type String     @db.VarChar(64)
+  source_id   String     @default("") @db.VarChar(128)
+  buff_value  Decimal    @default(0) @db.Decimal(12, 3)
+  grant_day_key DateTime? @db.Date
+  started_at  DateTime   @db.Timestamptz(6)
+  expire_at   DateTime   @db.Timestamptz(6)
+  created_at  DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime   @default(now()) @db.Timestamptz(6)
+  characters  characters @relation(fields: [character_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([character_id, buff_key, source_type, source_id], map: "uq_character_global_buff_identity")
+  @@index([character_id, expire_at], map: "idx_character_global_buff_active")
+  @@index([character_id, buff_key], map: "idx_character_global_buff_buff_key")
 }
 
 model dungeon_entry_count {

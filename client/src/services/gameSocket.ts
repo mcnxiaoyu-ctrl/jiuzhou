@@ -70,6 +70,17 @@ const resolveGameSocketUrl = (): string => {
 const GAME_SOCKET_URL = resolveGameSocketUrl();
 
 // 角色属性接口
+export interface CharacterGlobalBuffData {
+  id: string;
+  buffKey: string;
+  label: string;
+  iconText: string;
+  effectText: string;
+  startedAt: string;
+  expireAt: string;
+  totalDurationMs: number;
+}
+
 export interface CharacterData {
   id: number;
   userId: number;
@@ -128,6 +139,7 @@ export interface CharacterData {
   currentMapId: string;
   currentRoomId: string;
   featureUnlocks: CharacterFeatureCode[];
+  globalBuffs: CharacterGlobalBuffData[];
 }
 
 type CharacterListener = (character: CharacterData | null) => void;

@@ -165,6 +165,20 @@ export type SectInfoDto = {
   buildings: SectBuildingDto[];
 };
 
+export type SectBlessingStatusDto = {
+  today: string;
+  blessedToday: boolean;
+  canBless: boolean;
+  active: boolean;
+  expireAt: string | null;
+  fuyuanBonus: number;
+  durationHours: number;
+};
+
+export type MySectInfoDto = SectInfoDto & {
+  blessingStatus: SectBlessingStatusDto;
+};
+
 export type SectListItemDto = {
   id: string;
   name: string;
@@ -188,7 +202,7 @@ export interface SectSearchResponse {
 export interface GetMySectResponse {
   success: boolean;
   message: string;
-  data?: SectInfoDto | null;
+  data?: MySectInfoDto | null;
 }
 
 export const getMySect = (requestConfig?: AxiosRequestConfig): Promise<GetMySectResponse> => {
@@ -221,6 +235,10 @@ export const getSectBuildings = (): Promise<{ success: boolean; message: string;
 
 export const upgradeSectBuilding = (buildingType: string): Promise<{ success: boolean; message: string }> => {
   return api.post('/sect/buildings/upgrade', { buildingType });
+};
+
+export const offerSectBlessing = (): Promise<{ success: boolean; message: string; data?: SectBlessingStatusDto }> => {
+  return api.post('/sect/buildings/bless');
 };
 
 export type SectQuestStatusDto = 'not_accepted' | 'in_progress' | 'completed' | 'claimed';

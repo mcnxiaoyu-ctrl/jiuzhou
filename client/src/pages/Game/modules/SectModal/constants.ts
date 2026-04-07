@@ -7,6 +7,8 @@
 import type { AppointableSectPositionDto, SectPositionDto } from '../../../../services/api';
 import type { SectPanelKey } from './types';
 
+export const BLESSING_HALL_BUILDING_TYPE = 'blessing_hall';
+
 export const NO_SECT_PANEL_ITEMS: Array<{ key: SectPanelKey; label: string }> = [
   { key: 'hall', label: '宗门大厅' },
   { key: 'myApplications', label: '我的申请' },
@@ -77,6 +79,16 @@ export const BUILDING_META_MAP: Record<string, { name: string; desc: string }> =
   forge_house: { name: '铁匠铺', desc: '统一收口强化与精炼的费用减免，属于装备成长的专用建筑。' },
   spirit_array: { name: '聚灵阵', desc: '汇聚天地灵气，提升修炼速度。' },
   defense_array: { name: '护山大阵', desc: '守护宗门的阵法，提升宗门整体防御。' },
+  [BLESSING_HALL_BUILDING_TYPE]: { name: '祈福殿', desc: '宗门弟子可每日祈福一次，领取限时全局福源增益。' },
+};
+
+export const getBlessingBuildingFuyuanBonus = (level: number): number => {
+  const safeLevel = Math.max(0, Math.min(50, Math.floor(level)));
+  return safeLevel * 0.5;
+};
+
+export const formatBlessingBuildingFuyuanBonus = (bonus: number): string => {
+  return Number.isInteger(bonus) ? String(bonus) : bonus.toFixed(1);
 };
 
 const formatForgeHouseDiscountPercent = (level: number): string => {
@@ -96,5 +108,8 @@ export const getBuildingEffectText = (buildingType: string, level: number): stri
   if (buildingType === 'forge_house') return `强化/精炼花费 -${formatForgeHouseDiscountPercent(level)}%`;
   if (buildingType === 'spirit_array') return `灵气回复 +${2 + Math.max(0, level - 1)}%`;
   if (buildingType === 'defense_array') return `宗门防御 +${3 + Math.max(0, level - 1)}%`;
+  if (buildingType === BLESSING_HALL_BUILDING_TYPE) {
+    return `祈福福源 +${formatBlessingBuildingFuyuanBonus(getBlessingBuildingFuyuanBonus(level))}（3小时）`;
+  }
   return '—';
 };
