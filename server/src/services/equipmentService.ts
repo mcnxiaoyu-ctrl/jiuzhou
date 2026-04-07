@@ -774,6 +774,7 @@ class EquipmentService {
       bindType?: string;
       identified?: boolean;
       obtainedFrom?: string;
+      skipInventoryMutexLock?: boolean;
     } = {}
   ): Promise<{ success: boolean; instanceId?: number; message: string }> {
     return this.createEquipmentInstanceTx(userId, characterId, generated, options);
@@ -790,6 +791,7 @@ class EquipmentService {
       bindType?: string;
       identified?: boolean;
       obtainedFrom?: string;
+      skipInventoryMutexLock?: boolean;
     } = {}
   ): Promise<{ success: boolean; instanceId?: number; message: string }> {
     const location = options.location || 'bag';
@@ -797,7 +799,9 @@ class EquipmentService {
     let locationSlot = options.locationSlot ?? null;
     const obtainedFrom = normalizeItemInstanceObtainedFrom(options.obtainedFrom).value;
 
-    await lockCharacterInventoryMutex(characterId);
+    if (!options.skipInventoryMutexLock) {
+      await lockCharacterInventoryMutex(characterId);
+    }
 
     let attempt = 0;
     while (attempt < 6) {

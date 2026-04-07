@@ -834,6 +834,7 @@ class BattleDropService {
               ...(bindType ? { bindType } : {}),
               ...(equipOptions ? { equipOptions } : {}),
               ...(bagSlotAllocator ? { bagSlotAllocator } : {}),
+              ...(bagSlotAllocator ? { skipInventoryMutexLock: true } : {}),
             },
           );
         },
@@ -1341,6 +1342,7 @@ class BattleDropService {
               ...(bindType ? { bindType } : {}),
               ...(equipOptions ? { equipOptions } : {}),
               ...(bagSlotAllocator ? { bagSlotAllocator } : {}),
+              ...(bagSlotAllocator ? { skipInventoryMutexLock: true } : {}),
             });
           },
           addSilver: async (ownerCharacterId, silverGain) => {

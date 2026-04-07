@@ -59,6 +59,36 @@ type AchievementPointsDeltaRow = {
   collection_points: number;
 };
 
+const achievementDefsByTrackKeyCache = new WeakMap<
+  object,
+  Map<string, AchievementDefRow[]>
+>();
+
+const getEnabledAchievementDefsByTrackKey = (): Map<string, AchievementDefRow[]> => {
+  const definitions = getAchievementDefinitions();
+  const cached = achievementDefsByTrackKeyCache.get(definitions as object);
+  if (cached) {
+    return cached;
+  }
+
+  const defsByTrackKey = new Map<string, AchievementDefRow[]>();
+  for (const row of definitions) {
+    if (row.enabled === false) continue;
+    const parsed = parseAchievementDefRow(row as Record<string, unknown>);
+    if (!parsed) continue;
+
+    const matchedDefs = defsByTrackKey.get(parsed.track_key);
+    if (matchedDefs) {
+      matchedDefs.push(parsed);
+      continue;
+    }
+    defsByTrackKey.set(parsed.track_key, [parsed]);
+  }
+
+  achievementDefsByTrackKeyCache.set(definitions as object, defsByTrackKey);
+  return defsByTrackKey;
+};
+
 /**
  * 成就进度更新服务
  *
@@ -79,6 +109,9 @@ type AchievementPointsDeltaRow = {
  * 2. `multi` 成就既要保留现有去重语义，又不能在高频路径反复打库，因此只允许把命中的 trackKey 先归并，再一次性合并进 `progress_data`。
  */
 class AchievementProgressService {
+  private multiTargetKeysCache = new WeakMap<AchievementDefRow, string[]>();
+  private achievementTargetCache = new WeakMap<AchievementDefRow, number>();
+
   private normalizeIncrement(value: number): number {
     const n = Math.floor(Number(value));
     if (!Number.isFinite(n) || n <= 0) return 1;
@@ -112,6 +145,11 @@ class AchievementProgressService {
   }
 
   private extractMultiTargetKeys(achievement: AchievementDefRow): string[] {
+    const cached = this.multiTargetKeysCache.get(achievement);
+    if (cached) {
+      return cached;
+    }
+
     const out = new Set<string>();
     for (const item of achievement.target_list) {
       if (typeof item === 'string') {
@@ -124,7 +162,9 @@ class AchievementProgressService {
       const key = asNonEmptyString(record.key) ?? asNonEmptyString(record.track_key) ?? asNonEmptyString(record.trackKey);
       if (key) out.add(key);
     }
-    return Array.from(out);
+    const resolved = Array.from(out);
+    this.multiTargetKeysCache.set(achievement, resolved);
+    return resolved;
   }
 
   private mergeProgressForMulti(
@@ -157,11 +197,47 @@ class AchievementProgressService {
   }
 
   private getAchievementTarget(def: AchievementDefRow): number {
-    if (def.track_type !== 'multi') {
-      return Math.max(1, def.target_value);
+    const cached = this.achievementTargetCache.get(def);
+    if (cached !== undefined) {
+      return cached;
     }
-    const targetKeys = this.extractMultiTargetKeys(def);
-    return targetKeys.length > 0 ? targetKeys.length : Math.max(1, def.target_value);
+
+    const target = (() => {
+      if (def.track_type !== 'multi') {
+        return Math.max(1, def.target_value);
+      }
+      const targetKeys = this.extractMultiTargetKeys(def);
+      return targetKeys.length > 0 ? targetKeys.length : Math.max(1, def.target_value);
+    })();
+
+    this.achievementTargetCache.set(def, target);
+    return target;
+  }
+
+  private collectMatchedAchievementDefs(
+    candidateTrackKeys: Set<string>,
+  ): {
+    defs: AchievementDefRow[];
+    defsByTrackKey: Map<string, AchievementDefRow[]>;
+  } {
+    const cachedDefsByTrackKey = getEnabledAchievementDefsByTrackKey();
+    const defsByTrackKey = new Map<string, AchievementDefRow[]>();
+    const defsById = new Map<string, AchievementDefRow>();
+
+    for (const candidateTrackKey of candidateTrackKeys) {
+      const matchedDefs = cachedDefsByTrackKey.get(candidateTrackKey);
+      if (!matchedDefs || matchedDefs.length <= 0) continue;
+
+      defsByTrackKey.set(candidateTrackKey, matchedDefs);
+      for (const def of matchedDefs) {
+        defsById.set(def.id, def);
+      }
+    }
+
+    return {
+      defs: Array.from(defsById.values()),
+      defsByTrackKey,
+    };
   }
 
   private isPrerequisiteSatisfied(
@@ -278,23 +354,9 @@ class AchievementProgressService {
       }
     }
 
-    const defs = getAchievementDefinitions()
-      .filter((row) => candidateTrackKeys.has(String(row.track_key ?? '')))
-      .filter((row) => row.enabled !== false)
-      .map(parseAchievementDefRow)
-      .filter((row): row is AchievementDefRow => row !== null);
+    const { defs, defsByTrackKey } = this.collectMatchedAchievementDefs(candidateTrackKeys);
 
     if (defs.length <= 0) return;
-
-    const defsByTrackKey = new Map<string, AchievementDefRow[]>();
-    for (const def of defs) {
-      const matchedDefs = defsByTrackKey.get(def.track_key);
-      if (matchedDefs) {
-        matchedDefs.push(def);
-        continue;
-      }
-      defsByTrackKey.set(def.track_key, [def]);
-    }
 
     const contributionByPair = new Map<string, AchievementContribution>();
     for (const input of aggregatedInputs.values()) {

@@ -358,6 +358,7 @@ export const addItemToInventory = async (
     quality?: string | null;
     qualityRank?: number | null;
     bagSlotAllocator?: CharacterBagSlotAllocator;
+    skipInventoryMutexLock?: boolean;
   } = {},
 ): Promise<{ success: boolean; message: string; itemIds?: number[] }> => {
   if (!Number.isInteger(qty) || qty <= 0) {
@@ -365,7 +366,9 @@ export const addItemToInventory = async (
   }
 
   return runInventoryMutation(async () => {
-    await lockCharacterInventoryMutex(characterId);
+    if (!options.skipInventoryMutexLock) {
+      await lockCharacterInventoryMutex(characterId);
+    }
 
     const location = options.location || "bag";
     const requestedBindType = normalizeItemBindType(options.bindType);

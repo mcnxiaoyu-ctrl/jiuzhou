@@ -65,6 +65,8 @@ export interface CreateItemOptions {
   obtainedFrom?: string;
   /** 奖励链路共享的新槽位分配器，只负责 bag 位置的新格子消费。 */
   bagSlotAllocator?: CharacterBagSlotAllocator;
+  /** 调用方已持有角色背包互斥锁时，跳过底层重复加锁 SQL。 */
+  skipInventoryMutexLock?: boolean;
   // 装备专用选项
   equipOptions?: GenerateOptions & {
     /**
@@ -317,7 +319,8 @@ const createEquipmentItem = async (
       ...(reservedBagSlots[i] !== undefined ? { locationSlot: reservedBagSlots[i] } : {}),
       ...(options.locationSlot !== undefined ? { locationSlot: options.locationSlot } : {}),
       bindType: options.bindType,
-      obtainedFrom: options.obtainedFrom
+      obtainedFrom: options.obtainedFrom,
+      ...(options.skipInventoryMutexLock ? { skipInventoryMutexLock: true } : {}),
     });
 
     if (!result.success) {
@@ -356,6 +359,7 @@ const createNormalItem = async (
     bindType: options.bindType,
     obtainedFrom: options.obtainedFrom,
     ...(options.bagSlotAllocator ? { bagSlotAllocator: options.bagSlotAllocator } : {}),
+    ...(options.skipInventoryMutexLock ? { skipInventoryMutexLock: true } : {}),
   });
 
   return {

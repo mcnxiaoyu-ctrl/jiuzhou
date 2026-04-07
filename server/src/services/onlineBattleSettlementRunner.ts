@@ -779,6 +779,7 @@ const settleDungeonClearInDbInTransaction = async (
             ...(bindType ? { bindType } : {}),
             ...(equipOptions ? { equipOptions } : {}),
             ...(bagSlotAllocator ? { bagSlotAllocator } : {}),
+            ...(bagSlotAllocator ? { skipInventoryMutexLock: true } : {}),
           });
         },
         addSilver: async (ownerCharacterId, silverGain) => {

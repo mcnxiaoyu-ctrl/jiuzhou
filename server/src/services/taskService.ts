@@ -2053,6 +2053,16 @@ class TaskService {
   async recordCollectItemEvents(characterId: number, events: CollectItemEventInput[]): Promise<void> {
     const normalizedEvents = normalizeCollectItemEvents(events);
     if (normalizedEvents.length <= 0) return;
+    const taskEvents = normalizedEvents.map((event) => ({
+      type: 'collect' as const,
+      itemId: event.itemId,
+      count: event.count,
+    }));
+    const achievementProgressInputs = normalizedEvents.map((event) => ({
+      characterId,
+      trackKey: `item:obtain:${event.itemId}`,
+      increment: event.count,
+    }));
 
     const characterRealmState = await loadCharacterTaskRealmState(characterId);
     if (!characterRealmState) return;
@@ -2060,30 +2070,16 @@ class TaskService {
     await resetRecurringTaskProgressIfNeeded(characterId, undefined, characterRealmState);
     const taskOverviewChanged = await applyTaskEvents(
       characterId,
-      normalizedEvents.map((event) => ({
-        type: 'collect' as const,
-        itemId: event.itemId,
-        count: event.count,
-      })),
+      taskEvents,
       characterRealmState,
     );
 
     await updateSectionProgressBatch(
       characterId,
-      normalizedEvents.map((event) => ({
-        type: 'collect' as const,
-        itemId: event.itemId,
-        count: event.count,
-      })),
+      taskEvents,
     );
 
-    await updateAchievementProgressBatch(
-      normalizedEvents.map((event) => ({
-        characterId,
-        trackKey: `item:obtain:${event.itemId}`,
-        increment: event.count,
-      })),
-    );
+    await updateAchievementProgressBatch(achievementProgressInputs);
 
     if (taskOverviewChanged) {
       await notifyTaskOverviewUpdate(characterId, ['task']);

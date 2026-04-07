@@ -223,6 +223,7 @@ class InventoryService {
       quality?: string | null;
       qualityRank?: number | null;
       bagSlotAllocator?: CharacterBagSlotAllocator;
+      skipInventoryMutexLock?: boolean;
     } = {},
   ): Promise<{ success: boolean; message: string; itemIds?: number[] }> {
     return await addItemToInventory(
