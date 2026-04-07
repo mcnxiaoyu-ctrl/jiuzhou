@@ -50,6 +50,10 @@ import {
 import { parsePositiveInt } from './shared/httpParam.js';
 import { loadActivePartnerMarketListing } from './shared/partnerMarketState.js';
 import { loadActivePartnerFusionMaterial } from './shared/partnerFusionState.js';
+import {
+  clearPendingPartnerTechniqueLearnPreviewByPartnerIds,
+  hasPendingPartnerTechniqueLearnPreviewForPartner,
+} from './shared/partnerTechniqueLearnPreviewStore.js';
 import { getPartnerDefinitionById } from './staticConfigLoader.js';
 import { schedulePartnerRankSnapshotRefreshByCharacterId } from './partnerRankSnapshotService.js';
 import { getTechniqueDetailByIdForPartner } from './techniqueService.js';
@@ -554,6 +558,13 @@ class PartnerMarketService {
     if (await loadActivePartnerFusionMaterial(partnerId, true)) {
       return { success: false, message: '归契中的伙伴不可上架' };
     }
+    if (await hasPendingPartnerTechniqueLearnPreviewForPartner({
+      characterId: params.characterId,
+      partnerId,
+      forUpdate: true,
+    })) {
+      return { success: false, message: '存在待处理的打书预览，请先确认或放弃' };
+    }
     const activeListing = await loadActivePartnerMarketListing(partnerId, true);
     if (activeListing) {
       return { success: false, message: '该伙伴已在坊市挂单中' };
@@ -751,6 +762,12 @@ class PartnerMarketService {
     if (!sellerAddResult.success) {
       return { success: false, message: sellerAddResult.message };
     }
+
+    await clearPendingPartnerTechniqueLearnPreviewByPartnerIds({
+      characterId: sellerCharacterId,
+      partnerIds: [partnerId],
+      forUpdate: true,
+    });
 
     await query(
       `

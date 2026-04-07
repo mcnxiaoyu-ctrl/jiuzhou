@@ -61,6 +61,7 @@ import {
   type PartnerTechniqueRow,
 } from './shared/partnerView.js';
 import { loadActivePartnerMarketListing } from './shared/partnerMarketState.js';
+import { clearPendingPartnerTechniqueLearnPreviewByPartnerIds } from './shared/partnerTechniqueLearnPreviewStore.js';
 import { broadcastHeavenPartnerAcquired } from './shared/partnerWorldBroadcast.js';
 import { getPartnerDefinitionById } from './staticConfigLoader.js';
 import { isQualityName, type QualityName } from './shared/itemQuality.js';
@@ -856,6 +857,12 @@ class PartnerFusionService {
         return { success: false, message: '归契素材状态异常，请稍后重试', code: 'FUSION_PARTNER_STATE_INVALID' };
       }
     }
+
+    await clearPendingPartnerTechniqueLearnPreviewByPartnerIds({
+      characterId,
+      partnerIds: materialPartnerIds,
+      forUpdate: true,
+    });
 
     await query(
       `
