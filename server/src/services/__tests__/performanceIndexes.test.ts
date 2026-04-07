@@ -31,6 +31,7 @@ import {
   MAIL_CHARACTER_ACTIVE_SCOPE_INDEX_NAME,
   MAIL_CHARACTER_EXPIRE_CLEANUP_INDEX_NAME,
   MARKET_LISTING_ITEM_INSTANCE_ID_INDEX_NAME,
+  CHARACTER_TASK_PROGRESS_ACTIVE_LOOKUP_INDEX_NAME,
 } from '../shared/performanceIndexes.js';
 
 test.after(async () => {
@@ -125,4 +126,21 @@ test('ensurePerformanceIndexes 应保证热点性能索引存在', async () => {
   );
   const marketListingIndexDef = marketListingIndexResult.rows[0]?.indexdef ?? '';
   assert.match(marketListingIndexDef, /item_instance_id IS NOT NULL/i);
+
+  const taskProgressIndexResult = await query<{ indexdef: string }>(
+    `
+      SELECT indexdef
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname = $1
+    `,
+    [CHARACTER_TASK_PROGRESS_ACTIVE_LOOKUP_INDEX_NAME],
+  );
+  const taskProgressIndexDef = taskProgressIndexResult.rows[0]?.indexdef ?? '';
+  assert.match(taskProgressIndexDef, /character_task_progress/i);
+  assert.match(taskProgressIndexDef, /character_id/i);
+  assert.match(taskProgressIndexDef, /status/i);
+  assert.match(taskProgressIndexDef, /task_id/i);
+  assert.match(taskProgressIndexDef, /INCLUDE \(progress, tracked, accepted_at, completed_at, claimed_at\)/i);
+  assert.match(taskProgressIndexDef, /status IS DISTINCT FROM 'claimed'/i);
 });

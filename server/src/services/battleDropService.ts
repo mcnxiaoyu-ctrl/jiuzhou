@@ -10,7 +10,7 @@
 import { query, withTransactionAuto } from '../config/database.js';
 import { itemService, CreateItemOptions } from './itemService.js';
 import { sendSystemMail, type MailAttachItem } from './mailService.js';
-import { recordCollectItemEvent, recordCollectItemEvents } from './taskService.js';
+import { recordCollectItemEventsBatch } from './taskService.js';
 import {
   grantRewardItemWithAutoDisassemble,
   type AutoDisassembleSetting,
@@ -43,6 +43,7 @@ import {
   normalizeCharacterRewardTargetIds,
 } from './shared/characterRewardTargetLock.js';
 import { createCharacterBagSlotAllocator } from './shared/characterBagSlotAllocator.js';
+import { createCharacterInventoryMutationContext } from './shared/characterInventoryMutationContext.js';
 import { getRealmOrderIndex } from './shared/realmRules.js';
 import type {
   IdleBattleRewardSettlementPlan,
@@ -767,6 +768,7 @@ class BattleDropService {
       rules: undefined,
     });
     let bagSlotAllocator: Awaited<ReturnType<typeof createCharacterBagSlotAllocator>> | null = null;
+    let inventoryMutationContext: Awaited<ReturnType<typeof createCharacterInventoryMutationContext>> | null = null;
 
     if (plan.dropPlans.length > 0) {
       await lockCharacterRewardSettlementTargets([receiverCharacterId]);
@@ -791,6 +793,7 @@ class BattleDropService {
         });
       }
       bagSlotAllocator = await createCharacterBagSlotAllocator([receiverCharacterId]);
+      inventoryMutationContext = await createCharacterInventoryMutationContext([receiverCharacterId]);
     }
 
     for (const dropPlan of plan.dropPlans) {
@@ -835,6 +838,7 @@ class BattleDropService {
               ...(bindType ? { bindType } : {}),
               ...(equipOptions ? { equipOptions } : {}),
               ...(bagSlotAllocator ? { bagSlotAllocator } : {}),
+              ...(inventoryMutationContext ? { inventoryMutationContext } : {}),
               ...(bagSlotAllocator ? { skipInventoryMutexLock: true } : {}),
             },
           );
@@ -873,9 +877,15 @@ class BattleDropService {
       }
     }
 
-    for (const { itemDefId, qty } of collectCounts.values()) {
-      await recordCollectItemEvent(receiverCharacterId, itemDefId, qty);
-    }
+    await recordCollectItemEventsBatch([
+      {
+        characterId: receiverCharacterId,
+        events: [...collectCounts.values()].map(({ itemDefId, qty }) => ({
+          itemId: itemDefId,
+          count: qty,
+        })),
+      },
+    ]);
 
     if (pendingMailItems.length > 0) {
       const chunkSize = 10;
@@ -1238,6 +1248,10 @@ class BattleDropService {
         requiresInventoryMutation && participantCharacterIds.length > 0
           ? await createCharacterBagSlotAllocator(participantCharacterIds)
           : null;
+      const inventoryMutationContext =
+        requiresInventoryMutation && participantCharacterIds.length > 0
+          ? await createCharacterInventoryMutationContext(participantCharacterIds)
+          : null;
 
       const result = this.buildDistributeResultFromBattleRewardPlan(plan);
       const perPlayerRewardByCharacterId = new Map(
@@ -1386,6 +1400,7 @@ class BattleDropService {
               ...(bindType ? { bindType } : {}),
               ...(equipOptions ? { equipOptions } : {}),
               ...(bagSlotAllocator ? { bagSlotAllocator } : {}),
+              ...(inventoryMutationContext ? { inventoryMutationContext } : {}),
               ...(bagSlotAllocator ? { skipInventoryMutexLock: true } : {}),
             });
           },
@@ -1474,15 +1489,15 @@ class BattleDropService {
         (total, collectEventMap) => total + collectEventMap.size,
         0,
       );
-      for (const [characterId, collectEventMap] of collectEventMapByCharacter.entries()) {
-        await recordCollectItemEvents(
+      await recordCollectItemEventsBatch(
+        [...collectEventMapByCharacter.entries()].map(([characterId, collectEventMap]) => ({
           characterId,
-          [...collectEventMap.entries()].map(([itemId, count]) => ({
+          events: [...collectEventMap.entries()].map(([itemId, count]) => ({
             itemId,
             count,
           })),
-        );
-      }
+        })),
+      );
       slowLogger.mark('recordCollectItemEvents', {
         collectEventCount,
       });

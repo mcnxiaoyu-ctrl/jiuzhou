@@ -32,6 +32,7 @@ export const MAIL_USER_EXPIRE_CLEANUP_INDEX_NAME = 'idx_mail_user_expire_cleanup
 export const MAIL_DELETED_HISTORY_CLEANUP_INDEX_NAME = 'idx_mail_deleted_history_cleanup';
 export const MAIL_EXPIRED_HISTORY_CLEANUP_INDEX_NAME = 'idx_mail_expired_history_cleanup';
 export const ITEM_INSTANCE_STACKABLE_LOOKUP_INDEX_NAME = 'idx_item_instance_stackable_lookup';
+export const CHARACTER_TASK_PROGRESS_ACTIVE_LOOKUP_INDEX_NAME = 'idx_character_task_progress_active_lookup';
 export const MARKET_LISTING_ITEM_INSTANCE_ID_INDEX_NAME = 'idx_market_listing_item_instance_id';
 export const GENERATED_TECHNIQUE_PUBLISHED_ID_INDEX_NAME = 'idx_generated_technique_def_published_id';
 export const GENERATED_SKILL_ENABLED_SORT_SOURCE_INDEX_NAME = 'idx_generated_skill_def_enabled_sort_source';
@@ -231,6 +232,33 @@ const PERFORMANCE_INDEX_DEFINITIONS: PerformanceIndexDefinition[] = [
       "metadata IS NULL OR LOWER(BTRIM(metadata::text)) = 'null'",
       "quality IS NULL OR BTRIM(quality) = ''",
       'quality_rank IS NULL OR quality_rank <= 0',
+    ],
+  },
+  {
+    name: CHARACTER_TASK_PROGRESS_ACTIVE_LOOKUP_INDEX_NAME,
+    createSql: `
+      CREATE INDEX IF NOT EXISTS ${CHARACTER_TASK_PROGRESS_ACTIVE_LOOKUP_INDEX_NAME}
+      ON character_task_progress (
+        character_id,
+        status,
+        task_id
+      )
+      INCLUDE (
+        progress,
+        tracked,
+        accepted_at,
+        completed_at,
+        claimed_at
+      )
+      WHERE status IS DISTINCT FROM 'claimed'
+    `,
+    matchFragments: [
+      'character_task_progress',
+      'character_id',
+      'status',
+      'task_id',
+      'INCLUDE (progress, tracked, accepted_at, completed_at, claimed_at)',
+      "status IS DISTINCT FROM 'claimed'",
     ],
   },
   {

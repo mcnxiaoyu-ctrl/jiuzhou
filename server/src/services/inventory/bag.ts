@@ -61,6 +61,11 @@ import {
   isPlainStackingState,
 } from "./shared/stacking.js";
 import type { CharacterBagSlotAllocator } from "../shared/characterBagSlotAllocator.js";
+import type {
+  CharacterInventoryMutationContext,
+  PlainAutoStackLookupOptions,
+  PlainAutoStackLookupRow,
+} from "../shared/characterInventoryMutationContext.js";
 
 // ============================================
 // 获取背包信息（容量与使用情况）
@@ -247,20 +252,6 @@ const serializeInventoryMetadata = (
   return Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null;
 };
 
-type PlainAutoStackLookupRow = {
-  id: number;
-  qty: number;
-};
-
-type PlainAutoStackLookupOptions = {
-  characterId: number;
-  itemDefId: string;
-  location: SlottedInventoryLocation;
-  stackMax: number;
-  bindType: string;
-  excludeItemId?: number;
-};
-
 const ITEM_INSTANCE_STACKABLE_BIND_TYPE_SQL = buildNormalizedItemBindTypeSql(
   "bind_type",
 );
@@ -295,9 +286,23 @@ const loadPlainAutoStackRows = async ({
   stackMax,
   bindType,
   excludeItemId,
-}: PlainAutoStackLookupOptions): Promise<PlainAutoStackLookupRow[]> => {
+  inventoryMutationContext,
+}: PlainAutoStackLookupOptions & {
+  inventoryMutationContext?: CharacterInventoryMutationContext;
+}): Promise<PlainAutoStackLookupRow[]> => {
   if (stackMax <= 1) {
     return [];
+  }
+
+  if (inventoryMutationContext) {
+    return inventoryMutationContext.getPlainAutoStackRows({
+      characterId,
+      itemDefId,
+      location,
+      stackMax,
+      bindType,
+      ...(excludeItemId !== undefined ? { excludeItemId } : {}),
+    });
   }
 
   const params: Array<number | string> = [
@@ -358,6 +363,7 @@ export const addItemToInventory = async (
     quality?: string | null;
     qualityRank?: number | null;
     bagSlotAllocator?: CharacterBagSlotAllocator;
+    inventoryMutationContext?: CharacterInventoryMutationContext;
     skipInventoryMutexLock?: boolean;
   } = {},
 ): Promise<{ success: boolean; message: string; itemIds?: number[] }> => {
@@ -397,8 +403,17 @@ export const addItemToInventory = async (
         : null;
     const canStackByOption = !metadataJson && !quality && qualityRank === null;
 
-    const info = await getInventoryInfo(characterId);
-    const capacity = getSlottedCapacity(info, location);
+    const cachedCapacity = options.inventoryMutationContext?.getSlottedCapacity(
+      characterId,
+      location,
+    );
+    const info = cachedCapacity === null || cachedCapacity === undefined
+      ? await getInventoryInfo(characterId)
+      : null;
+    const capacity =
+      cachedCapacity === null || cachedCapacity === undefined
+        ? getSlottedCapacity(info!, location)
+        : cachedCapacity;
 
     const itemIds: number[] = [];
     let remainingQty = qty;
@@ -411,6 +426,9 @@ export const addItemToInventory = async (
         location,
         stackMax: stack_max,
         bindType: actualBindType,
+        ...(options.inventoryMutationContext
+          ? { inventoryMutationContext: options.inventoryMutationContext }
+          : {}),
       });
     }
 
@@ -465,6 +483,14 @@ export const addItemToInventory = async (
           `,
           [canAdd, actualBindType, row.id],
         );
+        options.inventoryMutationContext?.applyPlainAutoStackDelta({
+          characterId,
+          itemDefId,
+          location,
+          bindType: actualBindType,
+          itemId: row.id,
+          addedQty: canAdd,
+        });
         itemIds.push(row.id);
         remainingQty -= canAdd;
       }
@@ -520,6 +546,16 @@ export const addItemToInventory = async (
             if (location === "bag" && options.bagSlotAllocator) {
               nextReservedBagSlotIndex += 1;
             }
+            if (canStackByOption) {
+              options.inventoryMutationContext?.registerPlainAutoStackRow({
+                characterId,
+                itemDefId,
+                location,
+                bindType: actualBindType,
+                itemId: inserted,
+                qty: addQty,
+              });
+            }
             break;
           }
         }
@@ -533,9 +569,11 @@ export const addItemToInventory = async (
       remainingQty -= addQty;
     }
 
-    const usedSlots = location === "bag" ? info.bag_used : info.warehouse_used;
-    if (usedSlots > capacity) {
-      return { success: false, message: "背包数据异常" };
+    if (info) {
+      const usedSlots = location === "bag" ? info.bag_used : info.warehouse_used;
+      if (usedSlots > capacity) {
+        return { success: false, message: "背包数据异常" };
+      }
     }
 
     return { success: true, message: "添加成功", itemIds };

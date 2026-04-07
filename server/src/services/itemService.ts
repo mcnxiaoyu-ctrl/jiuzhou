@@ -42,6 +42,7 @@ import { partnerService } from './partnerService.js';
 import { partnerReboneService } from './partnerReboneService.js';
 import { recoverStaminaByCharacterId } from './staminaService.js';
 import type { CharacterBagSlotAllocator } from './shared/characterBagSlotAllocator.js';
+import type { CharacterInventoryMutationContext } from './shared/characterInventoryMutationContext.js';
 
 // 物品定义接口
 export interface ItemDef {
@@ -65,6 +66,8 @@ export interface CreateItemOptions {
   obtainedFrom?: string;
   /** 奖励链路共享的新槽位分配器，只负责 bag 位置的新格子消费。 */
   bagSlotAllocator?: CharacterBagSlotAllocator;
+  /** 奖励事务内共享的库存视图缓存，用于复用容量与普通堆叠承载实例。 */
+  inventoryMutationContext?: CharacterInventoryMutationContext;
   /** 调用方已持有角色背包互斥锁时，跳过底层重复加锁 SQL。 */
   skipInventoryMutexLock?: boolean;
   // 装备专用选项
@@ -359,6 +362,7 @@ const createNormalItem = async (
     bindType: options.bindType,
     obtainedFrom: options.obtainedFrom,
     ...(options.bagSlotAllocator ? { bagSlotAllocator: options.bagSlotAllocator } : {}),
+    ...(options.inventoryMutationContext ? { inventoryMutationContext: options.inventoryMutationContext } : {}),
     ...(options.skipInventoryMutexLock ? { skipInventoryMutexLock: true } : {}),
   });
 

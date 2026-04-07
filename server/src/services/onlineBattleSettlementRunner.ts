@@ -38,6 +38,7 @@ import {
   type CharacterRewardDelta,
 } from './shared/characterRewardSettlement.js';
 import { createCharacterBagSlotAllocator } from './shared/characterBagSlotAllocator.js';
+import { createCharacterInventoryMutationContext } from './shared/characterInventoryMutationContext.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { lockCharacterRewardSettlementTargets } from './shared/characterRewardTargetLock.js';
 import { getDungeonDifficultyById, getItemDefinitionById } from './staticConfigLoader.js';
@@ -586,6 +587,7 @@ const settleDungeonClearInDbInTransaction = async (
   const pendingCharacterRewardDeltas = new Map<number, CharacterRewardDelta>();
   const pendingMailByCharacter = new Map<number, { userId: number; items: MailAttachItem[] }>();
   let bagSlotAllocator: Awaited<ReturnType<typeof createCharacterBagSlotAllocator>> | null = null;
+  let inventoryMutationContext: Awaited<ReturnType<typeof createCharacterInventoryMutationContext>> | null = null;
   const itemMetaCache = new Map<
     string,
     {
@@ -654,6 +656,7 @@ const settleDungeonClearInDbInTransaction = async (
       );
     }
     bagSlotAllocator = await createCharacterBagSlotAllocator(participantCharacterIds);
+    inventoryMutationContext = await createCharacterInventoryMutationContext(participantCharacterIds);
   }
 
   const appendGrantedItem = (
@@ -779,6 +782,7 @@ const settleDungeonClearInDbInTransaction = async (
             ...(bindType ? { bindType } : {}),
             ...(equipOptions ? { equipOptions } : {}),
             ...(bagSlotAllocator ? { bagSlotAllocator } : {}),
+            ...(inventoryMutationContext ? { inventoryMutationContext } : {}),
             ...(bagSlotAllocator ? { skipInventoryMutexLock: true } : {}),
           });
         },
