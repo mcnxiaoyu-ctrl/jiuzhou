@@ -60,6 +60,7 @@ import {
   buildPlainStackingSqlPredicate,
   isPlainStackingState,
 } from "./shared/stacking.js";
+import type { CharacterBagSlotAllocator } from "../shared/characterBagSlotAllocator.js";
 
 // ============================================
 // 获取背包信息（容量与使用情况）
@@ -356,6 +357,7 @@ export const addItemToInventory = async (
     metadata?: Record<string, unknown> | null;
     quality?: string | null;
     qualityRank?: number | null;
+    bagSlotAllocator?: CharacterBagSlotAllocator;
   } = {},
 ): Promise<{ success: boolean; message: string; itemIds?: number[] }> => {
   if (!Number.isInteger(qty) || qty <= 0) {
@@ -424,13 +426,20 @@ export const addItemToInventory = async (
       remainingAfterStacks <= 0
         ? 0
         : Math.ceil(remainingAfterStacks / Math.max(1, stack_max));
+    const reservedBagSlots =
+      location === "bag" && options.bagSlotAllocator
+        ? options.bagSlotAllocator.reserveSlots(characterId, neededSlots)
+        : [];
     if (neededSlots > 0) {
-      const emptySlots = await findEmptySlotsByCapacity(
-        characterId,
-        location,
-        capacity,
-        neededSlots,
-      );
+      const emptySlots =
+        location === "bag" && options.bagSlotAllocator
+          ? reservedBagSlots
+          : await findEmptySlotsByCapacity(
+              characterId,
+              location,
+              capacity,
+              neededSlots,
+            );
       if (emptySlots.length < neededSlots) {
         return { success: false, message: "背包已满" };
       }
@@ -458,6 +467,7 @@ export const addItemToInventory = async (
       }
     }
 
+    let nextReservedBagSlotIndex = 0;
     while (remainingQty > 0) {
       const addQty = Math.min(remainingQty, Math.max(1, stack_max));
       let insertedId: number | null = null;
@@ -465,12 +475,15 @@ export const addItemToInventory = async (
 
       while (insertedId === null && attempt < 6) {
         attempt += 1;
-        const emptySlots = await findEmptySlotsByCapacity(
-          characterId,
-          location,
-          capacity,
-          6,
-        );
+        const emptySlots =
+          location === "bag" && options.bagSlotAllocator
+            ? reservedBagSlots.slice(nextReservedBagSlotIndex, nextReservedBagSlotIndex + 1)
+            : await findEmptySlotsByCapacity(
+                characterId,
+                location,
+                capacity,
+                6,
+              );
         if (emptySlots.length === 0) {
           return { success: false, message: "背包已满" };
         }
@@ -501,6 +514,9 @@ export const addItemToInventory = async (
           );
           if (inserted !== null) {
             insertedId = inserted;
+            if (location === "bag" && options.bagSlotAllocator) {
+              nextReservedBagSlotIndex += 1;
+            }
             break;
           }
         }

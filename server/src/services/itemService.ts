@@ -41,6 +41,7 @@ import type { PartnerLearnTechniqueResultDto } from './partnerService.js';
 import { partnerService } from './partnerService.js';
 import { partnerReboneService } from './partnerReboneService.js';
 import { recoverStaminaByCharacterId } from './staminaService.js';
+import type { CharacterBagSlotAllocator } from './shared/characterBagSlotAllocator.js';
 
 // 物品定义接口
 export interface ItemDef {
@@ -58,8 +59,12 @@ export interface ItemDef {
 // 创建物品选项
 export interface CreateItemOptions {
   location?: SlottedInventoryLocation;
+  /** 奖励事务已统一锁背包时，可直接指定目标槽位，避免重复扫空槽。 */
+  locationSlot?: number;
   bindType?: string;
   obtainedFrom?: string;
+  /** 奖励链路共享的新槽位分配器，只负责 bag 位置的新格子消费。 */
+  bagSlotAllocator?: CharacterBagSlotAllocator;
   // 装备专用选项
   equipOptions?: GenerateOptions & {
     /**
@@ -287,6 +292,15 @@ const createEquipmentItem = async (
   const itemIds: number[] = [];
   let lastEquipment: GeneratedEquipment | undefined;
   const preGeneratedEquipment = options.equipOptions?.preGeneratedEquipment;
+  const location = options.location || 'bag';
+  const reservedBagSlots =
+    location === 'bag' && options.bagSlotAllocator
+      ? options.bagSlotAllocator.reserveSlots(characterId, qty)
+      : [];
+
+  if (location === 'bag' && options.bagSlotAllocator && reservedBagSlots.length < qty) {
+    return { success: false, message: '背包已满' };
+  }
 
   // 装备不可堆叠，逐个生成
   for (let i = 0; i < qty; i++) {
@@ -299,7 +313,9 @@ const createEquipmentItem = async (
     }
 
     const result = await equipmentService.createEquipmentInstance(userId, characterId, generated, {
-      location: options.location || 'bag',
+      location,
+      ...(reservedBagSlots[i] !== undefined ? { locationSlot: reservedBagSlots[i] } : {}),
+      ...(options.locationSlot !== undefined ? { locationSlot: options.locationSlot } : {}),
       bindType: options.bindType,
       obtainedFrom: options.obtainedFrom
     });
@@ -338,7 +354,8 @@ const createNormalItem = async (
   const result = await inventoryService.addItemToInventory(characterId, userId, itemDefId, qty, {
     location: options.location || 'bag',
     bindType: options.bindType,
-    obtainedFrom: options.obtainedFrom
+    obtainedFrom: options.obtainedFrom,
+    ...(options.bagSlotAllocator ? { bagSlotAllocator: options.bagSlotAllocator } : {}),
   });
 
   return {

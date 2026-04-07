@@ -25,6 +25,7 @@ import type {
 } from "./shared/types.js";
 import type { GeneratedAffix } from "../equipmentService.js";
 import type { SocketedGemEntry } from "../equipmentGrowthRules.js";
+import type { CharacterBagSlotAllocator } from "../shared/characterBagSlotAllocator.js";
 
 import {
   getInventoryInfo,
@@ -221,6 +222,7 @@ class InventoryService {
       metadata?: Record<string, unknown> | null;
       quality?: string | null;
       qualityRank?: number | null;
+      bagSlotAllocator?: CharacterBagSlotAllocator;
     } = {},
   ): Promise<{ success: boolean; message: string; itemIds?: number[] }> {
     return await addItemToInventory(

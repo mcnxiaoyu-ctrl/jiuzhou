@@ -357,11 +357,14 @@ export const grantRewardItemWithAutoDisassemble = async (
   const canDisassemble = resolveItemCanDisassemble({
     disassemblable: input.itemMeta.disassemblable,
   });
+  const allowAutoDisassemble =
+    canDisassemble
+    && input.autoDisassembleSetting.enabled
+    && !shouldSkipAutoDisassembleBySource(input.sourceObtainedFrom);
 
   if (
-    !canDisassemble ||
-    !input.autoDisassembleSetting.enabled ||
-    shouldSkipAutoDisassembleBySource(input.sourceObtainedFrom)
+    category !== 'equipment'
+    && !allowAutoDisassemble
   ) {
     const createResult = await input.createItem({
       itemDefId: input.itemDefId,
@@ -501,6 +504,11 @@ export const grantRewardItemWithAutoDisassemble = async (
 
       result.warnings.push(`物品创建失败: ${input.itemDefId}, ${sourceCreateResult.message}`);
     };
+
+    if (!allowAutoDisassemble) {
+      await createSourceItem();
+      continue;
+    }
 
     /**
      * 装备品质由生成器最终决定，必须先做一次“预生成”拿到真实品质，

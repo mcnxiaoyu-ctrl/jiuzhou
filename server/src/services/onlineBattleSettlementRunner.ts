@@ -37,6 +37,7 @@ import {
   applyCharacterRewardDeltas,
   type CharacterRewardDelta,
 } from './shared/characterRewardSettlement.js';
+import { createCharacterBagSlotAllocator } from './shared/characterBagSlotAllocator.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { lockCharacterRewardSettlementTargets } from './shared/characterRewardTargetLock.js';
 import { getDungeonDifficultyById, getItemDefinitionById } from './staticConfigLoader.js';
@@ -584,6 +585,7 @@ const settleDungeonClearInDbInTransaction = async (
   const autoDisassembleSettings = new Map<number, AutoDisassembleSetting>();
   const pendingCharacterRewardDeltas = new Map<number, CharacterRewardDelta>();
   const pendingMailByCharacter = new Map<number, { userId: number; items: MailAttachItem[] }>();
+  let bagSlotAllocator: Awaited<ReturnType<typeof createCharacterBagSlotAllocator>> | null = null;
   const itemMetaCache = new Map<
     string,
     {
@@ -651,6 +653,7 @@ const settleDungeonClearInDbInTransaction = async (
         }),
       );
     }
+    bagSlotAllocator = await createCharacterBagSlotAllocator(participantCharacterIds);
   }
 
   const appendGrantedItem = (
@@ -775,6 +778,7 @@ const settleDungeonClearInDbInTransaction = async (
             obtainedFrom,
             ...(bindType ? { bindType } : {}),
             ...(equipOptions ? { equipOptions } : {}),
+            ...(bagSlotAllocator ? { bagSlotAllocator } : {}),
           });
         },
         addSilver: async (ownerCharacterId, silverGain) => {

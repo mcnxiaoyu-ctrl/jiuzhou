@@ -114,7 +114,13 @@ test('未开启自动分解时应保持原奖励逻辑', async () => {
     {
       success: true,
       message: 'ok',
-      itemIds: [501, 502],
+      itemIds: [501],
+      equipment: { qualityRank: 1 },
+    },
+    {
+      success: true,
+      message: 'ok',
+      itemIds: [502],
       equipment: { qualityRank: 1 },
     },
   ]);
@@ -146,9 +152,11 @@ test('未开启自动分解时应保持原奖励逻辑', async () => {
   assert.deepEqual(result.pendingMailItems, []);
   assert.deepEqual(result.grantedItems, [{ itemDefId: 'equip-ring-001', qty: 2, itemIds: [501, 502] }]);
   assert.equal(result.gainedSilver, 0);
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0]?.qty, 2);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0]?.qty, 1);
+  assert.equal(calls[1]?.qty, 1);
   assert.equal(calls[0]?.bindType, 'bound');
+  assert.equal(calls[1]?.bindType, 'bound');
 });
 
 test('任务奖励来源应跳过自动分解', async () => {

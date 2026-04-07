@@ -41,6 +41,7 @@ import {
   lockCharacterRewardSettlementTargets,
   normalizeCharacterRewardTargetIds,
 } from './shared/characterRewardTargetLock.js';
+import { createCharacterBagSlotAllocator } from './shared/characterBagSlotAllocator.js';
 import { getRealmOrderIndex } from './shared/realmRules.js';
 import type {
   IdleBattleRewardSettlementPlan,
@@ -764,6 +765,7 @@ class BattleDropService {
       enabled: false,
       rules: undefined,
     });
+    let bagSlotAllocator: Awaited<ReturnType<typeof createCharacterBagSlotAllocator>> | null = null;
 
     if (plan.dropPlans.length > 0) {
       await lockCharacterRewardSettlementTargets([receiverCharacterId]);
@@ -787,6 +789,7 @@ class BattleDropService {
           rules: row.auto_disassemble_rules,
         });
       }
+      bagSlotAllocator = await createCharacterBagSlotAllocator([receiverCharacterId]);
     }
 
     for (const dropPlan of plan.dropPlans) {
@@ -830,6 +833,7 @@ class BattleDropService {
               obtainedFrom,
               ...(bindType ? { bindType } : {}),
               ...(equipOptions ? { equipOptions } : {}),
+              ...(bagSlotAllocator ? { bagSlotAllocator } : {}),
             },
           );
         },
@@ -1228,6 +1232,10 @@ class BattleDropService {
           settingCharacterCount: autoDisassembleSettings.size,
         });
       }
+      const bagSlotAllocator =
+        requiresInventoryMutation && participantCharacterIds.length > 0
+          ? await createCharacterBagSlotAllocator(participantCharacterIds)
+          : null;
 
       const result = this.buildDistributeResultFromBattleRewardPlan(plan);
       const perPlayerRewardByCharacterId = new Map(
@@ -1332,6 +1340,7 @@ class BattleDropService {
               obtainedFrom,
               ...(bindType ? { bindType } : {}),
               ...(equipOptions ? { equipOptions } : {}),
+              ...(bagSlotAllocator ? { bagSlotAllocator } : {}),
             });
           },
           addSilver: async (ownerCharacterId, silverGain) => {
