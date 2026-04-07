@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 
 import { IMG_LINGSHI } from '../../../shared/imageAssets';
 import {
+  buildMonthCardIndicator,
   buildMonthCardDailyRewards,
   buildMonthCardPanelState,
   getMonthCardPrivileges,
@@ -80,6 +81,16 @@ describe('monthCardDisplay', () => {
     expect(state.statusValue).toBe('已到期');
     expect(state.statusHint).toBe('背包有月卡道具时可点击“使用续期”叠加天数。');
     expect(state.actionLabel).toBe('使用续期');
+  });
+
+  it('今日奖励未领取时应展示月卡红点', () => {
+    expect(buildMonthCardIndicator({ active: true, canClaim: true })).toEqual({
+      badgeDot: true,
+      tooltip: '今日月卡奖励待领取',
+    });
+    expect(buildMonthCardIndicator({ active: true, canClaim: false })).toEqual({
+      badgeDot: false,
+    });
   });
 
   it('月卡特权列表应展示体力恢复与福源加成', () => {

@@ -16,14 +16,19 @@ import SkillFloatButton from './modules/SkillFloatButton';
 import TechniqueModal from './modules/TechniqueModal';
 import NpcTalkModal from './modules/NpcTalkModal';
 import {
-  getTechniqueResearchIndicatorTooltip,
-  resolveTechniqueResearchIndicatorStatus,
+  buildTechniqueResearchIndicator,
+  resolveTechniqueResearchIndicatorNextRefreshDelayMs,
   type TechniqueResearchStatusData,
 } from './modules/TechniqueModal/researchShared';
+import {
+  buildPartnerRecruitIndicator,
+  resolvePartnerRecruitIndicatorNextRefreshDelayMs,
+} from './modules/PartnerModal/partnerRecruitShared';
 import TaskModal from './modules/TaskModal';
 import SectModal from './modules/SectModal';
 import MarketModal from './modules/MarketModal';
 import MonthCardModal from './modules/MonthCardModal';
+import { buildMonthCardIndicator } from './modules/MonthCardModal/monthCardDisplay';
 import BattlePassModal from './modules/BattlePassModal';
 import ArenaModal from './modules/ArenaModal';
 import RankModal from './modules/RankModal';
@@ -61,6 +66,9 @@ import {
   getBattleSessionByBattleId,
   getDungeonInstance,
   getGameHomeOverview,
+  getMonthCardStatus,
+  getPartnerRecruitStatus,
+  getTechniqueResearchStatus,
   getWanderOverview,
   pickupRoomItem,
   SILENT_API_REQUEST_CONFIG,
@@ -83,10 +91,11 @@ import type {
   NpcTalkTaskOption,
   RealmOverviewDto,
   TaskOverviewSummaryRowDto,
-  TechniqueResearchResultStatusDto,
   BattleSessionSnapshotDto,
   BattleStateDto,
   WanderOverviewDto,
+  MonthCardStatusResponse,
+  PartnerRecruitStatusDto,
 } from '../../services/api';
 import { getMainQuestProgress, startDialogue, advanceDialogue, selectDialogueChoice, completeSection, type DialogueState, type MainQuestProgressDto } from '../../services/mainQuestApi';
 import { PARTNER_FEATURE_CODE } from '../../services/feature';
@@ -726,7 +735,9 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [signInModalOpen, setSignInModalOpen] = useState(false);
   const [showSignInDot, setShowSignInDot] = useState(false);
   const [showMailDot, setShowMailDot] = useState(false);
-  const [techniqueIndicatorStatus, setTechniqueIndicatorStatus] = useState<TechniqueResearchResultStatusDto | null>(null);
+  const [monthCardStatus, setMonthCardStatus] = useState<MonthCardStatusResponse['data'] | null>(null);
+  const [partnerRecruitStatus, setPartnerRecruitStatus] = useState<PartnerRecruitStatusDto | null>(null);
+  const [techniqueResearchStatus, setTechniqueResearchStatus] = useState<TechniqueResearchStatusData | null>(null);
   const [wanderOverview, setWanderOverview] = useState<WanderOverviewDto | null>(null);
   const [mailModalOpen, setMailModalOpen] = useState(false);
   const [settingModalOpen, setSettingModalOpen] = useState(false);
@@ -809,6 +820,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const lastKeepalivePositionKeyRef = useRef<string>('');
   const teamBattleAutoCloseTimerRef = useRef<number | null>(null);
   const taskIndicatorQueuedRefreshTimerRef = useRef<number | null>(null);
+  const lastGameDateKeyRef = useRef('');
   const activeBattleSessionRef = useRef<BattleSessionSnapshotDto | null>(null);
   const reconnectBattleIdRef = useRef<string | null>(null);
   const viewModeRef = useRef<'map' | 'battle'>('map');
@@ -1837,9 +1849,59 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     setShowMailDot(unreadCount > 0);
   }, []);
 
-  const applyTechniqueResearchStatus = useCallback((status: TechniqueResearchStatusData | null) => {
-    setTechniqueIndicatorStatus(resolveTechniqueResearchIndicatorStatus(status));
+  const applyMonthCardStatus = useCallback((status: MonthCardStatusResponse['data'] | null) => {
+    setMonthCardStatus(status);
   }, []);
+
+  const applyPartnerRecruitStatus = useCallback((status: PartnerRecruitStatusDto | null) => {
+    setPartnerRecruitStatus(status);
+  }, []);
+
+  const applyTechniqueResearchStatus = useCallback((status: TechniqueResearchStatusData | null) => {
+    setTechniqueResearchStatus(status);
+  }, []);
+
+  const refreshMonthCardStatus = useCallback(async () => {
+    if (!characterId) {
+      applyMonthCardStatus(null);
+      return;
+    }
+
+    try {
+      const response = await getMonthCardStatus(undefined, SILENT_API_REQUEST_CONFIG);
+      applyMonthCardStatus(response.data ?? null);
+    } catch {
+      // 静默保留上一份状态，避免网络抖动导致主菜单红点闪烁。
+    }
+  }, [applyMonthCardStatus, characterId]);
+
+  const refreshPartnerRecruitStatus = useCallback(async () => {
+    if (!characterId) {
+      applyPartnerRecruitStatus(null);
+      return;
+    }
+
+    try {
+      const response = await getPartnerRecruitStatus(SILENT_API_REQUEST_CONFIG);
+      applyPartnerRecruitStatus(response.data ?? null);
+    } catch {
+      // 静默保留上一份状态，避免冷却计时中的临时请求失败抹掉红点。
+    }
+  }, [applyPartnerRecruitStatus, characterId]);
+
+  const refreshTechniqueResearchStatus = useCallback(async () => {
+    if (!TECHNIQUE_RESEARCH_ENABLED || !characterId) {
+      applyTechniqueResearchStatus(null);
+      return;
+    }
+
+    try {
+      const response = await getTechniqueResearchStatus(characterId, SILENT_API_REQUEST_CONFIG);
+      applyTechniqueResearchStatus(response.data ?? null);
+    } catch {
+      // 静默保留上一份状态，避免冷却计时中的临时请求失败抹掉红点。
+    }
+  }, [applyTechniqueResearchStatus, characterId]);
 
   const applyWanderOverview = useCallback((overview: WanderOverviewDto | null) => {
     wanderOverviewRequestSeqRef.current += 1;
@@ -2138,12 +2200,42 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   }, [characterId]);
 
   useEffect(() => {
-    if (!TECHNIQUE_RESEARCH_ENABLED) {
-      setTechniqueIndicatorStatus(null);
+    if (!characterId) {
+      applyMonthCardStatus(null);
+      return;
+    }
+    void refreshMonthCardStatus();
+  }, [applyMonthCardStatus, characterId, refreshMonthCardStatus, character?.monthCardActive]);
+
+  useEffect(() => {
+    if (!characterId) {
+      applyPartnerRecruitStatus(null);
+      return;
+    }
+    void refreshPartnerRecruitStatus();
+  }, [applyPartnerRecruitStatus, characterId, refreshPartnerRecruitStatus]);
+
+  useEffect(() => {
+    if (!TECHNIQUE_RESEARCH_ENABLED || !characterId) {
+      applyTechniqueResearchStatus(null);
+      return;
+    }
+    void refreshTechniqueResearchStatus();
+  }, [applyTechniqueResearchStatus, characterId, refreshTechniqueResearchStatus]);
+
+  useEffect(() => {
+    if (!characterId) {
       return undefined;
     }
-    if (!characterId) {
-      setTechniqueIndicatorStatus(null);
+
+    return gameSocket.onPartnerRecruitStatusUpdate((payload) => {
+      if (payload.characterId !== characterId) return;
+      applyPartnerRecruitStatus(payload.status);
+    });
+  }, [applyPartnerRecruitStatus, characterId]);
+
+  useEffect(() => {
+    if (!TECHNIQUE_RESEARCH_ENABLED || !characterId) {
       return undefined;
     }
 
@@ -2152,6 +2244,52 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       applyTechniqueResearchStatus(payload.status);
     });
   }, [applyTechniqueResearchStatus, characterId]);
+
+  useEffect(() => {
+    if (!characterId) {
+      lastGameDateKeyRef.current = '';
+      return undefined;
+    }
+
+    return gameSocket.onGameTimeSync((payload) => {
+      const dateKey = `${payload.year}-${String(payload.month).padStart(2, '0')}-${String(payload.day).padStart(2, '0')}`;
+      if (dateKey === lastGameDateKeyRef.current) {
+        return;
+      }
+      lastGameDateKeyRef.current = dateKey;
+      if (monthCardStatus?.today && monthCardStatus.today !== dateKey) {
+        void refreshMonthCardStatus();
+      }
+    });
+  }, [characterId, monthCardStatus?.today, refreshMonthCardStatus]);
+
+  useEffect(() => {
+    if (!characterId) {
+      return undefined;
+    }
+    const nextRefreshDelayMs = resolvePartnerRecruitIndicatorNextRefreshDelayMs(partnerRecruitStatus);
+    if (nextRefreshDelayMs == null) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      void refreshPartnerRecruitStatus();
+    }, nextRefreshDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [characterId, partnerRecruitStatus, refreshPartnerRecruitStatus]);
+
+  useEffect(() => {
+    if (!TECHNIQUE_RESEARCH_ENABLED || !characterId) {
+      return undefined;
+    }
+    const nextRefreshDelayMs = resolveTechniqueResearchIndicatorNextRefreshDelayMs(techniqueResearchStatus);
+    if (nextRefreshDelayMs == null) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      void refreshTechniqueResearchStatus();
+    }, nextRefreshDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [characterId, refreshTechniqueResearchStatus, techniqueResearchStatus]);
 
   useEffect(() => {
     if (!characterId) {
@@ -2288,6 +2426,9 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       setHomeOverviewIdleSession(undefined);
       invalidatePhoneBindingStatus();
       applyTeamOverview({ info: null, role: null, applications: [] });
+      applyMonthCardStatus(null);
+      applyPartnerRecruitStatus(null);
+      applyTechniqueResearchStatus(null);
       setAchievementClaimableCount(0);
       setShowSignInDot(false);
       setTrackedRoomIds([]);
@@ -2359,6 +2500,21 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     if (key === 'battle-report') setMobileChatDrawerOpen(true);
     if (key === 'character') setPlayerInfoOpen(true);
   };
+  const monthCardIndicator = useMemo(
+    () => buildMonthCardIndicator({
+      active: monthCardStatus?.active === true,
+      canClaim: monthCardStatus?.canClaim === true,
+    }),
+    [monthCardStatus?.active, monthCardStatus?.canClaim],
+  );
+  const partnerRecruitIndicator = useMemo(
+    () => buildPartnerRecruitIndicator(partnerRecruitStatus),
+    [partnerRecruitStatus],
+  );
+  const techniqueIndicator = useMemo(
+    () => buildTechniqueResearchIndicator(techniqueResearchStatus),
+    [techniqueResearchStatus],
+  );
   const functionIndicators: Record<string, { badgeCount?: number; badgeDot?: boolean; tooltip?: string }> | undefined = useMemo(() => {
     const out: Record<string, { badgeCount?: number; badgeDot?: boolean; tooltip?: string }> = {};
     if (isTeamLeader && teamApplicationUnread > 0) {
@@ -2393,10 +2549,22 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         tooltip: `有${taskCompletableCount}个任务可完成`,
       };
     }
-    if (techniqueIndicatorStatus) {
+    if (partnerRecruitIndicator.badgeDot) {
+      out.partner = {
+        badgeDot: true,
+        tooltip: partnerRecruitIndicator.tooltip,
+      };
+    }
+    if (techniqueIndicator.badgeDot) {
       out.technique = {
         badgeDot: true,
-        tooltip: getTechniqueResearchIndicatorTooltip(techniqueIndicatorStatus),
+        tooltip: techniqueIndicator.tooltip,
+      };
+    }
+    if (monthCardIndicator.badgeDot) {
+      out.monthcard = {
+        badgeDot: true,
+        tooltip: monthCardIndicator.tooltip,
       };
     }
     if (wanderIndicator.badgeDot) {
@@ -2413,7 +2581,9 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     sectPendingApplicationCount,
     taskCompletableCount,
     teamApplicationUnread,
-    techniqueIndicatorStatus,
+    monthCardIndicator,
+    partnerRecruitIndicator,
+    techniqueIndicator,
     wanderIndicator,
   ]);
 
@@ -3223,7 +3393,11 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         }}
       />
       <BagModal open={bagModalOpen} onClose={() => setBagModalOpen(false)} />
-      <PartnerModal open={partnerModalOpen} onClose={() => setPartnerModalOpen(false)} />
+      <PartnerModal
+        open={partnerModalOpen}
+        onClose={() => setPartnerModalOpen(false)}
+        onRecruitStatusChange={applyPartnerRecruitStatus}
+      />
       <WanderModal
         open={wanderModalOpen}
         onClose={() => setWanderModalOpen(false)}
@@ -3236,7 +3410,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         <TechniqueModal
           open={techniqueModalOpen}
           onClose={() => setTechniqueModalOpen(false)}
-          onResearchIndicatorChange={setTechniqueIndicatorStatus}
+          onResearchStatusChange={applyTechniqueResearchStatus}
         />
       )}
       {taskModalOpen && (
@@ -3254,7 +3428,11 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         />
       )}
       {monthCardModalOpen && (
-        <MonthCardModal open={monthCardModalOpen} onClose={() => setMonthCardModalOpen(false)} />
+        <MonthCardModal
+          open={monthCardModalOpen}
+          onClose={() => setMonthCardModalOpen(false)}
+          onStatusChange={applyMonthCardStatus}
+        />
       )}
       {battlePassModalOpen && (
         <BattlePassModal open={battlePassModalOpen} onClose={() => setBattlePassModalOpen(false)} />

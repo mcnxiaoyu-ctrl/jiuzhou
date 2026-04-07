@@ -1,4 +1,8 @@
+import type { AxiosRequestConfig } from 'axios';
 import api from './core';
+import { withRequestParams } from './requestConfig';
+
+type RequestConfig = AxiosRequestConfig;
 
 export type TechniqueDefDto = {
   id: string;
@@ -309,8 +313,14 @@ export interface TechniqueResearchStatusResponse {
   };
 }
 
-export const getTechniqueResearchStatus = (characterId: number): Promise<TechniqueResearchStatusResponse> => {
-  return api.get(`/character/${characterId}/technique/research/status`);
+export const getTechniqueResearchStatus = (
+  characterId: number,
+  requestConfig?: RequestConfig,
+): Promise<TechniqueResearchStatusResponse> => {
+  return api.get(
+    `/character/${characterId}/technique/research/status`,
+    withRequestParams(requestConfig, {}),
+  );
 };
 
 export interface TechniqueResearchGenerateResponse {

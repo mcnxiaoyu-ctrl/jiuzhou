@@ -27,6 +27,7 @@ import { formatGameCooldownRemaining } from '../../shared/cooldownText';
 
 export type PartnerRecruitStatusData = NonNullable<PartnerRecruitStatusResponse['data']>;
 export const PARTNER_RECRUIT_STATUS_POLL_INTERVAL_MS = 15_000;
+const PARTNER_RECRUIT_COOLDOWN_READY_BUFFER_MS = 1_000;
 
 export type PartnerRecruitIndicatorView = {
   badgeDot: boolean;
@@ -82,11 +83,20 @@ export type PartnerRecruitLayoutState = {
 export const buildPartnerRecruitIndicator = (
   status: PartnerRecruitStatusData | null,
 ): PartnerRecruitIndicatorView => {
-  if (!status?.hasUnreadResult) return { badgeDot: false };
-  return {
-    badgeDot: true,
-    tooltip: getPartnerRecruitIndicatorTooltip(status.resultStatus),
-  };
+  if (!status) return { badgeDot: false };
+  if (status.hasUnreadResult) {
+    return {
+      badgeDot: true,
+      tooltip: getPartnerRecruitIndicatorTooltip(status.resultStatus),
+    };
+  }
+  if (hasPartnerRecruitCooldownCompleted(status)) {
+    return {
+      badgeDot: true,
+      tooltip: '伙伴招募冷却已结束，可再次招募',
+    };
+  }
+  return { badgeDot: false };
 };
 
 export const resolvePartnerRecruitIndicatorStatus = (
@@ -99,6 +109,18 @@ export const shouldPollPartnerRecruitStatus = (
   status: PartnerRecruitStatusData | null,
 ): boolean => {
   return status?.currentJob?.status === 'pending';
+};
+
+export const resolvePartnerRecruitIndicatorNextRefreshDelayMs = (
+  status: PartnerRecruitStatusData | null,
+): number | null => {
+  if (!isPartnerRecruitCoolingDown(status)) {
+    return null;
+  }
+  return Math.max(
+    PARTNER_RECRUIT_COOLDOWN_READY_BUFFER_MS,
+    Math.ceil((status?.cooldownRemainingSeconds ?? 0) * 1000) + PARTNER_RECRUIT_COOLDOWN_READY_BUFFER_MS,
+  );
 };
 
 export const getPartnerRecruitIndicatorTooltip = (
@@ -149,6 +171,16 @@ export const isPartnerRecruitCoolingDown = (
   status: PartnerRecruitStatusData | null,
 ): boolean => {
   return (status?.cooldownRemainingSeconds ?? 0) > 0;
+};
+
+export const hasPartnerRecruitCooldownCompleted = (
+  status: PartnerRecruitStatusData | null,
+): boolean => {
+  return status !== null
+    && status.unlocked
+    && !status.hasUnreadResult
+    && status.cooldownUntil !== null
+    && !isPartnerRecruitCoolingDown(status);
 };
 
 export const formatPartnerRecruitCooldownRemaining = (

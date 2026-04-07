@@ -87,6 +87,28 @@ export type MonthCardPanelState = {
   actionLabel: '使用' | '使用续期';
 };
 
+export type MonthCardIndicatorInput = {
+  active: boolean;
+  canClaim: boolean;
+};
+
+export type MonthCardIndicatorView = {
+  badgeDot: boolean;
+  tooltip?: string;
+};
+
+export const buildMonthCardIndicator = (
+  input: MonthCardIndicatorInput,
+): MonthCardIndicatorView => {
+  if (!input.active || !input.canClaim) {
+    return { badgeDot: false };
+  }
+  return {
+    badgeDot: true,
+    tooltip: '今日月卡奖励待领取',
+  };
+};
+
 export const getMonthCardPrivileges = (
   benefits: MonthCardBenefitDisplayInput,
 ): MonthCardPrivilege[] => {

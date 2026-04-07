@@ -116,6 +116,7 @@ import './index.scss';
 interface PartnerModalProps {
   open: boolean;
   onClose: () => void;
+  onRecruitStatusChange?: (status: PartnerRecruitStatusDto | null) => void;
 }
 
 type RecruitStatusRefreshMode = 'initial' | 'background';
@@ -149,7 +150,7 @@ const PARTNER_SKILL_TOOLTIP_CLASS_NAMES = {
  * 1. 伙伴列表和功法书列表都依赖总览接口，写操作后必须统一刷新，不能分别手动拼局部状态。
  * 2. 当前选择的伙伴在刷新后可能失效，需要在 overview 更新时自动校正到出战伙伴或首个伙伴。
  */
-const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
+const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose, onRecruitStatusChange }) => {
   const { message, modal } = App.useApp();
   const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
@@ -184,7 +185,8 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
 
   const applyRecruitStatus = useCallback((status: PartnerRecruitStatusDto | null) => {
     setRecruitStatus(status);
-  }, []);
+    onRecruitStatusChange?.(status);
+  }, [onRecruitStatusChange]);
 
   const applyFusionStatus = useCallback((status: PartnerFusionStatusDto | null) => {
     setFusionStatus(status);

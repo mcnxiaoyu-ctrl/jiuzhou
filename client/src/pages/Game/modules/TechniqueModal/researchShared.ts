@@ -27,6 +27,7 @@ import { formatGameCooldownRemaining } from '../../shared/cooldownText';
 
 export type TechniqueResearchStatusData = NonNullable<TechniqueResearchStatusResponse['data']>;
 export const TECHNIQUE_RESEARCH_STATUS_POLL_INTERVAL_MS = 20_000;
+const TECHNIQUE_RESEARCH_COOLDOWN_READY_BUFFER_MS = 1_000;
 
 export type TechniqueResearchIndicatorView = {
   badgeDot: boolean;
@@ -64,8 +65,17 @@ export type TechniqueResearchQualityRateItem = {
 export const buildTechniqueResearchIndicator = (
   status: TechniqueResearchStatusData | null,
 ): TechniqueResearchIndicatorView => {
-  if (!status?.hasUnreadResult) return { badgeDot: false };
-  return { badgeDot: true, tooltip: getTechniqueResearchIndicatorTooltip(status.resultStatus) };
+  if (!status) return { badgeDot: false };
+  if (status.hasUnreadResult) {
+    return { badgeDot: true, tooltip: getTechniqueResearchIndicatorTooltip(status.resultStatus) };
+  }
+  if (hasTechniqueResearchCooldownCompleted(status)) {
+    return {
+      badgeDot: true,
+      tooltip: '洞府研修冷却已结束，可再次推演',
+    };
+  }
+  return { badgeDot: false };
 };
 
 export const resolveTechniqueResearchIndicatorStatus = (
@@ -78,6 +88,18 @@ export const shouldPollTechniqueResearchStatus = (
   status: TechniqueResearchStatusData | null,
 ): boolean => {
   return status?.currentJob?.status === 'pending';
+};
+
+export const resolveTechniqueResearchIndicatorNextRefreshDelayMs = (
+  status: TechniqueResearchStatusData | null,
+): number | null => {
+  if (!isTechniqueResearchCoolingDown(status)) {
+    return null;
+  }
+  return Math.max(
+    TECHNIQUE_RESEARCH_COOLDOWN_READY_BUFFER_MS,
+    Math.ceil((status?.cooldownRemainingSeconds ?? 0) * 1000) + TECHNIQUE_RESEARCH_COOLDOWN_READY_BUFFER_MS,
+  );
 };
 
 export const getTechniqueResearchIndicatorTooltip = (
@@ -111,6 +133,16 @@ export const isTechniqueResearchCoolingDown = (
   status: TechniqueResearchStatusData | null,
 ): boolean => {
   return (status?.cooldownRemainingSeconds ?? 0) > 0;
+};
+
+export const hasTechniqueResearchCooldownCompleted = (
+  status: TechniqueResearchStatusData | null,
+): boolean => {
+  return status !== null
+    && status.unlocked
+    && !status.hasUnreadResult
+    && status.cooldownUntil !== null
+    && !isTechniqueResearchCoolingDown(status);
 };
 
 export const formatTechniqueResearchCooldownRemaining = (

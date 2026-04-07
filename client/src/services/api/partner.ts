@@ -1,8 +1,10 @@
-import api from './core';
-import type { CharacterFeatureCode } from '../feature';
 import type { AxiosRequestConfig } from 'axios';
+import api from './core';
 import { withRequestParams } from './requestConfig';
+import type { CharacterFeatureCode } from '../feature';
 import type { SkillDefDto, TechniqueDefDto, TechniqueLayerDto } from './technique';
+
+type RequestConfig = AxiosRequestConfig;
 
 export type PartnerGrowthDto = {
   max_qixue: number;
@@ -662,8 +664,10 @@ export const updatePartnerSkillPolicy = (
   return api.put('/partner/skill-policy', { partnerId, slots });
 };
 
-export const getPartnerRecruitStatus = (): Promise<PartnerRecruitStatusResponse> => {
-  return api.get('/partner/recruit/status');
+export const getPartnerRecruitStatus = (
+  requestConfig?: RequestConfig,
+): Promise<PartnerRecruitStatusResponse> => {
+  return api.get('/partner/recruit/status', requestConfig);
 };
 
 export const generatePartnerRecruitDraft = (

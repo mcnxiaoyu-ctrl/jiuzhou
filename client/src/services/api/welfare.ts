@@ -1,4 +1,8 @@
+import type { AxiosRequestConfig } from 'axios';
 import api from './core';
+import { withRequestParams } from './requestConfig';
+
+type RequestConfig = AxiosRequestConfig;
 
 export interface SignInRecordDto {
   date: string;
@@ -67,8 +71,11 @@ export interface MonthCardStatusResponse {
   };
 }
 
-export const getMonthCardStatus = (monthCardId?: string): Promise<MonthCardStatusResponse> => {
-  return api.get('/monthcard/status', { params: { monthCardId } });
+export const getMonthCardStatus = (
+  monthCardId?: string,
+  requestConfig?: RequestConfig,
+): Promise<MonthCardStatusResponse> => {
+  return api.get('/monthcard/status', withRequestParams(requestConfig, { monthCardId }));
 };
 
 export type BattlePassTaskDto = {

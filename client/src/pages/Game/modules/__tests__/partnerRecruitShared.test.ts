@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PartnerRecruitStatusDto } from '../../../../services/api/partner';
 import {
+  buildPartnerRecruitIndicator,
   resolvePartnerRecruitQualityRateItems,
   resolvePartnerRecruitGuaranteeText,
   resolvePartnerRecruitActionState,
@@ -96,6 +97,18 @@ describe('partnerRecruitShared', () => {
 
     expect(submitState.canSubmit).toBe(true);
     expect(submitState.disabledReason).toBeNull();
+  });
+
+  it('冷却结束后应亮起可再次招募红点', () => {
+    const indicator = buildPartnerRecruitIndicator(buildRecruitStatus({
+      cooldownUntil: '2026-03-19T12:00:00.000Z',
+      cooldownRemainingSeconds: 0,
+    }));
+
+    expect(indicator).toEqual({
+      badgeDot: true,
+      tooltip: '伙伴招募冷却已结束，可再次招募',
+    });
   });
 
   it('应把服务端下发的品质概率格式化为招募面板展示项', () => {

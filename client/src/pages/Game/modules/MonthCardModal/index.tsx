@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import { App, Button, Modal } from 'antd';
 import { useCallback, useMemo, useState, type ComponentType } from 'react';
-import { activateMonthCardItem, claimMonthCardReward, getInventoryItems, getMonthCardStatus } from '../../../../services/api';
+import { activateMonthCardItem, claimMonthCardReward, getInventoryItems, getMonthCardStatus, type MonthCardStatusResponse } from '../../../../services/api';
 import { gameSocket } from '../../../../services/gameSocket';
 import {
   buildMonthCardDailyRewards,
@@ -22,6 +22,7 @@ import './index.scss';
 interface MonthCardModalProps {
   open: boolean;
   onClose: () => void;
+  onStatusChange?: (status: MonthCardStatusResponse['data'] | null) => void;
 }
 
 const monthCardId = 'monthcard-001';
@@ -36,7 +37,7 @@ const privilegeIconMap: Record<MonthCardPrivilegeIconName, ComponentType> = {
   StarOutlined,
 };
 
-const MonthCardModal: React.FC<MonthCardModalProps> = ({ open, onClose }) => {
+const MonthCardModal: React.FC<MonthCardModalProps> = ({ open, onClose, onStatusChange }) => {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState(false);
@@ -49,15 +50,18 @@ const MonthCardModal: React.FC<MonthCardModalProps> = ({ open, onClose }) => {
       const res = await getMonthCardStatus(monthCardId);
       if (!res.success || !res.data) {
         setStatus(null);
+        onStatusChange?.(null);
         return;
       }
       setStatus(res.data);
+      onStatusChange?.(res.data);
     } catch {
       setStatus(null);
+      onStatusChange?.(null);
     } finally {
       setLoading(false);
     }
-  }, [message]);
+  }, [onStatusChange]);
 
   const refreshMonthCardItem = useCallback(async () => {
     try {

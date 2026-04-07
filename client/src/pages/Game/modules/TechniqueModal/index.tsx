@@ -17,7 +17,6 @@ import {
   markTechniqueResearchResultViewed,
   publishTechniqueResearchDraft,
   type SkillDefDto,
-  type TechniqueResearchResultStatusDto,
   type TechniqueDefDto,
   type TechniqueLayerDto,
   type TechniqueUpgradeCostResponse,
@@ -31,7 +30,6 @@ import { getItemQualityLabel, getItemQualityTagClassName } from '../../shared/it
 import ResearchPanel from './ResearchPanel';
 import {
   hasTechniqueResearchCooldownBypassToken,
-  resolveTechniqueResearchIndicatorStatus,
   resolveTechniqueResearchSubmitState,
   type TechniqueResearchStatusData,
 } from './researchShared';
@@ -234,11 +232,11 @@ const mobilePanelLabels: Record<TechniquePanel, string> = {
 interface TechniqueModalProps {
   open: boolean;
   onClose: () => void;
-  onResearchIndicatorChange?: (resultStatus: TechniqueResearchResultStatusDto | null) => void;
+  onResearchStatusChange?: (status: TechniqueResearchStatusData | null) => void;
 }
 type ResearchStatusRefreshMode = 'initial' | 'manual' | 'background';
 
-const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResearchIndicatorChange }) => {
+const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResearchStatusChange }) => {
   const { message, modal } = App.useApp();
   const [characterId, setCharacterId] = useState<number | null>(() => gameSocket.getCharacter()?.id ?? null);
   const [panel, setPanel] = useState<TechniquePanel>('slots');
@@ -296,8 +294,8 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
   const applyResearchStatus = useCallback((status: TechniqueResearchStatusData | null) => {
     researchStatusRef.current = status;
     setResearchStatus(status);
-    onResearchIndicatorChange?.(resolveTechniqueResearchIndicatorStatus(status));
-  }, [onResearchIndicatorChange]);
+    onResearchStatusChange?.(status);
+  }, [onResearchStatusChange]);
 
   const researchSubmitState = useMemo(
     () => resolveTechniqueResearchSubmitState(researchStatus, researchCooldownBypassEnabled),
@@ -439,7 +437,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
       setResearchRefreshing(false);
       researchStatusRef.current = null;
       setResearchStatus(null);
-      onResearchIndicatorChange?.(null);
+      onResearchStatusChange?.(null);
       return;
     }
     const shouldShowBlockingLoading = mode === 'initial' && researchStatusRef.current == null;
@@ -459,13 +457,13 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
       if (shouldShowBlockingLoading) setResearchLoading(false);
       if (shouldShowRefreshLoading) setResearchRefreshing(false);
     }
-  }, [applyResearchStatus, characterId]);
+  }, [applyResearchStatus, characterId, onResearchStatusChange]);
 
   useEffect(() => {
     if (!open || panel !== 'research') return;
     const nextMode: ResearchStatusRefreshMode = researchStatusRef.current == null ? 'initial' : 'background';
     void refreshResearchStatus(nextMode);
-  }, [onResearchIndicatorChange, open, panel, refreshResearchStatus]);
+  }, [open, panel, refreshResearchStatus]);
 
   useEffect(() => {
     if (!open || panel !== 'research' || !characterId) return undefined;
@@ -495,7 +493,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
       try {
         const res = await markTechniqueResearchResultViewed(characterId);
         if (res.success) {
-          onResearchIndicatorChange?.(null);
+          onResearchStatusChange?.(null);
           await refreshResearchStatus('background');
         }
       } finally {
@@ -504,7 +502,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
     })();
   }, [
     characterId,
-    onResearchIndicatorChange,
+    onResearchStatusChange,
     open,
     panel,
     refreshResearchStatus,

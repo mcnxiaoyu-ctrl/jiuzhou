@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TechniqueResearchStatusData } from '../researchShared';
 import {
+  buildTechniqueResearchIndicator,
   formatTechniqueResearchCooldownRemaining,
   resolveTechniqueResearchActionState,
   resolveTechniqueResearchCooldownDisplay,
@@ -157,6 +158,18 @@ describe('researchShared', () => {
     }), true);
 
     expect(actionState.canGenerate).toBe(false);
+  });
+
+  it('冷却结束后应亮起可再次推演红点', () => {
+    const indicator = buildTechniqueResearchIndicator(buildStatus({
+      cooldownUntil: '2026-03-11T10:00:00.000Z',
+      cooldownRemainingSeconds: 0,
+    }));
+
+    expect(indicator).toEqual({
+      badgeDot: true,
+      tooltip: '洞府研修冷却已结束，可再次推演',
+    });
   });
 
   it('resolveTechniqueResearchCooldownDisplay: 启用顿悟符时应展示统一冷却豁免提示', () => {
