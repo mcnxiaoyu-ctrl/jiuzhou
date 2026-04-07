@@ -74,9 +74,15 @@ export const BUILDING_META_MAP: Record<string, { name: string; desc: string }> =
   library: { name: '藏经阁', desc: '存放功法典籍，提高修炼效率。' },
   training_hall: { name: '演武场', desc: '宗门弟子修炼之地，提升修炼收益。' },
   alchemy_room: { name: '炼丹房', desc: '炼制丹药，提供日常补给。' },
-  forge_house: { name: '炼器房', desc: '打造灵器法宝，提升装备品质。' },
+  forge_house: { name: '铁匠铺', desc: '统一收口强化与精炼的费用减免，属于装备成长的专用建筑。' },
   spirit_array: { name: '聚灵阵', desc: '汇聚天地灵气，提升修炼速度。' },
   defense_array: { name: '护山大阵', desc: '守护宗门的阵法，提升宗门整体防御。' },
+};
+
+const formatForgeHouseDiscountPercent = (level: number): string => {
+  const normalizedLevel = Math.max(0, Math.min(50, level));
+  const percent = normalizedLevel * 0.5;
+  return Number.isInteger(percent) ? String(percent) : percent.toFixed(1);
 };
 
 export const getBuildingEffectText = (buildingType: string, level: number): string => {
@@ -87,7 +93,7 @@ export const getBuildingEffectText = (buildingType: string, level: number): stri
   if (buildingType === 'training_hall') return `修炼收益 +${2 + Math.max(0, level - 1)}%`;
   if (buildingType === 'library') return `功法学习效率 +${2 + Math.max(0, level - 1)}%`;
   if (buildingType === 'alchemy_room') return `炼丹成功率 +${1 + Math.max(0, level - 1)}%`;
-  if (buildingType === 'forge_house') return `炼器成功率 +${1 + Math.max(0, level - 1)}%`;
+  if (buildingType === 'forge_house') return `强化/精炼花费 -${formatForgeHouseDiscountPercent(level)}%`;
   if (buildingType === 'spirit_array') return `灵气回复 +${2 + Math.max(0, level - 1)}%`;
   if (buildingType === 'defense_array') return `宗门防御 +${3 + Math.max(0, level - 1)}%`;
   return '—';

@@ -117,6 +117,7 @@ export interface SectBonuses {
   expBonus: number;
   dropBonus: number;
   craftBonus: number;
+  equipmentGrowthCostDiscount: number;
 }
 
 export interface SectQuest {

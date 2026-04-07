@@ -1,4 +1,8 @@
 import { toNumber } from './db.js';
+import {
+  getSectBuildingUpgradeConfig,
+  SECT_BUILDING_MAX_LEVEL,
+} from './buildingConfig.js';
 import type {
   SectBuildingRequirement,
   SectBuildingRow,
@@ -7,28 +11,16 @@ import type {
 
 const FULLY_UPGRADED_MESSAGE = '建筑已满级';
 const UPGRADE_CLOSED_MESSAGE = '暂未开放';
-const BUILDING_MAX_LEVEL = 50;
-
-const HALL_BUILDING_TYPE = 'hall';
-
-export const calcHallUpgradeCost = (
-  currentLevel: number,
-): { funds: number; buildPoints: number } => {
-  const nextLevel = currentLevel + 1;
-  return {
-    funds: Math.floor(1000 * 1.2 * nextLevel * nextLevel),
-    buildPoints: Math.floor(10 * nextLevel),
-  };
-};
 
 export const getBuildingUpgradeRequirement = (
   buildingType: string,
   currentLevel: number,
 ): SectBuildingRequirement => {
-  if (buildingType !== HALL_BUILDING_TYPE) {
+  const config = getSectBuildingUpgradeConfig(buildingType);
+  if (!config) {
     return {
       upgradable: false,
-      maxLevel: BUILDING_MAX_LEVEL,
+      maxLevel: SECT_BUILDING_MAX_LEVEL,
       nextLevel: null,
       funds: null,
       buildPoints: null,
@@ -36,10 +28,10 @@ export const getBuildingUpgradeRequirement = (
     };
   }
 
-  if (currentLevel >= BUILDING_MAX_LEVEL) {
+  if (currentLevel >= config.maxLevel) {
     return {
       upgradable: false,
-      maxLevel: BUILDING_MAX_LEVEL,
+      maxLevel: config.maxLevel,
       nextLevel: null,
       funds: null,
       buildPoints: null,
@@ -47,10 +39,10 @@ export const getBuildingUpgradeRequirement = (
     };
   }
 
-  const cost = calcHallUpgradeCost(currentLevel);
+  const cost = config.getUpgradeCost(currentLevel);
   return {
     upgradable: true,
-    maxLevel: BUILDING_MAX_LEVEL,
+    maxLevel: config.maxLevel,
     nextLevel: currentLevel + 1,
     funds: cost.funds,
     buildPoints: cost.buildPoints,
@@ -70,8 +62,7 @@ export const withBuildingRequirement = (
 };
 
 export const buildingUpgradeConstants = {
-  BUILDING_MAX_LEVEL,
+  BUILDING_MAX_LEVEL: SECT_BUILDING_MAX_LEVEL,
   FULLY_UPGRADED_MESSAGE,
-  HALL_BUILDING_TYPE,
   UPGRADE_CLOSED_MESSAGE,
 };

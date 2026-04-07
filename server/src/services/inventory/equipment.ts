@@ -29,9 +29,7 @@ import { randomInt } from "crypto";
 import {
   type EquipmentGrowthFailMode,
   REFINE_MAX_LEVEL,
-  buildEnhanceCostPlan,
   buildEquipmentDisplayBaseAttrs,
-  buildRefineCostPlan,
   getEnhanceFailMode,
   getEnhanceSuccessRatePercent,
   getRefineFailResultLevel,
@@ -82,6 +80,10 @@ import { getEnhanceItemState, getRefineItemState, getRerollItemState } from "./s
 import { clampInt, getStaticItemDef } from "./shared/helpers.js";
 import { refreshCharacterBattleStateAfterEquipmentChange } from "./shared/battleStateRefresh.js";
 import { getEquippedSetPieceCountMap } from "./shared/equippedSetCount.js";
+import {
+  buildDiscountedEquipmentGrowthCostPlan,
+  getSectEquipmentGrowthDiscountContext,
+} from "./shared/equipmentGrowthCost.js";
 import { updateAchievementProgress } from "../achievementService.js";
 import { findEmptySlots } from "./bag.js";
 
@@ -432,9 +434,13 @@ export const enhanceEquipment = async (
 
   const curLv = normalizeEnhanceLevel(item.strengthenLevel);
   const targetLv = curLv + 1;
-  const costPlan = buildEnhanceCostPlan(
+  const equipReqRealmRank = getRealmRankOneBasedForEquipment(item.equipReqRealm);
+  const { discountRate } = await getSectEquipmentGrowthDiscountContext(characterId);
+  const costPlan = buildDiscountedEquipmentGrowthCostPlan(
+    "enhance",
     targetLv,
-    getRealmRankOneBasedForEquipment(item.equipReqRealm),
+    equipReqRealmRank,
+    discountRate,
   );
 
   const beforeDiffRes = await diffEquipmentAttrIfEquipped(
@@ -598,9 +604,13 @@ export const refineEquipment = async (
   }
 
   const targetLv = curLv + 1;
-  const costPlan = buildRefineCostPlan(
+  const equipReqRealmRank = getRealmRankOneBasedForEquipment(item.equipReqRealm);
+  const { discountRate } = await getSectEquipmentGrowthDiscountContext(characterId);
+  const costPlan = buildDiscountedEquipmentGrowthCostPlan(
+    "refine",
     targetLv,
-    getRealmRankOneBasedForEquipment(item.equipReqRealm),
+    equipReqRealmRank,
+    discountRate,
   );
 
   const beforeDiffRes = await diffEquipmentAttrIfEquipped(
@@ -735,14 +745,17 @@ export const getEquipmentGrowthCostPreview = async (
   const equipReqRealmRank = getRealmRankOneBasedForEquipment(
     enhanceState.item.equipReqRealm ?? refineState.item.equipReqRealm,
   );
+  const { discountRate } = await getSectEquipmentGrowthDiscountContext(characterId);
 
   const enhanceCurrentLevel = normalizeEnhanceLevel(
     enhanceState.item.strengthenLevel,
   );
   const enhanceTargetLevel = enhanceCurrentLevel + 1;
-  const enhanceCostPlan = buildEnhanceCostPlan(
+  const enhanceCostPlan = buildDiscountedEquipmentGrowthCostPlan(
+    "enhance",
     enhanceTargetLevel,
     equipReqRealmRank,
+    discountRate,
   );
 
   const refineCurrentLevel = clampInt(
@@ -756,7 +769,12 @@ export const getEquipmentGrowthCostPreview = async (
     : refineCurrentLevel + 1;
   const refineCostPlan = refineAtMaxLevel
     ? null
-    : buildRefineCostPlan(refineTargetLevel, equipReqRealmRank);
+    : buildDiscountedEquipmentGrowthCostPlan(
+        "refine",
+        refineTargetLevel,
+        equipReqRealmRank,
+        discountRate,
+      );
 
   const itemRowResult = await query(
     `

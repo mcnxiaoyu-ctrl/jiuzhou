@@ -3,20 +3,23 @@ import { Transactional } from "../../decorators/transactional.js";
 import { assertMember, hasPermission, toNumber } from "./db.js";
 import {
   buildingUpgradeConstants,
-  calcHallUpgradeCost,
+  getBuildingUpgradeRequirement,
   withBuildingRequirement,
 } from "./buildingRequirement.js";
 import { invalidateSectInfoCache } from "./cache.js";
+import {
+  getSectBuildingDisplayName,
+  getSectBuildingUpgradeConfig,
+  HALL_BUILDING_TYPE,
+} from "./buildingConfig.js";
 import type {
   Result,
   SectBuildingRow,
   SectBuildingView,
 } from "./types.js";
 
-const { BUILDING_MAX_LEVEL, FULLY_UPGRADED_MESSAGE, HALL_BUILDING_TYPE } =
+const { FULLY_UPGRADED_MESSAGE, UPGRADE_CLOSED_MESSAGE } =
   buildingUpgradeConstants;
-const HALL_BUILDING_NAME = "宗门大殿";
-const ONLY_HALL_UPGRADE_MESSAGE = "当前仅开放宗门大殿升级";
 
 /**
  * 宗门建筑服务
@@ -82,8 +85,9 @@ class SectBuildingService {
     characterId: number,
     buildingType: string,
   ): Promise<Result> {
-    if (buildingType !== HALL_BUILDING_TYPE) {
-      return { success: false, message: ONLY_HALL_UPGRADE_MESSAGE };
+    const config = getSectBuildingUpgradeConfig(buildingType);
+    if (!config) {
+      return { success: false, message: UPGRADE_CLOSED_MESSAGE };
     }
 
     const member = await assertMember(characterId);
@@ -93,7 +97,7 @@ class SectBuildingService {
 
     const buildingRes = await query(
       `SELECT * FROM sect_building WHERE sect_id = $1 AND building_type = $2 FOR UPDATE`,
-      [member.sectId, HALL_BUILDING_TYPE],
+      [member.sectId, buildingType],
     );
     if (buildingRes.rows.length === 0) {
       return { success: false, message: "建筑不存在" };
@@ -101,11 +105,12 @@ class SectBuildingService {
 
     const building = buildingRes.rows[0] as SectBuildingRow;
     const currentLevel = toNumber(building.level);
-    if (currentLevel >= BUILDING_MAX_LEVEL) {
+    const requirement = getBuildingUpgradeRequirement(buildingType, currentLevel);
+    if (!requirement.upgradable) {
       return { success: false, message: FULLY_UPGRADED_MESSAGE };
     }
 
-    const cost = calcHallUpgradeCost(currentLevel);
+    const cost = config.getUpgradeCost(currentLevel);
     const sectRes = await query(
       `SELECT funds, build_points FROM sect_def WHERE id = $1 FOR UPDATE`,
       [member.sectId],
@@ -131,13 +136,15 @@ class SectBuildingService {
       [building.id],
     );
 
-    await this.applyHallMemberCap(member.sectId);
+    if (buildingType === HALL_BUILDING_TYPE) {
+      await this.applyHallMemberCap(member.sectId);
+    }
     await this.addLog(
       member.sectId,
       "upgrade_building",
       characterId,
       null,
-      `升级建筑：${HALL_BUILDING_NAME}`,
+      `升级建筑：${getSectBuildingDisplayName(buildingType)}`,
     );
     await invalidateSectInfoCache(member.sectId);
     return { success: true, message: "升级成功" };

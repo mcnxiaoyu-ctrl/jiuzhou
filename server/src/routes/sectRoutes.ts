@@ -258,9 +258,6 @@ router.post('/buildings/upgrade', asyncHandler(async (req, res) => {
   const body = req.body as { buildingType?: unknown };
   const buildingType = typeof body?.buildingType === 'string' ? body.buildingType.trim() : '';
   if (!buildingType) throw new BusinessError('参数错误');
-  if (buildingType !== 'hall') {
-    throw new BusinessError('当前仅开放宗门大殿升级');
-  }
   const result = await upgradeBuilding(characterId, buildingType);
   return sendResult(res, result);
 }));
