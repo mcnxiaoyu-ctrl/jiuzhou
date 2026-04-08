@@ -12,7 +12,7 @@
  * 数据流：
  *   客户端 → IdleConfigDto → idleRoutes → idleSessionService → IdleSessionRow（持久化）
  *   IdleSessionRow.sessionSnapshot → IdleBattleExecutor → BattleEngine（战斗结算）
- *   IdleBattleSummaryRow / IdleBattleDetailRow → 客户端回放展示
+ *   IdleSessionRow / RewardItemEntry → 会话级挂机汇总展示
  *
  * 关键边界条件：
  *   1. maxDurationMs 最小值固定为 60_000，最大值由当前月卡权益决定（基础 8 小时，月卡生效时提升到 12 小时），超出范围应在路由层拒绝
@@ -37,8 +37,9 @@ export type {
 
 /**
  * 挂机战斗重放快照。
- * - initialState：开战前的初始 BattleState 快照，用于按随机种子重放整场战斗
- * - playerAutoSkillPolicy：挂机玩家的自动放技能策略；若为空则重放时走默认自动战斗逻辑
+ * - 仅用于内部校验 / 测试场景，不再参与挂机日志持久化。
+ * - initialState：开战前的初始 BattleState 快照，用于按随机种子重放整场战斗。
+ * - playerAutoSkillPolicy：挂机玩家的自动放技能策略；若为空则重放时走默认自动战斗逻辑。
  */
 export interface IdleBattleReplaySnapshot {
   initialState: import('../../battle/types.js').BattleState;
@@ -124,7 +125,7 @@ export interface SessionSnapshot {
  * - status 联合字面量：active → stopping → completed | interrupted
  * - rewardItems 为累计物品奖励列表，每次战斗胜利后追加合并
  * - bagFullFlag 表示本次挂机期间出现过“背包空间不足，改走邮件补发”的情况
- * - viewedAt 为 null 表示玩家尚未查看本次挂机结果（用于触发回放弹窗）
+ * - viewedAt 为 null 表示玩家尚未查看本次挂机结果（保留会话已读语义）
  */
 export interface IdleSessionRow {
   id: string;
@@ -147,49 +148,8 @@ export interface IdleSessionRow {
 }
 
 /**
- * 单场战斗摘要行（idle_battle_batches 表的轻量回放映射）
- * - 用于左侧批次列表与断线补全，只保留列表渲染必需字段
- * - itemCount 直接在 SQL 层聚合，避免把整段 items_gained JSON 传到前端后再求长度
- */
-export interface IdleBattleSummaryRow {
-  id: string;
-  sessionId: string;
-  batchIndex: number;
-  result: 'attacker_win' | 'defender_win' | 'draw';
-  roundCount: number;
-  expGained: number;
-  silverGained: number;
-  itemCount: number;
-  executedAt: Date;
-}
-
-/**
- * 单场战斗详情行（对前端输出的完整回放详情）
- * - 服务端读取批次快照后现场重放生成 battleLog，再返回给前端
- * - 复用摘要字段，确保列表和详情的业务规则只有一份来源
- */
-export interface IdleBattleDetailRow extends IdleBattleSummaryRow {
-  randomSeed: number;
-  itemsGained: RewardItemEntry[];
-  battleLog: import('../../battle/types.js').BattleLogEntry[];
-  monsterIds: string[];
-}
-
-/**
- * 单场战斗详情存储行（idle_battle_batches 表的内部映射）
- * - `battle_log` 列现在存的是 `IdleBattleReplaySnapshot`，不是 battleLog 正文
- * - 仅供服务端详情查询和重放使用，不直接返回给前端
- */
-export interface IdleBattleStoredDetailRow extends IdleBattleSummaryRow {
-  randomSeed: number;
-  itemsGained: RewardItemEntry[];
-  battleReplaySnapshot: IdleBattleReplaySnapshot | null;
-  monsterIds: string[];
-}
-
-/**
  * 奖励物品条目
- * - 用于 IdleSessionRow.rewardItems 和 IdleBattleDetailRow.itemsGained
+ * - 用于 IdleSessionRow.rewardItems 与实时挂机收益推送
  * - itemDefId：物品定义 ID；itemName：展示名称（快照，防止物品改名后历史记录显示异常）
  */
 export interface RewardItemEntry {

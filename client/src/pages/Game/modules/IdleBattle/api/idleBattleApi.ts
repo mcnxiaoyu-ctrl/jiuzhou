@@ -25,8 +25,6 @@ import type {
   IdleStartResponse,
   IdleStatusResponse,
   IdleHistoryResponse,
-  IdleBatchesResponse,
-  IdleBatchDetailResponse,
   IdleProgressResponse,
   IdleConfigResponse,
   IdleConfigDto,
@@ -64,33 +62,9 @@ export const getIdleStatus = (
 ): Promise<IdleStatusResponse> =>
   unwrapData<IdleStatusResponse>(api.get("/idle/status", requestConfig));
 
-/** 查询历史记录（最近 3 条） */
 export const getIdleHistory = (): Promise<IdleHistoryResponse> =>
-  unwrapData<IdleHistoryResponse>(api.get("/idle/history"));
+  unwrapData<IdleHistoryResponse>(api.get('/idle/history'));
 
-/** 查询会话内战斗批次（回放） */
-export const getIdleBatches = (
-  sessionId: string,
-): Promise<IdleBatchesResponse> =>
-  unwrapData<IdleBatchesResponse>(
-    api.get(`/idle/history/${sessionId}/batches`),
-  );
-
-/** 查询单个战斗批次详情（回放日志） */
-export const getIdleBatchDetail = (
-  sessionId: string,
-  batchId: string,
-): Promise<IdleBatchDetailResponse> =>
-  unwrapData<IdleBatchDetailResponse>(
-    api.get(`/idle/history/${sessionId}/batches/${batchId}`),
-  );
-
-/** 标记会话已查看 */
-export const markIdleSessionViewed = (
-  sessionId: string,
-): Promise<ApiOkEnvelope> => api.post(`/idle/history/${sessionId}/viewed`);
-
-/** 断线补全（活跃会话 + 最新批次） */
 export const getIdleProgress = (): Promise<IdleProgressResponse> =>
   unwrapData<IdleProgressResponse>(api.get("/idle/progress"));
 

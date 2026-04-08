@@ -14,7 +14,7 @@ import {
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：按“每个角色仅保留最近 N 个已结束挂机会话”的规则清理 idle_sessions，控制历史体积增长。
- * 2. 做什么：依赖 idle_sessions -> idle_battle_batches 的级联删除，一并清理回放批次明细，避免批次表无限增长。
+ * 2. 做什么：仅围绕 idle_sessions 做会话级历史裁剪，避免挂机历史体积持续增长。
  * 3. 不做什么：不创建 setInterval，不管理线程生命周期；调度统一交给 cleanupWorker。
  *
  * 输入/输出：
@@ -23,7 +23,7 @@ import {
  *
  * 数据流/状态流：
  * cleanupWorker -> getScheduleConfig -> runCleanupOnce
- * -> advisory lock -> 分批 DELETE idle_sessions -> CASCADE 删除 idle_battle_batches -> 返回删除统计
+ * -> advisory lock -> 分批 DELETE idle_sessions -> 返回删除统计
  *
  * 关键边界条件与坑点：
  * 1. 多实例部署使用 pg_try_advisory_lock，避免多个实例并发清理同一批数据。

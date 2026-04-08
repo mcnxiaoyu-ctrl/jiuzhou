@@ -872,25 +872,6 @@ model generated_technique_layer {
   @@index([technique_id, layer], map: "idx_generated_technique_layer_technique")
 }
 
-model idle_battle_batches {
-  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  session_id    String        @db.Uuid
-  batch_index   Int
-  result        String        @db.VarChar(20)
-  round_count   Int           @default(0)
-  random_seed   BigInt
-  exp_gained    Int           @default(0)
-  silver_gained Int           @default(0)
-  items_gained  Json          @default("[]")
-  battle_log    Json          @default("[]")
-  monster_ids   String[]      @default([])
-  executed_at   DateTime      @default(now()) @db.Timestamptz(6)
-  idle_sessions idle_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([executed_at], map: "idx_idle_batches_executed_at")
-  @@index([session_id, batch_index], map: "idx_idle_batches_session")
-}
-
 model idle_configs {
   character_id          Int        @id
   map_id                String?    @db.VarChar(100)
@@ -923,7 +904,6 @@ model idle_sessions {
   viewed_at           DateTime?             @db.Timestamptz(6)
   created_at          DateTime              @default(now()) @db.Timestamptz(6)
   updated_at          DateTime              @default(now()) @db.Timestamptz(6)
-  idle_battle_batches idle_battle_batches[]
   characters          characters            @relation(fields: [character_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([character_id, started_at(sort: Desc)], map: "idx_idle_sessions_character_started")

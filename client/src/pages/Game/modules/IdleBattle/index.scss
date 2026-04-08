@@ -1,10 +1,3 @@
-/**
- * IdleBattleModule 模块级样式
- *
- * 复用点：idle-battle-tabs 统一控制 Tab 面板内间距，
- * 被 IdleBattlePanel 使用
- */
-
 .idle-battle-panel {
   display: flex;
   flex-direction: column;
@@ -13,24 +6,4 @@
 
 .idle-battle-error {
   border-radius: 8px;
-}
-
-// Tabs 样式覆盖
-.idle-battle-tabs {
-  .ant-tabs-nav {
-    margin-bottom: 0;
-
-    &::before {
-      border-bottom-color: var(--border-color-soft, #eee);
-    }
-  }
-
-  .ant-tabs-tab {
-    padding: 10px 4px;
-    font-size: 14px;
-  }
-
-  .ant-tabs-tabpane {
-    padding-top: 16px;
-  }
 }

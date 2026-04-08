@@ -2,7 +2,7 @@
  * IdleSessionService — 挂机会话生命周期管理
  *
  * 作用：
- *   管理 Idle_Session 的完整生命周期：启动、终止、查询、历史记录、回放数据。
+ *   管理 Idle_Session 的完整生命周期：启动、终止、查询与历史记录。
  *   不包含战斗执行逻辑（由 IdleBattleExecutor 负责）。
  *
  * 输入/输出：
@@ -11,8 +11,6 @@
  *   - getActiveIdleSession：查询当前活跃会话（用于断线续战）
  *   - getIdleHistory：最近 3 条历史记录（倒序）
  *   - markSessionViewed：标记会话已查看（幂等）
- *   - getSessionBatchSummaries：查询会话内所有 Battle_Batch 摘要（用于回放列表）
- *   - getSessionBatchDetail：查询单个 Battle_Batch 详情（用于回放日志）
  *
  * 数据流：
  *   客户端 → idleRoutes → startIdleSession → Redis 互斥锁 → DB 写入 → IdleBattleExecutor
@@ -36,17 +34,10 @@ import { partnerService } from '../partnerService.js';
 import type {
   IdleConfigDto,
   IdleSessionRow,
-  IdleBattleDetailRow,
-  IdleBattleSummaryRow,
   SessionSnapshot,
   RewardItemEntry,
 } from './types.js';
-import {
-  rowToIdleBattleStoredDetailRow,
-  rowToIdleBattleSummaryRow,
-  rowToIdleSessionRow,
-} from './rowMappers.js';
-import { replayIdleBattleLogs } from './idleBattleSimulationCore.js';
+import { rowToIdleSessionRow } from './rowMappers.js';
 import { getIdleExecutionLoopHeartbeatAt } from './idleExecutionRegistry.js';
 import {
   resolveOrphanStoppingSessionIds,
@@ -316,7 +307,7 @@ class IdleSessionService {
    */
   @Transactional
   async startIdleSession(params: StartIdleSessionParams): Promise<StartIdleSessionResult> {
-    const { characterId, userId, config } = params;
+    const { characterId, userId: _userId, config } = params;
 
     // 0. 组队中禁止挂机：查询 team_members 表判断角色是否在队伍中
     const teamCheck = await query(
@@ -596,80 +587,6 @@ class IdleSessionService {
        WHERE id = $1 AND character_id = $2 AND viewed_at IS NULL`,
       [sessionId, characterId]
     );
-  }
-
-  /**
-   * 查询会话内所有 Battle_Batch 摘要（用于回放左侧列表，按 batch_index 升序）
-   *
-   * 权限检查：通过 session_id + character_id 联查，防止越权访问。
-   */
-  async getSessionBatchSummaries(
-    sessionId: string,
-    characterId: number,
-  ): Promise<IdleBattleSummaryRow[]> {
-    const res = await query(
-      `SELECT
-         b.id,
-         b.session_id,
-         b.batch_index,
-         b.result,
-         b.round_count,
-         b.exp_gained,
-         b.silver_gained,
-         jsonb_array_length(b.items_gained) AS item_count,
-         b.executed_at
-       FROM idle_battle_batches b
-       JOIN idle_sessions s ON s.id = b.session_id
-       WHERE b.session_id = $1 AND s.character_id = $2
-       ORDER BY b.batch_index ASC`,
-      [sessionId, characterId],
-    );
-
-    return (res.rows as Record<string, unknown>[]).map(rowToIdleBattleSummaryRow);
-  }
-
-  /**
-   * 查询单个 Battle_Batch 详情（用于回放右侧日志面板）
-   *
-   * 权限检查：通过 session_id + character_id 联查，防止越权访问。
-   */
-  async getSessionBatchDetail(
-    sessionId: string,
-    characterId: number,
-    batchId: string,
-  ): Promise<IdleBattleDetailRow | null> {
-    const res = await query(
-      `SELECT
-         b.id,
-         b.session_id,
-         b.batch_index,
-         b.result,
-         b.round_count,
-         b.random_seed,
-         b.exp_gained,
-         b.silver_gained,
-         jsonb_array_length(b.items_gained) AS item_count,
-         b.items_gained,
-         b.battle_log,
-         b.monster_ids,
-         b.executed_at
-       FROM idle_battle_batches b
-       JOIN idle_sessions s ON s.id = b.session_id
-       WHERE b.session_id = $1
-         AND s.character_id = $2
-         AND b.id = $3
-       LIMIT 1`,
-      [sessionId, characterId, batchId],
-    );
-
-    if (res.rows.length === 0) return null;
-    const storedRow = rowToIdleBattleStoredDetailRow(
-      res.rows[0] as Record<string, unknown>,
-    );
-    return {
-      ...storedRow,
-      battleLog: replayIdleBattleLogs(storedRow.battleReplaySnapshot),
-    };
   }
 
   /**

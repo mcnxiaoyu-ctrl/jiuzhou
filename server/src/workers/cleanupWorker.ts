@@ -47,7 +47,7 @@ class CleanupWorker {
 
   private buildJobs(): CleanupJob[] {
     const dungeonExpiredInstanceCleanupSchedule = dungeonExpiredInstanceCleanupService.getScheduleConfig();
-    const idleBatchSchedule = idleBattleBatchCleanupService.getScheduleConfig();
+      const idleHistorySchedule = idleBattleBatchCleanupService.getScheduleConfig();
     const mailHistoryCleanupSchedule = mailHistoryCleanupService.getScheduleConfig();
 
     return [
@@ -70,10 +70,10 @@ class CleanupWorker {
         },
       },
       {
-        id: 'idle-batch-history-cleanup',
+        id: 'idle-history-cleanup',
         label: '挂机会话历史清理',
-        enabled: idleBatchSchedule.enabled,
-        intervalMs: idleBatchSchedule.intervalMs,
+        enabled: idleHistorySchedule.enabled,
+        intervalMs: idleHistorySchedule.intervalMs,
         run: async () => {
           await idleBattleBatchCleanupService.runCleanupOnce();
         },
@@ -121,7 +121,7 @@ class CleanupWorker {
 
     console.log(`[CleanupWorker] 启动，注册 ${this.jobs.length} 个清理任务`);
     for (const runtime of this.jobs) {
-      if (runtime.job.id === 'idle-batch-history-cleanup') {
+      if (runtime.job.id === 'idle-history-cleanup') {
         console.log(`[CleanupWorker] ${runtime.job.label}：${idleBattleBatchCleanupService.getConfigSummaryText()}`);
       } else if (runtime.job.id === 'dungeon-expired-instance-cleanup') {
         console.log(`[CleanupWorker] ${runtime.job.label}：${dungeonExpiredInstanceCleanupService.getConfigSummaryText()}`);

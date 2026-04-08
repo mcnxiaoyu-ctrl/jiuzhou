@@ -19,7 +19,7 @@
  *
  * 关键边界条件与坑点：
  *   1. 仅对 completed / interrupted 生效，active / stopping 会话绝不能进入历史裁剪集合。
- *   2. 这里定义的是“会话级历史”而不是“批次级历史”；批次删除依赖 idle_sessions 的级联删除完成。
+ *   2. 这里定义的是“会话级历史”，不再包含任何批次级历史保留语义。
  */
 
 export const IDLE_HISTORY_KEEP_SESSION_COUNT = 3;

@@ -23,24 +23,20 @@
  *   3. 进程退出时等待所有 Worker 任务完成后再关闭连接
  */
 
-import { randomUUID } from 'crypto';
 import { query, withTransactionAuto } from '../../config/database.js';
 import { BATTLE_TICK_MS, BATTLE_START_COOLDOWN_MS } from '../battle/index.js';
 import { getGameServer } from '../../game/gameServer.js';
 import { getMapDefById, getRoomInMap, isMapEnabled } from '../mapService.js';
 import { getCharacterUserId } from '../sect/db.js';
 import type {
-  IdleBattleReplaySnapshot,
   IdleBattleRewardSettlementPlan,
   IdleSessionRow,
-  RewardItemEntry,
 } from './types.js';
 import {
   buildIdleBattleRewardSettlementPlan,
   buildIdleRewardParticipant,
   settleIdleBattleRewardSettlementPlan,
 } from './idleBattleRewardResolver.js';
-import { toPgTextArrayLiteral } from './pgTextArrayLiteral.js';
 import { rowToIdleSessionRow } from './rowMappers.js';
 import { idleSessionService } from './idleSessionService.js';
 import type { IdleRoomMonsterSlot } from './idleBattleSimulationCore.js';
@@ -56,7 +52,6 @@ import {
   createIdleRewardWindowState,
   resetIdleRewardWindowDelta,
   shouldFlushIdleRewardWindow,
-  type IdleRewardWindowBatch,
   type IdleRewardWindowState,
 } from './idleRewardWindow.js';
 import {
@@ -69,7 +64,6 @@ import {
   logIdleFlushFailure,
   resolveIdleTerminationFlushDecision,
 } from './idleFlushControl.js';
-import { partitionIdleWorkerFlushBatches } from './idleWorkerFlushPartition.js';
 import { getWorkerPool } from '../../workers/workerPool.js';
 import { relocateCharacterOutOfDisabledMap } from '../mapDisabledRelocationService.js';
 
@@ -79,9 +73,7 @@ import { relocateCharacterOutOfDisabledMap } from '../mapDisabledRelocationServi
 
 type WorkerBatchResult = {
   result: 'attacker_win' | 'defender_win' | 'draw';
-  randomSeed: number;
   roundCount: number;
-  replaySnapshot: IdleBattleReplaySnapshot | null;
   monsterIds: string[];
 };
 
@@ -164,45 +156,10 @@ async function flushBuffer(
 
   try {
     const flushState = await withTransactionAuto(async () => {
-      const persistedBatchQueryResult = await query(
-        `SELECT id
-         FROM idle_battle_batches
-         WHERE id = ANY($1::uuid[])`,
-        [batches.map((batch) => batch.id)],
-      );
-      const persistedBatchIds = new Set(
-        (persistedBatchQueryResult.rows as Array<{ id: string }>).map((row) => String(row.id)),
-      );
-      const partition = partitionIdleWorkerFlushBatches(batches, persistedBatchIds);
-      let summarySeed: Pick<IdleSessionRow, 'rewardItems' | 'bagFullFlag'> = buffer.summaryState.snapshot;
-
-      if (partition.hasPersistedBatches) {
-        const latestSession = await idleSessionService.getIdleSessionById(session.id);
-        if (!latestSession) {
-          throw new Error(`挂机会话不存在，无法同步 flush 汇总基线: ${session.id}`);
-        }
-        summarySeed = latestSession;
-      }
-
-      const currentSummaryState = createIdleSessionSummaryState(summarySeed);
-      if (partition.pendingBatches.length === 0) {
-        return {
-          nextSummaryState: currentSummaryState,
-          flushedAt: Date.now(),
-        };
-      }
+      const currentSummaryState = createIdleSessionSummaryState(buffer.summaryState.snapshot);
 
       const participant = buildIdleRewardParticipant(session, userId);
-      const settledBatches: Array<
-        IdleRewardWindowBatch & {
-          expGained: number;
-          silverGained: number;
-          itemsGained: RewardItemEntry[];
-          bagFullFlag: boolean;
-        }
-      > = [];
-
-      for (const batch of partition.pendingBatches) {
+      for (const batch of batches) {
         const settledReward = await settleIdleBattleRewardSettlementPlan(
           participant,
           {
@@ -216,45 +173,9 @@ async function flushBuffer(
           ...settledReward,
           result: batch.result,
         });
-        settledBatches.push({
-          ...batch,
-          expGained: settledReward.expGained,
-          silverGained: settledReward.silverGained,
-          itemsGained: settledReward.itemsGained,
-          bagFullFlag: settledReward.bagFullFlag,
-        });
       }
 
       const summaryPayload = getIdleSessionSummaryFlushPayload(currentSummaryState);
-      const values = settledBatches
-        .map(
-          (b, i) =>
-            `($${i * 11 + 1}, $${i * 11 + 2}, $${i * 11 + 3}, $${i * 11 + 4}, $${i * 11 + 5}, $${i * 11 + 6}, $${i * 11 + 7}, $${i * 11 + 8}, $${i * 11 + 9}, $${i * 11 + 10}, $${i * 11 + 11}, NOW())`,
-        )
-        .join(', ');
-      const params = settledBatches.flatMap((b) => [
-        b.id,
-        b.sessionId,
-        b.batchIndex,
-        b.result,
-        b.roundCount,
-        b.randomSeed,
-        b.expGained,
-        b.silverGained,
-        JSON.stringify(b.replaySnapshot),
-        JSON.stringify(b.itemsGained),
-        toPgTextArrayLiteral(b.monsterIds),
-      ]);
-
-      await query(
-        `INSERT INTO idle_battle_batches (
-          id, session_id, batch_index, result, round_count, random_seed,
-          exp_gained, silver_gained, battle_log, items_gained, monster_ids, executed_at
-        )
-         VALUES ${values}`,
-        params,
-      );
-
       await idleSessionService.updateSessionSummary(
         session.id,
         summaryPayload.delta,
@@ -465,18 +386,12 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
 
       // 4. 追加结果到缓冲区
       appendIdleRewardWindowBatch(buffer.rewardWindow, {
-        id: randomUUID(),
-        sessionId: session.id,
-        batchIndex,
         result: batchResult.result,
         roundCount: batchResult.roundCount,
-        randomSeed: batchResult.randomSeed,
         expGained: batchResult.rewardPlan.expGained,
         silverGained: batchResult.rewardPlan.silverGained,
         previewItems: batchResult.rewardPlan.previewItems,
         dropPlans: batchResult.rewardPlan.dropPlans,
-        replaySnapshot: batchResult.replaySnapshot,
-        monsterIds: batchResult.monsterIds,
       });
       batchIndex++;
 

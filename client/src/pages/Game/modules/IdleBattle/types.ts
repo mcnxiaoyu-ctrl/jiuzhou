@@ -8,17 +8,15 @@
  *
  * 输入/输出：
  *   - 被 idleBattleApi、useIdleBattle Hook、UI 组件导入
- *   - 与服务端 IdleSessionRow、IdleBattleSummaryRow、IdleBattleDetailRow、IdleConfigDto 字段对齐
+ *   - 与服务端 IdleSessionRow、IdleConfigDto 字段对齐
  *
  * 数据流：
  *   服务端 JSON → idleBattleApi 解析 → 这里的 DTO 类型 → useIdleBattle → UI 组件
  *
  * 关键边界条件：
  *   1. status 为联合字面量，UI 层必须先检查 status 再决定展示逻辑
- *   2. viewedAt 为 null 表示玩家尚未查看本次挂机结果，用于触发回放弹窗
+ *   2. viewedAt 为 null 表示玩家尚未查看本次挂机结果，供会话级已读状态复用
  */
-
-import type { BattleLogEntryDto } from "../../../../services/api/combat-realm";
 
 // ============================================
 // 挂机配置（客户端视图）
@@ -96,40 +94,6 @@ export interface IdleSessionDto {
 }
 
 // ============================================
-// 单场战斗记录（客户端视图）
-// ============================================
-
-/**
- * 单场战斗批次摘要 DTO（GET /api/idle/history/:id/batches 响应体）
- * - 仅包含左侧列表渲染所需字段，不携带完整 battleLog
- * - itemCount 由服务端聚合，避免前端为显示“物品×N”读取整段奖励 JSON
- */
-export interface IdleBatchSummaryDto {
-  id: string;
-  sessionId: string;
-  batchIndex: number;
-  result: "attacker_win" | "defender_win" | "draw";
-  roundCount: number;
-  expGained: number;
-  silverGained: number;
-  itemCount: number;
-  executedAt: string; // ISO 8601 字符串
-}
-
-/**
- * 单场战斗批次详情 DTO（GET /api/idle/history/:id/batches/:batchId 响应体）
- * - 仅在玩家选中某个批次后加载，右侧日志面板使用
- * - battleLog 复用 BattleLogEntryDto，与在线战斗日志格式一致
- * - 日志由服务端根据重放快照现场生成，不是数据库里直接存的整场正文
- */
-export interface IdleBatchDetailDto extends IdleBatchSummaryDto {
-  randomSeed: number;
-  itemsGained: RewardItemEntryDto[];
-  battleLog: BattleLogEntryDto[];
-  monsterIds: string[];
-}
-
-// ============================================
 // API 响应数据类型（已在 API 层解包 data）
 // ============================================
 
@@ -146,17 +110,8 @@ export interface IdleHistoryResponse {
   history: IdleSessionDto[];
 }
 
-export interface IdleBatchesResponse {
-  batches: IdleBatchSummaryDto[];
-}
-
-export interface IdleBatchDetailResponse {
-  batch: IdleBatchDetailDto | null;
-}
-
 export interface IdleProgressResponse {
   session: IdleSessionDto | null;
-  batches: IdleBatchSummaryDto[];
 }
 
 export interface IdleConfigResponse {

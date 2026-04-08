@@ -214,7 +214,7 @@ export interface IdleUpdatePayload {
  */
 export interface IdleFinishedPayload {
   sessionId: string;
-  reason: "duration_exceeded" | "user_stopped" | "session_not_found";
+  reason: string;
 }
 
 type IdleUpdateListener = (data: IdleUpdatePayload) => void;

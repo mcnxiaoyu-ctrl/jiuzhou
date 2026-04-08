@@ -24,7 +24,6 @@
  */
 
 import type {
-  IdleBattleReplaySnapshot,
   IdleBattleRewardSettlementPlan,
   IdleRewardPlanDropEntry,
   RewardItemEntry,
@@ -32,14 +31,8 @@ import type {
 import { mergeRewardItems } from './idleSessionSummary.js';
 
 export interface IdleRewardWindowBatch {
-  id: string;
-  sessionId: string;
-  batchIndex: number;
   result: 'attacker_win' | 'defender_win' | 'draw';
   roundCount: number;
-  randomSeed: number;
-  replaySnapshot: IdleBattleReplaySnapshot | null;
-  monsterIds: string[];
   expGained: number;
   silverGained: number;
   previewItems: RewardItemEntry[];
@@ -114,7 +107,6 @@ export const getIdleRewardWindowFlushPayload = (
           ? { qualityWeights: { ...dropPlan.qualityWeights } }
           : {}),
       })),
-      monsterIds: [...batch.monsterIds],
     })),
     windowRewardPlan: {
       expGained,
