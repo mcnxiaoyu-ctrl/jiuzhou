@@ -24,6 +24,7 @@ type MailAttachmentPreviewItem = {
 
 export type MailInstanceAttachmentPreviewItem = {
   itemDefId: string;
+  itemName?: string;
   quantity: number;
 };
 
@@ -54,10 +55,15 @@ const normalizeInstanceAttachmentItems = (
   for (const item of items) {
     const itemDefId = String(item.itemDefId || '').trim();
     const quantity = Math.max(0, Math.floor(Number(item.quantity) || 0));
+    const itemName = String(item.itemName || '').trim();
     if (!itemDefId || quantity <= 0) {
       continue;
     }
-    normalized.push({ itemDefId, quantity });
+    normalized.push({
+      itemDefId,
+      quantity,
+      ...(itemName ? { itemName } : {}),
+    });
   }
   return normalized;
 };

@@ -47,6 +47,8 @@ const createMailDto = (overrides?: Partial<MailDto>): MailDto => ({
   attachSpiritStones: 0,
   attachItems: [],
   attachRewards: [{ type: 'silver', amount: 100 }],
+  hasAttachments: true,
+  hasClaimableAttachments: true,
   readAt: null,
   claimedAt: null,
   expireAt: null,
@@ -118,6 +120,31 @@ describe('runMailBatchClaim', () => {
         spiritStones: 0,
       },
       shouldRefreshCharacter: false,
+    });
+  });
+
+  it('单封领取返回失败时不应误计为成功领取', async () => {
+    vi.mocked(claimMailAttachments).mockResolvedValue({
+      success: false,
+      message: '邮件附件状态异常',
+    });
+
+    const result = await runMailBatchClaim({
+      initialUnclaimedCount: 1,
+      autoDisassemble: false,
+      signal: new AbortController().signal,
+    });
+
+    expect(result).toEqual({
+      status: 'failed',
+      claimedCount: 0,
+      processedCount: 0,
+      currencyDelta: {
+        silver: 0,
+        spiritStones: 0,
+      },
+      shouldRefreshCharacter: false,
+      errorMessage: '邮件附件状态异常',
     });
   });
 });

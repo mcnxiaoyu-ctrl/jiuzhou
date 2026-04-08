@@ -247,6 +247,8 @@ export interface MailDto {
   attachSpiritStones: number;
   attachItems: MailAttachItem[];
   attachRewards: GrantedRewardResultDto[];
+  hasAttachments: boolean;
+  hasClaimableAttachments: boolean;
   readAt: string | null;
   claimedAt: string | null;
   expireAt: string | null;

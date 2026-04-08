@@ -53,10 +53,10 @@ interface MailModalProps {
 const isMailRead = (mail: MailDto): boolean => !!mail.readAt;
 
 const hasAttachments = (mail: MailDto): boolean =>
-  mail.attachRewards.length > 0;
+  mail.hasAttachments;
 
 const hasUnclaimedAttachments = (mail: MailDto): boolean =>
-  !mail.claimedAt && hasAttachments(mail);
+  mail.hasClaimableAttachments;
 
 const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
   const { message, modal } = App.useApp();
@@ -85,10 +85,11 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
         const res = await getMailList(1, 100);
         if (res.success && res.data) {
           const nextMails = res.data.mails;
+          const nextClaimableCount = nextMails.filter((mail) => mail.hasClaimableAttachments).length;
 
           setMails(nextMails);
           setUnreadCount(res.data.unreadCount);
-          setUnclaimedCount(res.data.unclaimedCount);
+          setUnclaimedCount(nextClaimableCount);
 
           // 自动选中邮件（支持打开弹窗时重置为首封）
           setActiveId((prev) => {
@@ -197,6 +198,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
             m.id === id
               ? {
                   ...m,
+                  hasClaimableAttachments: false,
                   claimedAt: new Date().toISOString(),
                   readAt: m.readAt ?? new Date().toISOString(),
                 }
@@ -492,6 +494,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
                 const isUnread = !isMailRead(m);
                 const hasGift = hasAttachments(m);
                 const giftClaimed = hasGift && !!m.claimedAt;
+                const giftAbnormal = hasGift && !giftClaimed && !hasUnclaimedAttachments(m);
                 return (
                   <div
                     key={m.id}
@@ -516,8 +519,8 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
                       <span className="mail-from">{m.senderName}</span>
                       <span className="mail-tags">
                         {hasGift ? (
-                          <Tag color={giftClaimed ? "default" : "gold"}>
-                            {giftClaimed ? "已领取" : "有附件"}
+                          <Tag color={giftClaimed ? "default" : giftAbnormal ? "red" : "gold"}>
+                            {giftClaimed ? "已领取" : giftAbnormal ? "附件异常" : "有附件"}
                           </Tag>
                         ) : (
                           <Tag color="default">无附件</Tag>
@@ -599,13 +602,17 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
                       <span>附件</span>
                     </div>
                     {hasAttachments(activeMail) ? (
-                      <div className="mail-attachments-list">
-                        {formatGrantedRewardTexts(activeMail.attachRewards).map((text, idx) => (
-                          <div key={`${activeMail.id}-${idx}`} className="mail-attachment">
-                            <span className="mail-attachment-name">{text}</span>
-                          </div>
-                        ))}
-                      </div>
+                      formatGrantedRewardTexts(activeMail.attachRewards).length > 0 ? (
+                        <div className="mail-attachments-list">
+                          {formatGrantedRewardTexts(activeMail.attachRewards).map((text, idx) => (
+                            <div key={`${activeMail.id}-${idx}`} className="mail-attachment">
+                              <span className="mail-attachment-name">{text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mail-attachments-empty">附件状态异常，请刷新后重试</div>
+                      )
                     ) : (
                       <div className="mail-attachments-empty">无附件</div>
                     )}
@@ -614,7 +621,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
                     type="primary"
                     icon={<GiftOutlined />}
                     disabled={
-                      !hasAttachments(activeMail) || !!activeMail.claimedAt
+                      !hasUnclaimedAttachments(activeMail) || !!activeMail.claimedAt
                     }
                     loading={claiming}
                     onClick={() => claimAttachments(activeMail.id)}
@@ -623,6 +630,8 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
                       ? "无可领取"
                       : activeMail.claimedAt
                         ? "已领取"
+                        : !hasUnclaimedAttachments(activeMail)
+                          ? "附件异常"
                         : "领取附件"}
                   </Button>
                 </div>

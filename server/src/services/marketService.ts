@@ -778,6 +778,8 @@ class MarketService {
     if (String(item.location) !== "auction") {
       return { success: false, message: "物品不在坊市中，无法下架" };
     }
+    const itemDefId = String(item.item_def_id || '');
+    const itemName = String(getItemDefinitionById(itemDefId)?.name || itemDefId);
 
     await bufferCharacterItemInstanceMutations([
       {
@@ -828,6 +830,13 @@ class MarketService {
       metadata: {
         listingId,
         action: "cancel",
+        attachmentPreviewItems: [
+          {
+            itemDefId,
+            itemName,
+            quantity: Math.max(1, Math.floor(Number(item.qty) || 1)),
+          },
+        ],
       },
     });
     if (!mailResult.success) {
@@ -1098,19 +1107,19 @@ class MarketService {
       mailType: "trade",
       title: mailTitle,
       content: mailContent,
-      attachItems: [
-        {
-          item_def_id: itemDefId,
-          item_name: itemName,
-          qty: buyQty,
-        },
-      ],
       attachInstanceIds: [deliveredItemInstanceId],
       expireDays: 30,
       source: "market",
       sourceRefId: String(listingId),
       metadata: {
         listingId,
+        attachmentPreviewItems: [
+          {
+            itemDefId,
+            itemName,
+            quantity: buyQty,
+          },
+        ],
       },
     });
     if (!mailResult.success) {

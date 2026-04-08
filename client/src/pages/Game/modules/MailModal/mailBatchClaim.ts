@@ -60,7 +60,7 @@ export interface RunMailBatchClaimArgs {
 }
 
 const hasUnclaimedAttachments = (mail: MailDto): boolean => {
-  return !mail.claimedAt && mail.attachRewards.length > 0;
+  return mail.hasClaimableAttachments;
 };
 
 const buildBatchRequestConfig = (signal: AbortSignal): AxiosRequestConfig => {
@@ -139,6 +139,16 @@ export const runMailBatchClaim = async (
         claimRequestInFlight = true;
         const claimRes = await claimMailAttachments(mail.id, args.autoDisassemble, requestConfig);
         claimRequestInFlight = false;
+        if (!claimRes.success) {
+          return {
+            status: 'failed',
+            claimedCount,
+            processedCount,
+            currencyDelta,
+            shouldRefreshCharacter: false,
+            errorMessage: claimRes.message || '领取失败',
+          };
+        }
         claimedCount += 1;
         processedCount += 1;
         currencyDelta = mergeMailClaimCurrencyDelta(
