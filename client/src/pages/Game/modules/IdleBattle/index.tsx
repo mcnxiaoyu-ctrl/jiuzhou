@@ -3,7 +3,7 @@
  *
  * 作用：
  *   组合 useIdleBattle Hook 与所有 UI 子组件，对外暴露两个接口：
- *     1. IdleBattlePanel：完整的挂机面板（仅保留配置）
+ *     1. IdleBattlePanel：完整的挂机面板（配置 / 历史双标签页）
  *     2. IdleBattleStatusBar：嵌入 game-header 的状态指示器
  *   不包含任何业务逻辑，所有状态由 useIdleBattle 统一管理。
  *
@@ -14,7 +14,7 @@
  *     - onOpenPanel: 点击指示器时打开面板的回调
  *
  * 数据流：
- *   useIdleBattle（单例 Hook）→ 分发给 IdleConfigPanel / IdleStatusIndicator
+ *   useIdleBattle（单例 Hook）→ 分发给 IdleConfigPanel / IdleHistoryList / IdleStatusIndicator
  *
  * 关键边界条件：
  *   1. IdleBattlePanel 和 IdleBattleStatusBar 共享同一个 useIdleBattle 实例，
@@ -22,12 +22,12 @@
  *   2. 面板只保留会话级配置与状态，不再承载历史回放逻辑
  */
 
-import React, { useEffect } from 'react';
-import { Alert } from 'antd';
+import React, { useEffect, useMemo } from 'react';
+import { Alert, Tabs } from 'antd';
 import { useIdleBattle, type UseIdleBattleReturn } from './hooks/useIdleBattle';
 import IdleConfigPanel from './components/IdleConfigPanel';
 import IdleStatusIndicator from './components/IdleStatusIndicator';
-import IdleSessionSummaryList from './components/IdleSessionSummaryList';
+import IdleHistoryList from './components/IdleHistoryList';
 import './index.scss';
 
 // ============================================
@@ -46,7 +46,7 @@ interface IdleBattlePanelProps {
 }
 
 /**
- * 完整挂机面板：仅保留配置区
+ * 完整挂机面板：保留配置 / 历史双标签页
  * 由父组件传入 idle（useIdleBattle 返回值），避免重复创建 Hook 实例
  */
 export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle }) => {
@@ -73,6 +73,53 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle }) => {
     void loadHistory();
   }, [loadHistory, refreshConfig]);
 
+  const tabItems = useMemo<NonNullable<Parameters<typeof Tabs>[0]['items']>>(() => [
+    {
+      key: 'config',
+      label: '挂机配置',
+      children: (
+        <div className="idle-battle-tab-pane">
+          <IdleConfigPanel
+            config={config}
+            maxDurationLimitMs={maxDurationLimitMs}
+            monthCardActive={monthCardActive}
+            isActive={activeSession !== null && !isStopping}
+            isStopping={isStopping}
+            isLoading={isLoading}
+            onConfigChange={setConfig}
+            onStart={startIdle}
+            onStop={stopIdle}
+            onSave={saveConfig}
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'history',
+      label: '挂机历史',
+      children: (
+          <IdleHistoryList
+            history={history}
+            isLoading={isLoading}
+            onRefresh={loadHistory}
+          />
+        ),
+      },
+  ], [
+    activeSession,
+    config,
+    history,
+    isLoading,
+    isStopping,
+    loadHistory,
+    maxDurationLimitMs,
+    monthCardActive,
+    saveConfig,
+    setConfig,
+    startIdle,
+    stopIdle,
+  ]);
+
   return (
     <div className="idle-battle-panel">
       {/* 错误提示 */}
@@ -86,23 +133,10 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle }) => {
         />
       )}
 
-      <IdleConfigPanel
-        config={config}
-        maxDurationLimitMs={maxDurationLimitMs}
-        monthCardActive={monthCardActive}
-        isActive={activeSession !== null && !isStopping}
-        isStopping={isStopping}
-        isLoading={isLoading}
-        onConfigChange={setConfig}
-        onStart={startIdle}
-        onStop={stopIdle}
-        onSave={saveConfig}
-      />
-
-      <IdleSessionSummaryList
-        history={history}
-        isLoading={isLoading}
-        onRefresh={loadHistory}
+      <Tabs
+        className="idle-battle-tabs"
+        defaultActiveKey="config"
+        items={tabItems}
       />
     </div>
   );

@@ -2,8 +2,87 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 .idle-battle-error {
   border-radius: 8px;
+}
+
+.idle-battle-tabs {
+  min-width: 0;
+
+  > .ant-tabs-nav {
+    margin: 0 0 12px;
+  }
+
+  > .ant-tabs-nav::before {
+    border-bottom-color: var(--border-color-soft);
+  }
+
+  .ant-tabs-nav-list {
+    gap: 24px;
+  }
+
+  .ant-tabs-tab {
+    margin: 0;
+    padding: 8px 0;
+  }
+
+  .ant-tabs-tab-btn {
+    color: var(--text-tertiary);
+    font-size: 14px;
+    font-weight: var(--font-weight-section, 600);
+    transition: color 0.15s ease;
+  }
+
+  .ant-tabs-tab:hover .ant-tabs-tab-btn,
+  .ant-tabs-tab-btn:focus-visible {
+    color: var(--text-color);
+  }
+
+  .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+    color: var(--primary-color);
+  }
+
+  .ant-tabs-ink-bar {
+    background: var(--primary-color);
+  }
+
+  .ant-tabs-content-holder {
+    min-width: 0;
+  }
+}
+
+.idle-battle-tab-pane {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-color-soft);
+  border-radius: 14px;
+  background: var(--panel-bg);
+}
+
+@media (max-width: 768px) {
+  .idle-battle-tabs {
+    > .ant-tabs-nav {
+      margin-bottom: 10px;
+    }
+
+    .ant-tabs-nav-list {
+      gap: 16px;
+    }
+
+    .ant-tabs-tab {
+      padding: 6px 0;
+    }
+
+    .ant-tabs-tab-btn {
+      font-size: 13px;
+    }
+  }
+
+  .idle-battle-tab-pane {
+    padding: 12px;
+    border-radius: 12px;
+  }
 }
