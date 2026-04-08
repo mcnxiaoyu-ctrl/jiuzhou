@@ -84,7 +84,7 @@ test('ensurePerformanceIndexes 应保证热点性能索引存在', async () => {
   );
   const mailCounterIndexDef = mailCounterIndexResult.rows[0]?.indexdef ?? '';
   assert.match(mailCounterIndexDef, /COALESCE\(expire_at, 'infinity'::timestamp with time zone\)/i);
-  assert.match(mailCounterIndexDef, /INCLUDE \(read_at, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids\)/i);
+  assert.match(mailCounterIndexDef, /INCLUDE \(read_at, claimed_at, attach_silver, attach_spirit_stones\)/i);
   assert.match(mailCounterIndexDef, /deleted_at IS NULL/i);
 
   const itemStackIndexResult = await query<{ indexdef: string }>(

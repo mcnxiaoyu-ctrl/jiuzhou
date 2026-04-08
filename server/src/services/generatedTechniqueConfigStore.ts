@@ -121,13 +121,11 @@ const isUndefinedTableError = (error: unknown): boolean => {
  * 1) 先用 `published_technique_ids` 物化已发布功法 ID，避免后续重复扫整行定义；
  * 2) 再用 `ordered_skill_keys` 只按 `id / sort_weight / source_id` 这类窄列完成过滤与排序，
  *    把原本对宽 JSON 行的外部排序收敛成窄键排序；
- * 3) 最后通过 `JOIN LATERAL` 按有序键逐条回表取完整技能定义，避免宽行 `Hash Join`
- *    打散顺序后再对完整结果做一次全量排序，同时保持返回字段与顺序不变。
+ * 3) 最后按主键回表取完整技能定义，保持结果字段与顺序不变。
  *
  * 边界条件：
  * 1) 这里不改变业务可见范围，仍然只读取 `d.is_published = true AND d.enabled = true AND s.enabled = true`。
  * 2) `MATERIALIZED` 不能删除，否则 PostgreSQL 可能重新内联成宽行排序，优化会失效。
- * 3) `JOIN LATERAL` 依赖 `generated_skill_def.id` 的主键/唯一索引逐条定位；这里只改变执行形状，不改变筛选口径。
  */
 const LOAD_PUBLISHED_GENERATED_SKILLS_SQL = `
   WITH published_technique_ids AS MATERIALIZED (
@@ -144,62 +142,33 @@ const LOAD_PUBLISHED_GENERATED_SKILLS_SQL = `
     ORDER BY s.sort_weight DESC, s.id ASC
   )
   SELECT
-    skill_row.id,
-    skill_row.code,
-    skill_row.name,
-    skill_row.description,
-    skill_row.icon,
-    skill_row.source_type,
-    skill_row.source_id,
-    skill_row.cost_lingqi,
-    skill_row.cost_lingqi_rate,
-    skill_row.cost_qixue,
-    skill_row.cost_qixue_rate,
-    skill_row.cooldown,
-    skill_row.target_type,
-    skill_row.target_count,
-    skill_row.damage_type,
-    skill_row.element,
-    skill_row.effects,
-    skill_row.trigger_type,
-    skill_row.conditions,
-    skill_row.ai_priority,
-    skill_row.ai_conditions,
-    skill_row.upgrades,
-    skill_row.sort_weight,
-    skill_row.version,
-    skill_row.enabled
+    s.id,
+    s.code,
+    s.name,
+    s.description,
+    s.icon,
+    s.source_type,
+    s.source_id,
+    s.cost_lingqi,
+    s.cost_lingqi_rate,
+    s.cost_qixue,
+    s.cost_qixue_rate,
+    s.cooldown,
+    s.target_type,
+    s.target_count,
+    s.damage_type,
+    s.element,
+    s.effects,
+    s.trigger_type,
+    s.conditions,
+    s.ai_priority,
+    s.ai_conditions,
+    s.upgrades,
+    s.sort_weight,
+    s.version,
+    s.enabled
   FROM ordered_skill_keys k
-  JOIN LATERAL (
-    SELECT
-      s.id,
-      s.code,
-      s.name,
-      s.description,
-      s.icon,
-      s.source_type,
-      s.source_id,
-      s.cost_lingqi,
-      s.cost_lingqi_rate,
-      s.cost_qixue,
-      s.cost_qixue_rate,
-      s.cooldown,
-      s.target_type,
-      s.target_count,
-      s.damage_type,
-      s.element,
-      s.effects,
-      s.trigger_type,
-      s.conditions,
-      s.ai_priority,
-      s.ai_conditions,
-      s.upgrades,
-      s.sort_weight,
-      s.version,
-      s.enabled
-    FROM generated_skill_def s
-    WHERE s.id = k.id
-  ) AS skill_row ON true
+  JOIN generated_skill_def s ON s.id = k.id
   ORDER BY k.sort_weight DESC, k.id ASC
 `;
 

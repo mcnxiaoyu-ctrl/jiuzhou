@@ -84,17 +84,14 @@ const PERFORMANCE_INDEX_DEFINITIONS: PerformanceIndexDefinition[] = [
         read_at,
         claimed_at,
         attach_silver,
-        attach_spirit_stones,
-        attach_items,
-        attach_rewards,
-        attach_instance_ids
+        attach_spirit_stones
       )
       WHERE deleted_at IS NULL
     `,
     matchFragments: [
       'recipient_character_id',
       "COALESCE(expire_at, 'infinity'::timestamp with time zone)",
-      'INCLUDE (read_at, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids)',
+      'INCLUDE (read_at, claimed_at, attach_silver, attach_spirit_stones)',
       'deleted_at IS NULL',
     ],
   },
@@ -132,10 +129,7 @@ const PERFORMANCE_INDEX_DEFINITIONS: PerformanceIndexDefinition[] = [
         read_at,
         claimed_at,
         attach_silver,
-        attach_spirit_stones,
-        attach_items,
-        attach_rewards,
-        attach_instance_ids
+        attach_spirit_stones
       )
       WHERE deleted_at IS NULL
         AND recipient_character_id IS NULL
@@ -143,7 +137,7 @@ const PERFORMANCE_INDEX_DEFINITIONS: PerformanceIndexDefinition[] = [
     matchFragments: [
       'recipient_user_id',
       "COALESCE(expire_at, 'infinity'::timestamp with time zone)",
-      'INCLUDE (read_at, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids)',
+      'INCLUDE (read_at, claimed_at, attach_silver, attach_spirit_stones)',
       'deleted_at IS NULL',
       'recipient_character_id IS NULL',
     ],
