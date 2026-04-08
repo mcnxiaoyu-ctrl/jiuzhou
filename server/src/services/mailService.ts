@@ -62,6 +62,7 @@ import {
   buildMailAttachmentPreviewRewards,
   type MailInstanceAttachmentPreviewItem,
 } from './shared/mailAttachmentPreview.js';
+import { resolveRewardItemDisplayMetaMap } from './shared/rewardDisplay.js';
 
 // ============================================
 // 类型定义
@@ -79,6 +80,25 @@ export interface MailAttachItem {
     equipOptions?: any;
   };
 }
+
+const resolveMailClaimRewardItemName = (
+  itemDefId: string,
+  preferredName: string | null | undefined,
+  itemDisplayMetaById: ReadonlyMap<string, { name: string }>,
+): string | undefined => {
+  const normalizedPreferredName = typeof preferredName === 'string' ? preferredName.trim() : '';
+  if (normalizedPreferredName) {
+    return normalizedPreferredName;
+  }
+
+  const normalizedItemDefId = String(itemDefId || '').trim();
+  if (!normalizedItemDefId) {
+    return undefined;
+  }
+
+  const normalizedResolvedName = itemDisplayMetaById.get(normalizedItemDefId)?.name.trim() || '';
+  return normalizedResolvedName || undefined;
+};
 
 export interface SendMailOptions {
   recipientUserId: number;
@@ -1957,6 +1977,11 @@ class MailService {
       }
     }
 
+    const rewardItemDisplayMetaById = resolveRewardItemDisplayMetaMap([
+      ...lockedInstanceRows.map((row) => String(row.item_def_id || '').trim()),
+      ...effectiveAttachItems.map((attachItem) => String(attachItem.item_def_id || '').trim()),
+    ]);
+
     let rewards: RewardResult[] = [];
     let claimedInstanceIds: number[] = [];
     const autoDisassembleSetting = await this.getMailClaimAutoDisassembleSetting(
@@ -2009,6 +2034,7 @@ class MailService {
             type: 'item',
             itemDefId: key,
             quantity: qty,
+            itemName: resolveMailClaimRewardItemName(key, undefined, rewardItemDisplayMetaById),
           });
         }
       } else {
@@ -2031,7 +2057,12 @@ class MailService {
               qty: Math.max(1, Math.floor(Number(attachItem.qty) || 1)),
               bindType: attachItem.options?.bindType,
               itemMeta: {
-                itemName: String(attachItem.item_name || '').trim() || itemDefId,
+                itemName:
+                  resolveMailClaimRewardItemName(
+                    itemDefId,
+                    attachItem.item_name,
+                    rewardItemDisplayMetaById,
+                  ) || itemDefId,
                 category: String(itemDef?.category || ''),
                 subCategory: typeof itemDef?.sub_category === 'string' ? itemDef.sub_category : null,
                 effectDefs: itemDef?.effect_defs,
@@ -2075,10 +2106,11 @@ class MailService {
                 type: 'item',
                 itemDefId: grantedItem.itemDefId,
                 quantity: grantedItem.qty,
-                itemName:
-                  typeof attachItemDefs.get(grantedItem.itemDefId)?.name === 'string'
-                    ? String(attachItemDefs.get(grantedItem.itemDefId)?.name).trim() || undefined
-                    : undefined,
+                itemName: resolveMailClaimRewardItemName(
+                  grantedItem.itemDefId,
+                  undefined,
+                  rewardItemDisplayMetaById,
+                ),
               });
             }
             if (autoDisassembleResult.gainedSilver > 0) {
@@ -2113,7 +2145,11 @@ class MailService {
             type: 'item',
             itemDefId: key,
             quantity: Math.max(1, Math.floor(Number(attachItem.qty) || 1)),
-            itemName: String(attachItem.item_name || '').trim() || undefined,
+            itemName: resolveMailClaimRewardItemName(
+              key,
+              attachItem.item_name,
+              rewardItemDisplayMetaById,
+            ),
           });
         }
       }
