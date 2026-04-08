@@ -27,7 +27,6 @@ import { grantSectionRewards } from './mainQuest/grantRewards.js';
 import type { RewardResult } from './mainQuest/types.js';
 import {
   buildGrantRewardsInput,
-  buildGrantedRewardPreview,
   hasGrantedRewardPayload,
   normalizeGrantedRewardPayload,
   type GrantedRewardPayload,
@@ -54,9 +53,14 @@ import {
 } from './shared/mailCounterStore.js';
 import { enqueueCharacterItemGrant } from './shared/characterItemGrantDeltaService.js';
 import {
+  loadProjectedCharacterItemInstances,
   loadProjectedCharacterItemInstanceById,
   loadProjectedCharacterItemInstancesByLocation,
 } from './shared/characterItemInstanceMutationService.js';
+import {
+  buildMailAttachmentPreviewRewards,
+  type MailInstanceAttachmentPreviewItem,
+} from './shared/mailAttachmentPreview.js';
 
 // ============================================
 // 类型定义
@@ -245,40 +249,6 @@ type MailUnreadPushState = {
 
 const mailExpireCleanupState = new Map<string, MailExpireCleanupState>();
 const mailUnreadPushState = new Map<number, MailUnreadPushState>();
-
-const buildLegacyMailRewardPayload = (input: {
-  attachSilver: number;
-  attachSpiritStones: number;
-  attachItems: MailAttachItem[];
-}): GrantedRewardPayload => {
-  return normalizeGrantedRewardPayload({
-    silver: Math.max(0, Math.floor(Number(input.attachSilver) || 0)),
-    spiritStones: Math.max(0, Math.floor(Number(input.attachSpiritStones) || 0)),
-    items: input.attachItems.map((item) => ({
-      itemDefId: String(item.item_def_id || '').trim(),
-      quantity: Math.max(0, Math.floor(Number(item.qty) || 0)),
-    })),
-  });
-};
-
-const buildMailPreviewRewards = (input: {
-  attachSilver: number;
-  attachSpiritStones: number;
-  attachItems: MailAttachItem[];
-  attachRewardsRaw: unknown;
-}): GrantedRewardPreviewResult[] => {
-  const normalizedAttachRewards = normalizeGrantedRewardPayload(input.attachRewardsRaw);
-  if (hasGrantedRewardPayload(normalizedAttachRewards)) {
-    return buildGrantedRewardPreview(normalizedAttachRewards);
-  }
-  return buildGrantedRewardPreview(
-    buildLegacyMailRewardPayload({
-      attachSilver: input.attachSilver,
-      attachSpiritStones: input.attachSpiritStones,
-      attachItems: input.attachItems,
-    }),
-  );
-};
 
 const buildMailUnreadCacheKey = (userId: number, characterId: number): string => {
   return `${userId}:${characterId}`;
@@ -1615,7 +1585,33 @@ class MailService {
         ),
       ]);
 
-      const mails: MailDto[] = result.rows.map(row => ({
+      const normalizedAttachItemsList = result.rows.map((row) => this.normalizeAttachItems(row.attach_items));
+      const normalizedAttachInstanceIdList = result.rows.map((row) => this.normalizeAttachInstanceIds(row.attach_instance_ids));
+      const attachInstanceIdSet = new Set<number>();
+      for (const attachInstanceIds of normalizedAttachInstanceIdList) {
+        for (const attachInstanceId of attachInstanceIds) {
+          attachInstanceIdSet.add(attachInstanceId);
+        }
+      }
+
+      const instancePreviewById = new Map<number, MailInstanceAttachmentPreviewItem>();
+      if (attachInstanceIdSet.size > 0) {
+        const projectedItems = await loadProjectedCharacterItemInstances(characterId);
+        for (const projectedItem of projectedItems) {
+          if (!attachInstanceIdSet.has(projectedItem.id)) {
+            continue;
+          }
+          if (projectedItem.location !== 'mail') {
+            continue;
+          }
+          instancePreviewById.set(projectedItem.id, {
+            itemDefId: String(projectedItem.item_def_id || '').trim(),
+            quantity: Math.max(0, Math.floor(Number(projectedItem.qty) || 0)),
+          });
+        }
+      }
+
+      const mails: MailDto[] = result.rows.map((row, index) => ({
         id: row.id,
         senderType: row.sender_type,
         senderName: row.sender_name,
@@ -1624,15 +1620,22 @@ class MailService {
         content: row.content,
         attachSilver: row.attach_silver,
         attachSpiritStones: row.attach_spirit_stones,
-        attachItems: this.normalizeAttachItems(row.attach_items).map((item: MailAttachItem) => ({
+        attachItems: normalizedAttachItemsList[index].map((item: MailAttachItem) => ({
           ...item,
           item_def_id: String(item.item_def_id || '').trim(),
         })),
-          attachRewards: buildMailPreviewRewards({
+        attachRewards: buildMailAttachmentPreviewRewards({
           attachSilver: Number(row.attach_silver) || 0,
           attachSpiritStones: Number(row.attach_spirit_stones) || 0,
-          attachItems: this.normalizeAttachItems(row.attach_items),
+          attachItems: normalizedAttachItemsList[index],
           attachRewardsRaw: row.attach_rewards,
+          attachInstanceItems: normalizedAttachInstanceIdList[index]
+            .map((attachInstanceId) => instancePreviewById.get(attachInstanceId))
+            .filter(
+              (
+                preview,
+              ): preview is MailInstanceAttachmentPreviewItem => preview !== undefined,
+            ),
         }),
         readAt: row.read_at?.toISOString() || null,
         claimedAt: row.claimed_at?.toISOString() || null,
