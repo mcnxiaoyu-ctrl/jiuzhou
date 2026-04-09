@@ -30,6 +30,14 @@ export interface ChangeLogEntrySource {
 
 export const CHANGE_LOG_ENTRIES: readonly ChangeLogEntrySource[] = [
   {
+    releasedAt: '2026-04-08',
+    sections: [
+      '重构大量代码，优化整体性能',
+      '修复洞府研修功法书抄写后入包异常问题',
+      '修复功法升级失败但任扣除部分材料问题'
+    ]
+  },
+  {
     releasedAt: '2026-04-07',
     sections: [
       '优化了云游系统提示词，避免出现其他体系的境界',
