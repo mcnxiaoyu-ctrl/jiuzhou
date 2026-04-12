@@ -33,6 +33,7 @@ import {
   DEFAULT_ARENA_SCORE,
   buildArenaProjectionRecord,
   collectArenaProjectionCharacterIds,
+  normalizeArenaProjectionRecord,
 } from './shared/arenaProjection.js';
 import { getDungeonDifficultyById } from './staticConfigLoader.js';
 import {
@@ -137,6 +138,7 @@ export type ArenaProjectionRecord = {
   todayUsed: number;
   todayLimit: number;
   todayRemaining: number;
+  lastDailyReset: string;
   records: ArenaRecord[];
 };
 
@@ -473,6 +475,22 @@ const normalizeDungeonEntryProjection = (
     lastDailyReset: currentDate,
     lastWeeklyReset: lastWeeklyReset >= currentWeekStart ? lastWeeklyReset : currentWeekStart,
   };
+};
+
+const normalizeArenaProjection = (
+  projection: ArenaProjectionRecord,
+): ArenaProjectionRecord => {
+  return normalizeArenaProjectionRecord(projection);
+};
+
+const shouldPersistNormalizedArenaProjection = (
+  previous: ArenaProjectionRecord,
+  normalized: ArenaProjectionRecord,
+): boolean => {
+  return previous.todayUsed !== normalized.todayUsed
+    || previous.todayLimit !== normalized.todayLimit
+    || previous.todayRemaining !== normalized.todayRemaining
+    || previous.lastDailyReset !== normalized.lastDailyReset;
 };
 
 const buildCharacterKey = (characterId: number): string => `${CHARACTER_KEY_PREFIX}${characterId}`;
@@ -815,10 +833,11 @@ const persistSessionProjection = async (
 };
 
 const persistArenaProjection = async (projection: ArenaProjectionRecord): Promise<void> => {
-  arenaProjectionByCharacterId.set(projection.characterId, projection);
+  const normalized = normalizeArenaProjection(projection);
+  arenaProjectionByCharacterId.set(normalized.characterId, normalized);
   await Promise.all([
-    redis.sadd(ARENA_INDEX_KEY, String(projection.characterId)),
-    persistJson(buildArenaKey(projection.characterId), projection),
+    redis.sadd(ARENA_INDEX_KEY, String(normalized.characterId)),
+    persistJson(buildArenaKey(normalized.characterId), normalized),
   ]);
 };
 
@@ -835,8 +854,9 @@ const persistArenaProjectionsBatch = async (
     ...projections.map((projection) => String(projection.characterId)),
   );
   for (const projection of projections) {
-    arenaProjectionByCharacterId.set(projection.characterId, projection);
-    multi.set(buildArenaKey(projection.characterId), JSON.stringify(projection));
+    const normalized = normalizeArenaProjection(projection);
+    arenaProjectionByCharacterId.set(normalized.characterId, normalized);
+    multi.set(buildArenaKey(normalized.characterId), JSON.stringify(normalized));
   }
   await multi.exec();
 };
@@ -1332,8 +1352,13 @@ const loadArenaProjectionFromRedis = async (
 ): Promise<ArenaProjectionRecord | null> => {
   const cached = await readJson<ArenaProjectionRecord>(buildArenaKey(characterId));
   if (!cached) return null;
-  arenaProjectionByCharacterId.set(characterId, cached);
-  return cached;
+  const normalized = normalizeArenaProjection(cached);
+  if (shouldPersistNormalizedArenaProjection(cached, normalized)) {
+    await persistArenaProjection(normalized);
+    return normalized;
+  }
+  arenaProjectionByCharacterId.set(characterId, normalized);
+  return normalized;
 };
 
 const hydrateArenaProjectionByCharacterId = async (
@@ -2362,7 +2387,15 @@ export const getArenaProjection = async (
   const normalizedCharacterId = toInt(characterId);
   if (normalizedCharacterId <= 0) return null;
   const cached = arenaProjectionByCharacterId.get(normalizedCharacterId);
-  if (cached) return cached;
+  if (cached) {
+    const normalized = normalizeArenaProjection(cached);
+    if (shouldPersistNormalizedArenaProjection(cached, normalized)) {
+      await persistArenaProjection(normalized);
+      return normalized;
+    }
+    arenaProjectionByCharacterId.set(normalizedCharacterId, normalized);
+    return normalized;
+  }
   const redisProjection = await loadArenaProjectionFromRedis(normalizedCharacterId);
   if (redisProjection) {
     return redisProjection;

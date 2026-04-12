@@ -33,6 +33,7 @@ import {
   DEFAULT_ARENA_RATING,
   type ArenaBattleOutcome,
 } from "../shared/arenaRatingDelta.js";
+import { buildArenaProjectionRecord } from '../shared/arenaProjection.js';
 import type { BattleResult } from "./battleTypes.js";
 import {
   BATTLE_START_COOLDOWN_MS,
@@ -296,16 +297,16 @@ export async function settleArenaBattleIfNeeded(
   const opponentAfter = Math.max(0, opponentBefore + opponentDelta);
 
   const opponentSnapshot = await getOnlineBattleCharacterSnapshotByCharacterId(opponentCharacterId);
-  await upsertArenaProjection({
+  await upsertArenaProjection(buildArenaProjectionRecord({
     characterId: opponentCharacterId,
     score: opponentAfter,
     winCount: (opponentProjection?.winCount ?? 0) + (opponentOutcome === 'win' ? 1 : 0),
     loseCount: (opponentProjection?.loseCount ?? 0) + (opponentOutcome === 'lose' ? 1 : 0),
     todayUsed: opponentProjection?.todayUsed ?? 0,
     todayLimit: opponentProjection?.todayLimit ?? 20,
-    todayRemaining: opponentProjection?.todayRemaining ?? 20,
+    lastDailyReset: opponentProjection?.lastDailyReset,
     records: opponentProjection?.records ?? [],
-  });
+  }));
   await applyArenaBattleResultProjection({
     battleId,
     challengerCharacterId,
