@@ -4,7 +4,8 @@
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：集中维护伙伴技能策略的读取、默认补尾、禁用分组、顺序归一化与战斗策略生成。
  * 2. 做什么：把“伙伴当前有效技能全集 + 已保存策略”合并成单一视图，供路由、服务与战斗链路复用。
- * 3. 不做什么：不做伙伴归属鉴权，不处理 HTTP 参数，也不直接决定前端按钮文案。
+ * 3. 做什么：统一收口“主动技能 + 可配置光环被动技能”的策略覆盖范围，避免前端面板、保存校验、战斗触发各自筛一遍。
+ * 4. 不做什么：不做伙伴归属鉴权，不处理 HTTP 参数，也不直接决定前端按钮文案。
  *
  * 输入/输出：
  * - 输入：伙伴 ID、当前有效技能列表、数据库中的策略行、客户端提交的完整 slots。
@@ -19,7 +20,7 @@
  */
 import { query } from '../../config/database.js';
 import {
-  isManualSkillTriggerType,
+  isPartnerSkillPolicyEligible,
   normalizeExplicitSkillTriggerType,
 } from '../../shared/skillTriggerType.js';
 import {
@@ -79,13 +80,14 @@ const sortByPriority = <T extends { priority: number; naturalOrder: number }>(en
   return [...entries].sort((left, right) => left.priority - right.priority || left.naturalOrder - right.naturalOrder);
 };
 
-const filterManualSkillPolicyEntries = (
+const filterConfigurableSkillPolicyEntries = (
   availableSkills: PartnerEffectiveSkillEntry[],
 ): PartnerEffectiveSkillEntry[] => {
   return availableSkills.filter((skill) => (
-    isManualSkillTriggerType(
-      normalizeExplicitSkillTriggerType(skill.trigger_type),
-    )
+    isPartnerSkillPolicyEligible({
+      triggerType: normalizeExplicitSkillTriggerType(skill.trigger_type),
+      effects: skill.effects,
+    })
   ));
 };
 
@@ -150,7 +152,7 @@ const buildMergedEntries = (params: {
   availableSkills: PartnerEffectiveSkillEntry[];
   persistedRows: PartnerSkillPolicyRow[];
 }): Array<PartnerSkillPolicyEntryDto & { naturalOrder: number }> => {
-  const availableSkills = filterManualSkillPolicyEntries(params.availableSkills);
+  const availableSkills = filterConfigurableSkillPolicyEntries(params.availableSkills);
   const persistedRowMap = new Map<string, PartnerSkillPolicyRow>();
   for (const row of params.persistedRows) {
     const skillId = normalizeText(row.skill_id);
@@ -251,7 +253,7 @@ export const normalizePartnerSkillPolicySlotsForSave = (params: {
   availableSkills: PartnerEffectiveSkillEntry[];
   slots: PartnerSkillPolicySlotDto[];
 }): PartnerSkillPolicyValidationResult => {
-  const availableSkills = filterManualSkillPolicyEntries(params.availableSkills);
+  const availableSkills = filterConfigurableSkillPolicyEntries(params.availableSkills);
   const availableSkillIds = new Set(availableSkills.map((skill) => skill.skillId));
   if (params.slots.length !== availableSkills.length) {
     return { success: false, message: '技能策略必须覆盖伙伴当前全部可配置技能' };

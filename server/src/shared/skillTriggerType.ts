@@ -3,13 +3,13 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：集中维护技能 `triggerType/trigger_type` 的归一化规则，避免战斗装配、静态配置读取、AI 生成功法清洗各自写一套。
- * 2. 做什么：把“含光环效果的技能必须按被动处理”“只有主动技能才能进入手动配技/策略列表”收敛成单一入口。
+ * 2. 做什么：把“含光环效果的技能必须按被动处理”“哪些技能允许进入角色/伙伴策略列表”收敛成单一入口。
  * 3. 做什么：提供被动技能运行时前置约束校验，避免生成链路和配置链路各自手写一套判断。
  * 4. 不做什么：不负责技能效果完整合法性校验，不决定战斗目标选择，也不执行战斗逻辑。
  *
  * 输入/输出：
  * - 输入：原始触发类型字符串、技能效果数组中最小必要字段（`type` / `buffKind`），以及被动技能校验所需的目标/消耗/冷却字段。
- * - 输出：规范化后的触发类型、是否允许手动配置，以及被动技能配置校验结果。
+ * - 输出：规范化后的触发类型、是否允许进入策略配置，以及被动技能配置校验结果。
  *
  * 数据流/状态流：
  * 技能定义/生成技能/战斗技能数据 -> 本模块统一解析触发类型/可手动施放性 -> 战斗构建、技能详情展示、AI candidate 清洗、角色与伙伴配技复用。
@@ -76,6 +76,19 @@ export const resolveSkillTriggerType = (params: {
 
 export const isManualSkillTriggerType = (triggerType: SkillTriggerType): boolean => {
   return triggerType === 'active';
+};
+
+export const isPartnerSkillPolicyEligible = (params: {
+  triggerType?: SkillTriggerType | string | null;
+  effects?: readonly AuraInspectableSkillEffect[] | null;
+}): boolean => {
+  const resolvedTriggerType = typeof params.triggerType === 'string'
+    ? normalizeExplicitSkillTriggerType(params.triggerType)
+    : (params.triggerType ?? 'active');
+  if (resolvedTriggerType === 'active') {
+    return true;
+  }
+  return resolvedTriggerType === 'passive' && skillHasAuraEffect(params.effects);
 };
 
 const isZeroLikeNumber = (value: number | null | undefined): boolean => {

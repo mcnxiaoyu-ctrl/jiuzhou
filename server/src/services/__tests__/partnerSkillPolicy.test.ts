@@ -75,6 +75,34 @@ const createAvailableSkills = (): PartnerEffectiveSkillEntry[] => [
   },
 ];
 
+const PASSIVE_AURA_SKILL: PartnerEffectiveSkillEntry = {
+  skillId: 'skill-passive-aura',
+  skillName: '护体灵光',
+  skillIcon: '/passive.png',
+  skillDescription: '进场自动展开光环',
+  cooldown: 0,
+  target_type: 'self',
+  effects: [{ type: 'buff', buffKind: 'aura' }],
+  trigger_type: 'passive',
+  sourceTechniqueId: 'tech-c',
+  sourceTechniqueName: '护体诀',
+  sourceTechniqueQuality: '玄',
+};
+
+const PASSIVE_NON_AURA_SKILL: PartnerEffectiveSkillEntry = {
+  skillId: 'skill-passive-non-aura',
+  skillName: '静守灵台',
+  skillIcon: '/passive-self.png',
+  skillDescription: '常驻提高自身抗性',
+  cooldown: 0,
+  target_type: 'self',
+  effects: [{ type: 'buff', buffKind: 'attr', attrKey: 'fafang', value: 30 }],
+  trigger_type: 'passive',
+  sourceTechniqueId: 'tech-d',
+  sourceTechniqueName: '灵台诀',
+  sourceTechniqueQuality: '玄',
+};
+
 const createPersistedRows = (): PartnerSkillPolicyRow[] => [
   {
     id: 1,
@@ -135,31 +163,20 @@ test('buildPartnerBattleSkillPolicy: 应返回完整顺序，供战斗层统一�
   ]);
 });
 
-test('buildPartnerSkillPolicyDto: passive 技能不应进入伙伴手动策略列表', () => {
+test('buildPartnerSkillPolicyDto: 光环被动技能应进入伙伴策略列表，普通被动仍应排除', () => {
   const result = buildPartnerSkillPolicyDto({
     partnerId: 9,
     availableSkills: [
       ...createAvailableSkills(),
-      {
-        skillId: 'skill-passive-aura',
-        skillName: '护体灵光',
-        skillIcon: '/passive.png',
-        skillDescription: '进场自动展开光环',
-        cooldown: 0,
-        target_type: 'self',
-        effects: [{ type: 'buff', buffKind: 'aura' }],
-        trigger_type: 'passive',
-        sourceTechniqueId: 'tech-c',
-        sourceTechniqueName: '护体诀',
-        sourceTechniqueQuality: '玄',
-      },
+      PASSIVE_AURA_SKILL,
+      PASSIVE_NON_AURA_SKILL,
     ],
     persistedRows: createPersistedRows(),
   });
 
   assert.deepEqual(
     result.entries.map((entry) => entry.skillId),
-    ['skill-b', 'skill-c', 'skill-a'],
+    ['skill-b', 'skill-c', 'skill-passive-aura', 'skill-a'],
   );
 });
 
@@ -195,25 +212,14 @@ test('normalizePartnerSkillPolicySlotsForSave: 应重排优先级并保留启用
   ]);
 });
 
-test('normalizePartnerSkillPolicySlotsForSave: 带光环被动技能时仍应只校验主动技能覆盖', () => {
+test('normalizePartnerSkillPolicySlotsForSave: 带光环被动技能时应要求覆盖主动技能与光环技能', () => {
   const result = normalizePartnerSkillPolicySlotsForSave({
     availableSkills: [
       ...createAvailableSkills(),
-      {
-        skillId: 'skill-passive-aura',
-        skillName: '护体灵光',
-        skillIcon: '/passive.png',
-        skillDescription: '进场自动展开光环',
-        cooldown: 0,
-        target_type: 'self',
-        effects: [{ type: 'buff', buffKind: 'aura' }],
-        trigger_type: 'passive',
-        sourceTechniqueId: 'tech-c',
-        sourceTechniqueName: '护体诀',
-        sourceTechniqueQuality: '玄',
-      },
+      PASSIVE_AURA_SKILL,
     ],
     slots: [
+      { skillId: 'skill-passive-aura', priority: 1, enabled: false },
       { skillId: 'skill-c', priority: 8, enabled: true },
       { skillId: 'skill-a', priority: 2, enabled: false },
       { skillId: 'skill-b', priority: 4, enabled: true },
@@ -226,7 +232,8 @@ test('normalizePartnerSkillPolicySlotsForSave: 带光环被动技能时仍应只
   assert.deepEqual(result.value, [
     { skillId: 'skill-b', priority: 1, enabled: true },
     { skillId: 'skill-c', priority: 2, enabled: true },
-    { skillId: 'skill-a', priority: 3, enabled: false },
+    { skillId: 'skill-passive-aura', priority: 3, enabled: false },
+    { skillId: 'skill-a', priority: 4, enabled: false },
   ]);
 });
 
