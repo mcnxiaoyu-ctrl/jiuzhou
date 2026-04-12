@@ -68,6 +68,7 @@ import type {
 } from "../shared/characterInventoryMutationContext.js";
 import { loadCharacterPendingItemGrants } from "../shared/characterItemGrantDeltaService.js";
 import {
+  applyCharacterItemInstanceMutationsImmediately,
   applyCharacterItemInstanceMutations,
   bufferCharacterItemInstanceMutations,
   type BufferedCharacterItemInstanceMutation,
@@ -1143,6 +1144,7 @@ export const moveItemInstancesToBagWithStacking = async (
   options: {
     expectedSourceLocation: MoveToBagSourceLocation;
     expectedOwnerUserId?: number;
+    persistImmediately?: boolean;
   },
 ): Promise<{ success: boolean; message: string; itemIds: number[] }> => {
   let projectedItems = await loadProjectedCharacterItemInstances(characterId);
@@ -1166,7 +1168,11 @@ export const moveItemInstancesToBagWithStacking = async (
     }
   }
 
-  await bufferCharacterItemInstanceMutations(bufferedMutations);
+  if (options.persistImmediately) {
+    await applyCharacterItemInstanceMutationsImmediately(bufferedMutations);
+  } else {
+    await bufferCharacterItemInstanceMutations(bufferedMutations);
+  }
   return { success: true, message: '移动成功', itemIds };
 };
 

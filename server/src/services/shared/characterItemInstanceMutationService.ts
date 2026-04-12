@@ -973,6 +973,49 @@ export const upsertCharacterItemInstanceSnapshot = async (
   );
 };
 
+/**
+ * 在当前事务内立即应用实例 mutation，供必须受 savepoint 控制的链路复用。
+ *
+ * 作用：
+ * 1. 直接把 upsert/delete 写入 `item_instance`，保证调用方可以依赖数据库事务回滚，而不是依赖 after-commit Redis 投影。
+ * 2. 仅处理当前入参 mutation，不接管原有异步 flush 体系，避免影响常规高频奖励链路。
+ *
+ * 输入 / 输出：
+ * - 输入：已经按顺序计算好的实例 mutation 列表。
+ * - 输出：无；全部 mutation 会立刻落到数据库当前事务。
+ *
+ * 数据流 / 状态流：
+ * - 调用方先完成容量/堆叠/槽位计算；
+ * - 本方法按顺序执行 delete/upsert；
+ * - 若外层事务或 savepoint 回滚，所有已写实例会一起回退。
+ *
+ * 复用设计说明：
+ * - 邮件主动领取需要“失败即无副作用”语义，因此复用共享 snapshot 持久化能力而不是再写一套 SQL。
+ * - 常规战斗/挂机链路仍继续走 `bufferCharacterItemInstanceMutations`，保持高频奖励性能方案不变。
+ *
+ * 关键边界条件与坑点：
+ * 1. 调用方必须保证 mutation 顺序已经收敛正确，本方法不会重新排序或做冲突消解。
+ * 2. 这里不会同步写 Redis 投影视图；只有真正需要 savepoint 语义的调用方才应使用它。
+ */
+export const applyCharacterItemInstanceMutationsImmediately = async (
+  mutations: readonly BufferedCharacterItemInstanceMutation[],
+): Promise<void> => {
+  for (const mutation of mutations) {
+    if (mutation.kind === 'delete') {
+      await query(
+        `
+          DELETE FROM item_instance
+          WHERE id = $1 AND owner_character_id = $2
+        `,
+        [mutation.itemId, mutation.characterId],
+      );
+      continue;
+    }
+    if (!mutation.snapshot) continue;
+    await upsertCharacterItemInstanceSnapshot(mutation.snapshot);
+  }
+};
+
 export const reserveItemInstanceIds = async (count: number): Promise<number[]> => {
   const normalizedCount = Math.max(0, Math.floor(count));
   if (normalizedCount <= 0) return [];

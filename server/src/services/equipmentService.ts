@@ -49,6 +49,7 @@ import {
   type JsonValue,
   loadProjectedCharacterItemInstances,
   reserveItemInstanceIds,
+  upsertCharacterItemInstanceSnapshot,
 } from './shared/characterItemInstanceMutationService.js';
 
 // ============================================
@@ -781,6 +782,7 @@ class EquipmentService {
       identified?: boolean;
       obtainedFrom?: string;
       skipInventoryMutexLock?: boolean;
+      persistImmediately?: boolean;
     } = {}
   ): Promise<{ success: boolean; instanceId?: number; message: string }> {
     return this.createEquipmentInstanceTx(userId, characterId, generated, options);
@@ -798,6 +800,7 @@ class EquipmentService {
       identified?: boolean;
       obtainedFrom?: string;
       skipInventoryMutexLock?: boolean;
+      persistImmediately?: boolean;
     } = {}
   ): Promise<{ success: boolean; instanceId?: number; message: string }> {
     const location = options.location || 'bag';
@@ -831,45 +834,51 @@ class EquipmentService {
       return { success: false, message: '装备创建失败' };
     }
 
-    await bufferCharacterItemInstanceMutations([
-      {
-        opId: `equipment-create:${instanceId}:${Date.now()}`,
-        characterId,
-        itemId: instanceId,
-        createdAt: Date.now(),
-        kind: 'upsert',
-        snapshot: {
-          id: instanceId,
-          owner_user_id: userId,
-          owner_character_id: characterId,
-          item_def_id: generated.itemDefId,
-          qty: 1,
-          quality: generated.quality,
-          quality_rank: generated.qualityRank,
-          metadata: null,
-          location,
-          location_slot: locationSlot,
-          equipped_slot: null,
-          strengthen_level: 0,
-          refine_level: 0,
-          socketed_gems: [],
-          affixes: JSON.parse(JSON.stringify(generated.affixes)) as JsonValue,
-          identified: options.identified !== false,
-          locked: false,
-          bind_type: options.bindType || 'none',
-          bind_owner_user_id: null,
-          bind_owner_character_id: null,
-          random_seed: String(generated.seed),
-          affix_gen_version: generated.affixGenVersion || AFFIX_GEN_VERSION,
-          affix_roll_meta: null,
-          custom_name: null,
-          expire_at: null,
-          obtained_from: obtainedFrom,
-          obtained_ref_id: null,
-          created_at: new Date(),
+    const snapshot = {
+      id: instanceId,
+      owner_user_id: userId,
+      owner_character_id: characterId,
+      item_def_id: generated.itemDefId,
+      qty: 1,
+      quality: generated.quality,
+      quality_rank: generated.qualityRank,
+      metadata: null,
+      location,
+      location_slot: locationSlot,
+      equipped_slot: null,
+      strengthen_level: 0,
+      refine_level: 0,
+      socketed_gems: [],
+      affixes: JSON.parse(JSON.stringify(generated.affixes)) as JsonValue,
+      identified: options.identified !== false,
+      locked: false,
+      bind_type: options.bindType || 'none',
+      bind_owner_user_id: null,
+      bind_owner_character_id: null,
+      random_seed: String(generated.seed),
+      affix_gen_version: generated.affixGenVersion || AFFIX_GEN_VERSION,
+      affix_roll_meta: null,
+      custom_name: null,
+      expire_at: null,
+      obtained_from: obtainedFrom,
+      obtained_ref_id: null,
+      created_at: new Date(),
+    };
+
+    if (options.persistImmediately) {
+      await upsertCharacterItemInstanceSnapshot(snapshot);
+    } else {
+      await bufferCharacterItemInstanceMutations([
+        {
+          opId: `equipment-create:${instanceId}:${Date.now()}`,
+          characterId,
+          itemId: instanceId,
+          createdAt: Date.now(),
+          kind: 'upsert',
+          snapshot,
         },
-      },
-    ]);
+      ]);
+    }
 
     return {
       success: true,

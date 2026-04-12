@@ -76,6 +76,8 @@ export interface CreateItemOptions {
   inventoryMutationContext?: CharacterInventoryMutationContext;
   /** 调用方已持有角色背包互斥锁时，跳过底层重复加锁 SQL。 */
   skipInventoryMutexLock?: boolean;
+  /** 需要严格受当前事务 / savepoint 控制时，改为立即写入真实实例表。 */
+  persistImmediately?: boolean;
   // 装备专用选项
   equipOptions?: GenerateOptions & {
     /**
@@ -330,6 +332,7 @@ const createEquipmentItem = async (
       bindType: options.bindType,
       obtainedFrom: options.obtainedFrom,
       ...(options.skipInventoryMutexLock ? { skipInventoryMutexLock: true } : {}),
+      ...(options.persistImmediately ? { persistImmediately: true } : {}),
     });
 
     if (!result.success) {
