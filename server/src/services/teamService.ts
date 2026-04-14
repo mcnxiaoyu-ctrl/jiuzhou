@@ -1,4 +1,4 @@
-import { query } from '../config/database.js';
+import { afterTransactionCommit, query, withTransaction } from '../config/database.js';
 import crypto from 'crypto';
 import { getGameServer } from '../game/gameServer.js';
 import { onUserJoinTeam, onUserLeaveTeam } from './battle/index.js';
@@ -1311,92 +1311,106 @@ export const getReceivedInvitations = async (characterId: number) => {
  * 处理入队邀请
  */
 export const handleInvitation = async (characterId: number, invitationId: string, accept: boolean) => {
-  // 获取邀请信息
-  const inviteResult = await query(
-    `SELECT ti.*, t.max_members,
-            (SELECT COUNT(*) FROM team_members WHERE team_id = ti.team_id) as member_count
-     FROM team_invitations ti
-     JOIN teams t ON ti.team_id = t.id
-     WHERE ti.id = $1 AND ti.invitee_id = $2 AND ti.status = 'pending'`,
-    [invitationId, characterId]
-  );
-
-  if (inviteResult.rows.length === 0) {
-    return { success: false, message: '邀请不存在或已处理' };
-  }
-
-  const invite = inviteResult.rows[0];
-
-  if (accept) {
-    // 检查是否已在其他队伍
-    const existingMember = await query(
-      `SELECT team_id FROM team_members WHERE character_id = $1`,
+  return await withTransaction(async () => {
+    // 先锁角色行，再锁邀请行，确保同一角色的入队写路径串行化，避免并发接受不同邀请时产生竞争。
+    await query(
+      `SELECT id FROM characters WHERE id = $1 FOR UPDATE`,
       [characterId]
     );
 
-    if (existingMember.rows.length > 0) {
+    const inviteResult = await query(
+      `SELECT ti.*, t.max_members,
+              (SELECT COUNT(*) FROM team_members WHERE team_id = ti.team_id) as member_count
+       FROM team_invitations ti
+       JOIN teams t ON ti.team_id = t.id
+       WHERE ti.id = $1 AND ti.invitee_id = $2 AND ti.status = 'pending'
+       FOR UPDATE`,
+      [invitationId, characterId]
+    );
+
+    if (inviteResult.rows.length === 0) {
+      return { success: false, message: '邀请不存在或已处理' };
+    }
+
+    const invite = inviteResult.rows[0];
+
+    if (accept) {
+      const existingMember = await query(
+        `SELECT team_id FROM team_members WHERE character_id = $1`,
+        [characterId]
+      );
+
+      if (existingMember.rows.length > 0) {
+        await query(
+          `UPDATE team_invitations SET status = 'rejected', handled_at = NOW() WHERE id = $1`,
+          [invitationId]
+        );
+        return { success: false, message: '你已在其他队伍中' };
+      }
+
+      if (invite.member_count >= invite.max_members) {
+        await query(
+          `UPDATE team_invitations SET status = 'rejected', handled_at = NOW() WHERE id = $1`,
+          [invitationId]
+        );
+        return { success: false, message: '队伍已满' };
+      }
+
+      const joinGuard = await assertCharacterCanJoinTeam(characterId);
+      if (joinGuard) {
+        return joinGuard;
+      }
+
       await query(
-        `UPDATE team_invitations SET status = 'rejected', handled_at = NOW() WHERE id = $1`,
+        `INSERT INTO team_members (team_id, character_id, role) VALUES ($1, $2, 'member')`,
+        [invite.team_id, characterId]
+      );
+
+      // 历史 accepted 记录会保留在表里；在当前邀请转 accepted 前，先把旧 accepted 收敛成 expired，避免再次入队时撞唯一键。
+      await query(
+        `UPDATE team_invitations
+         SET status = 'expired', handled_at = COALESCE(handled_at, NOW())
+         WHERE team_id = $1 AND invitee_id = $2 AND status = 'accepted' AND id != $3`,
+        [invite.team_id, characterId, invitationId]
+      );
+
+      await query(
+        `UPDATE team_invitations SET status = 'accepted', handled_at = NOW() WHERE id = $1`,
         [invitationId]
       );
-      return { success: false, message: '你已在其他队伍中' };
-    }
 
-    // 检查队伍是否已满
-    if (invite.member_count >= invite.max_members) {
       await query(
-        `UPDATE team_invitations SET status = 'rejected', handled_at = NOW() WHERE id = $1`,
-        [invitationId]
+        `UPDATE team_invitations SET status = 'rejected', handled_at = NOW()
+         WHERE invitee_id = $1 AND status = 'pending' AND id != $2`,
+        [characterId, invitationId]
       );
-      return { success: false, message: '队伍已满' };
+
+      const userIds = await getUserIdsByCharacterIds([characterId]);
+      const userId = Number(userIds?.[0]);
+      await afterTransactionCommit(async () => {
+        if (Number.isFinite(userId) && userId > 0) {
+          await onUserJoinTeam(userId);
+        }
+        await invalidateTeamInfoCache(invite.team_id);
+        await notifyTeamMembersChanged(invite.team_id, [characterId], 'accept_invitation');
+      });
+
+      return { success: true, message: '已加入队伍' };
     }
 
-    const joinGuard = await assertCharacterCanJoinTeam(characterId);
-    if (joinGuard) {
-      return joinGuard;
-    }
-
-    // 加入队伍
-    const userIds = await getUserIdsByCharacterIds([characterId]);
-    const userId = Number(userIds?.[0]);
-    if (Number.isFinite(userId) && userId > 0) {
-      await onUserJoinTeam(userId);
-    }
-    await query(
-      `INSERT INTO team_members (team_id, character_id, role) VALUES ($1, $2, 'member')`,
-      [invite.team_id, characterId]
-    );
-
-    // 更新邀请状态
-    await query(
-      `UPDATE team_invitations SET status = 'accepted', handled_at = NOW() WHERE id = $1`,
-      [invitationId]
-    );
-
-    // 拒绝其他待处理邀请
-    await query(
-      `UPDATE team_invitations SET status = 'rejected', handled_at = NOW() 
-       WHERE invitee_id = $1 AND status = 'pending' AND id != $2`,
-      [characterId, invitationId]
-    );
-
-    await invalidateTeamInfoCache(invite.team_id);
-    await notifyTeamMembersChanged(invite.team_id, [characterId], 'accept_invitation');
-
-    return { success: true, message: '已加入队伍' };
-  } else {
-    // 拒绝邀请
     await query(
       `UPDATE team_invitations SET status = 'rejected', handled_at = NOW() WHERE id = $1`,
       [invitationId]
     );
 
     const inviterId = Number(invite.inviter_id);
-    if (Number.isFinite(inviterId)) {
-      const inviterUserIds = await getUserIdsByCharacterIds([inviterId]);
-      emitTeamUpdateToUserIds(inviterUserIds, { kind: 'reject_invitation', teamId: invite.team_id, invitationId, time: Date.now() });
-    }
+    await afterTransactionCommit(async () => {
+      if (Number.isFinite(inviterId)) {
+        const inviterUserIds = await getUserIdsByCharacterIds([inviterId]);
+        emitTeamUpdateToUserIds(inviterUserIds, { kind: 'reject_invitation', teamId: invite.team_id, invitationId, time: Date.now() });
+      }
+    });
 
     return { success: true, message: '已拒绝邀请' };
-  }
+  });
 };
