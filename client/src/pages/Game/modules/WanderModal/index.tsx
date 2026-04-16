@@ -196,7 +196,6 @@ const WanderModal: React.FC<WanderModalProps> = ({ open, onClose, onOverviewChan
                         {overview.hasPendingEpisode ? <Tag color="gold">等待抉择</Tag> : null}
                         {overview.isCoolingDown ? <Tag color="green">冷却中</Tag> : null}
                         {currentGenerationJob?.status === 'pending' ? <Tag color="processing">生成中</Tag> : null}
-                        {currentGenerationJob?.status === 'failed' ? <Tag color="red">生成失败</Tag> : null}
                       </div>
                     </div>
                     <div className="wander-episode-opening">{primaryEpisode.opening}</div>

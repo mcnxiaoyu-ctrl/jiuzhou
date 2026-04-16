@@ -359,6 +359,54 @@ const buildGenerationJobDto = (row: WanderGenerationJobRow): WanderGenerationJob
   };
 };
 
+export const shouldExposeWanderGenerationJob = (params: {
+  latestGenerationJob: Pick<WanderGenerationJobRow, 'status' | 'generated_episode_id' | 'created_at'> | null;
+  currentEpisode: Pick<WanderEpisodeRow, 'id' | 'chosen_at'> | null;
+  latestEpisodeCreatedAtMs: number;
+}): boolean => {
+  const { latestGenerationJob, currentEpisode, latestEpisodeCreatedAtMs } = params;
+  if (!latestGenerationJob) {
+    return false;
+  }
+
+  const latestGenerationJobCreatedAtMs = new Date(latestGenerationJob.created_at).getTime();
+  if (!Number.isFinite(latestGenerationJobCreatedAtMs)) {
+    return false;
+  }
+
+  if (latestGenerationJob.status === 'pending') {
+    return (
+      (currentEpisode !== null
+        && latestGenerationJob.generated_episode_id === currentEpisode.id
+        && currentEpisode.chosen_at === null)
+      || !Number.isFinite(latestEpisodeCreatedAtMs)
+      || latestGenerationJobCreatedAtMs >= latestEpisodeCreatedAtMs
+    );
+  }
+
+  if (latestGenerationJob.status !== 'failed') {
+    return false;
+  }
+
+  if (currentEpisode !== null) {
+    return false;
+  }
+
+  return !Number.isFinite(latestEpisodeCreatedAtMs) || latestGenerationJobCreatedAtMs >= latestEpisodeCreatedAtMs;
+};
+
+export const shouldExposeWanderCurrentEpisode = (params: {
+  latestEpisode: Pick<WanderEpisodeRow, 'chosen_option_index' | 'chosen_at'> | null;
+  isCoolingDown: boolean;
+}): boolean => {
+  const { latestEpisode, isCoolingDown } = params;
+  if (!latestEpisode) {
+    return false;
+  }
+
+  return isPendingEpisodeSelection(latestEpisode) || isCoolingDown;
+};
+
 const buildOverview = (params: {
   today: string;
   aiAvailable: boolean;
@@ -635,7 +683,7 @@ class WanderService {
   }
 
   private async loadContinuableActiveStoryRow(characterId: number): Promise<WanderStoryRow | null> {
-    const activeStory = await this.loadContinuableActiveStoryRow(characterId);
+    const activeStory = await this.loadActiveStoryRow(characterId);
     if (!activeStory) {
       return null;
     }
@@ -686,11 +734,10 @@ class WanderService {
     const cooldownState = buildWanderCooldownState(latestEpisodeRow ? toRequiredIsoString(latestEpisodeRow.created_at) : null);
     const currentEpisodeRow = latestEpisodeRow
       && !isLegacyPendingEpisode(latestEpisodeRow)
-      && (
-        isPendingEpisodeSelection(latestEpisodeRow)
-        || latestEpisodeRow.chosen_at === null
-        || cooldownState.isCoolingDown
-      )
+      && shouldExposeWanderCurrentEpisode({
+        latestEpisode: latestEpisodeRow,
+        isCoolingDown: cooldownState.isCoolingDown,
+      })
       ? latestEpisodeRow
       : null;
 
@@ -701,16 +748,11 @@ class WanderService {
 
     const currentEpisode = currentEpisodeRow ? buildEpisodeDto(currentEpisodeRow) : null;
     const latestEpisodeCreatedAtMs = latestEpisodeRow ? new Date(latestEpisodeRow.created_at).getTime() : Number.NaN;
-    const latestGenerationJobCreatedAtMs = latestGenerationJobRow ? new Date(latestGenerationJobRow.created_at).getTime() : Number.NaN;
-    const shouldExposeGenerationJob = latestGenerationJobRow !== null
-      && (latestGenerationJobRow.status === 'pending' || latestGenerationJobRow.status === 'failed')
-      && (
-        (currentEpisodeRow !== null
-          && latestGenerationJobRow.generated_episode_id === currentEpisodeRow.id
-          && currentEpisodeRow.chosen_at === null)
-        || !Number.isFinite(latestEpisodeCreatedAtMs)
-        || latestGenerationJobCreatedAtMs >= latestEpisodeCreatedAtMs
-      );
+    const shouldExposeGenerationJob = shouldExposeWanderGenerationJob({
+      latestGenerationJob: latestGenerationJobRow,
+      currentEpisode: currentEpisodeRow,
+      latestEpisodeCreatedAtMs,
+    });
     const currentGenerationJob = shouldExposeGenerationJob && latestGenerationJobRow
       ? buildGenerationJobDto(latestGenerationJobRow)
       : null;
