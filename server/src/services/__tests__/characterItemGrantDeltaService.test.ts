@@ -31,6 +31,7 @@ import * as itemServiceModule from '../itemService.js';
 import * as mailServiceModule from '../mailService.js';
 import * as characterBagSlotAllocatorModule from '../shared/characterBagSlotAllocator.js';
 import * as characterInventoryMutationContextModule from '../shared/characterInventoryMutationContext.js';
+import * as characterItemGrantMailOutboxModule from '../shared/characterItemGrantMailOutbox.js';
 import * as inventorySlotSessionModule from '../shared/inventorySlotSession.js';
 import {
   bufferSimpleCharacterItemGrants,
@@ -193,10 +194,12 @@ test('flushCharacterPendingItemGrantsNow 应把待发奖励同步落成真实库
   t.mock.method(database, 'withTransaction', async <T>(executor: () => Promise<T>) => {
     return await executor();
   });
-  t.mock.method(inventoryMutex, 'lockCharacterInventoryMutex', async () => {});
+  t.mock.method(inventoryMutex, 'lockCharacterInventoryMutex', async () => 0);
   t.mock.method(inventorySlotSessionModule, 'createInventorySlotSession', async () => ({}) as never);
   t.mock.method(characterBagSlotAllocatorModule, 'createCharacterBagSlotAllocatorFromSession', () => ({}) as never);
   t.mock.method(characterInventoryMutationContextModule, 'createCharacterInventoryMutationContextFromSession', () => ({}) as never);
+  t.mock.method(characterItemGrantMailOutboxModule, 'claimCharacterItemGrantOverflowMailBatch', async () => []);
+  t.mock.method(characterItemGrantMailOutboxModule, 'countPendingCharacterItemGrantOverflowMail', async () => 0);
   t.mock.method(itemServiceModule.itemService, 'createItem', async (userId: number, characterId: number, itemDefId: string, qty: number) => {
     createItemCalls.push({ userId, characterId, itemDefId, qty });
     return { success: true, message: 'ok', itemIds: [9001] };
@@ -215,4 +218,159 @@ test('flushCharacterPendingItemGrantsNow 应把待发奖励同步落成真实库
   assert.deepEqual(await redis.hgetall(mainKey), {});
   assert.deepEqual(await redis.hgetall(inflightKey), {});
   assert.equal(dirtyCharacterIds.has('101'), false);
+});
+
+test('flushCharacterPendingItemGrantsNow 在背包已满时应写入补发 outbox 并在锁外发送邮件', async (t) => {
+  const hashStore = new Map<string, Map<string, number>>();
+  const mainKey = 'character:item-grant-delta:101';
+  const inflightKey = 'character:item-grant-delta:inflight:101';
+  const encodedPayload = JSON.stringify({
+    userId: 202,
+    itemDefId: 'stone-bag',
+    bindType: 'none',
+    obtainedFrom: 'battle_drop',
+    idleSessionId: 'idle-session-1',
+    metadata: null,
+    quality: null,
+    qualityRank: null,
+    equipOptions: null,
+  });
+  const enqueuedOutboxEntries: Array<{
+    characterId: number;
+    recipientUserId: number;
+    recipientCharacterId: number;
+    title: string;
+    content: string;
+    attachItems: Array<{ item_def_id: string; qty: number }>;
+    idleSessionIds: string[];
+    expireDays: number;
+  }> = [];
+  let finalizedOutboxId = 0;
+  let restoredOutboxId = 0;
+  let idleSessionUpdateCount = 0;
+  let sendMailCallCount = 0;
+
+  hashStore.set(mainKey, new Map([[encodedPayload, 2]]));
+
+  t.mock.method(redis, 'hgetall', async (key: string) => {
+    const hash = hashStore.get(key);
+    if (!hash) return {};
+    return Object.fromEntries([...hash.entries()].map(([field, qty]) => [field, String(qty)]));
+  });
+
+  t.mock.method(redis, 'eval', async (script: string, _numKeys: number, _dirtyKey: string, currentMainKey: string, currentInflightKey: string) => {
+    if (script.includes('RENAME')) {
+      const currentMainHash = hashStore.get(currentMainKey);
+      if (!currentMainHash || currentMainHash.size <= 0) {
+        return 0;
+      }
+      hashStore.set(currentInflightKey, new Map(currentMainHash));
+      hashStore.delete(currentMainKey);
+      return 1;
+    }
+
+    if (script.includes('HGETALL')) {
+      const inflightHash = hashStore.get(currentInflightKey);
+      if (!inflightHash || inflightHash.size <= 0) {
+        return 0;
+      }
+      const restoredMainHash = hashStore.get(currentMainKey) ?? new Map<string, number>();
+      for (const [field, qty] of inflightHash.entries()) {
+        restoredMainHash.set(field, (restoredMainHash.get(field) ?? 0) + qty);
+      }
+      hashStore.set(currentMainKey, restoredMainHash);
+      hashStore.delete(currentInflightKey);
+      return 1;
+    }
+
+    hashStore.delete(currentInflightKey);
+    return 1;
+  });
+
+  t.mock.method(database, 'withTransaction', async <T>(executor: () => Promise<T>) => {
+    return await executor();
+  });
+  t.mock.method(database, 'query', async (sql: string) => {
+    if (sql.includes('UPDATE idle_sessions')) {
+      idleSessionUpdateCount += 1;
+    }
+    return { rows: [] } as never;
+  });
+  t.mock.method(inventoryMutex, 'lockCharacterInventoryMutex', async () => 0);
+  t.mock.method(inventorySlotSessionModule, 'createInventorySlotSession', async () => ({}) as never);
+  t.mock.method(characterBagSlotAllocatorModule, 'createCharacterBagSlotAllocatorFromSession', () => ({}) as never);
+  t.mock.method(characterInventoryMutationContextModule, 'createCharacterInventoryMutationContextFromSession', () => ({}) as never);
+  t.mock.method(itemServiceModule.itemService, 'createItem', async () => ({
+    success: false,
+    message: '背包已满',
+  }));
+  t.mock.method(characterItemGrantMailOutboxModule, 'enqueueCharacterItemGrantOverflowMail', async (
+    entries: Parameters<typeof characterItemGrantMailOutboxModule.enqueueCharacterItemGrantOverflowMail>[0],
+  ) => {
+    enqueuedOutboxEntries.push(...entries);
+  });
+  t.mock.method(characterItemGrantMailOutboxModule, 'claimCharacterItemGrantOverflowMailBatch', async () => [501]);
+  t.mock.method(characterItemGrantMailOutboxModule, 'countPendingCharacterItemGrantOverflowMail', async () => 0);
+  t.mock.method(characterItemGrantMailOutboxModule, 'loadCharacterItemGrantOverflowMailForUpdate', async (outboxId: number) => ({
+    id: outboxId,
+    characterId: 101,
+    recipientUserId: 202,
+    recipientCharacterId: 101,
+    title: '奖励补发',
+    content: '由于背包空间不足，部分奖励已通过邮件补发，请前往邮箱领取。',
+    attachItems: [
+      {
+        item_def_id: 'stone-bag',
+        qty: 2,
+        options: {
+          bindType: 'none',
+        },
+      },
+    ],
+    idleSessionIds: ['idle-session-1'],
+    expireDays: 30,
+    attemptCount: 0,
+  }));
+  t.mock.method(characterItemGrantMailOutboxModule, 'finalizeCharacterItemGrantOverflowMail', async (outboxId: number) => {
+    finalizedOutboxId = outboxId;
+  });
+  t.mock.method(characterItemGrantMailOutboxModule, 'restoreCharacterItemGrantOverflowMailAttempt', async (outboxId: number) => {
+    restoredOutboxId = outboxId;
+  });
+  t.mock.method(mailServiceModule, 'sendSystemMail', async () => {
+    sendMailCallCount += 1;
+    return {
+      success: true,
+      mailId: 88,
+      message: 'ok',
+    };
+  });
+
+  await flushCharacterPendingItemGrantsNow(101);
+
+  assert.equal(enqueuedOutboxEntries.length, 1);
+  assert.deepEqual(enqueuedOutboxEntries[0], {
+    characterId: 101,
+    recipientUserId: 202,
+    recipientCharacterId: 101,
+    title: '奖励补发',
+    content: '由于背包空间不足，部分奖励已通过邮件补发，请前往邮箱领取。',
+    attachItems: [
+      {
+        item_def_id: 'stone-bag',
+        qty: 2,
+        options: {
+          bindType: 'none',
+        },
+      },
+    ],
+    idleSessionIds: ['idle-session-1'],
+    expireDays: 30,
+  });
+  assert.equal(sendMailCallCount, 1);
+  assert.equal(finalizedOutboxId, 501);
+  assert.equal(restoredOutboxId, 0);
+  assert.equal(idleSessionUpdateCount, 1);
+  assert.deepEqual(await redis.hgetall(mainKey), {});
+  assert.deepEqual(await redis.hgetall(inflightKey), {});
 });

@@ -252,7 +252,7 @@ class InventoryService {
       bagSlotAllocator?: CharacterBagSlotAllocator;
       inventoryMutationContext?: CharacterInventoryMutationContext;
       slotSession?: InventorySlotSession;
-      skipInventoryMutexLock?: boolean;
+      inventoryMutexAlreadyLocked?: boolean;
     } = {},
   ): Promise<{ success: boolean; message: string; itemIds?: number[] }> {
     return await addItemToInventory(

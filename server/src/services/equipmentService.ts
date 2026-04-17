@@ -898,7 +898,7 @@ class EquipmentService {
       bindType?: string;
       identified?: boolean;
       obtainedFrom?: string;
-      skipInventoryMutexLock?: boolean;
+      inventoryMutexAlreadyLocked?: boolean;
       persistImmediately?: boolean;
       fallbackOnSlotConflict?: boolean;
       slotSession?: InventorySlotSession;
@@ -918,7 +918,7 @@ class EquipmentService {
       bindType?: string;
       identified?: boolean;
       obtainedFrom?: string;
-      skipInventoryMutexLock?: boolean;
+      inventoryMutexAlreadyLocked?: boolean;
       persistImmediately?: boolean;
       fallbackOnSlotConflict?: boolean;
       slotSession?: InventorySlotSession;
@@ -932,7 +932,7 @@ class EquipmentService {
     let locationSlot = options.locationSlot ?? null;
     const obtainedFrom = normalizeItemInstanceObtainedFrom(options.obtainedFrom).value;
 
-    if (!options.skipInventoryMutexLock) {
+    if (!options.inventoryMutexAlreadyLocked) {
       await lockCharacterInventoryMutex(characterId);
     }
 

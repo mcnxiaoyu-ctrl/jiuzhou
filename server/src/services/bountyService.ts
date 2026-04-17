@@ -1,9 +1,10 @@
-import { query } from '../config/database.js';
+import { query, withTransaction } from '../config/database.js';
 import crypto from 'crypto';
 import { getBountyDefinitions, getItemDefinitions, getItemDefinitionsByIds } from './staticConfigLoader.js';
 import { getTaskDefinitionById } from './taskDefinitionService.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { Transactional } from '../decorators/transactional.js';
+import { BusinessError } from '../middleware/BusinessError.js';
 import { loadCharacterSettlementResourceSnapshot } from './shared/characterSettlementResourceDeltaService.js';
 import { applyCharacterRewardDeltas } from './shared/characterRewardSettlement.js';
 import { consumeSpecificItemInstance } from './inventory/shared/consume.js';
@@ -80,8 +81,8 @@ type BountyInstanceRow = {
   expires_at: string | Date | null;
 };
 
-type TaskStatusRow = { status: string | null };
 type InsertIdRow = { id: number | string | null };
+type BountyTaskProgressUpsertRow = { task_id: string | null };
 type ClaimLookupRow = {
   claim_id: number | string | null;
   claim_status: string | null;
@@ -89,6 +90,11 @@ type ClaimLookupRow = {
   required_items: unknown;
 };
 type ProgressLookupRow = { progress: unknown; status: string | null };
+type BountySubmitTransitionRow = {
+  previous_task_status: string | null;
+  task_updated: boolean;
+  claim_updated: boolean;
+};
 type InventoryOwnedItemRow = {
   id: number | string | null;
   qty: number | string | null;
@@ -149,6 +155,89 @@ const getObjectiveId = (objective: TaskObjectiveRecord): string | null =>
 
 const getObjectiveTarget = (objective: TaskObjectiveRecord): number =>
   Math.max(1, asFiniteNonNegativeInt(objective.target, 1));
+
+const acceptBountyTaskProgressTx = async (
+  characterId: number,
+  taskId: string,
+  initialStatus: 'turnin' | 'ongoing',
+): Promise<boolean> => {
+  const res = await query<BountyTaskProgressUpsertRow>(
+    `
+      INSERT INTO character_task_progress (
+        character_id,
+        task_id,
+        status,
+        progress,
+        tracked,
+        accepted_at,
+        completed_at,
+        claimed_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, '{}'::jsonb, true, NOW(), NULL, NULL, NOW())
+      ON CONFLICT (character_id, task_id) DO UPDATE SET
+        status = EXCLUDED.status,
+        progress = EXCLUDED.progress,
+        tracked = EXCLUDED.tracked,
+        accepted_at = NOW(),
+        completed_at = NULL,
+        claimed_at = NULL,
+        updated_at = NOW()
+      WHERE character_task_progress.status = 'claimed'
+      RETURNING task_id
+    `,
+    [characterId, taskId, initialStatus],
+  );
+  return res.rows.length > 0;
+};
+
+const completeBountySubmitProgressTx = async (
+  characterId: number,
+  taskId: string,
+  nextProgress: Record<string, number>,
+  claimId: number,
+): Promise<{ taskUpdated: boolean; claimUpdated: boolean; previousTaskStatus: string | null }> => {
+  const res = await query<BountySubmitTransitionRow>(
+    `
+      WITH current_task AS (
+        SELECT status
+        FROM character_task_progress
+        WHERE character_id = $1 AND task_id = $2
+        LIMIT 1
+      ),
+      updated_task AS (
+        UPDATE character_task_progress
+        SET progress = $3::jsonb,
+            status = 'claimable',
+            completed_at = COALESCE(completed_at, NOW()),
+            updated_at = NOW()
+        WHERE character_id = $1
+          AND task_id = $2
+          AND status NOT IN ('claimable', 'claimed')
+        RETURNING task_id
+      ),
+      updated_claim AS (
+        UPDATE bounty_claim
+        SET status = 'completed',
+            updated_at = NOW()
+        WHERE id = $4
+          AND status = 'claimed'
+        RETURNING id
+      )
+      SELECT
+        (SELECT status FROM current_task LIMIT 1) AS previous_task_status,
+        EXISTS(SELECT 1 FROM updated_task) AS task_updated,
+        EXISTS(SELECT 1 FROM updated_claim) AS claim_updated
+    `,
+    [characterId, taskId, JSON.stringify(nextProgress), claimId],
+  );
+  const row = res.rows[0];
+  return {
+    taskUpdated: row?.task_updated === true,
+    claimUpdated: row?.claim_updated === true,
+    previousTaskStatus: asNonEmptyString(row?.previous_task_status),
+  };
+};
 
 const getLocalDateKey = (d: Date = new Date()): string => {
   const y = d.getFullYear();
@@ -344,7 +433,6 @@ class BountyService {
     return { success: true, data: { bounties, today } };
   }
 
-  @Transactional
   async claimBounty(
     characterId: number,
     bountyInstanceId: number,
@@ -356,94 +444,81 @@ class BountyService {
     const bid = Number(bountyInstanceId);
     if (!Number.isFinite(cid) || cid <= 0) return { success: false, message: '角色不存在' };
     if (!Number.isFinite(bid) || bid <= 0) return { success: false, message: '悬赏不存在' };
+    try {
+      return await withTransaction(async () => {
+        const instRes = await query<BountyInstanceRow>(
+          `
+            SELECT id, task_id, claim_policy, max_claims, claimed_count, expires_at
+            FROM bounty_instance
+            WHERE id = $1
+            LIMIT 1
+            FOR UPDATE
+          `,
+          [bid],
+        );
+        if (instRes.rows.length === 0) {
+          return { success: false, message: '悬赏不存在' };
+        }
+        const inst = instRes.rows[0];
+        const taskId = asNonEmptyString(inst.task_id) ?? '';
+        if (!taskId) {
+          return { success: false, message: '悬赏数据异常' };
+        }
+        const expiresAtMs = inst.expires_at ? new Date(inst.expires_at).getTime() : 0;
+        if (expiresAtMs && Number.isFinite(expiresAtMs) && Date.now() > expiresAtMs) {
+          return { success: false, message: '悬赏已过期' };
+        }
 
-    const instRes = await query<BountyInstanceRow>(
-      `
-        SELECT id, task_id, claim_policy, max_claims, claimed_count, expires_at
-        FROM bounty_instance
-        WHERE id = $1
-        LIMIT 1
-        FOR UPDATE
-      `,
-      [bid],
-    );
-    if (instRes.rows.length === 0) {
-      return { success: false, message: '悬赏不存在' };
-    }
-    const inst = instRes.rows[0];
-    const taskId = asNonEmptyString(inst.task_id) ?? '';
-    if (!taskId) {
-      return { success: false, message: '悬赏数据异常' };
-    }
-    const expiresAtMs = inst.expires_at ? new Date(inst.expires_at).getTime() : 0;
-    if (expiresAtMs && Number.isFinite(expiresAtMs) && Date.now() > expiresAtMs) {
-      return { success: false, message: '悬赏已过期' };
-    }
+        const claimPolicy = (asNonEmptyString(inst.claim_policy) ?? 'limited') as BountyClaimPolicy;
+        const maxClaims = asFiniteInt(inst.max_claims, 0);
+        const claimedCount = asFiniteInt(inst.claimed_count, 0);
 
-    const claimPolicy = (asNonEmptyString(inst.claim_policy) ?? 'limited') as BountyClaimPolicy;
-    const maxClaims = asFiniteInt(inst.max_claims, 0);
-    const claimedCount = asFiniteInt(inst.claimed_count, 0);
+        if (claimPolicy === 'unique' && claimedCount >= 1) {
+          return { success: false, message: '该悬赏已被接取' };
+        }
+        if (claimPolicy === 'limited' && maxClaims > 0 && claimedCount >= maxClaims) {
+          return { success: false, message: '该悬赏接取次数已满' };
+        }
 
-    if (claimPolicy === 'unique' && claimedCount >= 1) {
-      return { success: false, message: '该悬赏已被接取' };
-    }
-    if (claimPolicy === 'limited' && maxClaims > 0 && claimedCount >= maxClaims) {
-      return { success: false, message: '该悬赏接取次数已满' };
-    }
+        const taskDef = await getTaskDefinitionById(taskId);
+        if (!taskDef) {
+          return { success: false, message: '任务不存在' };
+        }
+        const objectives = toTaskObjectiveRecords(taskDef.objectives);
+        const hasSubmitObjective = objectives.some((objective) => getObjectiveType(objective) === 'submit_items');
+        const initialStatus = hasSubmitObjective ? 'turnin' : 'ongoing';
 
-    const taskProgRes = await query<TaskStatusRow>(
-      `SELECT status FROM character_task_progress WHERE character_id = $1 AND task_id = $2 LIMIT 1 FOR UPDATE`,
-      [cid, taskId],
-    );
-    if (taskProgRes.rows.length > 0) {
-      const st = asNonEmptyString(taskProgRes.rows[0]?.status);
-      if (st && st !== 'claimed') {
-        return { success: false, message: '该任务已接取' };
+        const taskAccepted = await acceptBountyTaskProgressTx(cid, taskId, initialStatus);
+        if (!taskAccepted) {
+          return { success: false, message: '该任务已接取' };
+        }
+
+        const insertClaimRes = await query<InsertIdRow>(
+          `
+            INSERT INTO bounty_claim (bounty_instance_id, character_id, status, claimed_at, updated_at)
+            VALUES ($1, $2, 'claimed', NOW(), NOW())
+            ON CONFLICT (bounty_instance_id, character_id) DO NOTHING
+            RETURNING id
+          `,
+          [bid, cid],
+        );
+        if (insertClaimRes.rows.length === 0) {
+          throw new BusinessError('已接取该悬赏');
+        }
+
+        await query(
+          `UPDATE bounty_instance SET claimed_count = claimed_count + 1, updated_at = NOW() WHERE id = $1`,
+          [bid],
+        );
+
+        return { success: true, message: '接取成功', data: { bountyInstanceId: bid, taskId } };
+      });
+    } catch (error) {
+      if (error instanceof BusinessError) {
+        return { success: false, message: error.message };
       }
+      throw error;
     }
-
-    const insertClaimRes = await query<InsertIdRow>(
-      `
-        INSERT INTO bounty_claim (bounty_instance_id, character_id, status, claimed_at, updated_at)
-        VALUES ($1, $2, 'claimed', NOW(), NOW())
-        ON CONFLICT (bounty_instance_id, character_id) DO NOTHING
-        RETURNING id
-      `,
-      [bid, cid],
-    );
-    if (insertClaimRes.rows.length === 0) {
-      return { success: false, message: '已接取该悬赏' };
-    }
-
-    await query(
-      `UPDATE bounty_instance SET claimed_count = claimed_count + 1, updated_at = NOW() WHERE id = $1`,
-      [bid],
-    );
-
-    const taskDef = await getTaskDefinitionById(taskId);
-    if (!taskDef) {
-      return { success: false, message: '任务不存在' };
-    }
-    const objectives = toTaskObjectiveRecords(taskDef.objectives);
-    const hasSubmitObjective = objectives.some((objective) => getObjectiveType(objective) === 'submit_items');
-    const initialStatus = hasSubmitObjective ? 'turnin' : 'ongoing';
-
-    await query(
-      `
-        INSERT INTO character_task_progress (character_id, task_id, status, progress, tracked, accepted_at, completed_at, claimed_at, updated_at)
-        VALUES ($1, $2, $3, '{}'::jsonb, true, NOW(), NULL, NULL, NOW())
-        ON CONFLICT (character_id, task_id) DO UPDATE SET
-          status = EXCLUDED.status,
-          progress = EXCLUDED.progress,
-          tracked = EXCLUDED.tracked,
-          accepted_at = NOW(),
-          completed_at = NULL,
-          claimed_at = NULL,
-          updated_at = NOW()
-      `,
-      [cid, taskId, initialStatus],
-    );
-    return { success: true, message: '接取成功', data: { bountyInstanceId: bid, taskId } };
   }
 
   async publishBounty(
@@ -745,7 +820,7 @@ class BountyService {
     }
 
     const progRes = await query<ProgressLookupRow>(
-      `SELECT progress, status FROM character_task_progress WHERE character_id = $1 AND task_id = $2 FOR UPDATE`,
+      `SELECT progress, status FROM character_task_progress WHERE character_id = $1 AND task_id = $2`,
       [cid, tid],
     );
     if (progRes.rows.length === 0) {
@@ -808,20 +883,22 @@ class BountyService {
     }
     if (submitObjId) nextProgress[submitObjId] = submitTarget;
 
-    await query(
-      `
-        UPDATE character_task_progress
-        SET progress = $3::jsonb,
-            status = 'claimable',
-            completed_at = COALESCE(completed_at, NOW()),
-            updated_at = NOW()
-        WHERE character_id = $1 AND task_id = $2
-      `,
-      [cid, tid, JSON.stringify(nextProgress)],
-    );
+    if (!Number.isFinite(claimId) || claimId <= 0) {
+      throw new Error(`悬赏提交状态异常: cid=${cid}, tid=${tid}, claimId=${String(claimRow.claim_id)}`);
+    }
 
-    if (Number.isFinite(claimId) && claimId > 0) {
-      await query(`UPDATE bounty_claim SET status = 'completed', updated_at = NOW() WHERE id = $1`, [claimId]);
+    const submitTransition = await completeBountySubmitProgressTx(cid, tid, nextProgress, claimId);
+    if (!submitTransition.taskUpdated) {
+      if (submitTransition.previousTaskStatus === 'claimable') {
+        return { success: false, message: '任务已可领取' };
+      }
+      if (submitTransition.previousTaskStatus === 'claimed') {
+        return { success: false, message: '任务已完成' };
+      }
+      throw new Error(`悬赏任务提交流转失败: cid=${cid}, tid=${tid}, status=${submitTransition.previousTaskStatus ?? 'null'}`);
+    }
+    if (!submitTransition.claimUpdated) {
+      throw new Error(`悬赏领取记录流转失败: cid=${cid}, tid=${tid}, claimId=${claimId}`);
     }
     return { success: true, message: '提交成功', data: { taskId: tid } };
   }

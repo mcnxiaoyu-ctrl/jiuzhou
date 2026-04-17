@@ -42,6 +42,16 @@ type ResolvedQuestDef = Omit<SectQuest, 'status' | 'progress'> & {
   progressEvent?: QuestProgressEvent;
 };
 
+type SectQuestProgressRow = {
+  progress: number | string | null;
+  status: string | null;
+};
+
+type SectQuestClaimTransitionRow = {
+  previous_status: string | null;
+  claimed_quest_id: string | null;
+};
+
 const isEventQuestTemplate = (quest: SectQuestTemplate): quest is EventQuestTemplate => quest.objectiveType === 'event';
 const isSubmitQuestTemplate = (quest: SectQuestTemplate): quest is SubmitQuestTemplate => quest.objectiveType === 'submit_item';
 
@@ -283,13 +293,13 @@ const applyQuestProgressDeltaTx = async (
   characterId: number,
   questId: string,
   delta: number
-): Promise<void> => {
+): Promise<{ progress: number; status: SectQuest['status'] } | null> => {
   const questTemplate = QUEST_TEMPLATE_BY_ID.get(questId);
-  if (!questTemplate) return;
-  if (!Number.isFinite(delta) || delta <= 0) return;
+  if (!questTemplate) return null;
+  if (!Number.isFinite(delta) || delta <= 0) return null;
 
   const safeDelta = Math.max(1, Math.floor(delta));
-  await query(
+  const res = await query<SectQuestProgressRow>(
     `
       UPDATE sect_quest_progress
       SET progress = LEAST($3, progress + $4),
@@ -304,9 +314,51 @@ const applyQuestProgressDeltaTx = async (
       WHERE character_id = $1
         AND quest_id = $2
         AND status = 'in_progress'
+      RETURNING progress, status
     `,
     [characterId, questId, questTemplate.required, safeDelta]
   );
+  if (res.rows.length === 0) return null;
+  return {
+    progress: Math.max(0, Math.min(questTemplate.required, toNumber(res.rows[0]?.progress))),
+    status: normalizeQuestStatus(res.rows[0]?.status),
+  };
+};
+
+const claimSectQuestProgressTx = async (
+  characterId: number,
+  questId: string,
+  requiredProgress: number,
+): Promise<{ claimed: boolean; previousStatus: SectQuest['status'] | null }> => {
+  const res = await query<SectQuestClaimTransitionRow>(
+    `
+      WITH current_progress AS (
+        SELECT status
+        FROM sect_quest_progress
+        WHERE character_id = $1 AND quest_id = $2
+        LIMIT 1
+      ),
+      claimed_progress AS (
+        UPDATE sect_quest_progress
+        SET status = 'claimed',
+            progress = $3,
+            completed_at = COALESCE(completed_at, NOW())
+        WHERE character_id = $1
+          AND quest_id = $2
+          AND status = 'completed'
+        RETURNING quest_id
+      )
+      SELECT
+        (SELECT status FROM current_progress LIMIT 1) AS previous_status,
+        (SELECT quest_id FROM claimed_progress LIMIT 1) AS claimed_quest_id
+    `,
+    [characterId, questId, requiredProgress],
+  );
+  const row = res.rows[0];
+  return {
+    claimed: typeof row?.claimed_quest_id === 'string' && row.claimed_quest_id === questId,
+    previousStatus: row?.previous_status ? normalizeQuestStatus(row.previous_status) : null,
+  };
 };
 
 const recordSectQuestEventTx = async (
@@ -531,13 +583,12 @@ class SectQuestService {
       return { success: false, message: `${quest.submitRequirement.itemName}数量不足` };
     }
 
-    await applyQuestProgressDeltaTx(characterId, questId, consumeRes.consumed);
-    const updatedRes = await query<{ progress: number; status: string }>(
-      `SELECT progress, status FROM sect_quest_progress WHERE character_id = $1 AND quest_id = $2`,
-      [characterId, questId]
-    );
-    const updatedProgress = Math.max(0, Math.min(quest.required, toNumber(updatedRes.rows[0]?.progress)));
-    const updatedStatus = normalizeQuestStatus(updatedRes.rows[0]?.status);
+    const updatedSnapshot = await applyQuestProgressDeltaTx(characterId, questId, consumeRes.consumed);
+    if (!updatedSnapshot) {
+      throw new Error(`宗门任务进度推进失败: characterId=${characterId}, questId=${questId}`);
+    }
+    const updatedProgress = updatedSnapshot.progress;
+    const updatedStatus = updatedSnapshot.status;
 
     // 任务在本次提交后已完成时，只保留"领取奖励"日志，避免同一完成动作出现提交+领奖双记录。
     if (updatedStatus !== 'completed') {
@@ -571,19 +622,14 @@ class SectQuestService {
       return { success: false, message: '任务不存在' };
     }
 
-    const progressRes = await query(
-      `SELECT status FROM sect_quest_progress WHERE character_id = $1 AND quest_id = $2 FOR UPDATE`,
-      [characterId, questId]
-    );
-    if (progressRes.rows.length === 0) {
-      return { success: false, message: '任务未接取' };
-    }
-
-    const status = normalizeQuestStatus(progressRes.rows[0].status);
-    if (status === 'claimed') {
-      return { success: false, message: '奖励已领取' };
-    }
-    if (status !== 'completed') {
+    const claimTransition = await claimSectQuestProgressTx(characterId, questId, quest.required);
+    if (!claimTransition.claimed) {
+      if (claimTransition.previousStatus === null) {
+        return { success: false, message: '任务未接取' };
+      }
+      if (claimTransition.previousStatus === 'claimed') {
+        return { success: false, message: '奖励已领取' };
+      }
       return { success: false, message: '任务未完成' };
     }
 
@@ -599,17 +645,6 @@ class SectQuestService {
         WHERE character_id = $1
       `,
       [characterId, quest.reward.contribution]
-    );
-    await query(
-      `
-        UPDATE sect_quest_progress
-        SET status = 'claimed',
-            progress = $3,
-            completed_at = COALESCE(completed_at, NOW())
-        WHERE character_id = $1
-          AND quest_id = $2
-      `,
-      [characterId, questId, quest.required]
     );
     await this.addLog(
       member.sectId,

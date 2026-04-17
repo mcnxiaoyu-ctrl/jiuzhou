@@ -1,5 +1,5 @@
 import type { PoolClient, QueryResult } from 'pg';
-import { getTransactionClient, isInTransaction, query } from '../config/database.js';
+import { getTransactionClient, isInTransaction } from '../config/database.js';
 
 /**
  * Inventory Mutex — 角色背包互斥锁工具
@@ -37,10 +37,12 @@ const normalizeCharacterIds = (characterIds: number[]): number[] =>
 const waitForCharacterInventoryMutexWithRunner = async (
   runner: InventoryMutexQueryRunner,
   characterId: number,
-): Promise<void> => {
+): Promise<number> => {
   const sql = 'SELECT pg_advisory_xact_lock($1::integer, $2::integer)';
   const params: [number, number] = [INVENTORY_MUTEX_NAMESPACE, characterId];
+  const startedAt = Date.now();
   await runner.query(sql, params) as QueryResult;
+  return Math.max(0, Date.now() - startedAt);
 };
 
 /**
@@ -50,11 +52,11 @@ const waitForCharacterInventoryMutexWithRunner = async (
 export const lockCharacterInventoryMutexByClient = async (
   client: PoolClient,
   characterId: number
-): Promise<void> => {
+): Promise<number> => {
   if (!Number.isInteger(characterId) || characterId <= 0) {
     throw new Error(`角色背包互斥锁参数错误: characterId=${String(characterId)}`);
   }
-  await waitForCharacterInventoryMutexWithRunner(client, characterId);
+  return await waitForCharacterInventoryMutexWithRunner(client, characterId);
 };
 
 /**
@@ -62,7 +64,7 @@ export const lockCharacterInventoryMutexByClient = async (
  */
 export const lockCharacterInventoryMutex = async (
   characterId: number
-): Promise<void> => {
+): Promise<number> => {
   if (!Number.isInteger(characterId) || characterId <= 0) {
     throw new Error(`角色背包互斥锁参数错误: characterId=${String(characterId)}`);
   }
@@ -73,7 +75,7 @@ export const lockCharacterInventoryMutex = async (
   if (!client) {
     throw new Error('角色背包互斥锁获取失败：事务连接不存在');
   }
-  await lockCharacterInventoryMutexByClient(client, characterId);
+  return await lockCharacterInventoryMutexByClient(client, characterId);
 };
 
 /**

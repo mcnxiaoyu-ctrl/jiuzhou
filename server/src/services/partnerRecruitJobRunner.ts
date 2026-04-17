@@ -17,9 +17,6 @@
  * 1) 若 worker 启动失败，必须主动把任务退款并终结，不能让任务停留在 pending。
  * 2) 恢复 pending 任务时用户可能离线，此时允许只落状态不推送，前端刷新后再通过状态接口恢复结果。
  */
-import { Worker } from 'worker_threads';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { query } from '../config/database.js';
 import { getGameServer } from '../game/gameServer.js';
 import {
@@ -33,15 +30,55 @@ import type { PartnerRecruitQuality } from './shared/partnerRecruitRules.js';
 import type {
   PartnerRecruitWorkerMessage,
   PartnerRecruitWorkerPayload,
+  PartnerRecruitWorkerResult,
   PartnerRecruitWorkerResponse,
 } from '../workers/partnerRecruitWorkerShared.js';
+import {
+  PooledJobWorkerRunner,
+  resolveWorkerScriptPath,
+} from './shared/pooledJobWorkerRunner.js';
 
 type EnqueueParams = PartnerRecruitWorkerPayload & {
   userId?: number;
 };
 
+const resolvePartnerRecruitWorkerCount = (): number => {
+  const configured = Math.floor(Number(process.env.PARTNER_RECRUIT_WORKER_COUNT));
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return 2;
+  }
+  return configured;
+};
+
 class PartnerRecruitJobRunner {
-  private activeWorkers = new Map<string, Worker>();
+  private readonly abortedGenerationIds = new Set<string>();
+  private readonly workerPool = new PooledJobWorkerRunner<
+    PartnerRecruitWorkerPayload,
+    PartnerRecruitWorkerMessage,
+    PartnerRecruitWorkerResponse,
+    PartnerRecruitWorkerResult
+  >({
+    label: 'partner-recruit',
+    workerScript: resolveWorkerScriptPath(import.meta.url, 'partnerRecruitWorker'),
+    workerCount: resolvePartnerRecruitWorkerCount(),
+    buildExecuteMessage: (payload) => ({
+      type: 'executePartnerRecruit',
+      payload,
+    }),
+    parseWorkerResponse: (message) => {
+      if (message.type === 'ready') {
+        return { kind: 'ready' };
+      }
+      if (message.type === 'result') {
+        return { kind: 'result', payload: message.payload };
+      }
+      return {
+        kind: 'error',
+        message: message.payload.error,
+        ...(message.payload.stack ? { stack: message.payload.stack } : {}),
+      };
+    },
+  });
   private initialized = false;
 
   /**
@@ -65,37 +102,19 @@ class PartnerRecruitJobRunner {
     await refreshGeneratedPartnerSnapshots();
   }
 
-  private resolveWorkerScript(): string {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    if (process.env.NODE_ENV !== 'production') {
-      return path.join(__dirname, '../../dist/workers/partnerRecruitWorker.js');
-    }
-    return path.join(__dirname, '../workers/partnerRecruitWorker.js');
-  }
-
   async initialize(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
+    await this.workerPool.initialize();
     await this.recoverPendingJobs();
   }
 
   async shutdown(): Promise<void> {
-    const workers = [...this.activeWorkers.values()];
-    this.activeWorkers.clear();
-    await Promise.allSettled(workers.map((worker) => worker.terminate()));
+    await this.workerPool.shutdown();
   }
 
   async enqueue(params: EnqueueParams): Promise<void> {
-    if (this.activeWorkers.has(params.generationId)) return;
-
-    const worker = new Worker(this.resolveWorkerScript());
-    this.activeWorkers.set(params.generationId, worker);
-
-    const cleanup = async (): Promise<void> => {
-      this.activeWorkers.delete(params.generationId);
-      await worker.terminate().catch(() => undefined);
-    };
+    if (this.workerPool.hasActiveJob(params.generationId)) return;
 
     const failJob = async (reason: string): Promise<void> => {
       await partnerRecruitService.forceRefundPendingRecruitJob(params.characterId, params.generationId, reason);
@@ -113,78 +132,54 @@ class PartnerRecruitJobRunner {
       await notifyPartnerRecruitStatus(params.characterId, userId);
     };
 
-    worker.once('error', (error) => {
+    void this.workerPool.execute(params.generationId, {
+      generationId: params.generationId,
+      characterId: params.characterId,
+      quality: params.quality,
+    }).then((result) => {
       void (async () => {
-        await cleanup();
-        const message = error instanceof Error ? error.message : String(error);
-        await failJob(`伙伴招募 worker 启动失败：${message}`);
-      })();
-    });
-
-    worker.once('exit', (code) => {
-      if (code === 0) return;
-      void (async () => {
-        if (!this.activeWorkers.has(params.generationId)) return;
-        await cleanup();
-        await failJob(`伙伴招募 worker 异常退出，退出码=${code}`);
-      })();
-    });
-
-    worker.on('message', (message: PartnerRecruitWorkerResponse) => {
-      void (async () => {
-        if (message.type === 'ready') {
-          const request: PartnerRecruitWorkerMessage = {
-            type: 'executePartnerRecruit',
-            payload: {
-              generationId: params.generationId,
-              characterId: params.characterId,
-              quality: params.quality,
-            },
-          };
-          worker.postMessage(request);
+        if (this.abortedGenerationIds.delete(params.generationId)) {
           return;
         }
-
-        await cleanup();
         const userId = params.userId ?? await getCharacterUserId(params.characterId);
-        if (message.type === 'error') {
-          await failJob(`伙伴招募 worker 执行失败：${message.payload.error}`);
-          return;
-        }
-
-        if (message.payload.status === 'generated_draft') {
+        if (result.status === 'generated_draft') {
           await this.syncGeneratedRecruitSnapshots();
         }
 
         if (!userId) return;
         getGameServer().emitToUser(userId, 'partnerRecruitResult', {
-          characterId: message.payload.characterId,
-          generationId: message.payload.generationId,
-          status: message.payload.status === 'generated_draft' ? 'generated_draft' : 'failed',
+          characterId: result.characterId,
+          generationId: result.generationId,
+          status: result.status === 'generated_draft' ? 'generated_draft' : 'failed',
           hasUnreadResult: true,
-          message: message.payload.status === 'generated_draft'
+          message: result.status === 'generated_draft'
             ? '新的伙伴预览已生成，请前往伙伴界面查看'
             : '伙伴招募失败，请前往伙伴界面查看',
-          preview: message.payload.preview
+          preview: result.preview
             ? {
-                name: message.payload.preview.name,
-                quality: message.payload.preview.quality,
-                role: message.payload.preview.role,
-                element: message.payload.preview.element,
+                name: result.preview.name,
+                quality: result.preview.quality,
+                role: result.preview.role,
+                element: result.preview.element,
               }
             : undefined,
-          errorMessage: message.payload.errorMessage ?? undefined,
+          errorMessage: result.errorMessage ?? undefined,
         });
-        await notifyPartnerRecruitStatus(message.payload.characterId, userId);
+        await notifyPartnerRecruitStatus(result.characterId, userId);
+      })();
+    }).catch((error: Error) => {
+      void (async () => {
+        if (this.abortedGenerationIds.delete(params.generationId)) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        await failJob(`伙伴招募 worker 执行失败：${message}`);
       })();
     });
   }
 
   async abort(generationId: string): Promise<void> {
-    const worker = this.activeWorkers.get(generationId);
-    if (!worker) return;
-    this.activeWorkers.delete(generationId);
-    await worker.terminate().catch(() => undefined);
+    this.abortedGenerationIds.add(generationId);
   }
 
   private async recoverPendingJobs(): Promise<void> {

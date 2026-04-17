@@ -17,89 +17,91 @@
  * 1. worker 启动失败时必须把任务显式标记为 failed，不能留在 pending。
  * 2. 恢复 pending 任务时只依赖数据库真相，不依赖进程内内存状态，避免重启后任务丢失。
  */
-import { Worker } from 'worker_threads';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { query } from '../config/database.js';
 import { wanderService } from './wander/service.js';
-import type { WanderWorkerMessage, WanderWorkerPayload, WanderWorkerResponse } from '../workers/wanderWorkerShared.js';
+import type {
+  WanderWorkerMessage,
+  WanderWorkerPayload,
+  WanderWorkerResponse,
+  WanderWorkerResult,
+} from '../workers/wanderWorkerShared.js';
+import {
+  PooledJobWorkerRunner,
+  resolveWorkerScriptPath,
+} from './shared/pooledJobWorkerRunner.js';
 
 type EnqueueParams = WanderWorkerPayload;
 
 class WanderJobRunner {
-  private activeWorkers = new Map<string, Worker>();
+  private readonly abortedGenerationIds = new Set<string>();
+  private readonly workerPool = new PooledJobWorkerRunner<
+    WanderWorkerPayload,
+    WanderWorkerMessage,
+    WanderWorkerResponse,
+    WanderWorkerResult
+  >({
+    label: 'wander-generation',
+    workerScript: resolveWorkerScriptPath(import.meta.url, 'wanderWorker'),
+    workerCount: (() => {
+      const configured = Math.floor(Number(process.env.WANDER_WORKER_COUNT));
+      if (!Number.isFinite(configured) || configured <= 0) {
+        return 2;
+      }
+      return configured;
+    })(),
+    buildExecuteMessage: (payload) => ({
+      type: 'executeWanderGeneration',
+      payload,
+    }),
+    parseWorkerResponse: (message) => {
+      if (message.type === 'ready') {
+        return { kind: 'ready' };
+      }
+      if (message.type === 'result') {
+        return { kind: 'result', payload: message.payload };
+      }
+      return {
+        kind: 'error',
+        message: message.payload.error,
+        ...(message.payload.stack ? { stack: message.payload.stack } : {}),
+      };
+    },
+  });
   private initialized = false;
-
-  private resolveWorkerScript(): string {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    if (process.env.NODE_ENV !== 'production') {
-      return path.join(__dirname, '../../dist/workers/wanderWorker.js');
-    }
-    return path.join(__dirname, '../workers/wanderWorker.js');
-  }
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
+    await this.workerPool.initialize();
     await this.recoverPendingJobs();
   }
 
   async shutdown(): Promise<void> {
-    const workers = [...this.activeWorkers.values()];
-    this.activeWorkers.clear();
-    await Promise.allSettled(workers.map((worker) => worker.terminate()));
+    await this.workerPool.shutdown();
   }
 
   async enqueue(params: EnqueueParams): Promise<void> {
-    if (this.activeWorkers.has(params.generationId)) return;
-
-    const worker = new Worker(this.resolveWorkerScript());
-    this.activeWorkers.set(params.generationId, worker);
-
-    const cleanup = async (): Promise<void> => {
-      this.activeWorkers.delete(params.generationId);
-      await worker.terminate().catch(() => undefined);
-    };
+    if (this.workerPool.hasActiveJob(params.generationId)) return;
 
     const failJob = async (reason: string): Promise<void> => {
       await wanderService.markGenerationJobFailed(params.characterId, params.generationId, reason);
     };
 
-    worker.once('error', (error) => {
+    void this.workerPool.execute(params.generationId, params).then(() => {
+      this.abortedGenerationIds.delete(params.generationId);
+    }).catch((error: Error) => {
       void (async () => {
-        await cleanup();
-        const message = error instanceof Error ? error.message : String(error);
-        await failJob(`云游 worker 启动失败：${message}`);
-      })();
-    });
-
-    worker.once('exit', (code) => {
-      if (code === 0) return;
-      void (async () => {
-        if (!this.activeWorkers.has(params.generationId)) return;
-        await cleanup();
-        await failJob(`云游 worker 异常退出，退出码=${code}`);
-      })();
-    });
-
-    worker.on('message', (message: WanderWorkerResponse) => {
-      void (async () => {
-        if (message.type === 'ready') {
-          const request: WanderWorkerMessage = {
-            type: 'executeWanderGeneration',
-            payload: params,
-          };
-          worker.postMessage(request);
+        if (this.abortedGenerationIds.delete(params.generationId)) {
           return;
         }
-
-        await cleanup();
-        if (message.type === 'error') {
-          await failJob(`云游 worker 执行失败：${message.payload.error}`);
-        }
+        const message = error instanceof Error ? error.message : String(error);
+        await failJob(`云游 worker 执行失败：${message}`);
       })();
     });
+  }
+
+  async abort(generationId: string): Promise<void> {
+    this.abortedGenerationIds.add(generationId);
   }
 
   private async recoverPendingJobs(): Promise<void> {

@@ -81,8 +81,8 @@ export interface CreateItemOptions {
   inventoryMutationContext?: CharacterInventoryMutationContext;
   /** 事务级统一槽位会话，统一管理容量、空槽与普通堆叠视图。 */
   slotSession?: InventorySlotSession;
-  /** 调用方已持有角色背包互斥锁时，跳过底层重复加锁 SQL。 */
-  skipInventoryMutexLock?: boolean;
+  /** 调用方已持有角色背包互斥锁时，底层直接复用该锁，不再重复申请。 */
+  inventoryMutexAlreadyLocked?: boolean;
   /** 需要严格受当前事务 / savepoint 控制时，改为立即写入真实实例表。 */
   persistImmediately?: boolean;
   // 装备专用选项
@@ -340,7 +340,8 @@ const createEquipmentItem = async (
         : await createInventorySlotSession([characterId])
       : null;
     const effectiveSlotSession = localSlotSession ?? options.slotSession;
-    const shouldSkipInnerInventoryMutexLock = options.skipInventoryMutexLock === true || localSlotSession !== null;
+    const shouldReuseExistingInventoryMutex =
+      options.inventoryMutexAlreadyLocked === true || localSlotSession !== null;
 
     for (let i = 0; i < qty; i++) {
       const generated =
@@ -361,7 +362,7 @@ const createEquipmentItem = async (
           : {}),
         bindType: options.bindType,
         obtainedFrom: options.obtainedFrom,
-        ...(shouldSkipInnerInventoryMutexLock ? { skipInventoryMutexLock: true } : {}),
+        ...(shouldReuseExistingInventoryMutex ? { inventoryMutexAlreadyLocked: true } : {}),
         ...(options.persistImmediately ? { persistImmediately: true } : {}),
         ...(!options.persistImmediately ? { deferBufferedMutation: true } : {}),
       });
@@ -406,7 +407,7 @@ const createEquipmentItem = async (
     if (!hasUsableTransactionContext()) {
       try {
         return await withTransaction(async () => {
-          if (shouldCreateLocalSlotSession && !options.skipInventoryMutexLock) {
+          if (shouldCreateLocalSlotSession && !options.inventoryMutexAlreadyLocked) {
             await lockCharacterInventoryMutex(characterId);
           }
           const result = await executeBatch();
@@ -429,7 +430,7 @@ const createEquipmentItem = async (
     const savepointName = buildCreateItemSavepointName();
     await query(`SAVEPOINT ${savepointName}`);
     try {
-      if (shouldCreateLocalSlotSession && !options.skipInventoryMutexLock) {
+      if (shouldCreateLocalSlotSession && !options.inventoryMutexAlreadyLocked) {
         await lockCharacterInventoryMutex(characterId);
       }
       const result = await executeBatch();
@@ -475,7 +476,7 @@ const createNormalItem = async (
     ...(options.bagSlotAllocator ? { bagSlotAllocator: options.bagSlotAllocator } : {}),
     ...(options.inventoryMutationContext ? { inventoryMutationContext: options.inventoryMutationContext } : {}),
     ...(options.slotSession ? { slotSession: options.slotSession } : {}),
-    ...(options.skipInventoryMutexLock ? { skipInventoryMutexLock: true } : {}),
+    ...(options.inventoryMutexAlreadyLocked ? { inventoryMutexAlreadyLocked: true } : {}),
   });
 
   return {

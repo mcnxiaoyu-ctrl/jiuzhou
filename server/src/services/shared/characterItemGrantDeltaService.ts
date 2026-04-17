@@ -4,10 +4,22 @@ import { itemService } from '../itemService.js';
 import { sendSystemMail, type MailAttachItem } from '../mailService.js';
 import type { GenerateOptions, GeneratedEquipment } from '../equipmentService.js';
 import { createScopedLogger } from '../../utils/logger.js';
+import { createSlowOperationLogger } from '../../utils/slowOperationLogger.js';
 import { lockCharacterInventoryMutex } from '../inventoryMutex.js';
 import { createCharacterBagSlotAllocatorFromSession } from './characterBagSlotAllocator.js';
 import { createCharacterInventoryMutationContextFromSession } from './characterInventoryMutationContext.js';
 import { createInventorySlotSession } from './inventorySlotSession.js';
+import {
+  buildCharacterItemGrantOverflowMailSourceRefId,
+  claimCharacterItemGrantOverflowMailBatch,
+  countPendingCharacterItemGrantOverflowMail,
+  enqueueCharacterItemGrantOverflowMail,
+  finalizeCharacterItemGrantOverflowMail,
+  loadCharacterItemGrantOverflowMailForUpdate,
+  restoreCharacterItemGrantOverflowMailAttempt,
+  type CharacterItemGrantOverflowMailAttachment,
+  type CharacterItemGrantOverflowMailOutboxEntry,
+} from './characterItemGrantMailOutbox.js';
 
 /**
  * 角色物品授予 Delta 聚合服务
@@ -92,6 +104,17 @@ export type PendingCharacterItemGrant = {
   qualityRank: number | null;
 };
 
+type CharacterItemGrantOverflowFlushSummary = {
+  batchSize: number;
+  overflowCount: number;
+  inventoryMutexWaitMs: number;
+  inventoryMutexHoldMs: number;
+};
+
+type CharacterItemGrantFlushPhaseOneResult = CharacterItemGrantOverflowFlushSummary & {
+  outboxEntries: CharacterItemGrantOverflowMailOutboxEntry[];
+};
+
 const ITEM_GRANT_DIRTY_INDEX_KEY = 'character:item-grant-delta:index';
 const ITEM_GRANT_KEY_PREFIX = 'character:item-grant-delta:';
 const ITEM_GRANT_INFLIGHT_KEY_PREFIX = 'character:item-grant-delta:inflight:';
@@ -100,10 +123,13 @@ const ITEM_GRANT_FLUSH_INTERVAL_MS = 1_000;
 const ITEM_GRANT_FLUSH_BATCH_LIMIT = 100;
 const ITEM_GRANT_MAIL_CHUNK_SIZE = 10;
 const ITEM_GRANT_INFLIGHT_STALE_AFTER_MS = 5 * 60 * 1000;
+const ITEM_GRANT_OUTBOX_BATCH_LIMIT = 20;
+const ITEM_GRANT_FLUSH_SLOW_THRESHOLD_MS = 80;
 const itemGrantDeltaLogger = createScopedLogger('characterItemGrant.delta');
 
 let itemGrantFlushTimer: ReturnType<typeof setInterval> | null = null;
 let itemGrantFlushInFlight: Promise<void> | null = null;
+let itemGrantOutboxInFlight: Promise<void> | null = null;
 const syncFlushPromiseByCharacterId = new Map<number, Promise<void>>();
 
 const claimItemGrantDeltaLua = `
@@ -357,6 +383,56 @@ const pushPendingMailItem = (
   });
 };
 
+const toOverflowMailAttachment = (
+  mailItem: MailAttachItem,
+): CharacterItemGrantOverflowMailAttachment => {
+  return {
+    item_def_id: mailItem.item_def_id,
+    qty: mailItem.qty,
+    ...(mailItem.options
+      ? {
+          options: {
+            ...(mailItem.options.bindType ? { bindType: mailItem.options.bindType } : {}),
+            ...(mailItem.options.equipOptions
+              ? {
+                  equipOptions: mailItem.options.equipOptions as NonNullable<
+                    CharacterItemGrantOverflowMailAttachment['options']
+                  >['equipOptions'],
+                }
+              : {}),
+            ...(mailItem.options.metadata ? { metadata: mailItem.options.metadata } : {}),
+            ...(mailItem.options.quality ? { quality: mailItem.options.quality } : {}),
+            ...(mailItem.options.qualityRank !== undefined
+              ? { qualityRank: mailItem.options.qualityRank }
+              : {}),
+          },
+        }
+      : {}),
+  };
+};
+
+const toMailAttachItem = (
+  attachment: CharacterItemGrantOverflowMailAttachment,
+): MailAttachItem => {
+  return {
+    item_def_id: attachment.item_def_id,
+    qty: attachment.qty,
+    ...(attachment.options
+      ? {
+          options: {
+            ...(attachment.options.bindType ? { bindType: attachment.options.bindType } : {}),
+            ...(attachment.options.equipOptions ? { equipOptions: attachment.options.equipOptions as GenerateOptions } : {}),
+            ...(attachment.options.metadata ? { metadata: attachment.options.metadata } : {}),
+            ...(attachment.options.quality ? { quality: attachment.options.quality } : {}),
+            ...(attachment.options.qualityRank !== undefined
+              ? { qualityRank: attachment.options.qualityRank }
+              : {}),
+          },
+        }
+      : {}),
+  };
+};
+
 export const bufferCharacterItemGrantDeltas = async (
   grants: BufferedCharacterItemGrant[],
 ): Promise<void> => {
@@ -596,14 +672,25 @@ export const flushCharacterPendingItemGrantsNow = async (
     try {
       const hash = await loadClaimedCharacterItemGrantHash(normalizedCharacterId);
       const grants = parseClaimedCharacterItemGrantHash(normalizedCharacterId, hash);
-      if (grants.length > 0) {
-        await flushSingleCharacterItemGrants(normalizedCharacterId, grants);
+      try {
+        if (grants.length > 0) {
+          await flushSingleCharacterItemGrants(normalizedCharacterId, grants);
+        }
+      } catch (error) {
+        await restoreCharacterItemGrantDelta(normalizedCharacterId);
+        throw error;
       }
+
       await finalizeCharacterItemGrantDelta(normalizedCharacterId);
     } catch (error) {
-      await restoreCharacterItemGrantDelta(normalizedCharacterId);
       throw error;
     }
+
+    await processCharacterItemGrantOverflowMailBatch({
+      drainAll: true,
+      limit: ITEM_GRANT_OUTBOX_BATCH_LIMIT,
+      characterId: normalizedCharacterId,
+    });
   })();
 
   syncFlushPromiseByCharacterId.set(normalizedCharacterId, flushPromise);
@@ -619,17 +706,40 @@ export const flushCharacterPendingItemGrantsNow = async (
 const flushSingleCharacterItemGrants = async (
   characterId: number,
   grants: NormalizedCharacterItemGrant[],
-): Promise<void> => {
-  if (grants.length <= 0) return;
+) : Promise<CharacterItemGrantFlushPhaseOneResult> => {
+  if (grants.length <= 0) {
+    return {
+      batchSize: 0,
+      overflowCount: 0,
+      inventoryMutexWaitMs: 0,
+      inventoryMutexHoldMs: 0,
+      outboxEntries: [],
+    };
+  }
 
-  await withTransaction(async () => {
-    await lockCharacterInventoryMutex(characterId);
+  const slowLogger = createSlowOperationLogger({
+    label: 'characterItemGrant.flush.phase1',
+    thresholdMs: ITEM_GRANT_FLUSH_SLOW_THRESHOLD_MS,
+    fields: {
+      characterId,
+      item_grant_flush_batch_size: grants.length,
+    },
+  });
+
+  const phaseOneResult = await withTransaction(async () => {
+    const inventoryMutexWaitMs = await lockCharacterInventoryMutex(characterId);
+    const inventoryMutexHoldStartedAt = Date.now();
+    slowLogger.mark('acquireInventoryMutex', {
+      inventory_mutex_wait_ms: inventoryMutexWaitMs,
+    });
     const slotSession = await createInventorySlotSession([characterId]);
     const bagSlotAllocator = createCharacterBagSlotAllocatorFromSession(slotSession, [characterId]);
     const inventoryMutationContext = createCharacterInventoryMutationContextFromSession(slotSession);
     const pendingMailItems: MailAttachItem[] = [];
     const idleBagFullSessionIds = new Set<string>();
     let receiverUserId = 0;
+
+    slowLogger.mark('prepareInventoryContext');
 
     for (const grant of grants) {
       receiverUserId = grant.payload.userId;
@@ -645,7 +755,7 @@ const flushSingleCharacterItemGrants = async (
           bagSlotAllocator,
           inventoryMutationContext,
           slotSession,
-          skipInventoryMutexLock: true,
+          inventoryMutexAlreadyLocked: true,
           ...(grant.payload.metadata ? { metadata: grant.payload.metadata } : {}),
           ...(grant.payload.quality ? { quality: grant.payload.quality } : {}),
           ...(grant.payload.qualityRank !== null ? { qualityRank: grant.payload.qualityRank } : {}),
@@ -678,31 +788,132 @@ const flushSingleCharacterItemGrants = async (
       throw new Error(`角色资产 Delta flush 失败: characterId=${characterId}, itemDefId=${grant.payload.itemDefId}, message=${createResult.message}`);
     }
 
-    for (let index = 0; index < pendingMailItems.length; index += ITEM_GRANT_MAIL_CHUNK_SIZE) {
-      const chunk = pendingMailItems.slice(index, index + ITEM_GRANT_MAIL_CHUNK_SIZE);
-      const mailResult = await sendSystemMail(
-        receiverUserId,
-        characterId,
-        '奖励补发',
-        '由于背包空间不足，部分奖励已通过邮件补发，请前往邮箱领取。',
-        { items: chunk },
-        30,
-      );
-      if (!mailResult.success) {
-        throw new Error(`角色资产 Delta 补发邮件失败: characterId=${characterId}, message=${mailResult.message}`);
+    slowLogger.mark('createItems', {
+      item_grant_overflow_count: pendingMailItems.length,
+    });
+
+    const outboxEntries: CharacterItemGrantOverflowMailOutboxEntry[] = [];
+    if (pendingMailItems.length > 0) {
+      for (let index = 0; index < pendingMailItems.length; index += ITEM_GRANT_MAIL_CHUNK_SIZE) {
+        const chunk = pendingMailItems.slice(index, index + ITEM_GRANT_MAIL_CHUNK_SIZE);
+        outboxEntries.push({
+          characterId,
+          recipientUserId: receiverUserId,
+          recipientCharacterId: characterId,
+          title: '奖励补发',
+          content: '由于背包空间不足，部分奖励已通过邮件补发，请前往邮箱领取。',
+          attachItems: chunk.map((mailItem) => toOverflowMailAttachment(mailItem)),
+          idleSessionIds: [...idleBagFullSessionIds],
+          expireDays: 30,
+        });
       }
+      await enqueueCharacterItemGrantOverflowMail(outboxEntries);
+      slowLogger.mark('enqueueOverflowMailOutbox', {
+        item_grant_overflow_count: pendingMailItems.length,
+      });
     }
 
-    if (idleBagFullSessionIds.size > 0) {
-      await query(
-        `UPDATE idle_sessions
-         SET bag_full_flag = true,
-             updated_at = NOW()
-         WHERE id = ANY($1::uuid[])`,
-        [[...idleBagFullSessionIds]],
-      );
-    }
+    return {
+      batchSize: grants.length,
+      overflowCount: pendingMailItems.length,
+      inventoryMutexWaitMs,
+      inventoryMutexHoldMs: Math.max(0, Date.now() - inventoryMutexHoldStartedAt),
+      outboxEntries,
+    };
   });
+
+  slowLogger.flush({
+    inventory_mutex_wait_ms: phaseOneResult.inventoryMutexWaitMs,
+    inventory_mutex_hold_ms: phaseOneResult.inventoryMutexHoldMs,
+    item_grant_flush_batch_size: phaseOneResult.batchSize,
+    item_grant_overflow_count: phaseOneResult.overflowCount,
+  });
+
+  return phaseOneResult;
+};
+
+const processCharacterItemGrantOverflowMailOutboxById = async (
+  outboxId: number,
+): Promise<boolean> => {
+  let processed = false;
+  let retryCount = 0;
+
+  try {
+    await withTransaction(async () => {
+      const row = await loadCharacterItemGrantOverflowMailForUpdate(outboxId);
+      if (!row) {
+        return;
+      }
+
+      retryCount = row.attemptCount + 1;
+      const mailResult = await sendSystemMail(
+        row.recipientUserId,
+        row.recipientCharacterId,
+        row.title,
+        row.content,
+        {
+          items: row.attachItems.map((attachment) => toMailAttachItem(attachment)),
+        },
+        row.expireDays,
+      );
+      if (!mailResult.success || !mailResult.mailId) {
+        throw new Error(`奖励补发邮件发送失败: outboxId=${outboxId}, message=${mailResult.message}`);
+      }
+
+      if (row.idleSessionIds.length > 0) {
+        await query(
+          `UPDATE idle_sessions
+           SET bag_full_flag = true,
+               updated_at = NOW()
+           WHERE id = ANY($1::uuid[])`,
+          [row.idleSessionIds],
+        );
+      }
+
+      await finalizeCharacterItemGrantOverflowMail(outboxId, mailResult.mailId);
+      processed = true;
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : `奖励补发邮件处理失败: outboxId=${outboxId}`;
+    await restoreCharacterItemGrantOverflowMailAttempt(outboxId, message);
+    itemGrantDeltaLogger.warn(
+      {
+        outboxId,
+        item_grant_outbox_retry_count: retryCount > 0 ? retryCount : 1,
+      },
+      message,
+    );
+  }
+
+  return processed;
+};
+
+const processCharacterItemGrantOverflowMailBatch = async (
+  options: { drainAll?: boolean; limit?: number; characterId?: number } = {},
+): Promise<void> => {
+  const drainAll = options.drainAll === true;
+  const limit = Math.max(1, Math.floor(options.limit ?? ITEM_GRANT_OUTBOX_BATCH_LIMIT));
+
+  do {
+    const outboxIds = await claimCharacterItemGrantOverflowMailBatch(limit, options.characterId);
+    if (outboxIds.length <= 0) {
+      return;
+    }
+
+    for (const outboxId of outboxIds) {
+      await processCharacterItemGrantOverflowMailOutboxById(outboxId);
+    }
+
+    const pendingCount = await countPendingCharacterItemGrantOverflowMail();
+    itemGrantDeltaLogger.info(
+      {
+        item_grant_outbox_pending_count: pendingCount,
+        processedCount: outboxIds.length,
+        ...(options.characterId ? { characterId: options.characterId } : {}),
+      },
+      '角色物品奖励补发 outbox 批次处理完成',
+    );
+  } while (drainAll);
 };
 
 const flushCharacterItemGrantDeltas = async (
@@ -724,12 +935,25 @@ const flushCharacterItemGrantDeltas = async (
       try {
         const hash = await loadClaimedCharacterItemGrantHash(characterId);
         const grants = parseClaimedCharacterItemGrantHash(characterId, hash);
-        await flushSingleCharacterItemGrants(characterId, grants);
+        try {
+          if (grants.length > 0) {
+            await flushSingleCharacterItemGrants(characterId, grants);
+          }
+        } catch (error) {
+          await restoreCharacterItemGrantDelta(characterId);
+          throw error;
+        }
+
         await finalizeCharacterItemGrantDelta(characterId);
       } catch (error) {
-        await restoreCharacterItemGrantDelta(characterId);
         throw error;
       }
+
+      await processCharacterItemGrantOverflowMailBatch({
+        drainAll: true,
+        limit: ITEM_GRANT_OUTBOX_BATCH_LIMIT,
+        characterId,
+      });
     }
   } while (drainAll);
 };
@@ -753,13 +977,34 @@ const runItemGrantFlushLoopOnce = async (): Promise<void> => {
   }
 };
 
+const runItemGrantOverflowMailLoopOnce = async (): Promise<void> => {
+  if (itemGrantOutboxInFlight) {
+    await itemGrantOutboxInFlight;
+    return;
+  }
+
+  const currentOutboxRun = processCharacterItemGrantOverflowMailBatch().catch((error: Error) => {
+    itemGrantDeltaLogger.error(error, '角色物品奖励补发 outbox 处理失败');
+  });
+  itemGrantOutboxInFlight = currentOutboxRun;
+  try {
+    await currentOutboxRun;
+  } finally {
+    if (itemGrantOutboxInFlight === currentOutboxRun) {
+      itemGrantOutboxInFlight = null;
+    }
+  }
+};
+
 export const initializeCharacterItemGrantDeltaService = async (): Promise<void> => {
   if (itemGrantFlushTimer) return;
 
   await runItemGrantFlushLoopOnce();
+  await runItemGrantOverflowMailLoopOnce();
 
   itemGrantFlushTimer = setInterval(() => {
     void runItemGrantFlushLoopOnce();
+    void runItemGrantOverflowMailLoopOnce();
   }, ITEM_GRANT_FLUSH_INTERVAL_MS);
 };
 
@@ -772,6 +1017,10 @@ export const shutdownCharacterItemGrantDeltaService = async (): Promise<void> =>
   if (itemGrantFlushInFlight) {
     await itemGrantFlushInFlight;
   }
+  if (itemGrantOutboxInFlight) {
+    await itemGrantOutboxInFlight;
+  }
 
   await flushCharacterItemGrantDeltas({ drainAll: true });
+  await processCharacterItemGrantOverflowMailBatch({ drainAll: true, limit: ITEM_GRANT_OUTBOX_BATCH_LIMIT });
 };

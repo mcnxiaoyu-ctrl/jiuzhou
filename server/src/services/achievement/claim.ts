@@ -1,5 +1,4 @@
-import { query } from '../../config/database.js';
-import { Transactional } from '../../decorators/transactional.js';
+import { query, withTransaction } from '../../config/database.js';
 import { enqueueCharacterItemGrant } from '../shared/characterItemGrantDeltaService.js';
 import { applyCharacterRewardDeltas, createCharacterRewardDelta } from '../shared/characterRewardSettlement.js';
 import {
@@ -24,8 +23,20 @@ import {
   getItemDefinitionsByIds,
   getTitleDefinitions,
 } from '../staticConfigLoader.js';
+import { BusinessError } from '../../middleware/BusinessError.js';
 import { grantPermanentTitleTx } from './titleOwnership.js';
 import { lockCharacterRewardSettlementTargets } from '../shared/characterRewardTargetLock.js';
+
+type AchievementClaimTransitionRow = {
+  previous_status: string | null;
+  claimed_achievement_id: string | null;
+};
+
+type AchievementPointsClaimTransitionRow = {
+  total_points: number | string | null;
+  claimed_thresholds: unknown;
+  claimed_threshold: number | string | null;
+};
 
 /**
  * 成就领取服务
@@ -191,7 +202,88 @@ class AchievementClaimService {
     return this.getTitleInfo(id);
   }
 
-  @Transactional
+  private async claimAchievementStatusTx(
+    characterId: number,
+    achievementId: string,
+  ): Promise<{ claimed: boolean; previousStatus: string | null }> {
+    const res = await query<AchievementClaimTransitionRow>(
+      `
+        WITH current_achievement AS (
+          SELECT status
+          FROM character_achievement
+          WHERE character_id = $1
+            AND achievement_id = $2
+          LIMIT 1
+        ),
+        claimed_achievement AS (
+          UPDATE character_achievement
+          SET status = 'claimed',
+              claimed_at = NOW(),
+              updated_at = NOW()
+          WHERE character_id = $1
+            AND achievement_id = $2
+            AND status = 'completed'
+          RETURNING achievement_id
+        )
+        SELECT
+          (SELECT status FROM current_achievement LIMIT 1) AS previous_status,
+          (SELECT achievement_id FROM claimed_achievement LIMIT 1) AS claimed_achievement_id
+      `,
+      [characterId, achievementId],
+    );
+    const row = res.rows[0];
+    return {
+      claimed: asNonEmptyString(row?.claimed_achievement_id) === achievementId,
+      previousStatus: asNonEmptyString(row?.previous_status),
+    };
+  }
+
+  private async claimAchievementPointsThresholdTx(
+    characterId: number,
+    threshold: number,
+  ): Promise<{ claimed: boolean; totalPoints: number; claimedThresholds: number[] }> {
+    const res = await query<AchievementPointsClaimTransitionRow>(
+      `
+        WITH current_points AS (
+          SELECT total_points, claimed_thresholds
+          FROM character_achievement_points
+          WHERE character_id = $1
+          LIMIT 1
+        ),
+        updated_points AS (
+          UPDATE character_achievement_points
+          SET claimed_thresholds = (
+                SELECT COALESCE(jsonb_agg(value::int ORDER BY value::int), '[]'::jsonb)
+                FROM (
+                  SELECT DISTINCT value
+                  FROM (
+                    SELECT jsonb_array_elements_text(COALESCE((SELECT claimed_thresholds FROM current_points LIMIT 1), '[]'::jsonb)) AS value
+                    UNION ALL
+                    SELECT $2::text AS value
+                  ) AS merged_values
+                ) AS dedup_values
+              ),
+              updated_at = NOW()
+          WHERE character_id = $1
+            AND total_points >= $2
+            AND NOT COALESCE(claimed_thresholds, '[]'::jsonb) @> to_jsonb(ARRAY[$2]::int[])
+          RETURNING $2 AS claimed_threshold
+        )
+        SELECT
+          (SELECT total_points FROM current_points LIMIT 1) AS total_points,
+          (SELECT claimed_thresholds FROM current_points LIMIT 1) AS claimed_thresholds,
+          (SELECT claimed_threshold FROM updated_points LIMIT 1) AS claimed_threshold
+      `,
+      [characterId, threshold],
+    );
+    const row = res.rows[0];
+    return {
+      claimed: asFiniteNonNegativeInt(row?.claimed_threshold, -1) === threshold,
+      totalPoints: asFiniteNonNegativeInt(row?.total_points, 0),
+      claimedThresholds: parseClaimedThresholds(row?.claimed_thresholds),
+    };
+  }
+
   async claimAchievement(
     userId: number,
     characterId: number,
@@ -208,58 +300,40 @@ class AchievementClaimService {
     if (!achievementDef) {
       return { success: false, message: '成就不存在或未解锁' };
     }
+    try {
+      return await withTransaction(async () => {
+        await this.lockClaimRewardTarget(cid);
+        const claimTransition = await this.claimAchievementStatusTx(cid, aid);
+        if (!claimTransition.claimed) {
+          if (claimTransition.previousStatus === null) {
+            return { success: false, message: '成就不存在或未解锁' };
+          }
+          if (claimTransition.previousStatus === 'claimed') {
+            return { success: false, message: '奖励已领取' };
+          }
+          return { success: false, message: '成就尚未完成' };
+        }
 
-    await this.lockClaimRewardTarget(cid);
+        const rewards = normalizeRewards(achievementDef.rewards);
+        const rewardViews = await this.applyRewardsTx(uid, cid, rewards, 'achievement_reward');
+        const title = await this.grantTitleTx(cid, asNonEmptyString(achievementDef.title_id));
 
-    const lockedRes = await query(
-      `
-        SELECT status
-        FROM character_achievement
-        WHERE character_id = $1
-          AND achievement_id = $2
-        FOR UPDATE
-      `,
-      [cid, aid],
-    );
-
-    if ((lockedRes.rows ?? []).length === 0) {
-      return { success: false, message: '成就不存在或未解锁' };
+        return {
+          success: true,
+          message: 'ok',
+          data: {
+            achievementId: aid,
+            rewards: rewardViews,
+            ...(title ? { title } : {}),
+          },
+        };
+      });
+    } catch (error) {
+      if (error instanceof BusinessError) {
+        return { success: false, message: error.message };
+      }
+      throw error;
     }
-
-    const row = lockedRes.rows[0] as Record<string, unknown>;
-    const status = asNonEmptyString(row.status) ?? 'in_progress';
-    if (status === 'claimed') {
-      return { success: false, message: '奖励已领取' };
-    }
-    if (status !== 'completed') {
-      return { success: false, message: '成就尚未完成' };
-    }
-
-    const rewards = normalizeRewards(achievementDef.rewards);
-    const rewardViews = await this.applyRewardsTx(uid, cid, rewards, 'achievement_reward');
-    const title = await this.grantTitleTx(cid, asNonEmptyString(achievementDef.title_id));
-
-    await query(
-      `
-        UPDATE character_achievement
-        SET status = 'claimed',
-            claimed_at = NOW(),
-            updated_at = NOW()
-        WHERE character_id = $1
-          AND achievement_id = $2
-      `,
-      [cid, aid],
-    );
-
-    return {
-      success: true,
-      message: 'ok',
-      data: {
-        achievementId: aid,
-        rewards: rewardViews,
-        ...(title ? { title } : {}),
-      },
-    };
   }
 
   private async toPointRewardDef(
@@ -361,7 +435,6 @@ class AchievementClaimService {
     };
   }
 
-  @Transactional
   async claimAchievementPointsReward(
     userId: number,
     characterId: number,
@@ -381,57 +454,41 @@ class AchievementClaimService {
     if (!defRow) {
       return { success: false, message: '点数奖励不存在' };
     }
+    try {
+      return await withTransaction(async () => {
+        await this.lockClaimRewardTarget(cid);
+        await ensureCharacterAchievementPoints(cid);
+        const claimTransition = await this.claimAchievementPointsThresholdTx(cid, th);
+        if (!claimTransition.claimed) {
+          if (claimTransition.claimedThresholds.includes(th)) {
+            return { success: false, message: '该点数奖励已领取' };
+          }
+          if (claimTransition.totalPoints < th) {
+            return { success: false, message: '成就点数不足' };
+          }
+          return { success: false, message: '点数奖励不存在' };
+        }
 
-    await this.lockClaimRewardTarget(cid);
-    await ensureCharacterAchievementPoints(cid);
+        const rewards = normalizeRewards(defRow.rewards);
+        const rewardViews = await this.applyRewardsTx(uid, cid, rewards, 'achievement_points_reward');
+        const title = await this.grantTitleTx(cid, asNonEmptyString(defRow.title_id));
 
-    const pointsRes = await query(
-      `
-        SELECT total_points, claimed_thresholds
-        FROM character_achievement_points
-        WHERE character_id = $1
-        FOR UPDATE
-      `,
-      [cid],
-    );
-
-    const pointRow = (pointsRes.rows?.[0] ?? {}) as Record<string, unknown>;
-    const totalPoints = asFiniteNonNegativeInt(pointRow.total_points, 0);
-    const claimedThresholds = parseClaimedThresholds(pointRow.claimed_thresholds);
-
-    if (claimedThresholds.includes(th)) {
-      return { success: false, message: '该点数奖励已领取' };
+        return {
+          success: true,
+          message: 'ok',
+          data: {
+            threshold: th,
+            rewards: rewardViews,
+            ...(title ? { title } : {}),
+          },
+        };
+      });
+    } catch (error) {
+      if (error instanceof BusinessError) {
+        return { success: false, message: error.message };
+      }
+      throw error;
     }
-
-    if (totalPoints < th) {
-      return { success: false, message: '成就点数不足' };
-    }
-
-    const rewards = normalizeRewards(defRow.rewards);
-    const rewardViews = await this.applyRewardsTx(uid, cid, rewards, 'achievement_points_reward');
-    const title = await this.grantTitleTx(cid, asNonEmptyString(defRow.title_id));
-
-    const nextThresholds = Array.from(new Set([...claimedThresholds, th])).sort((a, b) => a - b);
-
-    await query(
-      `
-        UPDATE character_achievement_points
-        SET claimed_thresholds = $2::jsonb,
-            updated_at = NOW()
-        WHERE character_id = $1
-      `,
-      [cid, JSON.stringify(nextThresholds)],
-    );
-
-    return {
-      success: true,
-      message: 'ok',
-      data: {
-        threshold: th,
-        rewards: rewardViews,
-        ...(title ? { title } : {}),
-      },
-    };
   }
 }
 

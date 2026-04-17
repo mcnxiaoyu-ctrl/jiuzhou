@@ -194,6 +194,10 @@ type ClaimMailRow = {
   expire_at: Date | string | null;
 };
 
+type ReadMailTransitionRow = MailCounterStateRow & {
+  marked_read: boolean;
+};
+
 type ClaimInstanceRow = {
   id: number;
   item_def_id: string;
@@ -1199,7 +1203,7 @@ class MailService {
    * - 自动分解链路只替换 createItem 回调，不再额外拼装第二套库存写入逻辑。
    *
    * 关键边界条件与坑点：
-   * 1) 调用方必须已经持有背包互斥锁，因此统一传入 `skipInventoryMutexLock: true`，避免重复加锁。
+   * 1) 调用方必须已经持有背包互斥锁，因此统一传入 `inventoryMutexAlreadyLocked: true`，避免重复加锁。
    * 2) 若后续逻辑决定整封领取失败，调用方必须回滚 savepoint，否则前面已成功创建的物品会被提交。
    */
   private async createMailClaimItemSynchronously(
@@ -1227,7 +1231,7 @@ class MailService {
       bagSlotAllocator: context.bagSlotAllocator,
       inventoryMutationContext: context.inventoryMutationContext,
       slotSession: context.slotSession,
-      skipInventoryMutexLock: true,
+      inventoryMutexAlreadyLocked: true,
       persistImmediately: true,
     });
   }
@@ -2019,9 +2023,10 @@ class MailService {
     characterId: number,
     mailId: number
   ): Promise<{ success: boolean; message: string }> {
-    const result = await query<MailCounterStateRow>(`
+    const result = await query<ReadMailTransitionRow>(`
       WITH target_mail AS (
         SELECT
+          id,
           recipient_user_id,
           recipient_character_id,
           read_at,
@@ -2035,14 +2040,17 @@ class MailService {
         WHERE id = $1
           AND ${this.buildRecipientScopeSql(2, 3)}
           AND deleted_at IS NULL
-        FOR UPDATE
+        LIMIT 1
+      ),
+      marked_mail AS (
+        UPDATE mail
+        SET read_at = NOW(),
+            updated_at = NOW()
+        WHERE id = (SELECT id FROM target_mail LIMIT 1)
+          AND read_at IS NULL
+        RETURNING id
       )
-      UPDATE mail
-      SET read_at = COALESCE(mail.read_at, NOW()),
-          updated_at = NOW()
-      FROM target_mail
-      WHERE mail.id = $1
-      RETURNING
+      SELECT
         target_mail.recipient_user_id,
         target_mail.recipient_character_id,
         target_mail.read_at,
@@ -2051,7 +2059,9 @@ class MailService {
         target_mail.attach_spirit_stones,
         target_mail.attach_items,
         target_mail.attach_rewards,
-        target_mail.attach_instance_ids
+        target_mail.attach_instance_ids,
+        EXISTS(SELECT 1 FROM marked_mail) AS marked_read
+      FROM target_mail
     `, [mailId, characterId, userId]);
 
     if (result.rows.length === 0) {
@@ -2060,7 +2070,7 @@ class MailService {
 
     const readState = buildMailCounterStateFromRow(result.rows[0]);
     await this.applyMailCounterDeltaInputs([
-      readState ? buildMailCounterReadDelta(readState) : null,
+      result.rows[0]?.marked_read === true && readState ? buildMailCounterReadDelta(readState) : null,
     ]);
     await this.invalidateUnreadCounterAndNotifyRecipient(userId, characterId);
     return { success: true, message: '已读' };

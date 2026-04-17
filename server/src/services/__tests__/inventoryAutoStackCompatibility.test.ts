@@ -95,7 +95,7 @@ const installCommonMocks = (t: TestContext, rows: MockStackRow[]): void => {
     icon: "",
   } as StaticItemDef;
 
-  t.mock.method(inventoryMutex, "lockCharacterInventoryMutex", async () => {});
+  t.mock.method(inventoryMutex, "lockCharacterInventoryMutex", async () => 0);
   t.mock.method(inventoryHelpers, "getStaticItemDef", (itemDefIdRaw: string | number) => {
     return String(itemDefIdRaw) === "mat-9999" ? staticItemDef : null;
   });

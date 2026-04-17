@@ -361,7 +361,7 @@ test('battleDropService.settleBattleRewardPlan: battle_drop 装备应同步入�
       bagSlotAllocator: mockedBagAllocator,
       inventoryMutationContext: mockedInventoryContext,
       slotSession: mockedSlotSession,
-      skipInventoryMutexLock: true,
+      inventoryMutexAlreadyLocked: true,
       persistImmediately: true,
       equipOptions: { fuyuan: 8 },
     },

@@ -44,7 +44,7 @@ const createInventoryQueryMock = (
   t: TestContext,
   itemRows: MockInventoryRow[],
 ) => {
-  t.mock.method(inventoryMutex, 'lockCharacterInventoryMutex', async () => {});
+  t.mock.method(inventoryMutex, 'lockCharacterInventoryMutex', async () => 0);
   t.mock.method(staticConfigLoader, 'getItemDefinitionsByIds', (itemDefIds: string[]) => {
     const map = new Map<string, {
       category: string;

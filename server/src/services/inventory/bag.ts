@@ -1034,7 +1034,7 @@ export const addItemToInventory = async (
     bagSlotAllocator?: CharacterBagSlotAllocator;
     inventoryMutationContext?: CharacterInventoryMutationContext;
     slotSession?: InventorySlotSession;
-    skipInventoryMutexLock?: boolean;
+    inventoryMutexAlreadyLocked?: boolean;
   } = {},
 ): Promise<{ success: boolean; message: string; itemIds?: number[] }> => {
   if (!Number.isInteger(qty) || qty <= 0) {
@@ -1042,7 +1042,7 @@ export const addItemToInventory = async (
   }
 
   return runInventoryMutation(async () => {
-    if (!options.skipInventoryMutexLock) {
+    if (!options.inventoryMutexAlreadyLocked) {
       await lockCharacterInventoryMutex(characterId);
     }
 

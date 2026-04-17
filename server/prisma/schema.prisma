@@ -1031,6 +1031,30 @@ model mail {
   @@index([recipient_user_id, recipient_character_id, deleted_at, claimed_at, created_at(sort: Asc), id(sort: Asc)], map: "idx_mail_user_claim_queue")
 }
 
+/// 奖励入包主事务提交后，背包已满附件的补发邮件 outbox。
+model character_item_grant_mail_outbox {
+  id                     BigInt   @id @default(autoincrement())
+  character_id           Int
+  recipient_user_id      BigInt
+  recipient_character_id BigInt
+  title                  String   @db.VarChar(128)
+  content                String
+  attach_items           Json
+  idle_session_ids       Json?
+  expire_days            Int      @default(30)
+  status                 String   @default("pending") @db.VarChar(16)
+  attempt_count          Int      @default(0)
+  last_error             String?
+  next_attempt_at        DateTime @default(now()) @db.Timestamptz(6)
+  sent_mail_id           BigInt?
+  sent_at                DateTime? @db.Timestamptz(6)
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([character_id, status, next_attempt_at, created_at(sort: Asc), id(sort: Asc)], map: "idx_character_item_grant_mail_outbox_character_queue")
+  @@index([status, next_attempt_at, created_at(sort: Asc), id(sort: Asc)], map: "idx_character_item_grant_mail_outbox_queue")
+}
+
 /// 邮件计数聚合快照，统一承接角色级/账号级邮件红点统计。
 model mail_counter {
   scope_type      String   @db.VarChar(16)

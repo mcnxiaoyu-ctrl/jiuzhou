@@ -2761,16 +2761,48 @@ export const deleteDeferredSettlementTask = async (taskId: string): Promise<void
   ]);
 };
 
-export const loadDeferredSettlementTasksFromRedis = async (): Promise<DeferredSettlementTask[]> => {
+export const syncDeferredSettlementTasksFromRedis = async (): Promise<DeferredSettlementTask[]> => {
   requireOnlineBattleProjectionReady();
   const taskIds = await redis.smembers(DEFERRED_SETTLEMENT_INDEX_KEY);
-  const tasks: DeferredSettlementTask[] = [];
-  for (const taskId of taskIds) {
-    const task = await getDeferredSettlementTask(taskId);
-    if (!task) continue;
-    tasks.push(task);
+  const taskIdSet = new Set(taskIds);
+
+  for (const cachedTaskId of deferredSettlementTaskById.keys()) {
+    if (!taskIdSet.has(cachedTaskId)) {
+      deferredSettlementTaskById.delete(cachedTaskId);
+    }
   }
+
+  if (taskIds.length <= 0) {
+    return [];
+  }
+
+  const tasks: DeferredSettlementTask[] = [];
+  const taskKeys = taskIds.map((taskId) => buildDeferredSettlementKey(taskId));
+
+  for (let index = 0; index < taskIds.length; index += PROJECTION_PERSIST_BATCH_SIZE) {
+    const taskIdBatch = taskIds.slice(index, index + PROJECTION_PERSIST_BATCH_SIZE);
+    const taskKeyBatch = taskKeys.slice(index, index + PROJECTION_PERSIST_BATCH_SIZE);
+    const rawTaskBatch = await redis.mget(...taskKeyBatch);
+
+    for (let batchIndex = 0; batchIndex < taskIdBatch.length; batchIndex += 1) {
+      const taskId = taskIdBatch[batchIndex];
+      const rawTask = rawTaskBatch[batchIndex];
+      if (typeof rawTask !== 'string' || rawTask.length <= 0) {
+        deferredSettlementTaskById.delete(taskId);
+        continue;
+      }
+
+      const task = parseJson<DeferredSettlementTask>(rawTask);
+      deferredSettlementTaskById.set(taskId, task);
+      tasks.push(task);
+    }
+  }
+
   return tasks;
+};
+
+export const loadDeferredSettlementTasksFromRedis = async (): Promise<DeferredSettlementTask[]> => {
+  return await syncDeferredSettlementTasksFromRedis();
 };
 
 export const buildBattleRewardsPreviewFromDistributeResult = (

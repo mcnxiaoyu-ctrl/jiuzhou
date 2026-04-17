@@ -15,7 +15,7 @@
  * 前端兑换接口 -> redeemCode -> 系统奖励邮件 -> redeem_code 标记已兑换。
  *
  * 关键边界条件与坑点：
- * 1. 兑换必须在事务中先锁兑换码再发奖，避免并发请求把同一份奖励发两次。
+ * 1. 兑换必须在事务中先原子抢占兑换资格，再发奖励邮件，避免并发请求把同一份奖励发两次。
  * 2. 奖励载荷是服务端单一数据源，兑换入口只能消费这份配置，不能在路由层重新拼奖励。
  * 3. 兑换码奖励通过系统邮件投递，并复用通用奖励载荷，避免即时发奖和邮件附件各维护一套规则。
  */
@@ -33,10 +33,16 @@ import {
 } from './shared/rewardPayload.js';
 
 type RedeemCodeRow = {
+  code: string;
+  reward_payload: RedeemCodeRewardPayload | null;
+  existing_status: string | null;
+  redeemed: boolean;
+};
+
+type RedeemCodeCreateRow = {
   id: number | string;
   code: string;
-  reward_payload: unknown;
-  status: string;
+  created: boolean;
 };
 
 export type RedeemCodeConsumeResult = {
@@ -67,27 +73,37 @@ const buildRedeemCodeRewardMailContent = (code: string): string => {
   return `你已成功兑换兑换码 ${code}，奖励已通过系统邮件发放，请及时领取。`;
 };
 
-const createRedeemCodeRow = async (input: {
+const getOrCreateRedeemCodeRow = async (input: {
   sourceType: string;
   sourceRefId: string;
   rewardPayload: RedeemCodeRewardPayload;
-}): Promise<{ id: number; code: string; created: true }> => {
+}): Promise<{ id: number; code: string; created: boolean }> => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = generateRedeemCode();
-    const result = await query(
+    const result = await query<RedeemCodeCreateRow>(
       `
-        INSERT INTO redeem_code (code, source_type, source_ref_id, reward_payload)
-        VALUES ($1, $2, $3, $4::jsonb)
-        ON CONFLICT (code) DO NOTHING
-        RETURNING id, code
+        WITH attempted_insert AS (
+          INSERT INTO redeem_code (code, source_type, source_ref_id, reward_payload)
+          VALUES ($1, $2, $3, $4::jsonb)
+          ON CONFLICT DO NOTHING
+          RETURNING id, code, TRUE AS created
+        )
+        SELECT id, code, created
+        FROM attempted_insert
+        UNION ALL
+        SELECT id, code, FALSE AS created
+        FROM redeem_code
+        WHERE source_type = $2 AND source_ref_id = $3
+        LIMIT 1
       `,
       [code, input.sourceType, input.sourceRefId, JSON.stringify(input.rewardPayload)],
     );
     if (result.rows.length > 0) {
+      const row = result.rows[0];
       return {
-        id: Number(result.rows[0].id),
-        code: String(result.rows[0].code),
-        created: true,
+        id: Number(row.id),
+        code: String(row.code),
+        created: row.created === true,
       };
     }
   }
@@ -102,25 +118,7 @@ class RedeemCodeService {
     sourceRefId: string;
     rewardPayload: RedeemCodeRewardPayload;
   }): Promise<{ id: number; code: string; created: boolean }> {
-    const existingResult = await query(
-      `
-        SELECT id, code
-        FROM redeem_code
-        WHERE source_type = $1 AND source_ref_id = $2
-        LIMIT 1
-        FOR UPDATE
-      `,
-      [input.sourceType, input.sourceRefId],
-    );
-    if (existingResult.rows.length > 0) {
-      return {
-        id: Number(existingResult.rows[0].id),
-        code: String(existingResult.rows[0].code),
-        created: false,
-      };
-    }
-
-    return createRedeemCodeRow(input);
+    return getOrCreateRedeemCodeRow(input);
   }
 
   @Transactional
@@ -134,27 +132,50 @@ class RedeemCodeService {
       return { success: false, message: '兑换码不能为空' };
     }
 
-    const codeResult = await query(
+    const codeResult = await query<RedeemCodeRow>(
       `
-        SELECT id, code, reward_payload, status
-        FROM redeem_code
-        WHERE code = $1
-        LIMIT 1
-        FOR UPDATE
+        WITH existing_code AS (
+          SELECT code, reward_payload, status
+          FROM redeem_code
+          WHERE code = $1
+          LIMIT 1
+        ),
+        redeemed_code AS (
+          UPDATE redeem_code
+          SET status = 'redeemed',
+              redeemed_by_user_id = $2,
+              redeemed_by_character_id = $3,
+              redeemed_at = NOW(),
+              updated_at = NOW()
+          WHERE code = $1
+            AND status = 'created'
+          RETURNING code, reward_payload
+        )
+        SELECT
+          COALESCE(
+            (SELECT code FROM redeemed_code LIMIT 1),
+            (SELECT code FROM existing_code LIMIT 1)
+          ) AS code,
+          COALESCE(
+            (SELECT reward_payload FROM redeemed_code LIMIT 1),
+            (SELECT reward_payload FROM existing_code LIMIT 1)
+          ) AS reward_payload,
+          (SELECT status FROM existing_code LIMIT 1) AS existing_status,
+          EXISTS(SELECT 1 FROM redeemed_code) AS redeemed
       `,
-      [normalizedCode],
+      [normalizedCode, userId, characterId],
     );
-    if (codeResult.rows.length <= 0) {
+    const row = codeResult.rows[0];
+    const redeemedCode = typeof row?.code === 'string' ? row.code : '';
+    if (!redeemedCode) {
       return { success: false, message: '兑换码不存在' };
     }
-
-    const row = codeResult.rows[0] as RedeemCodeRow;
-    if (row.status === 'redeemed') {
+    if (row?.redeemed !== true) {
       return { success: false, message: '兑换码已使用' };
     }
 
     const normalizedRewardPayload = normalizeGrantedRewardPayload(
-      row.reward_payload as RedeemCodeRewardPayload,
+      row.reward_payload ?? null,
     );
     const rewardPreview = buildGrantedRewardPreview(normalizedRewardPayload);
 
@@ -165,12 +186,12 @@ class RedeemCodeService {
       senderName: '系统',
       mailType: 'reward',
       title: buildRedeemCodeRewardMailTitle(),
-      content: buildRedeemCodeRewardMailContent(row.code),
+      content: buildRedeemCodeRewardMailContent(redeemedCode),
       attachRewards: normalizedRewardPayload,
       source: 'redeem_code',
-      sourceRefId: row.code,
+      sourceRefId: redeemedCode,
       metadata: {
-        redeemCode: row.code,
+        redeemCode: redeemedCode,
         grantRewardsInput: buildGrantRewardsInput(normalizedRewardPayload),
       },
     });
@@ -178,24 +199,11 @@ class RedeemCodeService {
       throw new Error(mailResult.message || '奖励邮件发送失败');
     }
 
-    await query(
-      `
-        UPDATE redeem_code
-        SET status = 'redeemed',
-            redeemed_by_user_id = $2,
-            redeemed_by_character_id = $3,
-            redeemed_at = NOW(),
-            updated_at = NOW()
-        WHERE id = $1
-      `,
-      [Number(row.id), userId, characterId],
-    );
-
     return {
       success: true,
       message: '兑换成功，奖励已通过邮件发放',
       data: {
-        code: row.code,
+        code: redeemedCode,
         rewards: rewardPreview,
       },
     };
