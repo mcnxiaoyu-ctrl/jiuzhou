@@ -1,4 +1,4 @@
-import { query } from "../config/database.js";
+import { afterTransactionCommit, query } from "../config/database.js";
 import { Transactional } from "../decorators/transactional.js";
 import {
   addCharacterCurrenciesExact,
@@ -42,11 +42,10 @@ import { resolveGeneratedTechniqueBookDisplay } from "./shared/generatedTechniqu
 import { buildAffixPoolSlotCacheKey } from "./shared/affixPoolSlotResolver.js";
 import { mailService } from "./mailService.js";
 import {
-  bufferCharacterItemInstanceMutations,
+  applyCharacterItemInstanceMutationsImmediately,
   loadProjectedCharacterItemInstanceById,
   reserveItemInstanceIds,
   type CharacterItemInstanceSnapshot,
-  upsertCharacterItemInstanceSnapshot,
 } from "./shared/characterItemInstanceMutationService.js";
 
 export type MarketSort = "timeDesc" | "priceAsc" | "priceDesc" | "qtyDesc";
@@ -127,9 +126,15 @@ const parseMaybeString = (v: unknown): string =>
 
 const marketListingsCacheVersion = createCacheVersionManager("market:listings");
 
-const invalidateMarketListingsCache = async (): Promise<void> => {
+const invalidateMarketListingsCacheNow = async (): Promise<void> => {
   await marketListingsCacheVersion.bumpVersion();
   marketListingsCache.invalidateAll();
+};
+
+const invalidateMarketListingsCache = async (): Promise<void> => {
+  await afterTransactionCommit(async () => {
+    await invalidateMarketListingsCacheNow();
+  });
 };
 
 /**
@@ -636,6 +641,7 @@ class MarketService {
 
     let listingItemInstanceId = itemInstanceId;
     let listingItemSnapshot: CharacterItemInstanceSnapshot;
+    const mutationCreatedAt = Date.now();
 
     if (qty < curQty) {
       const clonedItem = await cloneItemInstanceWithQty({
@@ -647,12 +653,12 @@ class MarketService {
       });
       listingItemSnapshot = clonedItem;
       listingItemInstanceId = clonedItem.id;
-      await bufferCharacterItemInstanceMutations([
+      await applyCharacterItemInstanceMutationsImmediately([
         {
-          opId: `market-listing-source:${itemInstanceId}:${Date.now()}`,
+          opId: `market-listing-source:${itemInstanceId}:${mutationCreatedAt}`,
           characterId: params.characterId,
           itemId: itemInstanceId,
-          createdAt: Date.now(),
+          createdAt: mutationCreatedAt,
           kind: "upsert",
           snapshot: {
             ...row,
@@ -660,10 +666,10 @@ class MarketService {
           },
         },
         {
-          opId: `market-listing-clone:${listingItemInstanceId}:${Date.now()}`,
+          opId: `market-listing-clone:${listingItemInstanceId}:${mutationCreatedAt}`,
           characterId: params.characterId,
           itemId: listingItemInstanceId,
-          createdAt: Date.now(),
+          createdAt: mutationCreatedAt + 1,
           kind: "upsert",
           snapshot: clonedItem,
         },
@@ -675,18 +681,17 @@ class MarketService {
         location_slot: null,
         equipped_slot: null,
       };
-      await bufferCharacterItemInstanceMutations([
+      await applyCharacterItemInstanceMutationsImmediately([
         {
-          opId: `market-listing-move:${itemInstanceId}:${Date.now()}`,
+          opId: `market-listing-move:${itemInstanceId}:${mutationCreatedAt}`,
           characterId: params.characterId,
           itemId: itemInstanceId,
-          createdAt: Date.now(),
+          createdAt: mutationCreatedAt,
           kind: "upsert",
           snapshot: listingItemSnapshot,
         },
       ]);
     }
-    await upsertCharacterItemInstanceSnapshot(listingItemSnapshot);
     const listingResult = await query(
       `
         INSERT INTO market_listing (
@@ -730,6 +735,8 @@ class MarketService {
     const listingId = parsePositiveInt(params.listingId);
     if (listingId === null)
       return { success: false, message: "listingId参数错误" };
+
+    await lockCharacterInventoryMutex(params.characterId);
 
     const listingResult = await query(
       `
@@ -781,13 +788,14 @@ class MarketService {
     }
     const itemDefId = String(item.item_def_id || '');
     const itemName = String(getItemDefinitionById(itemDefId)?.name || itemDefId);
+    const mutationCreatedAt = Date.now();
 
-    await bufferCharacterItemInstanceMutations([
+    await applyCharacterItemInstanceMutationsImmediately([
       {
-        opId: `market-cancel:${itemInstanceId}:${Date.now()}`,
+        opId: `market-cancel:${itemInstanceId}:${mutationCreatedAt}`,
         characterId: params.characterId,
         itemId: itemInstanceId,
-        createdAt: Date.now(),
+        createdAt: mutationCreatedAt,
         kind: "upsert",
         snapshot: {
           ...item,
@@ -980,6 +988,7 @@ class MarketService {
     }
 
     let deliveredItemInstanceId = itemInstanceId;
+    const mutationCreatedAt = Date.now();
     if (isPartialPurchase) {
       const deliveredItem = await cloneItemInstanceWithQty({
         sourceItem: itemRow,
@@ -989,12 +998,12 @@ class MarketService {
         location: "mail",
       });
       deliveredItemInstanceId = deliveredItem.id;
-      await bufferCharacterItemInstanceMutations([
+      await applyCharacterItemInstanceMutationsImmediately([
         {
-          opId: `market-buy-partial-source:${itemInstanceId}:${Date.now()}`,
+          opId: `market-buy-partial-source:${itemInstanceId}:${mutationCreatedAt}`,
           characterId: sellerCharacterId,
           itemId: itemInstanceId,
-          createdAt: Date.now(),
+          createdAt: mutationCreatedAt,
           kind: "upsert",
           snapshot: {
             ...itemRow,
@@ -1002,10 +1011,10 @@ class MarketService {
           },
         },
         {
-          opId: `market-buy-partial:${deliveredItemInstanceId}:${Date.now()}`,
+          opId: `market-buy-partial:${deliveredItemInstanceId}:${mutationCreatedAt}`,
           characterId: params.buyerCharacterId,
           itemId: deliveredItemInstanceId,
-          createdAt: Date.now(),
+          createdAt: mutationCreatedAt + 1,
           kind: "upsert",
           snapshot: deliveredItem,
         },
@@ -1020,20 +1029,20 @@ class MarketService {
         [buyQty, listingId],
       );
     } else {
-      await bufferCharacterItemInstanceMutations([
+      await applyCharacterItemInstanceMutationsImmediately([
         {
-          opId: `market-buy-full-source-delete:${itemInstanceId}:${Date.now()}`,
+          opId: `market-buy-full-source-delete:${itemInstanceId}:${mutationCreatedAt}`,
           characterId: sellerCharacterId,
           itemId: itemInstanceId,
-          createdAt: Date.now(),
+          createdAt: mutationCreatedAt,
           kind: "delete",
           snapshot: null,
         },
         {
-          opId: `market-buy-full:${itemInstanceId}:${Date.now()}`,
+          opId: `market-buy-full:${itemInstanceId}:${mutationCreatedAt}`,
           characterId: params.buyerCharacterId,
           itemId: itemInstanceId,
-          createdAt: Date.now() + 1,
+          createdAt: mutationCreatedAt + 1,
           kind: "upsert",
           snapshot: {
             ...itemRow,

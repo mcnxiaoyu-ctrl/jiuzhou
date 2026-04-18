@@ -205,6 +205,15 @@ type ClaimInstanceRow = {
   bind_type: string;
 };
 
+type MailClaimPreparationRow = {
+  source: string | null;
+  attach_items: MailCounterStateRow['attach_items'];
+  attach_rewards: MailCounterStateRow['attach_rewards'];
+  attach_instance_ids: MailCounterStateRow['attach_instance_ids'];
+  attach_silver: number;
+  attach_spirit_stones: number;
+};
+
 type NormalizedMailRecipient = {
   recipientUserId: number;
   recipientCharacterId: number | null;
@@ -562,6 +571,136 @@ class MailService {
   private async prepareInventoryInteractionForMailClaim(characterId: number): Promise<void> {
     await flushCharacterPendingItemGrantsNow(characterId);
     await flushCharacterPendingItemInstanceMutationsNow(characterId);
+  }
+
+  /**
+   * 邮件列表实例附件预览自修复。
+   *
+   * 作用：
+   * 1) 统一把实例附件 ID 批量解析成预览映射，避免列表渲染阶段重复遍历全量实例。
+   * 2) 仅在检测到“邮件声明有实例附件，但当前投影视图缺项”时，主动 flush 一次实例 mutation，修复坊市邮件在过渡态被误判为附件异常的问题。
+   *
+   * 输入 / 输出：
+   * - 输入：角色 ID 与当前页所有邮件的实例附件 ID 列表。
+   * - 输出：`itemInstanceId -> 预览条目` 的映射表。
+   *
+   * 数据流 / 状态流：
+   * mail list -> 本方法收集实例附件 ID -> 读取 projected item 视图 -> 缺项时 flush -> 再次读取 -> 返回预览映射。
+   *
+   * 复用设计说明：
+   * - 邮件列表和后续需要做实例附件预览的只读入口可以共用同一修复协议，避免“缺项重试”逻辑散落在 DTO 拼装里。
+   * - 高频变化点是实例附件的落库时机，不是预览 DTO 结构，因此把修复收口到这里最能减少重复维护。
+   *
+   * 关键边界条件与坑点：
+   * 1) 这里只修复实例 mutation 过渡态，不会伪造缺失实例；二次读取仍缺项时必须保留异常信号。
+   * 2) 只在当前页确实存在实例附件且首轮解析缺项时才 flush，避免把普通邮件列表退化成每次都触发库存同步。
+   */
+  private async buildMailInstancePreviewMap(
+    characterId: number,
+    attachInstanceIdLists: readonly number[][],
+  ): Promise<Map<number, MailInstanceAttachmentPreviewItem>> {
+    const attachInstanceIdSet = new Set<number>();
+    for (const attachInstanceIds of attachInstanceIdLists) {
+      for (const attachInstanceId of attachInstanceIds) {
+        attachInstanceIdSet.add(attachInstanceId);
+      }
+    }
+
+    if (attachInstanceIdSet.size <= 0) {
+      return new Map();
+    }
+
+    const buildPreviewMap = async (): Promise<Map<number, MailInstanceAttachmentPreviewItem>> => {
+      const projectedItems = await loadProjectedCharacterItemInstances(characterId);
+      const previewById = new Map<number, MailInstanceAttachmentPreviewItem>();
+      for (const projectedItem of projectedItems) {
+        if (!attachInstanceIdSet.has(projectedItem.id) || projectedItem.location !== 'mail') {
+          continue;
+        }
+        previewById.set(projectedItem.id, {
+          itemDefId: String(projectedItem.item_def_id || '').trim(),
+          itemName: undefined,
+          quantity: Math.max(0, Math.floor(Number(projectedItem.qty) || 0)),
+        });
+      }
+      return previewById;
+    };
+
+    let previewById = await buildPreviewMap();
+    if (previewById.size === attachInstanceIdSet.size) {
+      return previewById;
+    }
+
+    await flushCharacterPendingItemInstanceMutationsNow(characterId);
+    previewById = await buildPreviewMap();
+    return previewById;
+  }
+
+  /**
+   * 邮件领取前置预判。
+   *
+   * 作用：
+   * 1) 在事务外预判本次领取是否会触发真实入包/实例移动，决定是否需要先做库存实体态 preflight。
+   * 2) 让单封领取与一键领取共用同一套“只在必要时 flush”的条件，避免把 preflight 误放进邮件事务。
+   *
+   * 输入 / 输出：
+   * - 输入：userId、characterId、mailId。
+   * - 输出：`true` 表示后续领取需要先做库存 preflight；`false` 表示不需要。
+   *
+   * 数据流 / 状态流：
+   * mail 基础附件字段 -> 规范化 attachRewards/attachItems/attachInstanceIds -> 计算是否存在需要真实库存的附件。
+   *
+   * 复用设计说明：
+   * - 单封领取在真正进入 `claimAttachmentsTx` 之前复用该入口，避免再次把 flush 逻辑塞回事务里。
+   * - 一键领取仍保留批量预判，但单封与批量现在使用同一套附件语义，减少规则分叉。
+   *
+   * 关键边界条件与坑点：
+   * 1) 这里只做 preflight 条件判断，不做 mail 行锁与最终有效性判定；邮件是否已领取/已删除仍以事务内加锁读取为准。
+   * 2) 账号级/角色级附件兼容、preview-only attachItems 规则必须与正式领取逻辑一致，否则会出现“误 flush”或“漏 flush”。
+   */
+  private async shouldPrepareInventoryInteractionForMailClaim(
+    userId: number,
+    characterId: number,
+    mailId: number,
+  ): Promise<boolean> {
+    const result = await query<MailClaimPreparationRow>(
+      `
+        SELECT
+          source,
+          attach_items,
+          attach_rewards,
+          attach_instance_ids,
+          attach_silver,
+          attach_spirit_stones
+        FROM mail
+        WHERE id = $1
+          AND ${this.buildRecipientScopeSql(2, 3)}
+          AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [mailId, characterId, userId],
+    );
+
+    const row = result.rows[0];
+    if (!row) {
+      return false;
+    }
+
+    const attachRewards = normalizeGrantedRewardPayload(row.attach_rewards);
+    if (hasGrantedRewardPayload(attachRewards)) {
+      return true;
+    }
+
+    const attachItems = this.normalizeAttachItems(row.attach_items);
+    const attachInstanceIds = this.normalizeAttachInstanceIds(row.attach_instance_ids);
+    const treatAttachItemsAsPreviewOnly = shouldTreatAttachItemsAsInstancePreviewOnly({
+      source: typeof row.source === 'string' ? row.source : null,
+      attachItems,
+      attachInstanceIds,
+    });
+
+    const hasInventoryItems = (treatAttachItemsAsPreviewOnly ? 0 : attachItems.length) > 0;
+    return hasInventoryItems || attachInstanceIds.length > 0;
   }
 
   @Transactional
@@ -1903,30 +2042,10 @@ class MailService {
       const normalizedAttachRewardsList = result.rows.map((row) => normalizeGrantedRewardPayload(row.attach_rewards));
       const normalizedAttachInstanceIdList = result.rows.map((row) => this.normalizeAttachInstanceIds(row.attach_instance_ids));
       const metadataPreviewItemsList = result.rows.map((row) => normalizeMailMetadataAttachmentPreviewItems(row.metadata ?? null));
-      const attachInstanceIdSet = new Set<number>();
-      for (const attachInstanceIds of normalizedAttachInstanceIdList) {
-        for (const attachInstanceId of attachInstanceIds) {
-          attachInstanceIdSet.add(attachInstanceId);
-        }
-      }
-
-      const instancePreviewById = new Map<number, MailInstanceAttachmentPreviewItem>();
-      if (attachInstanceIdSet.size > 0) {
-        const projectedItems = await loadProjectedCharacterItemInstances(characterId);
-        for (const projectedItem of projectedItems) {
-          if (!attachInstanceIdSet.has(projectedItem.id)) {
-            continue;
-          }
-          if (projectedItem.location !== 'mail') {
-            continue;
-          }
-          instancePreviewById.set(projectedItem.id, {
-            itemDefId: String(projectedItem.item_def_id || '').trim(),
-            itemName: undefined,
-            quantity: Math.max(0, Math.floor(Number(projectedItem.qty) || 0)),
-          });
-        }
-      }
+      const instancePreviewById = await this.buildMailInstancePreviewMap(
+        characterId,
+        normalizedAttachInstanceIdList,
+      );
 
       const mails: MailDto[] = result.rows.map((row, index) => {
         const attachItems = normalizedAttachItemsList[index];
@@ -2080,7 +2199,6 @@ class MailService {
   // 领取附件（核心功能 - 严格校验）
   // ============================================
 
-  @Transactional
   async claimAttachments(
     userId: number,
     characterId: number,
@@ -2090,6 +2208,30 @@ class MailService {
     options: {
       inventoryPrepared?: boolean;
     } = {},
+  ): Promise<{ success: boolean; message: string; rewards?: RewardResult[] }> {
+    if (
+      options.inventoryPrepared !== true
+      && await this.shouldPrepareInventoryInteractionForMailClaim(userId, characterId, mailId)
+    ) {
+      await this.prepareInventoryInteractionForMailClaim(characterId);
+    }
+
+    return this.claimAttachmentsTx(
+      userId,
+      characterId,
+      mailId,
+      shouldInvalidateUnreadCounter,
+      autoDisassemble,
+    );
+  }
+
+  @Transactional
+  private async claimAttachmentsTx(
+    userId: number,
+    characterId: number,
+    mailId: number,
+    shouldInvalidateUnreadCounter: boolean,
+    autoDisassemble: boolean,
   ): Promise<{ success: boolean; message: string; rewards?: RewardResult[] }> {
     const collectCounts = new Map<string, number>();
 
@@ -2157,10 +2299,6 @@ class MailService {
 
     if (!hasAttachRewards && !hasCurrency && !hasItems) {
       return { success: false, message: '该邮件没有附件' };
-    }
-
-    if (shouldLockInventoryForClaim && options.inventoryPrepared !== true) {
-      await this.prepareInventoryInteractionForMailClaim(characterId);
     }
 
     const rewardDistributionSavepoint = 'mail_claim_reward_distribution';

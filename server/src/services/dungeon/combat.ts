@@ -2,18 +2,18 @@
  * 秘境战斗（开启/推进/结算）
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：管理秘境实例的开战、推进下一波与通关排队结算，整个请求期只读写在线战斗投影。
- * 2. 做什么：把人数/境界/体力/次数/可领奖资格统一收口到投影链路，避免秘境热路径再直接触库。
- * 3. 不做什么：不在这里执行真实 DB 发奖、写 dungeon_record 或写 dungeon_instance 表，这些都交给延迟结算任务。
+ * 1. 做什么：管理秘境实例的开战、推进下一波与通关同步结算，整个请求期内完成必要的投影与真实落库。
+ * 2. 做什么：把人数/境界/体力/次数/可领奖资格统一收口到秘境链路，避免热路径散落多套扣费与发奖逻辑。
+ * 3. 不做什么：不创建通用 PVE 延迟结算任务，也不替代 battle engine 的单场战斗演算。
  *
  * 输入/输出：
  * - 输入：userId、instanceId。
  * - 输出：秘境当前战斗开启结果、推进结果或通关结束结果。
  *
  * 数据流/状态流：
- * - start -> 校验投影 -> 开启 battle -> 写回 dungeon projection；
- * - next -> 读取 battle result -> 更新 dungeon projection -> 必要时排队 deferred settlement task；
- * - 最终清算 -> onlineBattleSettlementRunner 异步执行真实落库。
+ * - start -> 校验投影/体力 -> 开启 battle -> 同步写 `dungeon_instance`/体力/次数 -> 写回 dungeon projection；
+ * - next -> 读取 battle result -> 下一波直接推进投影；通关时同步发奖并写 `dungeon_record` 后再更新 projection；
+ * - 历史遗留的 deferred task 仍由 runner 兼容消费，但新的秘境链路不再依赖它。
  *
  * 关键边界条件与坑点：
  * 1. 秘境实例缺失、投影未预热、角色快照缺失时直接失败，不允许回退 DB。
@@ -25,7 +25,6 @@ import { getBattleState, startDungeonPVEBattleForDungeonFlow } from '../battle/i
 import { getGameServer } from '../../game/gameServer.js';
 import {
   applyOnlineBattleCharacterStaminaDelta,
-  createDeferredSettlementTask,
   type DungeonEntryCountProjectionRecord,
   getDungeonProjection,
   getOnlineBattleCharacterSnapshotsByCharacterIds,
@@ -59,6 +58,10 @@ import { getDungeonDefById } from './shared/configLoader.js';
 import { createScopedLogger } from '../../utils/logger.js';
 import { createSlowOperationLogger } from '../../utils/slowOperationLogger.js';
 import { resolveDungeonMonsterAttrMultiplier } from './shared/difficulty.js';
+import {
+  settleDungeonClearInDb,
+  settleDungeonStartConsumptionInDb,
+} from './settlement.js';
 
 const dungeonCombatLogger = createScopedLogger('dungeon.combat');
 
@@ -322,6 +325,38 @@ export const startDungeonInstance = async (
           await incEntryCount(participant.characterId, projection.dungeonId),
         );
       }
+      try {
+        await settleDungeonStartConsumptionInDb({
+          settlementKey: `sync-dungeon-start:${battleId}`,
+          payload: {
+            instanceId: projection.instanceId,
+            dungeonId: projection.dungeonId,
+            difficultyId: projection.difficultyId,
+            creatorCharacterId: projection.creatorCharacterId,
+            teamId: projection.teamId,
+            currentStage: 1,
+            currentWave: 1,
+            participants: participants.slice(),
+            currentBattleId: battleId,
+            rewardEligibleCharacterIds,
+            startTime,
+            entryCountSnapshots,
+            staminaConsumptions: staminaConsumingParticipants.map((participant) => ({
+              characterId: participant.characterId,
+              amount: dungeonDef.stamina_cost,
+            })),
+          },
+        });
+      } catch (error) {
+        dungeonCombatLogger.error({
+          instanceId: projection.instanceId,
+          battleId,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          errorStack: error instanceof Error ? error.stack : undefined,
+        }, '秘境开战同步结算失败');
+        return { success: false, message: '秘境开战结算失败，请稍后重试' };
+      }
+
       for (const participant of staminaConsumingParticipants) {
         const nextSnapshot = await applyOnlineBattleCharacterStaminaDelta(
           participant.characterId,
@@ -346,50 +381,6 @@ export const startDungeonInstance = async (
         startTime,
         endTime: null,
       });
-
-      await createDeferredSettlementTask(
-        {
-          battleId,
-          battleType: 'pve',
-          result: 'draw',
-          participants: [],
-          rewardParticipants: [],
-          isDungeonBattle: true,
-          isTowerBattle: false,
-          rewardsPreview: null,
-          battleRewardPlan: null,
-          monsters: [],
-          arenaDelta: null,
-          dungeonContext: {
-            instanceId: projection.instanceId,
-            dungeonId: projection.dungeonId,
-            difficultyId: projection.difficultyId,
-          },
-          dungeonStartConsumption: {
-            instanceId: projection.instanceId,
-            dungeonId: projection.dungeonId,
-            difficultyId: projection.difficultyId,
-            creatorCharacterId: projection.creatorCharacterId,
-            teamId: projection.teamId,
-            currentStage: 1,
-            currentWave: 1,
-            participants: participants.slice(),
-            currentBattleId: battleId,
-            rewardEligibleCharacterIds,
-            startTime,
-            entryCountSnapshots,
-            staminaConsumptions: staminaConsumingParticipants.map((participant) => ({
-              characterId: participant.characterId,
-              amount: dungeonDef.stamina_cost,
-            })),
-          },
-          dungeonSettlement: null,
-          session: null,
-        },
-        {
-          taskId: `dungeon-start:${projection.instanceId}`,
-        },
-      );
 
       return {
         success: true,
@@ -535,32 +526,13 @@ export const nextDungeonInstance = async (
     const startAtMs = projection.startTime ? new Date(projection.startTime).getTime() : Date.now();
     const timeSpentSec = Math.max(0, Math.floor((Date.now() - startAtMs) / 1000));
 
-    await upsertDungeonProjection({
-      ...projection,
-      status: 'cleared',
-      currentBattleId: null,
-      endTime: new Date().toISOString(),
-    });
-
-    await createDeferredSettlementTask(
-      {
-        battleId: currentBattleId,
-        battleType: 'pve',
-        result: 'attacker_win',
-        participants: await buildDeferredSettlementParticipants(projection.participants),
-        rewardParticipants: await buildDeferredSettlementParticipants(rewardEligibleParticipants),
-        isDungeonBattle: true,
-        isTowerBattle: false,
-        rewardsPreview: null,
-        battleRewardPlan: null,
-        monsters: [],
-        arenaDelta: null,
-        dungeonContext: {
-          instanceId: projection.instanceId,
-          dungeonId: projection.dungeonId,
-          difficultyId: projection.difficultyId,
-        },
-        dungeonStartConsumption: null,
+    const settledParticipants = await buildDeferredSettlementParticipants(projection.participants);
+    const settledRewardParticipants = await buildDeferredSettlementParticipants(rewardEligibleParticipants);
+    let settlementResult: Awaited<ReturnType<typeof settleDungeonClearInDb>>;
+    try {
+      settlementResult = await settleDungeonClearInDb({
+        participants: settledParticipants,
+        rewardParticipants: settledRewardParticipants,
         dungeonSettlement: {
           instanceId: projection.instanceId,
           dungeonId: projection.dungeonId,
@@ -569,19 +541,40 @@ export const nextDungeonInstance = async (
           totalDamage,
           deathCount,
         },
-        session: null,
-      },
-      {
-        taskId: `dungeon-clear:${projection.instanceId}`,
-      },
-    );
-
-    slowLogger.mark('enqueueDungeonClearSettlement', {
-      rewardParticipantCount: rewardEligibleParticipants.length,
+      });
+    } catch (error) {
+      dungeonCombatLogger.error({
+        instanceId: projection.instanceId,
+        battleId: currentBattleId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      }, '秘境通关同步结算失败');
+      return flushAndReturn(
+        { success: false, message: '秘境通关结算失败，请稍后重试' },
+        { reason: 'dungeon_clear_settlement_failed' },
+      );
+    }
+    slowLogger.mark('settleDungeonClearInDb', {
+      rewardParticipantCount: settledRewardParticipants.length,
+      dungeonClearOutcome: settlementResult,
     });
+    if (settlementResult === 'discarded_missing_instance') {
+      return flushAndReturn(
+        { success: false, message: '秘境实例落库缺失，请重新开始本次秘境' },
+        { reason: 'dungeon_instance_missing_on_clear' },
+      );
+    }
+
+    await upsertDungeonProjection({
+      ...projection,
+      status: 'cleared',
+      currentBattleId: null,
+      endTime: new Date().toISOString(),
+    });
+
     return flushAndReturn(
       { success: true, data: { instanceId, status: 'cleared', finished: true } },
-      { result, finished: true, rewardParticipantCount: rewardEligibleParticipants.length },
+      { result, finished: true, rewardParticipantCount: settledRewardParticipants.length },
     );
   }
 

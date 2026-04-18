@@ -437,6 +437,7 @@ export const getInventoryItemsWithDefs = async (
  *
  * 作用：
  * - 一次性返回背包弹窗首屏所需的容量信息、背包物品与已穿戴物品，收敛前端打开弹窗时的多次请求。
+ * - 保持纯 projected 读语义：实例列表直接复用 pending mutation 投影视图，容量信息单独叠加 pending grant 占用，避免只读接口被同步 flush 阻塞。
  * - 共享同一套物品定义聚合上下文，避免背包物品与已穿戴物品分别富化造成重复计算。
  *
  * 输入/输出：
@@ -444,11 +445,12 @@ export const getInventoryItemsWithDefs = async (
  * - 输出：`info`、`bagItems`、`equippedItems` 三段只读快照数据。
  *
  * 数据流/状态流：
- * getInventoryInfo + getInventoryItems(bag/equipped) -> 共享上下文富化 -> 返回弹窗快照。
+ * pending item instance mutations -> projected item instances -> getInventoryInfo pending grant overlay + getInventoryItems(bag/equipped) -> 共享上下文富化 -> 返回弹窗快照。
  *
  * 关键边界条件与坑点：
  * 1. 背包和已穿戴需要共用一份上下文，否则套装件数、静态定义加载会被重复计算。
  * 2. 空背包也必须返回容量信息，不能因为物品为空就跳过 `info`。
+ * 3. 待 flush 的普通奖励只参与容量占用，不进入可点击物品列表，否则前端会拿到不存在的实例 ID。
  */
 export const getBagInventorySnapshot = async (
   characterId: number,
@@ -457,7 +459,10 @@ export const getBagInventorySnapshot = async (
   bagItems: InventoryItemWithDef[];
   equippedItems: InventoryItemWithDef[];
 }> => {
-  const projectedItems = await loadProjectedCharacterItemInstances(characterId);
+  const pendingMutations = await loadCharacterPendingItemInstanceMutations(characterId);
+  const projectedItems = await loadProjectedCharacterItemInstances(characterId, {
+    pendingMutations,
+  });
   const {
     bag: bagProjectedItems,
     equipped: equippedProjectedItems,
@@ -468,13 +473,14 @@ export const getBagInventorySnapshot = async (
     getInventoryInfo(characterId, {
       bagProjectedItems,
       warehouseProjectedItems,
-      knownPendingGrantsFlushed: true,
     }),
     getInventoryItems(characterId, "bag", 1, 200, {
       projectedItems: bagProjectedItems,
+      pendingMutations,
     }),
     getInventoryItems(characterId, "equipped", 1, 200, {
       projectedItems: equippedProjectedItems,
+      pendingMutations,
     }),
   ]);
 
@@ -489,6 +495,7 @@ export const getBagInventorySnapshot = async (
 
   const context = await buildInventoryItemDefContext(characterId, sourceItems, {
     equippedItems: equippedResult.items,
+    pendingMutations,
   });
 
   return {

@@ -13,8 +13,8 @@
  * 数据流/状态流：
  * - nextDungeonInstance 读取秘境投影
  * -> 复用 rewardEligibility 共享筛选工具解析显式空名单
- * -> 直接进入通关结算分支
- * -> 只创建延迟结算任务，不输出“名单为空”的异常告警。
+ * -> 直接进入通关同步结算分支
+ * -> 同步调用秘境真实结算服务，不输出“名单为空”的异常告警。
  *
  * 关键边界条件与坑点：
  * 1. 这里的空名单是“开战时明确固化为空”，不是字段缺失；测试要锁定这两者不能混为一谈。
@@ -29,6 +29,7 @@ import * as battleService from '../battle/index.js';
 import * as participantHelpers from '../dungeon/shared/participants.js';
 import * as projectionService from '../onlineBattleProjectionService.js';
 import * as stageData from '../dungeon/shared/stageData.js';
+import * as dungeonSettlementService from '../dungeon/settlement.js';
 import * as slowOperationLogger from '../../utils/slowOperationLogger.js';
 import * as logger from '../../utils/logger.js';
 import type { CharacterComputedRow } from '../characterComputedService.js';
@@ -101,7 +102,7 @@ test('nextDungeonInstance: 显式空可领奖名单时不应输出异常告警',
   });
 
   let updatedStatus = '';
-  let deferredTaskCreated = false;
+  let dungeonClearSettled = false;
 
   t.mock.method(projectionService, 'getDungeonProjection', async (requestInstanceId: string) => {
     assert.equal(requestInstanceId, instanceId);
@@ -157,32 +158,9 @@ test('nextDungeonInstance: 显式空可领奖名单时不应输出异常告警',
     return projection;
   });
 
-  t.mock.method(projectionService, 'createDeferredSettlementTask', async () => {
-    deferredTaskCreated = true;
-    return {
-      taskId: 'dungeon-clear-task',
-      battleId,
-      status: 'pending' as const,
-      attempts: 0,
-      maxAttempts: 5,
-      payload: {
-        battleId,
-        battleType: 'pve' as const,
-        result: 'attacker_win' as const,
-        participants: [],
-        rewardParticipants: [],
-        isDungeonBattle: true,
-        isTowerBattle: false,
-        rewardsPreview: null,
-        battleRewardPlan: null,
-        monsters: [],
-        arenaDelta: null,
-        dungeonContext: null,
-        dungeonStartConsumption: null,
-        dungeonSettlement: null,
-        session: null,
-      },
-    };
+  t.mock.method(dungeonSettlementService, 'settleDungeonClearInDb', async () => {
+    dungeonClearSettled = true;
+    return 'settled';
   });
 
   t.mock.method(
@@ -202,7 +180,7 @@ test('nextDungeonInstance: 显式空可领奖名单时不应输出异常告警',
   }
   assert.equal(result.data.status, 'cleared');
   assert.equal(updatedStatus, 'cleared');
-  assert.equal(deferredTaskCreated, true);
+  assert.equal(dungeonClearSettled, true);
   assert.equal(
     dungeonCombatLogOutput.includes('实例可领奖名单为空，结算奖励将跳过'),
     false,

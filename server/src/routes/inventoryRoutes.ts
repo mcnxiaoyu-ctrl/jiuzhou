@@ -116,7 +116,7 @@ router.get('/info', prepareInventoryConcreteState, asyncHandler(async (req, res)
 // 获取背包弹窗快照
 // GET /api/inventory/bag/snapshot
 // ============================================
-router.get('/bag/snapshot', prepareInventoryConcreteState, asyncHandler(async (req, res) => {
+router.get('/bag/snapshot', asyncHandler(async (req, res) => {
     const characterId = req.characterId!;
 
     const snapshot = await inventoryService.getBagInventorySnapshot(characterId);

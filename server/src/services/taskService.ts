@@ -1089,6 +1089,16 @@ type TaskSubmitClaimTransition = {
   previousStatus: TaskProgressStatusDb | null;
 };
 
+type TaskAcceptTransitionRow = {
+  previous_status: string | null;
+  accepted_task_id: string | null;
+};
+
+type TaskAcceptTransition = {
+  accepted: boolean;
+  previousStatus: TaskProgressStatusDb | null;
+};
+
 type BountyClaimRewardTransitionRow = {
   claim_id: number | string;
   spirit_stones_reward: number | string | null;
@@ -1177,6 +1187,49 @@ const markTaskClaimableTx = async (
   };
 };
 
+const acceptTaskProgressTx = async (
+  characterId: number,
+  taskId: string,
+): Promise<TaskAcceptTransition> => {
+  const res = await query<TaskAcceptTransitionRow>(
+    `
+      WITH current_progress AS (
+        SELECT status
+        FROM character_task_progress
+        WHERE character_id = $1 AND task_id = $2
+        LIMIT 1
+      ),
+      accepted_progress AS (
+        INSERT INTO character_task_progress
+          (character_id, task_id, status, progress, tracked, accepted_at, completed_at, claimed_at, updated_at)
+        SELECT
+          $1,
+          $2,
+          'ongoing',
+          '{}'::jsonb,
+          true,
+          NOW(),
+          NULL,
+          NULL,
+          NOW()
+        WHERE NOT EXISTS (SELECT 1 FROM current_progress)
+        ON CONFLICT (character_id, task_id) DO NOTHING
+        RETURNING task_id
+      )
+      SELECT
+        (SELECT status FROM current_progress LIMIT 1) AS previous_status,
+        (SELECT task_id FROM accepted_progress LIMIT 1) AS accepted_task_id
+    `,
+    [characterId, taskId],
+  );
+  const row = res.rows[0];
+  const acceptedTaskId = asNonEmptyString(row?.accepted_task_id);
+  return {
+    accepted: acceptedTaskId === taskId,
+    previousStatus: row?.previous_status ? asTaskProgressStatusDb(row.previous_status) : null,
+  };
+};
+
 const asStringArray = (v: unknown): string[] => {
   if (!Array.isArray(v)) return [];
   return v.map((x) => String(x ?? '').trim()).filter(Boolean);
@@ -1256,33 +1309,14 @@ export const acceptTaskFromNpc = async (
   const prereqOk = await checkPrereqSatisfied(cid, prereqTaskIds);
   if (!prereqOk) return { success: false, message: '前置任务未完成' };
 
-  const existsRes = await query(
-    `SELECT status FROM character_task_progress WHERE character_id = $1 AND task_id = $2 LIMIT 1`,
-    [cid, tid],
-  );
-  if ((existsRes.rows ?? []).length > 0) {
-    const st = asTaskProgressStatusDb(existsRes.rows[0]?.status);
-    if (st !== 'claimed') return { success: false, message: '任务已接取' };
+  const acceptTransition = await acceptTaskProgressTx(cid, tid);
+  if (!acceptTransition.accepted) {
+    if (acceptTransition.previousStatus !== 'claimed') return { success: false, message: '任务已接取' };
     if (taskCategory === 'main' || taskCategory === 'side') return { success: false, message: '任务已完成，不可重复接取' };
     if (taskCategory === 'daily') return { success: false, message: '今日任务已完成' };
     if (taskCategory === 'event') return { success: false, message: '本周活动任务已完成' };
+    return { success: false, message: '任务已完成，不可重复接取' };
   }
-
-  await query(
-    `
-      INSERT INTO character_task_progress (character_id, task_id, status, progress, tracked, accepted_at, completed_at, claimed_at, updated_at)
-      VALUES ($1, $2, 'ongoing', '{}'::jsonb, true, NOW(), NULL, NULL, NOW())
-      ON CONFLICT (character_id, task_id) DO UPDATE SET
-        status = EXCLUDED.status,
-        progress = EXCLUDED.progress,
-        tracked = EXCLUDED.tracked,
-        accepted_at = NOW(),
-        completed_at = NULL,
-        claimed_at = NULL,
-        updated_at = NOW()
-    `,
-    [cid, tid],
-  );
 
   return { success: true, message: 'ok', data: { taskId: tid } };
 };

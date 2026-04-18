@@ -232,3 +232,107 @@ test('flushOnlineBattleSettlementTasks: 同一秘境实例的 start/clear 任务
   ]);
   assert.equal(pendingTasks.length, 0);
 });
+
+test('flushOnlineBattleSettlementTasks: 失效 teamId 不应阻塞 dungeon-start 落库', async (t) => {
+  const instanceId = 'dungeon-instance-stale-team-id';
+  const startTask: DeferredSettlementTask = {
+    ...createBaseTask(`dungeon-start:${instanceId}`, instanceId),
+    payload: {
+      ...createBaseTask(`dungeon-start:${instanceId}`, instanceId).payload,
+      dungeonStartConsumption: {
+        instanceId,
+        dungeonId: 'dungeon-stale-team-test',
+        difficultyId: 'difficulty-stale-team-test',
+        creatorCharacterId: 1001,
+        teamId: 'team-stale',
+        currentStage: 1,
+        currentWave: 1,
+        participants: [{ userId: 101, characterId: 1001, role: 'leader' }],
+        currentBattleId: 'battle-start-stale-team',
+        rewardEligibleCharacterIds: [1001],
+        startTime: '2026-04-17T02:00:00.000Z',
+        entryCountSnapshots: [],
+        staminaConsumptions: [{ characterId: 1001, amount: 10 }],
+      },
+    },
+  };
+
+  let pendingTasks: DeferredSettlementTask[] = [startTask];
+  let insertSql = '';
+  let insertParams: unknown[] = [];
+
+  t.mock.method(database, 'withTransaction', async <T>(callback: () => Promise<T>) => callback());
+  t.mock.method(database, 'query', async (sql: string, params?: unknown[]) => {
+    if (sql.includes('INSERT INTO dungeon_instance')) {
+      insertSql = sql;
+      insertParams = params ?? [];
+      return { rows: [] };
+    }
+    if (sql.includes('UPDATE dungeon_instance')) {
+      return { rows: [{ id: instanceId }] };
+    }
+    return { rows: [] };
+  });
+  t.mock.method(characterRewardSettlement, 'applyCharacterRewardDeltas', async () => undefined);
+  t.mock.method(staminaService, 'applyStaminaDeltaByCharacterId', async () => ({
+    characterId: 1001,
+    stamina: 90,
+    maxStamina: 100,
+    recovered: 0,
+    changed: true,
+    staminaRecoverAt: new Date('2026-04-17T02:00:00.000Z'),
+    recoverySpeedWindow: {
+      startAtMs: null,
+      expireAtMs: null,
+    },
+  }));
+  t.mock.method(taskService, 'recordKillMonsterEvents', async () => undefined);
+  t.mock.method(taskService, 'recordDungeonClearEvent', async () => undefined);
+  t.mock.method(
+    onlineBattleProjectionService,
+    'listPendingDeferredSettlementTasks',
+    () => pendingTasks,
+  );
+  t.mock.method(
+    onlineBattleProjectionService,
+    'getDeferredSettlementTask',
+    async (taskId: string) => pendingTasks.find((entry) => entry.taskId === taskId) ?? null,
+  );
+  t.mock.method(
+    onlineBattleProjectionService,
+    'updateDeferredSettlementTaskStatus',
+    async (
+      params: Parameters<typeof onlineBattleProjectionService.updateDeferredSettlementTaskStatus>[0],
+    ) => {
+      const current = pendingTasks.find((entry) => entry.taskId === params.taskId) ?? null;
+      if (!current) return null;
+      const nextTask: DeferredSettlementTask = {
+        ...current,
+        status: params.status,
+        attempts: params.incrementAttempt ? current.attempts + 1 : current.attempts,
+        updatedAt: Date.now(),
+        errorMessage: params.errorMessage ?? null,
+      };
+      pendingTasks = pendingTasks.map((entry) => (
+        entry.taskId === params.taskId ? nextTask : entry
+      ));
+      return nextTask;
+    },
+  );
+  t.mock.method(
+    onlineBattleProjectionService,
+    'deleteDeferredSettlementTask',
+    async (taskId: string) => {
+      pendingTasks = pendingTasks.filter((entry) => entry.taskId !== taskId);
+    },
+  );
+  t.mock.method(gameServerModule, 'getGameServer', () => ({
+    pushCharacterUpdate: async () => undefined,
+  }) as never);
+
+  await flushOnlineBattleSettlementTasks();
+
+  assert.match(insertSql, /\(SELECT t\.id FROM teams t WHERE t\.id = \$5\)/);
+  assert.equal(insertParams[4], 'team-stale');
+  assert.equal(pendingTasks.length, 0);
+});

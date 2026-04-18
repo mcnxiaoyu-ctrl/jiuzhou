@@ -26,6 +26,7 @@ import {
 import { getCharacterUserId } from './sect/db.js';
 import { notifyPartnerRecruitStatus } from './partnerRecruitPush.js';
 import { appendPartnerRecruitRefundHint, partnerRecruitService } from './partnerRecruitService.js';
+import { PARTNER_RECRUIT_GENERATION_TIMEOUT_MS } from './shared/partnerRecruitGenerationTimeout.js';
 import type { PartnerRecruitQuality } from './shared/partnerRecruitRules.js';
 import type {
   PartnerRecruitWorkerMessage,
@@ -37,17 +38,14 @@ import {
   PooledJobWorkerRunner,
   resolveWorkerScriptPath,
 } from './shared/pooledJobWorkerRunner.js';
+import { resolveAiJobWorkerCount } from './shared/aiJobWorkerCount.js';
 
 type EnqueueParams = PartnerRecruitWorkerPayload & {
   userId?: number;
 };
 
 const resolvePartnerRecruitWorkerCount = (): number => {
-  const configured = Math.floor(Number(process.env.PARTNER_RECRUIT_WORKER_COUNT));
-  if (!Number.isFinite(configured) || configured <= 0) {
-    return 2;
-  }
-  return configured;
+  return resolveAiJobWorkerCount(process.env.PARTNER_RECRUIT_WORKER_COUNT);
 };
 
 class PartnerRecruitJobRunner {
@@ -60,6 +58,7 @@ class PartnerRecruitJobRunner {
   >({
     label: 'partner-recruit',
     workerScript: resolveWorkerScriptPath(import.meta.url, 'partnerRecruitWorker'),
+    taskTimeoutMs: PARTNER_RECRUIT_GENERATION_TIMEOUT_MS,
     workerCount: resolvePartnerRecruitWorkerCount(),
     buildExecuteMessage: (payload) => ({
       type: 'executePartnerRecruit',

@@ -21,6 +21,7 @@ import { query } from '../config/database.js';
 import { getGameServer } from '../game/gameServer.js';
 import { getCharacterUserId } from './sect/db.js';
 import { isGeneratedTechniqueType } from './shared/techniqueGenerationConstraints.js';
+import { TECHNIQUE_GENERATION_TIMEOUT_MS } from './shared/techniqueGenerationTimeout.js';
 import { notifyTechniqueResearchStatus } from './techniqueResearchPush.js';
 import {
   appendTechniqueResearchRefundHint,
@@ -37,6 +38,7 @@ import {
   PooledJobWorkerRunner,
   resolveWorkerScriptPath,
 } from './shared/pooledJobWorkerRunner.js';
+import { resolveAiJobWorkerCount } from './shared/aiJobWorkerCount.js';
 
 type EnqueueParams = TechniqueGenerationWorkerPayload & {
   userId?: number;
@@ -52,13 +54,8 @@ class TechniqueGenerationJobRunner {
   >({
     label: 'technique-generation',
     workerScript: resolveWorkerScriptPath(import.meta.url, 'techniqueGenerationWorker'),
-    workerCount: (() => {
-      const configured = Math.floor(Number(process.env.TECHNIQUE_GENERATION_WORKER_COUNT));
-      if (!Number.isFinite(configured) || configured <= 0) {
-        return 2;
-      }
-      return configured;
-    })(),
+    taskTimeoutMs: TECHNIQUE_GENERATION_TIMEOUT_MS,
+    workerCount: resolveAiJobWorkerCount(process.env.TECHNIQUE_GENERATION_WORKER_COUNT),
     buildExecuteMessage: (payload) => ({
       type: 'executeTechniqueGeneration',
       payload,

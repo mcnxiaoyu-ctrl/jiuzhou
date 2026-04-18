@@ -27,6 +27,7 @@ import {
   TECHNIQUE_TEXT_MODEL_RETRY_TEMPERATURE,
 } from './techniqueTextModelShared.js';
 import { resolveTechniqueGenerationRequestFailure } from './techniqueGenerationRequestFailure.js';
+import { TECHNIQUE_GENERATION_TIMEOUT_MS } from './techniqueGenerationTimeout.js';
 import {
   buildTechniqueGeneratorPromptInput,
   buildTechniqueGenerationResponseFormat,
@@ -1080,7 +1081,7 @@ export const buildTechniqueGenerationTextModelRequest = (params: {
 } => {
   const seed = params.seed ?? generateTechniqueTextModelSeed();
   const promptNoiseHash = buildTextModelPromptNoiseHash('technique-generation', seed);
-  const timeoutMs = 300_000;
+  const timeoutMs = TECHNIQUE_GENERATION_TIMEOUT_MS;
   const retryGuidance = readTechniqueGenerationRetryGuidance(params.promptContext);
   const extraGeneralRules = readTechniquePromptGeneralRules(params.promptContext);
   const promptInput = buildTechniqueGeneratorPromptInput({

@@ -29,6 +29,7 @@ import {
   PooledJobWorkerRunner,
   resolveWorkerScriptPath,
 } from './shared/pooledJobWorkerRunner.js';
+import { resolveAiJobWorkerCount } from './shared/aiJobWorkerCount.js';
 
 type EnqueueParams = WanderWorkerPayload;
 
@@ -42,13 +43,7 @@ class WanderJobRunner {
   >({
     label: 'wander-generation',
     workerScript: resolveWorkerScriptPath(import.meta.url, 'wanderWorker'),
-    workerCount: (() => {
-      const configured = Math.floor(Number(process.env.WANDER_WORKER_COUNT));
-      if (!Number.isFinite(configured) || configured <= 0) {
-        return 2;
-      }
-      return configured;
-    })(),
+    workerCount: resolveAiJobWorkerCount(process.env.WANDER_WORKER_COUNT),
     buildExecuteMessage: (payload) => ({
       type: 'executeWanderGeneration',
       payload,

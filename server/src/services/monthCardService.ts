@@ -1,6 +1,7 @@
-import { query } from '../config/database.js';
+import { query, withTransaction } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { getGameServer } from '../game/gameServer.js';
+import { BusinessError } from '../middleware/BusinessError.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { addCharacterCurrenciesExact } from './inventory/shared/consume.js';
 import { consumeSpecificItemInstance } from './inventory/shared/consume.js';
@@ -59,6 +60,17 @@ export type MonthCardClaimResult = {
   };
 };
 
+type MonthCardClaimTransitionRow = {
+  ownership_id: number | string | null;
+  previous_expire_at: Date | string | null;
+  previous_last_claim_date: Date | string | null;
+  claimed_ownership_id: number | string | null;
+};
+
+type MonthCardUseTransitionRow = {
+  expire_at: Date | string;
+};
+
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 const buildDateKey = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -75,6 +87,78 @@ const asNumber = (v: unknown, fallback: number) => {
 };
 
 const defaultDailySpiritStones = 10000;
+
+const claimMonthCardOwnershipRewardTx = async (
+  characterId: number,
+  monthCardId: string,
+  todayKey: string,
+): Promise<{
+  claimed: boolean;
+  ownershipId: number;
+  previousExpireAt: Date | null;
+  previousLastClaimDateKey: string;
+}> => {
+  const res = await query<MonthCardClaimTransitionRow>(
+    `
+      WITH current_ownership AS (
+        SELECT id, expire_at, last_claim_date
+        FROM month_card_ownership
+        WHERE character_id = $1 AND month_card_id = $2
+        LIMIT 1
+      ),
+      claimed_ownership AS (
+        UPDATE month_card_ownership
+        SET last_claim_date = $3::date,
+            updated_at = NOW()
+        WHERE id = (SELECT id FROM current_ownership LIMIT 1)
+          AND expire_at > NOW()
+          AND (last_claim_date IS NULL OR last_claim_date <> $3::date)
+        RETURNING id
+      )
+      SELECT
+        (SELECT id FROM current_ownership LIMIT 1) AS ownership_id,
+        (SELECT expire_at FROM current_ownership LIMIT 1) AS previous_expire_at,
+        (SELECT last_claim_date FROM current_ownership LIMIT 1) AS previous_last_claim_date,
+        (SELECT id FROM claimed_ownership LIMIT 1) AS claimed_ownership_id
+    `,
+    [characterId, monthCardId, todayKey],
+  );
+  const row = res.rows[0];
+  return {
+    claimed: asNumber(row?.claimed_ownership_id, 0) > 0,
+    ownershipId: asNumber(row?.ownership_id, 0),
+    previousExpireAt: row?.previous_expire_at ? new Date(row.previous_expire_at) : null,
+    previousLastClaimDateKey: normalizeDateKey(row?.previous_last_claim_date),
+  };
+};
+
+const extendMonthCardOwnershipTx = async (
+  characterId: number,
+  monthCardId: string,
+  durationDays: number,
+): Promise<Date> => {
+  const res = await query<MonthCardUseTransitionRow>(
+    `
+      INSERT INTO month_card_ownership (character_id, month_card_id, start_at, expire_at)
+      VALUES ($1, $2, NOW(), NOW() + ($3::integer * INTERVAL '1 day'))
+      ON CONFLICT (character_id, month_card_id) DO UPDATE SET
+        start_at = CASE
+          WHEN month_card_ownership.expire_at <= NOW() THEN NOW()
+          ELSE month_card_ownership.start_at
+        END,
+        expire_at = CASE
+          WHEN month_card_ownership.expire_at <= NOW()
+            THEN NOW() + ($3::integer * INTERVAL '1 day')
+          ELSE month_card_ownership.expire_at + ($3::integer * INTERVAL '1 day')
+        END,
+        updated_at = NOW()
+      RETURNING expire_at
+    `,
+    [characterId, monthCardId, durationDays],
+  );
+  const expireAt = res.rows[0]?.expire_at;
+  return expireAt instanceof Date ? expireAt : new Date(String(expireAt));
+};
 
 class MonthCardService {
   async getMonthCardStatus(userId: number, monthCardId: string): Promise<MonthCardStatusResult> {
@@ -176,45 +260,8 @@ class MonthCardService {
       return { success: false, message: consumeResult.message };
     }
 
-    const ownRes = await query(
-      `
-        SELECT id, start_at, expire_at
-        FROM month_card_ownership
-        WHERE character_id = $1 AND month_card_id = $2
-        LIMIT 1
-        FOR UPDATE
-      `,
-      [characterId, monthCardId],
-    );
-
     const now = new Date();
-    const ownExpireAtRaw = ownRes.rows[0]?.expire_at;
-    const ownExpireAt = ownExpireAtRaw ? new Date(ownExpireAtRaw) : null;
-    const baseMs = ownExpireAt && ownExpireAt.getTime() > now.getTime() ? ownExpireAt.getTime() : now.getTime();
-    const nextExpireAt = new Date(baseMs + durationDays * 24 * 60 * 60 * 1000);
-
-    if (ownRes.rows.length > 0) {
-      const shouldResetStart = !ownExpireAt || ownExpireAt.getTime() <= now.getTime();
-      if (shouldResetStart) {
-        await query(`UPDATE month_card_ownership SET start_at = NOW(), expire_at = $1, updated_at = NOW() WHERE id = $2`, [
-          nextExpireAt.toISOString(),
-          ownRes.rows[0].id,
-        ]);
-      } else {
-        await query(`UPDATE month_card_ownership SET expire_at = $1, updated_at = NOW() WHERE id = $2`, [
-          nextExpireAt.toISOString(),
-          ownRes.rows[0].id,
-        ]);
-      }
-    } else {
-      await query(
-        `
-          INSERT INTO month_card_ownership (character_id, month_card_id, start_at, expire_at)
-          VALUES ($1, $2, NOW(), $3)
-        `,
-        [characterId, monthCardId, nextExpireAt.toISOString()],
-      );
-    }
+    const nextExpireAt = await extendMonthCardOwnershipTx(characterId, monthCardId, durationDays);
     await updateAchievementProgress(characterId, 'monthcard:activate', 1);
     await invalidateStaminaCache(characterId);
     void getGameServer().pushCharacterUpdate(userId);
@@ -231,7 +278,6 @@ class MonthCardService {
     };
   }
 
-  @Transactional
   async claimMonthCardReward(userId: number, monthCardId: string): Promise<MonthCardClaimResult> {
     const monthCardDef = getMonthCardDefinitionById(monthCardId);
     if (!monthCardDef) {
@@ -244,67 +290,66 @@ class MonthCardService {
     }
 
     const reward = asNumber(monthCardDef.daily_spirit_stones, defaultDailySpiritStones);
+    const todayKey = buildDateKey(new Date());
 
-    const ownRes = await query(
-      `
-        SELECT id, expire_at, last_claim_date
-        FROM month_card_ownership
-        WHERE character_id = $1 AND month_card_id = $2
-        LIMIT 1
-        FOR UPDATE
-      `,
-      [characterId, monthCardId],
-    );
-    if (ownRes.rows.length === 0) {
-      return { success: false, message: '未激活月卡' };
+    try {
+      return await withTransaction(async () => {
+        const claimTransition = await claimMonthCardOwnershipRewardTx(characterId, monthCardId, todayKey);
+        if (!claimTransition.claimed) {
+          if (claimTransition.ownershipId <= 0) {
+            return { success: false, message: '未激活月卡' };
+          }
+          const expireAt = claimTransition.previousExpireAt;
+          if (!expireAt || expireAt.getTime() <= Date.now()) {
+            return { success: false, message: '月卡已到期' };
+          }
+          if (claimTransition.previousLastClaimDateKey === todayKey) {
+            return { success: false, message: '今日已领取' };
+          }
+          return { success: false, message: '月卡领取状态异常' };
+        }
+
+        const claimRecordResult = await query<{ id: number | string | null }>(
+          `
+            INSERT INTO month_card_claim_record (character_id, month_card_id, claim_date, reward_spirit_stones)
+            VALUES ($1, $2, $3::date, $4)
+            ON CONFLICT (character_id, month_card_id, claim_date) DO NOTHING
+            RETURNING id
+          `,
+          [characterId, monthCardId, todayKey, reward],
+        );
+        if (claimRecordResult.rows.length === 0) {
+          throw new BusinessError('今日已领取');
+        }
+
+        const addResult = await addCharacterCurrenciesExact(
+          characterId,
+          {
+            spiritStones: BigInt(reward),
+          },
+          { includeRemaining: true },
+        );
+        if (!addResult.success) {
+          throw new BusinessError(addResult.message);
+        }
+
+        return {
+          success: true,
+          message: '领取成功',
+          data: {
+            monthCardId,
+            date: todayKey,
+            rewardSpiritStones: reward,
+            spiritStones: Number(addResult.remaining?.spiritStones ?? 0n),
+          },
+        };
+      });
+    } catch (error) {
+      if (error instanceof BusinessError) {
+        return { success: false, message: error.message };
+      }
+      throw error;
     }
-
-    const now = new Date();
-    const todayKey = buildDateKey(now);
-    const expireAt = ownRes.rows[0]?.expire_at ? new Date(ownRes.rows[0].expire_at) : null;
-    if (!expireAt || expireAt.getTime() <= now.getTime()) {
-      return { success: false, message: '月卡已到期' };
-    }
-
-    const lastClaimDateKey = normalizeDateKey(ownRes.rows[0]?.last_claim_date);
-    if (lastClaimDateKey === todayKey) {
-      return { success: false, message: '今日已领取' };
-    }
-    await query(
-      `
-        INSERT INTO month_card_claim_record (character_id, month_card_id, claim_date, reward_spirit_stones)
-        VALUES ($1, $2, $3::date, $4)
-        ON CONFLICT (character_id, month_card_id, claim_date) DO NOTHING
-      `,
-      [characterId, monthCardId, todayKey, reward],
-    );
-
-    const addResult = await addCharacterCurrenciesExact(
-      characterId,
-      {
-        spiritStones: BigInt(reward),
-      },
-      { includeRemaining: true },
-    );
-    if (!addResult.success) {
-      return { success: false, message: addResult.message };
-    }
-
-    await query(
-      `UPDATE month_card_ownership SET last_claim_date = $1::date, updated_at = NOW() WHERE id = $2`,
-      [todayKey, ownRes.rows[0].id],
-    );
-
-    return {
-      success: true,
-      message: '领取成功',
-      data: {
-        monthCardId,
-        date: todayKey,
-        rewardSpiritStones: reward,
-        spiritStones: Number(addResult.remaining?.spiritStones ?? 0n),
-      },
-    };
   }
 }
 

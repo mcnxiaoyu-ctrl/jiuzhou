@@ -36,6 +36,7 @@ import {
   type TechniqueTextModelJsonSchemaProperties,
   type TechniqueTextModelResponseFormat,
 } from './techniqueTextModelShared.js';
+import { PARTNER_RECRUIT_GENERATION_TIMEOUT_MS } from './partnerRecruitGenerationTimeout.js';
 import { resolveTechniqueGenerationRequestFailure } from './techniqueGenerationRequestFailure.js';
 import {
   PARTNER_RECRUIT_BASE_MODEL_INSTRUCTION_REJECTION_RULES,
@@ -507,7 +508,7 @@ export const buildGeneratedPartnerTextModelRequest = (params: {
     requestedBaseModel: params.requestedBaseModel,
   });
   const primaryAttackGrowthTarget = rollPartnerRecruitPrimaryAttackGrowthTarget(params.quality, seed);
-  const timeoutMs = 300_000;
+  const timeoutMs = PARTNER_RECRUIT_GENERATION_TIMEOUT_MS;
 
   return {
     responseFormat: buildPartnerRecruitResponseFormat(params.quality),
@@ -568,7 +569,7 @@ export const buildGeneratedPartnerBaseAttrRefreshRequest = (params: {
       },
     }),
     baseModel: params.baseModel,
-    timeoutMs: 300_000,
+    timeoutMs: PARTNER_RECRUIT_GENERATION_TIMEOUT_MS,
   };
 };
 
