@@ -82,6 +82,22 @@ type InventorySlotCapacities = {
   warehouseCapacity: number;
 };
 
+const SLOT_STATIONARY_ITEM_INSTANCE_MUTATION_PREFIXES: ReadonlySet<string> = new Set([
+  'consume-item-instance',
+  'consume-material',
+  'equipment-unbind',
+  'equipment-unbind-direct',
+  'enhance-equipment',
+  'enhance-equipment-success',
+  'market-buy-partial-source',
+  'market-listing-source',
+  'partner-technique-preview-source',
+  'refine-equipment',
+  'remove-item',
+  'reroll-equipment',
+  'socket-equipment',
+]);
+
 export const buildItemInstanceIdArrayParam = (itemIds: readonly number[]): string[] => {
   return [...new Set(
     itemIds
@@ -156,11 +172,94 @@ const isLegacyAutoSlotResolutionMutation = (
   return mutation.snapshot.location === 'bag' || mutation.snapshot.location === 'warehouse';
 };
 
+const isSlotStationaryItemInstanceMutation = (
+  mutation: BufferedCharacterItemInstanceMutation,
+): boolean => SLOT_STATIONARY_ITEM_INSTANCE_MUTATION_PREFIXES.has(
+  getItemInstanceMutationPrefix(mutation.opId),
+);
+
 const getCapacityForLocation = (
   capacities: InventorySlotCapacities,
   location: ItemInstanceLocation,
 ): number => {
   return location === 'warehouse' ? capacities.warehouseCapacity : capacities.bagCapacity;
+};
+
+const buildExistingSlottedRowByItemId = (
+  existingRows: readonly ExistingItemInstanceLocationRow[],
+): Map<number, ExistingItemInstanceLocationRow> => {
+  const existingSlottedRowByItemId = new Map<number, ExistingItemInstanceLocationRow>();
+  for (const row of existingRows) {
+    const normalizedItemId = normalizePositiveInt(Number(row.id));
+    const normalizedOwnerCharacterId = normalizePositiveInt(Number(row.owner_character_id));
+    const normalizedLocationSlot = normalizeOptionalInt(
+      row.location_slot === null ? null : Number(row.location_slot),
+    );
+    if (
+      normalizedItemId <= 0
+      || normalizedOwnerCharacterId <= 0
+      || !isSlotConstrainedLocation(row.location, normalizedLocationSlot)
+    ) {
+      continue;
+    }
+    existingSlottedRowByItemId.set(normalizedItemId, row);
+  }
+  return existingSlottedRowByItemId;
+};
+
+const normalizeSlotStationaryItemInstanceMutationTargets = (
+  existingRows: readonly ExistingItemInstanceLocationRow[],
+  mutations: readonly BufferedCharacterItemInstanceMutation[],
+): BufferedCharacterItemInstanceMutation[] => {
+  const existingSlottedRowByItemId = buildExistingSlottedRowByItemId(existingRows);
+  if (existingSlottedRowByItemId.size <= 0 || mutations.length <= 0) {
+    return [...mutations];
+  }
+
+  let changed = false;
+  const normalizedMutations = mutations.map((mutation) => {
+    if (
+      mutation.kind !== 'upsert'
+      || !mutation.snapshot
+      || !isSlotStationaryItemInstanceMutation(mutation)
+    ) {
+      return mutation;
+    }
+
+    const existingRow = existingSlottedRowByItemId.get(mutation.itemId);
+    if (!existingRow) {
+      return mutation;
+    }
+    const existingOwnerCharacterId = normalizePositiveInt(Number(existingRow.owner_character_id));
+    const existingLocationSlot = normalizeOptionalInt(
+      existingRow.location_slot === null ? null : Number(existingRow.location_slot),
+    );
+    if (
+      existingOwnerCharacterId !== mutation.snapshot.owner_character_id
+      || !isSlotConstrainedLocation(existingRow.location, existingLocationSlot)
+    ) {
+      return mutation;
+    }
+    if (
+      mutation.snapshot.location === existingRow.location
+      && mutation.snapshot.location_slot === existingLocationSlot
+    ) {
+      return mutation;
+    }
+
+    changed = true;
+    return {
+      ...mutation,
+      snapshot: {
+        ...mutation.snapshot,
+        location: existingRow.location,
+        location_slot: existingLocationSlot,
+        equipped_slot: null,
+      },
+    };
+  });
+
+  return changed ? normalizedMutations : [...mutations];
 };
 
 const buildSlotReleaseItemIds = (
@@ -1260,11 +1359,19 @@ export const resolveItemInstanceFlushInput = (
   blockingMutations: readonly BufferedCharacterItemInstanceMutation[] = [],
 ): ResolvedItemInstanceFlushInput => {
   const normalizedMutations = normalizeBufferedCharacterItemInstanceMutations(mutations);
+  const slotStationaryMutations = normalizeSlotStationaryItemInstanceMutationTargets(
+    existingRows,
+    normalizedMutations.mutations,
+  );
+  const slotStationaryBlockingMutations = normalizeSlotStationaryItemInstanceMutationTargets(
+    existingRows,
+    blockingMutations,
+  );
   const resolvedAutoSlotMutations = resolveAutoSlotMutations(
     existingRows,
     capacities,
-    normalizedMutations.mutations,
-    blockingMutations,
+    slotStationaryMutations,
+    slotStationaryBlockingMutations,
   );
   const effectiveMutations = resolvedAutoSlotMutations.mutations;
   if (resolvedAutoSlotMutations.missingAutoSlotItemIds.length > 0) {

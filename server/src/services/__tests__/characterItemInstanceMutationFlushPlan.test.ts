@@ -18,6 +18,39 @@ const DEFAULT_CAPACITIES = {
   warehouseCapacity: 1000,
 };
 
+type TestSnapshot = NonNullable<BufferedCharacterItemInstanceMutation['snapshot']>;
+
+const buildSnapshot = (
+  overrides: Partial<TestSnapshot> & Pick<TestSnapshot, 'id' | 'owner_character_id' | 'item_def_id'>,
+): TestSnapshot => ({
+  owner_user_id: 1,
+  qty: 1,
+  quality: null,
+  quality_rank: null,
+  metadata: null,
+  location: 'bag',
+  location_slot: null,
+  equipped_slot: null,
+  strengthen_level: 0,
+  refine_level: 0,
+  socketed_gems: [],
+  affixes: [],
+  identified: true,
+  locked: false,
+  bind_type: 'none',
+  bind_owner_user_id: null,
+  bind_owner_character_id: null,
+  random_seed: null,
+  affix_gen_version: 0,
+  affix_roll_meta: null,
+  custom_name: null,
+  expire_at: null,
+  obtained_from: null,
+  obtained_ref_id: null,
+  created_at: new Date('2026-04-08T09:00:00.000Z'),
+  ...overrides,
+});
+
 test('flush plan 应先释放将被其他实例占用的旧槽位', () => {
   const plan = buildItemInstanceMutationFlushPlan(
     [
@@ -393,6 +426,40 @@ test('flush 应在整理快照与当前库存冲突时丢弃 sort-inventory muta
   assert.equal(resolved.droppedSortInventoryMutations, true);
   assert.deepEqual(resolved.effectiveMutations, []);
   assert.deepEqual(resolved.flushPlan.duplicateTargetKeys, []);
+});
+
+test('flush 应将数量型 mutation 锚定回当前真实槽位，避免继承过期整理槽位', () => {
+  const resolved = resolveItemInstanceFlushInput(
+    [
+      { id: 100, owner_character_id: 1, location: 'bag', location_slot: 99 },
+      { id: 200, owner_character_id: 1, location: 'bag', location_slot: 13 },
+    ],
+    DEFAULT_CAPACITIES,
+    [
+      buildMutation({
+        itemId: 100,
+        characterId: 1,
+        opId: 'consume-item-instance:100:200:0',
+        createdAt: 200,
+        kind: 'upsert',
+        snapshot: buildSnapshot({
+          id: 100,
+          owner_character_id: 1,
+          item_def_id: 'box-011',
+          qty: 2,
+          location: 'bag',
+          location_slot: 13,
+          obtained_from: 'battle_drop',
+        }),
+      }),
+    ],
+  );
+
+  assert.equal(resolved.droppedSortInventoryMutations, false);
+  assert.deepEqual(resolved.flushPlan.slotReleaseItemIds, []);
+  assert.deepEqual(resolved.flushPlan.duplicateTargetKeys, []);
+  assert.equal(resolved.effectiveMutations[0]?.snapshot?.location, 'bag');
+  assert.equal(resolved.effectiveMutations[0]?.snapshot?.location_slot, 99);
 });
 
 test('flush 应在同槽存在非 sort upsert 时保留非 sort 并裁掉 sort', () => {
