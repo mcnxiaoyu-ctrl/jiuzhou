@@ -26,7 +26,7 @@ import type {
 import { BATTLE_CONSTANTS } from '../types.js';
 import { rollChance } from '../utils/random.js';
 import { calculateDamage, applyDamage } from './damage.js';
-import { applyHealing, applyLifesteal } from './healing.js';
+import { applyBattleHealing, applyLifesteal } from './healing.js';
 import {
   addBuff,
   addShield,
@@ -787,7 +787,7 @@ function executeDamageEffect(
 
     caster.stats.damageDealt += actualDamage;
     if (actualDamage > 0) {
-      applyLifesteal(caster, actualDamage);
+      applyLifesteal(state, caster, actualDamage);
     }
 
     if (!target.isAlive) {
@@ -1166,7 +1166,7 @@ function executeEffect(
       break;
 
     case 'lifesteal':
-      executeLifestealEffect(caster, result, effect);
+      executeLifestealEffect(state, caster, result, effect);
       break;
 
     case 'control':
@@ -1282,7 +1282,7 @@ function executeMarkEffect(
     return;
   }
 
-  const actualHeal = applyHealing(caster, convertedValue);
+  const actualHeal = applyBattleHealing(state, caster, convertedValue);
   if (actualHeal > 0) {
     caster.stats.healingDone += actualHeal;
     if (target.id === caster.id) {
@@ -1312,11 +1312,7 @@ function executeHealEffect(
   const healBonus = caster.currentAttrs.zhiliao;
   healValue = Math.floor(healValue * (1 + healBonus));
 
-  // 减疗
-  const healReduction = target.currentAttrs.jianliao;
-  healValue = Math.floor(healValue * (1 - healReduction));
-
-  const actualHeal = applyHealing(target, healValue);
+  const actualHeal = applyBattleHealing(state, target, healValue);
   result.heal = (result.heal || 0) + actualHeal;
   caster.stats.healingDone += actualHeal;
   if (actualHeal > 0) {
@@ -1697,6 +1693,7 @@ function executeCleanseControlEffect(
  * 执行吸血效果（按本次命中伤害比例回复施法者）
  */
 function executeLifestealEffect(
+  state: BattleState,
   caster: BattleUnit,
   result: TargetResult,
   effect: SkillEffect
@@ -1708,7 +1705,7 @@ function executeLifestealEffect(
   const healAmount = Math.floor(damage * rate);
   if (healAmount <= 0) return;
 
-  const actualHeal = applyHealing(caster, healAmount);
+  const actualHeal = applyBattleHealing(state, caster, healAmount);
   if (actualHeal > 0) {
     caster.stats.healingDone += actualHeal;
   }

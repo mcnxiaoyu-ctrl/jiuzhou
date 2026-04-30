@@ -24,7 +24,7 @@ import {
 } from '../utils/affixTriggerBudget.js';
 import { addBuff, addShield } from './buff.js';
 import { applyDamage, calculateDamage } from './damage.js';
-import { applyHealing } from './healing.js';
+import { applyBattleHealing } from './healing.js';
 import {
   applyMarkStacks,
   applySoulShackleRecoveryReduction,
@@ -158,10 +158,10 @@ export function triggerSetBonusEffects(
         applyResult = applySetDamage(state, owner, target, params, context.damage, context.damageType);
         break;
       case 'heal':
-        applyResult = applySetHeal(owner, target, params);
+        applyResult = applySetHeal(state, owner, target, params);
         break;
       case 'resource':
-        applyResult = applySetResource(owner, target, params);
+        applyResult = applySetResource(state, owner, target, params);
         break;
       case 'shield':
         applyResult = applySetShield(effect, owner, target, params, context.damage);
@@ -384,6 +384,7 @@ function applyDirectSetDamage(
 }
 
 function applySetHeal(
+  state: BattleState,
   owner: BattleUnit,
   target: BattleUnit,
   params: Record<string, unknown>
@@ -399,7 +400,7 @@ function applySetHeal(
   }
   if (healAmount <= 0) return null;
 
-  const actualHeal = applyHealing(target, healAmount);
+  const actualHeal = applyBattleHealing(state, target, healAmount);
   if (actualHeal > 0) {
     owner.stats.healingDone += actualHeal;
     return {
@@ -506,6 +507,7 @@ function applyCalculatedSetDamage(
 }
 
 function applySetResource(
+  state: BattleState,
   owner: BattleUnit,
   target: BattleUnit,
   params: Record<string, unknown>
@@ -518,7 +520,7 @@ function applySetResource(
   if (amount <= 0) return null;
 
   if (resourceType === 'qixue') {
-    const actualHeal = applyHealing(target, amount);
+    const actualHeal = applyBattleHealing(state, target, amount);
     if (actualHeal > 0) {
       owner.stats.healingDone += actualHeal;
       return {
@@ -726,7 +728,7 @@ function applySetMark(
     return { targetResult };
   }
 
-  const actualHeal = applyHealing(owner, convertedValue);
+  const actualHeal = applyBattleHealing(state, owner, convertedValue);
   if (actualHeal > 0) {
     owner.stats.healingDone += actualHeal;
     if (target.id === owner.id) {

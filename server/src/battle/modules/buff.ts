@@ -21,7 +21,7 @@ import type {
 } from '../types.js';
 import { applyDamage } from './damage.js';
 import { calculateDamageAfterDefenseReduction } from './defense.js';
-import { applyHealing } from './healing.js';
+import { applyBattleHealing } from './healing.js';
 import { applySoulShackleRecoveryReduction } from './mark.js';
 import { appendBattleLog } from '../logStream.js';
 import { buildAuraSubEffectSummary } from '../utils/auraSummary.js';
@@ -426,8 +426,8 @@ export function processRoundStartEffects(
 
     // HOT治疗
     if (buff.hot && unit.isAlive && !isHealingForbidden(unit)) {
-      const hotHeal = calculateHotHeal(buff.hot, unit);
-      const actualHeal = applyHealing(unit, hotHeal);
+      const hotHeal = calculateHotHeal(buff.hot);
+      const actualHeal = applyBattleHealing(state, unit, hotHeal);
 
       if (actualHeal > 0) {
         logs.push({
@@ -515,14 +515,8 @@ function calculateDotDamage(dot: DotEffect, target: BattleUnit): number {
 /**
  * 计算HOT治疗
  */
-function calculateHotHeal(hot: HotEffect, target: BattleUnit): number {
-  let heal = hot.heal;
-
-  // 受减疗影响
-  const healReduction = target.currentAttrs.jianliao;
-  heal *= (1 - healReduction);
-
-  return Math.floor(Math.max(1, heal));
+function calculateHotHeal(hot: HotEffect): number {
+  return Math.floor(Math.max(1, hot.heal));
 }
 
 /**
@@ -649,7 +643,7 @@ function applyAuraSubEffect(
 
     case 'heal': {
       if (!target.isAlive || isHealingForbidden(target)) break;
-      const actualHeal = applyHealing(target, sub.resolvedValue);
+      const actualHeal = applyBattleHealing(state, target, sub.resolvedValue);
       if (actualHeal > 0) {
         subResult.heal = (subResult.heal ?? 0) + actualHeal;
       }

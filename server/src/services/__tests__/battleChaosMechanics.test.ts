@@ -143,6 +143,123 @@ test('heal_forbid 应同时阻断直接治疗与 HOT 结算', () => {
   assert.equal(ally.qixue, 500);
 });
 
+test('目标自身减疗属性不应压低其受到的治疗与 HOT', () => {
+  const caster = createUnit({ id: 'player-healer', name: '医修' });
+  const ally = createUnit({
+    id: 'player-high-jianliao',
+    name: '高减疗队友',
+    attrs: { jianliao: 1.8 },
+  });
+  ally.qixue = 500;
+  const state = createState({ attacker: [caster, ally], defender: [] });
+
+  const healSkill: BattleSkill = {
+    id: 'skill-heal-high-jianliao-ally',
+    name: '回春诀',
+    source: 'technique',
+    sourceId: 'tech-heal',
+    cost: {},
+    cooldown: 0,
+    targetType: 'single_ally',
+    targetCount: 1,
+    damageType: 'magic',
+    element: 'mu',
+    effects: [
+      {
+        type: 'heal',
+        valueType: 'flat',
+        value: 240,
+      },
+    ],
+    triggerType: 'active',
+    aiPriority: 40,
+  };
+
+  const healExecution = executeSkill(state, caster, healSkill, [ally.id]);
+  assert.equal(healExecution.success, true);
+  assert.equal(ally.qixue, 740);
+
+  ally.buffs.push(
+    createChaosBuff({
+      id: 'buff-hot-high-jianliao-ally',
+      buffDefId: 'buff-hot-high-jianliao-ally',
+      name: '木灵温养',
+      type: 'buff',
+      hot: { heal: 100 },
+      sourceUnitId: caster.id,
+    }),
+  );
+  const logs = processRoundStartEffects(state, ally);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0]?.type, 'hot');
+  assert.equal(ally.qixue, 840);
+});
+
+test('敌方减疗属性应以递减收益压制全体治疗且不叠加', () => {
+  const caster = createUnit({ id: 'player-healer', name: '医修' });
+  const ally = createUnit({ id: 'player-wounded', name: '伤者' });
+  const primaryReducer = createUnit({
+    id: 'enemy-high-jianliao',
+    name: '玄脉血螭',
+    attrs: { jianliao: 1.718 },
+  });
+  const secondaryReducer = createUnit({
+    id: 'enemy-low-jianliao',
+    name: '副减疗者',
+    attrs: { jianliao: 0.2 },
+  });
+  ally.qixue = 0;
+  const state = createState({
+    attacker: [caster, ally],
+    defender: [primaryReducer, secondaryReducer],
+  });
+  const reductionRate = 1.718 / (1.718 + 5);
+
+  const healSkill: BattleSkill = {
+    id: 'skill-heal-diminishing-jianliao',
+    name: '回春诀',
+    source: 'technique',
+    sourceId: 'tech-heal',
+    cost: {},
+    cooldown: 0,
+    targetType: 'single_ally',
+    targetCount: 1,
+    damageType: 'magic',
+    element: 'mu',
+    effects: [
+      {
+        type: 'heal',
+        valueType: 'flat',
+        value: 1000,
+      },
+    ],
+    triggerType: 'active',
+    aiPriority: 40,
+  };
+
+  const healExecution = executeSkill(state, caster, healSkill, [ally.id]);
+  assert.equal(healExecution.success, true);
+  assert.equal(ally.qixue, Math.floor(1000 * (1 - reductionRate)));
+
+  ally.buffs.push(
+    createChaosBuff({
+      id: 'buff-hot-diminishing-jianliao',
+      buffDefId: 'buff-hot-diminishing-jianliao',
+      name: '木灵温养',
+      type: 'buff',
+      hot: { heal: 100 },
+      sourceUnitId: caster.id,
+    }),
+  );
+  const logs = processRoundStartEffects(state, ally);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0]?.type, 'hot');
+  assert.equal(
+    ally.qixue,
+    Math.floor(1000 * (1 - reductionRate)) + Math.floor(100 * (1 - reductionRate)),
+  );
+});
+
 test('蚀心锁应压低直接治疗与回灵效果', () => {
   const caster = createUnit({ id: 'player-6', name: '锁脉修士' });
   const ally = createUnit({ id: 'player-7', name: '伤者' });
