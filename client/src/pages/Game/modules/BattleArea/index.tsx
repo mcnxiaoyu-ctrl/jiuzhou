@@ -40,6 +40,7 @@ import {
 } from './battleCooldownReplay';
 import { buildBattleActionKey } from './battleActionKey';
 import { isNewerBattleState } from './battleStateFreshness';
+import { applyBattleLogQixuePatch } from './battleLogStatePatch';
 import { BattleTeamPanel } from './BattleTeamPanel';
 import type { BattleFloatText, BattleUnit } from './types';
 export type { BattleUnit } from './types';
@@ -630,25 +631,28 @@ const BattleAreaComponent: React.FC<BattleAreaProps> = ({
       },
     ): void => {
       const resolvedBattleId = options?.battleId ?? nextState.battleId;
-      battleIdRef.current = resolvedBattleId;
-      battleStateRef.current = nextState;
-      battleLogsRef.current = nextLogs;
+      const prevState = battleStateRef.current;
       const prevIndex = lastLogIndexRef.current;
+      const newLogs = nextLogs.slice(Math.max(0, prevIndex));
+      const patchedNextState = applyBattleLogQixuePatch(nextState, prevState, newLogs);
+      battleIdRef.current = resolvedBattleId;
+      battleStateRef.current = patchedNextState;
+      battleLogsRef.current = nextLogs;
       applyLogsToFloats(prevIndex, nextLogs);
       lastLogIndexRef.current = nextLogs.length;
-      ensureBattleStartAnnounced(nextState);
+      ensureBattleStartAnnounced(patchedNextState);
       const prevChatIndex = lastChatLogIndexRef.current;
       const nextLines = formatNewLogs(prevChatIndex, nextLogs);
       lastChatLogIndexRef.current = nextLogs.length;
       pushBattleLines(nextLines);
-      ensureBattleEndAnnounced(nextState);
-      ensureBattleDropsAnnounced(nextState, options?.rewards ?? null);
+      ensureBattleEndAnnounced(patchedNextState);
+      ensureBattleDropsAnnounced(patchedNextState, options?.rewards ?? null);
       setBattleId(resolvedBattleId);
-      setBattleState(nextState);
+      setBattleState(patchedNextState);
       setBattleLogs(nextLogs);
       setStartupStatus('none');
-      syncBattleTeamInfo(nextState, options?.teamMeta);
-      setResult(resolveBattleResult(nextState));
+      syncBattleTeamInfo(patchedNextState, options?.teamMeta);
+      setResult(resolveBattleResult(patchedNextState));
     },
     [
       applyLogsToFloats,
