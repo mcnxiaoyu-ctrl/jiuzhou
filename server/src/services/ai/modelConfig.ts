@@ -17,7 +17,9 @@
  * 1) OpenAI SDK 需要的是 `baseURL` 而不是完整 endpoint，因此这里必须把 `/chat/completions`、`/images/generations` 等完整地址回收成统一 baseURL。
  * 2) 图片链路仍然同时承接 OpenAI 兼容接口与 DashScope 专用协议，provider 判定必须只收敛在这里，不能继续散落在多个业务文件中。
  * 3) 文本模型名支持逗号分隔候选列表；随机选择必须集中在这里，避免调用方各自解析导致“记录模型名”和“实际请求模型”不一致。
+ * 4) 图片默认超时复用 AI 生成统一超时入口，避免生图链路和文本生成链路出现默认等待时长漂移。
  */
+import { AI_GENERATION_TIMEOUT_MS } from '../shared/aiGenerationTimeout.js';
 
 export type ImageProvider = 'openai' | 'dashscope';
 export type TextModelProvider = 'openai' | 'anthropic';
@@ -46,7 +48,7 @@ const DEFAULT_TEXT_MODEL = 'gpt-4o-mini';
 const DEFAULT_IMAGE_MODEL = 'qwen-image-2.0';
 const DEFAULT_IMAGE_PROVIDER = 'auto';
 const DEFAULT_IMAGE_SIZE = '512x512';
-const DEFAULT_IMAGE_TIMEOUT_MS = 15_000;
+const DEFAULT_IMAGE_TIMEOUT_MS = AI_GENERATION_TIMEOUT_MS;
 const DEFAULT_IMAGE_MAX_SKILLS = 4;
 const DEFAULT_IMAGE_RESPONSE_FORMAT = 'b64_json';
 const DASHSCOPE_SYNC_IMAGE_PATH = '/api/v1/services/aigc/multimodal-generation/generation';

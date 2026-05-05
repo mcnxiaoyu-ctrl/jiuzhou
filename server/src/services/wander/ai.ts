@@ -20,6 +20,7 @@
  */
 import { callConfiguredTextModel } from '../ai/openAITextClient.js';
 import { readTextModelConfig } from '../ai/modelConfig.js';
+import { AI_GENERATION_TIMEOUT_MS } from '../shared/aiGenerationTimeout.js';
 import {
   CHARACTER_ATTR_LABEL_MAP,
   CHARACTER_RATIO_ATTR_KEY_SET,
@@ -167,7 +168,7 @@ type WanderAiResolutionPromptRuleSet = {
 };
 
 const WANDER_OPTION_COUNT = 3;
-const WANDER_AI_TIMEOUT_MS = 600_000;
+const WANDER_AI_TIMEOUT_MS = AI_GENERATION_TIMEOUT_MS;
 const WANDER_AI_MAX_ATTEMPTS = 3;
 const WANDER_ENDING_TYPE_VALUES: WanderEndingType[] = ['none', 'good', 'neutral', 'tragic', 'bizarre'];
 const WANDER_COMPLETED_ENDING_TYPE_VALUES: WanderEndingType[] = ['good', 'neutral', 'tragic', 'bizarre'];
