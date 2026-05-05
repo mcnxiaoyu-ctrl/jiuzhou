@@ -144,6 +144,12 @@ export type TechniqueTextModelJsonParseOptions = {
   preferredTopLevelKeys?: string[];
 };
 
+export type OpenAICompatibleTextModelProtocolConfig = {
+  provider: 'openai';
+  baseURL: string;
+  modelName: string;
+};
+
 export const TECHNIQUE_TEXT_MODEL_TEMPERATURE = 1.0;
 export const TECHNIQUE_TEXT_MODEL_RETRY_TEMPERATURE = 0.4;
 export const TECHNIQUE_TEXT_MODEL_SEED_MIN = 1;
@@ -315,6 +321,22 @@ export const buildTechniqueTextModelJsonSchemaResponseFormat = (_params: {
     strict: true,
   },
 });
+
+const isDeepSeekTextModel = (config: OpenAICompatibleTextModelProtocolConfig): boolean => {
+  const baseURL = config.baseURL.toLowerCase();
+  const modelName = config.modelName.toLowerCase();
+  return baseURL.includes('deepseek') || modelName.startsWith('deepseek-');
+};
+
+export const resolveOpenAICompatibleResponseFormat = (
+  config: OpenAICompatibleTextModelProtocolConfig,
+  responseFormat?: TechniqueTextModelResponseFormat,
+): TechniqueTextModelResponseFormat | undefined => {
+  if (!responseFormat) return undefined;
+  if (responseFormat.type !== 'json_schema') return responseFormat;
+  if (!isDeepSeekTextModel(config)) return responseFormat;
+  return { type: 'json_object' };
+};
 
 export const buildTechniqueTextModelPayload = (params: {
   modelName: string;

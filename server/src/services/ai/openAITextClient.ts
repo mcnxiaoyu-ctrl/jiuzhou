@@ -23,6 +23,7 @@ import { callAnthropicTextModel } from './anthropicTextClient.js';
 import {
   buildTechniqueTextModelPayload,
   extractTechniqueTextModelContent,
+  resolveOpenAICompatibleResponseFormat,
   type TechniqueTextModelResponseFormat,
 } from '../shared/techniqueTextModelShared.js';
 
@@ -73,7 +74,14 @@ export const callConfiguredTextModel = async (params: {
 
   const payload = buildTechniqueTextModelPayload({
     modelName: config.modelName,
-    responseFormat: params.responseFormat,
+    responseFormat: resolveOpenAICompatibleResponseFormat(
+      {
+        provider: 'openai',
+        baseURL: config.baseURL,
+        modelName: config.modelName,
+      },
+      params.responseFormat,
+    ),
     systemMessage: params.systemMessage,
     userMessage: params.userMessage,
     seed: params.seed,

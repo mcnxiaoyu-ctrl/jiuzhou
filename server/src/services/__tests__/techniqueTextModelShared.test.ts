@@ -22,6 +22,7 @@ import {
   buildTextModelPromptNoiseHash,
   buildTechniqueTextModelPayload,
   buildTechniqueTextModelJsonSchemaResponseFormat,
+  resolveOpenAICompatibleResponseFormat,
   extractTechniqueTextModelContent,
   parseTechniqueTextModelJsonObject,
   TECHNIQUE_TEXT_MODEL_RETRY_TEMPERATURE,
@@ -142,6 +143,66 @@ test('显式传入 response_format 时应原样写入 payload', () => {
   if (responseFormat.type !== 'json_schema') return;
   assert.equal(responseFormat.json_schema.name, 'partner_recruit_draft');
   assert.equal(responseFormat.json_schema.strict, true);
+});
+
+test('resolveOpenAICompatibleResponseFormat: DeepSeek 兼容接口应将 json_schema 降级为 json_object', () => {
+  const responseFormat = buildTechniqueTextModelJsonSchemaResponseFormat({
+    name: 'wander_story_payload',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['episodeTitle'],
+      properties: {
+        episodeTitle: {
+          type: 'string',
+          minLength: 2,
+          maxLength: 24,
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(
+    resolveOpenAICompatibleResponseFormat(
+      {
+        provider: 'openai',
+        baseURL: 'https://api.deepseek.com/v1',
+        modelName: 'deepseek-v4-pro',
+      },
+      responseFormat,
+    ),
+    { type: 'json_object' },
+  );
+});
+
+test('resolveOpenAICompatibleResponseFormat: 非 DeepSeek 兼容接口应保留 json_schema', () => {
+  const responseFormat = buildTechniqueTextModelJsonSchemaResponseFormat({
+    name: 'wander_story_payload',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['episodeTitle'],
+      properties: {
+        episodeTitle: {
+          type: 'string',
+          minLength: 2,
+          maxLength: 24,
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(
+    resolveOpenAICompatibleResponseFormat(
+      {
+        provider: 'openai',
+        baseURL: 'https://api.openai.com/v1',
+        modelName: 'gpt-4o-mini',
+      },
+      responseFormat,
+    ),
+    responseFormat,
+  );
 });
 
 test('分段 content 应拼接为统一文本', () => {
