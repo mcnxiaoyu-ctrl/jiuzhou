@@ -2,7 +2,7 @@
  * 鉴权路由验证码参数回归测试
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：锁定登录与注册必须先提供图片验证码参数，避免在路由层遗漏校验后把同一规则拆到多个 service 里兜底。
+ * 1. 做什么：锁定账号密码登录与未登录手机号发码必须先提供图片验证码参数，避免在路由层遗漏校验后把同一规则拆到多个 service 里兜底。
  * 2. 做什么：验证缺少验证码参数时会被统一拦截，不会继续进入后续鉴权逻辑。
  * 3. 不做什么：不验证真实数据库登录注册流程，不覆盖验证码生成图片内容。
  *
@@ -12,7 +12,7 @@
  *
  * 数据流/状态流：
  * - 测试创建仅挂载鉴权路由与错误处理中间件的应用；
- * - 发送缺少验证码字段的登录/注册请求；
+ * - 发送缺少验证码字段的账号密码登录/手机号发码请求；
  * - 断言路由层在进入 service 前直接返回 400。
  *
  * 关键边界条件与坑点：
@@ -95,7 +95,7 @@ test.after(() => {
   redis.disconnect();
 });
 
-test('登录与注册缺少图片验证码参数时应在路由层直接拦截', async () => {
+test('账号密码登录与手机号发码缺少图片验证码参数时应在路由层直接拦截', async () => {
   const app = createAuthTestApp();
   const server = await startServer(app);
 
@@ -108,13 +108,13 @@ test('登录与注册缺少图片验证码参数时应在路由层直接拦截',
     assert.equal(loginResponse.body.success, false);
     assert.equal(loginResponse.body.message, '图片验证码不能为空');
 
-    const registerResponse = await postJson(server.baseUrl, '/api/auth/register', {
-      username: 'tester',
-      password: '123456',
+    const phoneCodeResponse = await postJson(server.baseUrl, '/api/auth/phone-code/send', {
+      phoneNumber: '13800138000',
+      purpose: 'login',
     });
-    assert.equal(registerResponse.status, 400);
-    assert.equal(registerResponse.body.success, false);
-    assert.equal(registerResponse.body.message, '图片验证码不能为空');
+    assert.equal(phoneCodeResponse.status, 400);
+    assert.equal(phoneCodeResponse.body.success, false);
+    assert.equal(phoneCodeResponse.body.message, '图片验证码不能为空');
   } finally {
     await server.close();
   }

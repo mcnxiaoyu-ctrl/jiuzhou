@@ -70,55 +70,15 @@
   margin: auto;
   width: 380px;
   position: relative;
-  transform-style: preserve-3d;
-  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform, height;
-
-  &.flipped {
-    .card-front { 
-      opacity: 0; 
-      pointer-events: none; 
-      transform: rotateY(180deg); 
-      max-height: 100%;
-      overflow: hidden;
-    }
-    .card-back { 
-      opacity: 1; 
-      pointer-events: auto; 
-      transform: rotateY(0deg); 
-      max-height: none;
-      overflow: visible;
-    }
-  }
 }
 
 .card-face {
-  position: absolute;
-  top: 0;
-  left: 0;
   width: 100%;
   background: var(--auth-card-bg);
   border-radius: 16px;
   border: 1px solid var(--auth-card-border);
   padding: 32px 24px;
   box-shadow: var(--auth-card-shadow);
-  transition: opacity 0.4s ease, transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-  backface-visibility: hidden;
-}
-
-.card-front {
-  opacity: 1;
-  transform: rotateY(0deg);
-  max-height: none;
-  overflow: visible;
-}
-
-.card-back {
-  opacity: 0;
-  pointer-events: none;
-  transform: rotateY(-180deg);
-  max-height: 100%;
-  overflow: hidden;
 }
 
 .card-header {
@@ -153,87 +113,49 @@
   }
 }
 
-.auth-captcha {
-  margin-bottom: 12px;
-}
-
-.auth-captcha__row {
+.auth-mode-tabs {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(132px, 42%, 168px);
-  align-items: center;
-  gap: 12px;
-}
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
 
-.auth-captcha__input {
-  flex: 1;
-  margin-bottom: 0;
-  
-  .ant-form-item-explain-error:empty {
-    display: none;
+  .ant-btn {
+    min-width: 0;
+    height: 36px;
+    padding-inline: 8px;
+    border-radius: 10px;
+    font-size: 13px;
   }
 }
 
-.auth-captcha__visual {
-  width: 100%;
-  min-width: 0;
-  display: block;
+.auth-sms-captcha {
+  margin-bottom: 12px;
+
+  .captcha-challenge-input {
+    --captcha-challenge-height: var(--auth-control-height);
+    --captcha-challenge-radius: var(--auth-control-radius);
+  }
 }
 
-.auth-captcha__image-button {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
+.auth-sms-code-input {
+  .ant-input-group-addon {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+}
+
+.auth-sms-code-row__button {
   height: var(--auth-control-height);
-  padding: 0;
-  border: 1px solid var(--border-color);
-  border-radius: var(--auth-control-radius);
-  background: var(--auth-input-bg);
-  overflow: hidden;
-  cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  outline: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:hover:not(:disabled) {
-    border-color: color-mix(in srgb, var(--text-color) 24%, var(--border-color));
-  }
-
-  &:focus-visible {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px var(--primary-bg-soft);
-  }
-
-  &:disabled {
-    cursor: wait;
-    opacity: 0.72;
-  }
-}
-
-.auth-captcha__image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  pointer-events: none;
-}
-
-.auth-captcha__placeholder {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
+  min-width: 104px;
+  border-radius: 0 var(--auth-control-radius) var(--auth-control-radius) 0;
 }
 
 // Ant Design 样式覆盖
-.auth-card {
-  .ant-input-affix-wrapper,
-  .ant-input {
+  .auth-card {
+    .ant-input-affix-wrapper,
+  .ant-input,
+  .ant-input-group-addon {
     background: var(--auth-input-bg);
     border-color: var(--border-color);
     color: var(--text-color);
@@ -264,6 +186,11 @@
 
   .ant-input-affix-wrapper {
     padding-inline: 14px;
+  }
+
+  .auth-sms-code-input.ant-input-affix-wrapper {
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
   }
 
   .ant-input-affix-wrapper > input.ant-input {
@@ -338,9 +265,14 @@
     }
   }
 
-  .auth-captcha__row {
-    grid-template-columns: minmax(0, 1fr) 124px;
-    gap: 10px;
+  .auth-mode-tabs {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .auth-sms-code-row__button {
+    min-width: 92px;
+    padding-inline: 8px;
   }
 
   .auth-background .cloud {

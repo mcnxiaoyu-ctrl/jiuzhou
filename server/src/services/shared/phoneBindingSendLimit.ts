@@ -27,6 +27,8 @@ export type PhoneBindingSendLimitConfig = {
   dailyLimit: number;
 };
 
+export type PhoneBindingSendLimitSubject = number | string;
+
 type PhoneBindingSendLimitWindow = {
   keySegment: 'hour' | 'day';
   limit: number;
@@ -84,11 +86,11 @@ const buildWindowToken = (window: PhoneBindingSendLimitWindow, now: Date): strin
 };
 
 const buildWindowKey = (
-  userId: number,
+  subject: PhoneBindingSendLimitSubject,
   window: PhoneBindingSendLimitWindow,
   now: Date,
 ): string => {
-  return `market:phone-binding:send-limit:${window.keySegment}:${userId}:${buildWindowToken(window, now)}`;
+  return `market:phone-binding:send-limit:${window.keySegment}:${subject}:${buildWindowToken(window, now)}`;
 };
 
 const parseStoredCount = (rawCount: string | null): number => {
@@ -112,12 +114,12 @@ const buildExceededMessage = (window: PhoneBindingSendLimitWindow): string => {
 };
 
 export const assertPhoneBindingSendLimitAvailable = async (
-  userId: number,
+  subject: PhoneBindingSendLimitSubject,
   config: PhoneBindingSendLimitConfig,
   now: Date = new Date(),
 ): Promise<void> => {
   for (const window of PHONE_BINDING_SEND_LIMIT_WINDOWS(config)) {
-    const rawCount = await redis.get(buildWindowKey(userId, window, now));
+    const rawCount = await redis.get(buildWindowKey(subject, window, now));
     const currentCount = parseStoredCount(rawCount);
 
     if (currentCount >= window.limit) {
@@ -127,12 +129,12 @@ export const assertPhoneBindingSendLimitAvailable = async (
 };
 
 export const recordPhoneBindingSendSuccess = async (
-  userId: number,
+  subject: PhoneBindingSendLimitSubject,
   config: PhoneBindingSendLimitConfig,
   now: Date = new Date(),
 ): Promise<void> => {
   for (const window of PHONE_BINDING_SEND_LIMIT_WINDOWS(config)) {
-    const redisKey = buildWindowKey(userId, window, now);
+    const redisKey = buildWindowKey(subject, window, now);
     const nextCount = await redis.incr(redisKey);
 
     if (nextCount === 1) {

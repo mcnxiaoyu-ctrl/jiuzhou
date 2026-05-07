@@ -1,172 +1,117 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { App, Button, Form, Input } from 'antd';
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 
 import CreateCharacter from '../../components/CreateCharacter';
 import {
   checkCharacter,
-  login as apiLogin,
+  legacyBindPhone,
+  phoneLogin,
   register as apiRegister,
-  type UnifiedCaptchaPayload,
 } from '../../services/api';
-import {
-  ACCOUNT_PASSWORD_MIN_LENGTH,
-  ACCOUNT_PASSWORD_MIN_LENGTH_MESSAGE,
-  createConfirmPasswordValidator,
-} from '../shared/accountPasswordFormRules';
 import { IMG_LOGO as logo } from '../Game/shared/imageAssets';
-import AuthCaptchaField, { type AuthCaptchaFieldHandle } from './components/AuthCaptchaField';
+import AuthSmsCodeField, {
+  type AuthSmsCodeFormValues,
+} from './components/AuthSmsCodeField';
 import './index.scss';
 
 interface AuthProps {
   onLoginSuccess: () => void;
 }
 
-type LoginFormValues = {
+type AuthMode = 'login' | 'register' | 'legacy-bind';
+
+type PhoneLoginFormValues = AuthSmsCodeFormValues;
+
+type RegisterFormValues = AuthSmsCodeFormValues & {
   username: string;
-  password: string;
-  captchaId?: string;
-  captchaCode?: string;
-  ticket?: string;
-  randstr?: string;
 };
 
-type RegisterFormValues = {
+type LegacyBindFormValues = AuthSmsCodeFormValues & {
   username: string;
   password: string;
-  confirmPassword: string;
-  captchaId?: string;
-  captchaCode?: string;
-  ticket?: string;
-  randstr?: string;
+};
+
+type AuthStorageUser = {
+  id: number;
+  username: string;
+};
+
+const AUTH_MODE_TITLE: Record<AuthMode, string> = {
+  login: '手机号登录',
+  register: '注册成为修仙者',
+  'legacy-bind': '老账号绑定手机号',
 };
 
 const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const { message } = App.useApp();
-  const [loginForm] = Form.useForm<LoginFormValues>();
+  const [loginForm] = Form.useForm<PhoneLoginFormValues>();
   const [registerForm] = Form.useForm<RegisterFormValues>();
-  const [isFlipped, setIsFlipped] = useState(false);
+  const [legacyBindForm] = Form.useForm<LegacyBindFormValues>();
+  const [mode, setMode] = useState<AuthMode>('login');
   const [loading, setLoading] = useState(false);
   const [showCreateCharacter, setShowCreateCharacter] = useState(false);
-  const [cardHeight, setCardHeight] = useState<number>();
-  const [loginCaptchaRefreshNonce, setLoginCaptchaRefreshNonce] = useState(0);
-  const [registerCaptchaRefreshNonce, setRegisterCaptchaRefreshNonce] = useState(0);
-  const loginCardRef = useRef<HTMLDivElement>(null);
-  const registerCardRef = useRef<HTMLDivElement>(null);
-  const loginCaptchaRef = useRef<AuthCaptchaFieldHandle>(null);
-  const registerCaptchaRef = useRef<AuthCaptchaFieldHandle>(null);
 
-  useLayoutEffect(() => {
-    const update = () => {
-      const target = isFlipped ? registerCardRef.current : loginCardRef.current;
-      const nextHeight = target?.getBoundingClientRect().height ?? 0;
-      setCardHeight(nextHeight > 0 ? nextHeight : undefined);
-    };
+  const completeLogin = async (token: string, user: AuthStorageUser): Promise<void> => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    message.success('登录成功');
 
-    update();
-
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : undefined;
-    if (ro) {
-      if (loginCardRef.current) ro.observe(loginCardRef.current);
-      if (registerCardRef.current) ro.observe(registerCardRef.current);
+    try {
+      const charResult = await checkCharacter();
+      if (charResult.success && charResult.data?.hasCharacter) {
+        onLoginSuccess();
+      } else {
+        setShowCreateCharacter(true);
+      }
+    } catch {
+      void 0;
     }
-
-    window.addEventListener('resize', update);
-    return () => {
-      window.removeEventListener('resize', update);
-      ro?.disconnect();
-    };
-  }, [isFlipped]);
-
-  const refreshLoginCaptcha = () => {
-    setLoginCaptchaRefreshNonce((value) => value + 1);
   };
 
-  const refreshRegisterCaptcha = () => {
-    setRegisterCaptchaRefreshNonce((value) => value + 1);
-  };
-
-  const syncLoginCaptcha = (values: UnifiedCaptchaPayload) => {
-    loginForm.setFieldsValue(values);
-  };
-
-  const syncRegisterCaptcha = (values: UnifiedCaptchaPayload) => {
-    registerForm.setFieldsValue(values);
-  };
-
-  const flipToRegister = () => {
-    setIsFlipped(true);
-    refreshRegisterCaptcha();
-  };
-
-  const flipToLogin = () => {
-    setIsFlipped(false);
-    refreshLoginCaptcha();
-  };
-
-  const handleLogin = async (values: LoginFormValues) => {
-    // beforeSubmit: tencent 模式返回 { ticket, randstr }，local 模式返回 null（用表单已有值）
-    const captchaOverride = await loginCaptchaRef.current?.beforeSubmit();
-    // tencent 模式下 null 表示用户取消
-    if (loginCaptchaRef.current?.isTencent && !captchaOverride) return;
-
+  const handlePhoneLogin = async (values: PhoneLoginFormValues) => {
+    const phoneNumber = values.phoneNumber?.trim() ?? '';
+    const smsCode = values.smsCode?.trim() ?? '';
     setLoading(true);
     try {
-      const result = await apiLogin({
-        username: values.username,
-        password: values.password,
-        // local 模式用表单值，tencent 模式用 beforeSubmit 返回的载荷
-        ...(captchaOverride ?? {
-          captchaId: values.captchaId,
-          captchaCode: values.captchaCode,
-        }),
-      });
-
+      const result = await phoneLogin({ phoneNumber, smsCode });
       if (!result.data) {
         throw new Error('登录响应缺少账号数据');
       }
-
-      localStorage.setItem('token', result.data.token);
-      localStorage.setItem('user', JSON.stringify(result.data.user));
-      message.success('登录成功');
-
-      try {
-        const charResult = await checkCharacter();
-        if (charResult.success && charResult.data?.hasCharacter) {
-          onLoginSuccess();
-        } else {
-          setShowCreateCharacter(true);
-        }
-      } catch {
-        void 0;
-      }
-    } catch {
-      refreshLoginCaptcha();
+      await completeLogin(result.data.token, result.data.user);
     } finally {
       setLoading(false);
     }
   };
 
   const handleRegister = async (values: RegisterFormValues) => {
-    const captchaOverride = await registerCaptchaRef.current?.beforeSubmit();
-    if (registerCaptchaRef.current?.isTencent && !captchaOverride) return;
-
+    const phoneNumber = values.phoneNumber?.trim() ?? '';
+    const smsCode = values.smsCode?.trim() ?? '';
+    const username = values.username.trim();
     setLoading(true);
     try {
-      await apiRegister({
-        username: values.username,
-        password: values.password,
-        ...(captchaOverride ?? {
-          captchaId: values.captchaId,
-          captchaCode: values.captchaCode,
-        }),
-      });
+      await apiRegister({ username, phoneNumber, smsCode });
+      message.success('注册成功，请使用手机号登录');
+      registerForm.resetFields();
+      setMode('login');
+      loginForm.setFieldsValue({ phoneNumber });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      message.success('注册成功，请登录');
-      refreshRegisterCaptcha();
-      flipToLogin();
-    } catch {
-      refreshRegisterCaptcha();
+  const handleLegacyBind = async (values: LegacyBindFormValues) => {
+    const phoneNumber = values.phoneNumber?.trim() ?? '';
+    const smsCode = values.smsCode?.trim() ?? '';
+    const username = values.username.trim();
+    const password = values.password;
+    setLoading(true);
+    try {
+      const result = await legacyBindPhone({ username, password, phoneNumber, smsCode });
+      if (!result.data) {
+        throw new Error('绑定登录响应缺少账号数据');
+      }
+      await completeLogin(result.data.token, result.data.user);
     } finally {
       setLoading(false);
     }
@@ -185,95 +130,87 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
         <div className="cloud cloud-3" />
       </div>
 
-      <div className={`auth-card ${isFlipped ? 'flipped' : ''}`} style={cardHeight ? { height: cardHeight } : undefined}>
-        <div ref={loginCardRef} className="card-face card-front">
+      <div className="auth-card">
+        <div className="card-face">
           <div className="card-header">
             <img src={logo} alt="九州修仙录" className="logo" />
+            <p>{AUTH_MODE_TITLE[mode]}</p>
           </div>
 
-          <Form form={loginForm} name="login" onFinish={handleLogin} size="large">
-            <Form.Item name="username" rules={[{ required: true, message: '请输入道号' }]}>
-              <Input prefix={<UserOutlined />} placeholder="道号" />
-            </Form.Item>
-
-            <Form.Item name="password" rules={[{ required: true, message: '请输入口令' }]}>
-              <Input.Password prefix={<LockOutlined />} placeholder="口令" />
-            </Form.Item>
-
-            <AuthCaptchaField
-              ref={loginCaptchaRef}
-              onChange={syncLoginCaptcha}
-              refreshNonce={loginCaptchaRefreshNonce}
-            />
-
-            <Form.Item>
-              <Button type="primary" htmlType="submit" block loading={loading}>
-                踏入仙途
-              </Button>
-            </Form.Item>
-          </Form>
-
-          <div className="card-footer">
-            <span>初入修仙界？</span>
-            <Button type="link" onClick={flipToRegister}>
-              开辟道途
+          <div className="auth-mode-tabs" role="tablist" aria-label="登录方式">
+            <Button
+              type={mode === 'login' ? 'primary' : 'default'}
+              onClick={() => setMode('login')}
+            >
+              手机登录
+            </Button>
+            <Button
+              type={mode === 'register' ? 'primary' : 'default'}
+              onClick={() => setMode('register')}
+            >
+              注册
+            </Button>
+            <Button
+              type={mode === 'legacy-bind' ? 'primary' : 'default'}
+              onClick={() => setMode('legacy-bind')}
+            >
+              老账号绑定
             </Button>
           </div>
-        </div>
 
-        <div ref={registerCardRef} className="card-face card-back">
-          <div className="card-header">
-            <img src={logo} alt="九州修仙录" className="logo" />
-            <p>注册成为修仙者</p>
-          </div>
+          {mode === 'login' && (
+            <Form form={loginForm} name="phone-login" onFinish={handlePhoneLogin} size="large">
+              <AuthSmsCodeField form={loginForm} purpose="login" enabled={mode === 'login'} />
 
-          <Form form={registerForm} name="register" onFinish={handleRegister} size="large">
-            <Form.Item name="username" rules={[{ required: true, message: '请输入道号' }]}>
-              <Input prefix={<UserOutlined />} placeholder="道号" />
-            </Form.Item>
+              <Form.Item>
+                <Button type="primary" htmlType="submit" block loading={loading}>
+                  踏入仙途
+                </Button>
+              </Form.Item>
+            </Form>
+          )}
 
-            <Form.Item
-              name="password"
-              rules={[
-                { required: true, message: '请输入口令' },
-                { min: ACCOUNT_PASSWORD_MIN_LENGTH, message: ACCOUNT_PASSWORD_MIN_LENGTH_MESSAGE },
-              ]}
-            >
-              <Input.Password prefix={<LockOutlined />} placeholder="口令" />
-            </Form.Item>
+          {mode === 'register' && (
+            <Form form={registerForm} name="phone-register" onFinish={handleRegister} size="large">
+              <AuthSmsCodeField form={registerForm} purpose="register" enabled={mode === 'register'} />
 
-            <Form.Item
-              name="confirmPassword"
-              dependencies={['password']}
-              rules={[
-                { required: true, message: '请确认口令' },
-                ({ getFieldValue }) => ({
-                  validator: createConfirmPasswordValidator(getFieldValue, 'password', '两次口令不一致'),
-                }),
-              ]}
-            >
-              <Input.Password prefix={<LockOutlined />} placeholder="确认口令" />
-            </Form.Item>
+              <Form.Item
+                name="username"
+                rules={[
+                  { required: true, message: '请输入道号' },
+                  { min: 2, max: 20, message: '道号长度需在2-20个字符之间' },
+                ]}
+              >
+                <Input prefix={<UserOutlined />} placeholder="道号" autoComplete="username" />
+              </Form.Item>
 
-            <AuthCaptchaField
-              ref={registerCaptchaRef}
-              onChange={syncRegisterCaptcha}
-              refreshNonce={registerCaptchaRefreshNonce}
-            />
+              <Form.Item>
+                <Button type="primary" htmlType="submit" block loading={loading}>
+                  立下道心
+                </Button>
+              </Form.Item>
+            </Form>
+          )}
 
-            <Form.Item>
-              <Button type="primary" htmlType="submit" block loading={loading}>
-                立下道心
-              </Button>
-            </Form.Item>
-          </Form>
+          {mode === 'legacy-bind' && (
+            <Form form={legacyBindForm} name="legacy-bind" onFinish={handleLegacyBind} size="large">
+              <Form.Item name="username" rules={[{ required: true, message: '请输入道号' }]}>
+                <Input prefix={<UserOutlined />} placeholder="原道号" autoComplete="username" />
+              </Form.Item>
 
-          <div className="card-footer">
-            <span>已有道途？</span>
-            <Button type="link" onClick={flipToLogin}>
-              返回登录
-            </Button>
-          </div>
+              <Form.Item name="password" rules={[{ required: true, message: '请输入口令' }]}>
+                <Input.Password prefix={<LockOutlined />} placeholder="原口令" autoComplete="current-password" />
+              </Form.Item>
+
+              <AuthSmsCodeField form={legacyBindForm} purpose="legacy-bind" enabled={mode === 'legacy-bind'} />
+
+              <Form.Item>
+                <Button type="primary" htmlType="submit" block loading={loading}>
+                  绑定并进入
+                </Button>
+              </Form.Item>
+            </Form>
+          )}
         </div>
       </div>
 

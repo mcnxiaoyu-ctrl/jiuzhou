@@ -5,12 +5,16 @@ import {
   sendAliyunSmsVerificationCode,
   verifyAliyunSmsVerificationCode,
 } from './aliyunSmsVerificationService.js';
+import {
+  assertPhoneNumberAvailableForBinding,
+  normalizeAuthPhoneNumberOrThrow,
+} from './accountPhoneVerificationService.js';
 import { MARKET_PHONE_BINDING_CONFIG } from './marketPhoneBindingConfig.js';
 import {
   assertPhoneBindingSendLimitAvailable,
   recordPhoneBindingSendSuccess,
 } from './shared/phoneBindingSendLimit.js';
-import { maskPhoneNumber, normalizeMainlandPhoneNumber } from './shared/phoneNumber.js';
+import { maskPhoneNumber } from './shared/phoneNumber.js';
 
 /**
  * 坊市手机号绑定服务
@@ -82,13 +86,7 @@ const assertUserExists = async (userId: number): Promise<UserPhoneBindingRow> =>
 };
 
 const assertPhoneNotBoundByOtherUser = async (userId: number, phoneNumber: string): Promise<void> => {
-  const result = await query(
-    'SELECT id FROM users WHERE phone_number = $1 AND id <> $2 LIMIT 1',
-    [phoneNumber, userId],
-  );
-  if (result.rows.length > 0) {
-    throw new BusinessError('该手机号已绑定其他账号');
-  }
+  await assertPhoneNumberAvailableForBinding(phoneNumber, userId);
 };
 
 const assertPhoneBindingWritable = async (userId: number, phoneNumber: string): Promise<void> => {
@@ -119,7 +117,7 @@ export const sendPhoneBindingCode = async (
 ): Promise<SendPhoneBindingCodeResult> => {
   assertFeatureEnabled();
 
-  const phoneNumber = normalizeMainlandPhoneNumber(rawPhoneNumber);
+  const phoneNumber = normalizeAuthPhoneNumberOrThrow(rawPhoneNumber);
   await assertPhoneBindingWritable(userId, phoneNumber);
 
   const cooldownKey = buildCooldownKey(userId);
@@ -158,7 +156,7 @@ export const bindPhoneNumber = async (
 ): Promise<BindPhoneNumberResult> => {
   assertFeatureEnabled();
 
-  const phoneNumber = normalizeMainlandPhoneNumber(rawPhoneNumber);
+  const phoneNumber = normalizeAuthPhoneNumberOrThrow(rawPhoneNumber);
   const normalizedCode = verificationCode.trim();
   if (!/^\d{6}$/.test(normalizedCode)) {
     throw new BusinessError('验证码格式错误');

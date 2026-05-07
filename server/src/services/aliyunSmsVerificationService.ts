@@ -3,7 +3,7 @@ import * as OpenApi from '@alicloud/openapi-client';
 import * as Util from '@alicloud/tea-util';
 import CredentialPackage from '@alicloud/credentials';
 import { BusinessError } from '../middleware/BusinessError.js';
-import { MARKET_PHONE_BINDING_CONFIG } from './marketPhoneBindingConfig.js';
+import { ACCOUNT_PHONE_VERIFICATION_CONFIG } from './accountPhoneVerificationConfig.js';
 import { resolveAliyunSmsVerificationBusinessError } from './shared/aliyunSmsVerificationError.js';
 import {
   createAliyunCheckSmsVerifyCodeRequest,
@@ -113,16 +113,16 @@ const assertAliyunSuccess = (
 export const sendAliyunSmsVerificationCode = async (
   phoneNumber: string,
 ): Promise<void> => {
-  if (!MARKET_PHONE_BINDING_CONFIG.enabled) {
-    throw new Error('手机号绑定功能未开启，禁止发送短信验证码');
+  if (!ACCOUNT_PHONE_VERIFICATION_CONFIG.enabled) {
+    throw new Error('手机号验证码功能未开启，禁止发送短信验证码');
   }
 
   const client = getClient();
   const request = createAliyunSendSmsVerifyCodeRequest(phoneNumber, {
-    signName: MARKET_PHONE_BINDING_CONFIG.signName,
-    templateCode: MARKET_PHONE_BINDING_CONFIG.templateCode,
-    codeExpireSeconds: MARKET_PHONE_BINDING_CONFIG.codeExpireSeconds,
-    sendCooldownSeconds: MARKET_PHONE_BINDING_CONFIG.sendCooldownSeconds,
+    signName: ACCOUNT_PHONE_VERIFICATION_CONFIG.signName,
+    templateCode: ACCOUNT_PHONE_VERIFICATION_CONFIG.templateCode,
+    codeExpireSeconds: ACCOUNT_PHONE_VERIFICATION_CONFIG.codeExpireSeconds,
+    sendCooldownSeconds: ACCOUNT_PHONE_VERIFICATION_CONFIG.sendCooldownSeconds,
   });
   const runtime = new Util.RuntimeOptions({});
 
@@ -139,8 +139,8 @@ export const verifyAliyunSmsVerificationCode = async (
   phoneNumber: string,
   verificationCode: string,
 ): Promise<boolean> => {
-  if (!MARKET_PHONE_BINDING_CONFIG.enabled) {
-    throw new Error('手机号绑定功能未开启，禁止核验短信验证码');
+  if (!ACCOUNT_PHONE_VERIFICATION_CONFIG.enabled) {
+    throw new Error('手机号验证码功能未开启，禁止核验短信验证码');
   }
 
   const client = getClient();

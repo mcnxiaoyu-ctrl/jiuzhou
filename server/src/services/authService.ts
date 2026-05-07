@@ -3,6 +3,12 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { query } from '../config/database.js';
 import dotenv from 'dotenv';
+import { BusinessError } from '../middleware/BusinessError.js';
+import {
+  assertPhoneNumberAvailableForBinding,
+  normalizeAuthPhoneNumberOrThrow,
+  verifyAuthPhoneCode,
+} from './accountPhoneVerificationService.js';
 
 dotenv.config();
 
@@ -12,11 +18,12 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 export interface User {
   id: number;
   username: string;
-  password?: string;
+  password?: string | null;
+  phone_number?: string | null;
   created_at: Date;
   updated_at: Date;
   last_login: Date | null;
-  status: number;
+  status: number | null;
   session_token?: string;
 }
 
@@ -53,6 +60,37 @@ export const verifyPasswordHash = (password: string, passwordHash: string): Prom
   return bcrypt.compare(password, passwordHash);
 };
 
+const assertUserCanLogin = (user: Pick<User, 'status'>): void => {
+  if (user.status === 0) {
+    throw new BusinessError('账号已被禁用');
+  }
+};
+
+const createAuthenticatedResult = async (user: User): Promise<AuthResult> => {
+  assertUserCanLogin(user);
+
+  const sessionToken = generateSessionToken();
+
+  await query(
+    'UPDATE users SET last_login = CURRENT_TIMESTAMP, session_token = $1 WHERE id = $2',
+    [sessionToken, user.id],
+  );
+
+  const token = jwt.sign(
+    { id: user.id, username: user.username, sessionToken },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] },
+  );
+
+  const { password: _, session_token: __, ...userWithoutSensitive } = user;
+
+  return {
+    success: true,
+    message: '登录成功',
+    data: { user: userWithoutSensitive, token, sessionToken },
+  };
+};
+
 // 注册
 export const register = async (username: string, password: string): Promise<AuthResult> => {
   // 检查用户名是否已存在
@@ -85,6 +123,32 @@ export const register = async (username: string, password: string): Promise<Auth
   };
 };
 
+export const registerWithPhone = async (
+  username: string,
+  rawPhoneNumber: string,
+  smsCode: string,
+): Promise<AuthResult> => {
+  const existCheck = await query('SELECT id FROM users WHERE username = $1', [username]);
+  if (existCheck.rows.length > 0) {
+    return { success: false, message: '用户名已存在' };
+  }
+
+  const phoneNumber = await verifyAuthPhoneCode(rawPhoneNumber, smsCode);
+  await assertPhoneNumberAvailableForBinding(phoneNumber);
+
+  const insertSQL = `
+    INSERT INTO users (username, password, phone_number, created_at, updated_at) 
+    VALUES ($1, NULL, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+    RETURNING id, username, phone_number, created_at, updated_at, last_login, status
+  `;
+  await query(insertSQL, [username, phoneNumber]);
+
+  return {
+    success: true,
+    message: '注册成功',
+  };
+};
+
 // 登录
 export const login = async (username: string, password: string): Promise<AuthResult> => {
   // 查询用户
@@ -95,41 +159,76 @@ export const login = async (username: string, password: string): Promise<AuthRes
 
   const user = result.rows[0] as User;
 
-  // 检查账号状态
-  if (user.status === 0) {
-    return { success: false, message: '账号已被禁用' };
+  assertUserCanLogin(user);
+
+  if (!user.password) {
+    return { success: false, message: '该账号未设置口令，请使用手机号验证码登录' };
   }
 
   // 验证密码
-  const isMatch = await verifyPasswordHash(password, user.password!);
+  const isMatch = await verifyPasswordHash(password, user.password);
   if (!isMatch) {
     return { success: false, message: '用户名或密码错误' };
   }
 
-  // 生成新的会话token
-  const sessionToken = generateSessionToken();
+  return createAuthenticatedResult(user);
+};
 
-  // 更新最后登录时间和会话token
-  await query(
-    'UPDATE users SET last_login = CURRENT_TIMESTAMP, session_token = $1 WHERE id = $2',
-    [sessionToken, user.id]
-  );
+export const loginWithPhone = async (
+  rawPhoneNumber: string,
+  smsCode: string,
+): Promise<AuthResult> => {
+  const phoneNumber = await verifyAuthPhoneCode(rawPhoneNumber, smsCode);
+  const result = await query('SELECT * FROM users WHERE phone_number = $1', [phoneNumber]);
+  if (result.rows.length === 0) {
+    return { success: false, message: '手机号未注册' };
+  }
 
-  // 生成JWT token
-  const token = jwt.sign(
-    { id: user.id, username: user.username, sessionToken },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] }
-  );
+  const user = result.rows[0] as User;
+  return createAuthenticatedResult(user);
+};
 
-  // 移除敏感字段
-  const { password: _, session_token: __, ...userWithoutSensitive } = user;
+export const bindLegacyAccountPhoneAndLogin = async (
+  username: string,
+  password: string,
+  rawPhoneNumber: string,
+  smsCode: string,
+): Promise<AuthResult> => {
+  const phoneNumber = normalizeAuthPhoneNumberOrThrow(rawPhoneNumber);
+  const result = await query('SELECT * FROM users WHERE username = $1', [username]);
+  if (result.rows.length === 0) {
+    return { success: false, message: '用户名或密码错误' };
+  }
 
-  return {
-    success: true,
-    message: '登录成功',
-    data: { user: userWithoutSensitive, token, sessionToken },
-  };
+  const user = result.rows[0] as User;
+  assertUserCanLogin(user);
+
+  if (!user.password) {
+    return { success: false, message: '该账号未设置口令，请使用手机号验证码登录' };
+  }
+
+  const isMatch = await verifyPasswordHash(password, user.password);
+  if (!isMatch) {
+    return { success: false, message: '用户名或密码错误' };
+  }
+
+  if (user.phone_number && user.phone_number !== phoneNumber) {
+    return { success: false, message: '当前账号已绑定其他手机号，暂不支持换绑' };
+  }
+
+  await assertPhoneNumberAvailableForBinding(phoneNumber, user.id);
+
+  await verifyAuthPhoneCode(phoneNumber, smsCode);
+
+  if (!user.phone_number) {
+    await query(
+      'UPDATE users SET phone_number = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [phoneNumber, user.id],
+    );
+    user.phone_number = phoneNumber;
+  }
+
+  return createAuthenticatedResult(user);
 };
 
 // 验证token

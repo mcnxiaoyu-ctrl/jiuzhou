@@ -3,7 +3,7 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：封装天御 JS SDK 的动态加载、TencentCaptcha 实例创建与回调处理，返回统一的 ticket/randstr 结果。
- * 2. 做什么：把"加载 SDK 脚本 + 创建实例 + 处理回调 + 错误处理"的流程收敛到单一 Hook，供 AuthCaptchaField 和 MarketCaptchaDialog 复用。
+ * 2. 做什么：把"加载 SDK 脚本 + 创建实例 + 处理回调 + 错误处理"的流程收敛到单一 Hook，供鉴权发码组件和 MarketCaptchaDialog 复用。
  * 3. 不做什么：不渲染 UI，不提交票据到服务端，也不管理表单状态。
  *
  * 输入/输出：
@@ -18,7 +18,7 @@
  * 2. 用户主动关闭验证码弹窗（ret === 2）时 reject，调用方需区分"用户取消"和"验证失败"。
  *
  * 复用说明：
- * - 被 AuthCaptchaField（登录/注册）和 MarketCaptchaDialog（坊市验证码）复用。
+ * - 被鉴权发码组件和 MarketCaptchaDialog（坊市验证码）复用。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 

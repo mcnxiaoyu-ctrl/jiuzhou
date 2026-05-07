@@ -18,7 +18,7 @@
  * 2. tencentAppId 只在 provider === 'tencent' 时有意义，local 模式下前端应忽略。
  *
  * 复用说明：
- * - 被 useCaptchaConfig Hook 消费，Hook 再被 AuthCaptchaField、MarketCaptchaDialog、PhoneBindingCaptcha 等组件复用。
+ * - 被 useCaptchaConfig Hook 消费，Hook 再被鉴权发码组件、MarketCaptchaDialog、PhoneBindingCaptcha 等组件复用。
  */
 import api from './core';
 

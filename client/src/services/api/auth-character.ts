@@ -32,6 +32,35 @@ export interface AuthRequestPayload {
   randstr?: string;
 }
 
+export type AuthPhoneCodePurpose = 'login' | 'register' | 'legacy-bind';
+
+export interface SendAuthPhoneCodePayload {
+  phoneNumber: string;
+  purpose: AuthPhoneCodePurpose;
+  captchaId?: string;
+  captchaCode?: string;
+  ticket?: string;
+  randstr?: string;
+}
+
+export interface PhoneLoginPayload {
+  phoneNumber: string;
+  smsCode: string;
+}
+
+export interface PhoneRegisterPayload {
+  username: string;
+  phoneNumber: string;
+  smsCode: string;
+}
+
+export interface LegacyBindPhonePayload {
+  username: string;
+  password: string;
+  phoneNumber: string;
+  smsCode: string;
+}
+
 export interface AuthResponse {
   success: boolean;
   message: string;
@@ -41,6 +70,15 @@ export interface AuthResponse {
       username: string;
     };
     token: string;
+  };
+}
+
+export interface SendAuthPhoneCodeResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    cooldownSeconds: number;
+    maskedPhoneNumber: string;
   };
 }
 
@@ -92,14 +130,28 @@ export const getCaptcha = (): Promise<CaptchaResponse> => {
   return api.get('/auth/captcha', SILENT_API_REQUEST_CONFIG);
 };
 
+export const sendAuthPhoneCode = (
+  payload: SendAuthPhoneCodePayload,
+): Promise<SendAuthPhoneCodeResponse> => {
+  return api.post('/auth/phone-code/send', payload);
+};
+
 // 登录
 export const login = (payload: AuthRequestPayload): Promise<AuthResponse> => {
   return api.post('/auth/login', payload);
 };
 
+export const phoneLogin = (payload: PhoneLoginPayload): Promise<AuthResponse> => {
+  return api.post('/auth/phone-login', payload);
+};
+
 // 注册
-export const register = (payload: AuthRequestPayload): Promise<AuthResponse> => {
+export const register = (payload: PhoneRegisterPayload): Promise<AuthResponse> => {
   return api.post('/auth/register', payload);
+};
+
+export const legacyBindPhone = (payload: LegacyBindPhonePayload): Promise<AuthResponse> => {
+  return api.post('/auth/legacy-bind-phone', payload);
 };
 
 // 验证会话（持久登录检查）
