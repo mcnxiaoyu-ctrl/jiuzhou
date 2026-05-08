@@ -231,6 +231,37 @@ export const bindLegacyAccountPhoneAndLogin = async (
   return createAuthenticatedResult(user);
 };
 
+export const resetPasswordWithPhone = async (
+  rawPhoneNumber: string,
+  smsCode: string,
+  newPassword: string,
+): Promise<{ success: boolean; message: string }> => {
+  const passwordPolicyError = getPasswordPolicyError(newPassword);
+  if (passwordPolicyError) {
+    return { success: false, message: passwordPolicyError };
+  }
+
+  const phoneNumber = await verifyAuthPhoneCode(rawPhoneNumber, smsCode);
+  const result = await query('SELECT id, status FROM users WHERE phone_number = $1', [phoneNumber]);
+  if (result.rows.length === 0) {
+    return { success: false, message: '手机号未注册' };
+  }
+
+  const user = result.rows[0] as Pick<User, 'id' | 'status'>;
+  if (user.status === 0) {
+    return { success: false, message: '账号已被禁用' };
+  }
+
+  const nextPasswordHash = await hashPassword(newPassword);
+  const nextSessionToken = generateSessionToken();
+  await query(
+    'UPDATE users SET password = $1, session_token = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+    [nextPasswordHash, nextSessionToken, user.id],
+  );
+
+  return { success: true, message: '密码重置成功' };
+};
+
 // 验证token
 export const verifyToken = (token: string): { valid: boolean; decoded?: jwt.JwtPayload } => {
   try {

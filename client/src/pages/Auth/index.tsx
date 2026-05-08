@@ -8,7 +8,13 @@ import {
   legacyBindPhone,
   phoneLogin,
   register as apiRegister,
+  resetPasswordWithPhone,
 } from '../../services/api';
+import {
+  ACCOUNT_PASSWORD_MIN_LENGTH,
+  ACCOUNT_PASSWORD_MIN_LENGTH_MESSAGE,
+  createConfirmPasswordValidator,
+} from '../shared/accountPasswordFormRules';
 import { IMG_LOGO as logo } from '../Game/shared/imageAssets';
 import AuthSmsCodeField, {
   type AuthSmsCodeFormValues,
@@ -19,7 +25,7 @@ interface AuthProps {
   onLoginSuccess: () => void;
 }
 
-type AuthMode = 'login' | 'register' | 'legacy-bind';
+type AuthMode = 'login' | 'register' | 'legacy-bind' | 'reset-password';
 
 type PhoneLoginFormValues = AuthSmsCodeFormValues;
 
@@ -32,6 +38,11 @@ type LegacyBindFormValues = AuthSmsCodeFormValues & {
   password: string;
 };
 
+type ResetPasswordFormValues = AuthSmsCodeFormValues & {
+  newPassword: string;
+  confirmPassword: string;
+};
+
 type AuthStorageUser = {
   id: number;
   username: string;
@@ -41,6 +52,7 @@ const AUTH_MODE_TITLE: Record<AuthMode, string> = {
   login: '手机号登录',
   register: '注册成为修仙者',
   'legacy-bind': '老账号绑定手机号',
+  'reset-password': '找回口令',
 };
 
 const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
@@ -48,6 +60,7 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const [loginForm] = Form.useForm<PhoneLoginFormValues>();
   const [registerForm] = Form.useForm<RegisterFormValues>();
   const [legacyBindForm] = Form.useForm<LegacyBindFormValues>();
+  const [resetPasswordForm] = Form.useForm<ResetPasswordFormValues>();
   const [mode, setMode] = useState<AuthMode>('login');
   const [loading, setLoading] = useState(false);
   const [showCreateCharacter, setShowCreateCharacter] = useState(false);
@@ -117,6 +130,22 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  const handleResetPassword = async (values: ResetPasswordFormValues) => {
+    const phoneNumber = values.phoneNumber?.trim() ?? '';
+    const smsCode = values.smsCode?.trim() ?? '';
+    const newPassword = values.newPassword;
+    setLoading(true);
+    try {
+      await resetPasswordWithPhone({ phoneNumber, smsCode, newPassword });
+      message.success('口令已重置，请重新登录');
+      resetPasswordForm.resetFields();
+      setMode('login');
+      loginForm.setFieldsValue({ phoneNumber });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCharacterCreated = () => {
     setShowCreateCharacter(false);
     onLoginSuccess();
@@ -155,6 +184,12 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               onClick={() => setMode('legacy-bind')}
             >
               老账号绑定
+            </Button>
+            <Button
+              type={mode === 'reset-password' ? 'primary' : 'default'}
+              onClick={() => setMode('reset-password')}
+            >
+              找回口令
             </Button>
           </div>
 
@@ -207,6 +242,45 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
               <Form.Item>
                 <Button type="primary" htmlType="submit" block loading={loading}>
                   绑定并进入
+                </Button>
+              </Form.Item>
+            </Form>
+          )}
+
+          {mode === 'reset-password' && (
+            <Form form={resetPasswordForm} name="reset-password" onFinish={handleResetPassword} size="large">
+              <AuthSmsCodeField
+                form={resetPasswordForm}
+                purpose="reset-password"
+                enabled={mode === 'reset-password'}
+              />
+
+              <Form.Item
+                name="newPassword"
+                rules={[
+                  { required: true, message: '请输入新口令' },
+                  { min: ACCOUNT_PASSWORD_MIN_LENGTH, message: ACCOUNT_PASSWORD_MIN_LENGTH_MESSAGE },
+                ]}
+              >
+                <Input.Password prefix={<LockOutlined />} placeholder="新口令" autoComplete="new-password" />
+              </Form.Item>
+
+              <Form.Item
+                name="confirmPassword"
+                dependencies={['newPassword']}
+                rules={[
+                  { required: true, message: '请确认新口令' },
+                  ({ getFieldValue }) => ({
+                    validator: createConfirmPasswordValidator(getFieldValue, 'newPassword', '两次口令不一致'),
+                  }),
+                ]}
+              >
+                <Input.Password prefix={<LockOutlined />} placeholder="确认新口令" autoComplete="new-password" />
+              </Form.Item>
+
+              <Form.Item>
+                <Button type="primary" htmlType="submit" block loading={loading}>
+                  重置口令
                 </Button>
               </Form.Item>
             </Form>

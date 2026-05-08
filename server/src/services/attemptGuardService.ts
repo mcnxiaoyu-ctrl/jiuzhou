@@ -21,7 +21,7 @@
 import { redis } from '../config/redis.js';
 import { BusinessError } from '../middleware/BusinessError.js';
 
-export type ActionAttemptAction = 'login' | 'password-change' | 'redeem-code';
+export type ActionAttemptAction = 'login' | 'password-change' | 'password-reset' | 'redeem-code';
 
 export type ActionAttemptScope = {
   action: ActionAttemptAction;
@@ -56,6 +56,11 @@ const PASSWORD_CHANGE_POLICY: AttemptGuardPolicy = {
   blockedMessage: '密码验证失败次数过多，请10分钟后再试',
 };
 
+const PASSWORD_RESET_POLICY: AttemptGuardPolicy = {
+  ...PASSWORD_CHANGE_POLICY,
+  blockedMessage: '找回密码尝试过于频繁，请10分钟后再试',
+};
+
 const REDEEM_CODE_POLICY: AttemptGuardPolicy = {
   failureWindowMs: 15 * 60 * 1000,
   blockWindowMs: 15 * 60 * 1000,
@@ -68,6 +73,7 @@ const REDEEM_CODE_POLICY: AttemptGuardPolicy = {
 const ATTEMPT_GUARD_POLICY_MAP: Record<ActionAttemptAction, AttemptGuardPolicy> = {
   login: LOGIN_POLICY,
   'password-change': PASSWORD_CHANGE_POLICY,
+  'password-reset': PASSWORD_RESET_POLICY,
   'redeem-code': REDEEM_CODE_POLICY,
 };
 

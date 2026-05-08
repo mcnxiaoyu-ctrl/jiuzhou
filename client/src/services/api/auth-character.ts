@@ -32,7 +32,7 @@ export interface AuthRequestPayload {
   randstr?: string;
 }
 
-export type AuthPhoneCodePurpose = 'login' | 'register' | 'legacy-bind';
+export type AuthPhoneCodePurpose = 'login' | 'register' | 'legacy-bind' | 'reset-password';
 
 export interface SendAuthPhoneCodePayload {
   phoneNumber: string;
@@ -59,6 +59,12 @@ export interface LegacyBindPhonePayload {
   password: string;
   phoneNumber: string;
   smsCode: string;
+}
+
+export interface ResetPasswordWithPhonePayload {
+  phoneNumber: string;
+  smsCode: string;
+  newPassword: string;
 }
 
 export interface AuthResponse {
@@ -152,6 +158,12 @@ export const register = (payload: PhoneRegisterPayload): Promise<AuthResponse> =
 
 export const legacyBindPhone = (payload: LegacyBindPhonePayload): Promise<AuthResponse> => {
   return api.post('/auth/legacy-bind-phone', payload);
+};
+
+export const resetPasswordWithPhone = (
+  payload: ResetPasswordWithPhonePayload,
+): Promise<{ success: boolean; message: string }> => {
+  return api.post('/auth/password/reset', payload);
 };
 
 // 验证会话（持久登录检查）

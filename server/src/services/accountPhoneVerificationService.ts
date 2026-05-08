@@ -17,7 +17,7 @@ import { maskPhoneNumber, normalizeMainlandPhoneNumber } from './shared/phoneNum
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：统一处理未登录态手机号验证码发送、短信验证码校验、手机号唯一性检查和脱敏展示。
- * 2. 做什么：为手机号登录、注册、老账号绑定和登录后绑定提供同一条手机号规则入口，避免各路由重复归一化和查库。
+ * 2. 做什么：为手机号登录、注册、老账号绑定、找回密码和登录后绑定提供同一条手机号规则入口，避免各路由重复归一化和查库。
  * 3. 不做什么：不签发登录 token，不创建用户，也不渲染前端倒计时。
  *
  * 输入/输出：
@@ -28,7 +28,7 @@ import { maskPhoneNumber, normalizeMainlandPhoneNumber } from './shared/phoneNum
  * 鉴权路由/账号路由 -> 本服务归一化手机号 -> 查库校验场景 -> Redis 频控 -> 阿里云短信发送/核验 -> 返回业务服务继续登录或绑定。
  *
  * 复用设计说明：
- * - 手机号格式、手机号唯一性、未登录态发码频控都是登录/注册/绑定的共同规则，因此集中在这里。
+ * - 手机号格式、手机号唯一性、未登录态发码频控都是登录/注册/绑定/找回密码的共同规则，因此集中在这里。
  * - `purpose + phoneNumber + ip` 作为未登录态限流主体，避免把注册和登录验证码混用，也避免没有 userId 时退化成全局线性限制。
  *
  * 关键边界条件与坑点：
@@ -36,7 +36,7 @@ import { maskPhoneNumber, normalizeMainlandPhoneNumber } from './shared/phoneNum
  * 2. 阿里云验证码由供应商生成和核验，服务端不保存明文验证码；本服务只保存发送冷却与窗口计数。
  */
 
-export type AuthPhoneCodePurpose = 'login' | 'register' | 'legacy-bind';
+export type AuthPhoneCodePurpose = 'login' | 'register' | 'legacy-bind' | 'reset-password';
 
 type UserPhoneLookupRow = {
   id: number;
@@ -65,6 +65,7 @@ export const parseAuthPhoneCodePurpose = (
     normalized === 'login'
     || normalized === 'register'
     || normalized === 'legacy-bind'
+    || normalized === 'reset-password'
   ) {
     return normalized;
   }
@@ -127,7 +128,7 @@ const assertPurposeAllowsPhone = async (
 ): Promise<void> => {
   const user = await getUserByPhoneNumber(phoneNumber);
 
-  if (purpose === 'login') {
+  if (purpose === 'login' || purpose === 'reset-password') {
     if (!user) {
       throw new BusinessError('手机号未注册');
     }

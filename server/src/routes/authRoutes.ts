@@ -6,6 +6,7 @@ import {
   login,
   loginWithPhone,
   registerWithPhone,
+  resetPasswordWithPhone,
   verifyTokenAndSession,
 } from '../services/authService.js';
 import {
@@ -56,6 +57,7 @@ const phoneCodeQpsLimit = createQpsLimitMiddleware({
 type AuthPayload = {
   username?: string;
   password?: string;
+  newPassword?: string;
   phoneNumber?: string;
   smsCode?: string;
   purpose?: string;
@@ -185,6 +187,34 @@ router.post('/legacy-bind-phone', loginQpsLimit, asyncHandler(async (req, res) =
   await assertActionAttemptAllowed(attemptScope);
 
   const result = await bindLegacyAccountPhoneAndLogin(username, password, phoneNumber, smsCode);
+  if (result.success) {
+    await clearActionAttemptFailures(attemptScope);
+  } else {
+    await recordActionAttemptFailure(attemptScope);
+  }
+  sendResult(res, result);
+}));
+
+// 手机验证码找回密码接口
+router.post('/password/reset', loginQpsLimit, asyncHandler(async (req, res) => {
+  const payload = (req.body ?? {}) as AuthPayload;
+  const phoneNumber = payload.phoneNumber?.trim() ?? '';
+  const smsCode = payload.smsCode?.trim() ?? '';
+  const newPassword = payload.newPassword ?? '';
+  const requestIp = resolveRequestIp(req);
+
+  if (!phoneNumber || !smsCode || !newPassword) {
+    throw new BusinessError('手机号、验证码和新口令不能为空');
+  }
+
+  const attemptScope = {
+    action: 'password-reset' as const,
+    subject: phoneNumber,
+    ip: requestIp,
+  };
+  await assertActionAttemptAllowed(attemptScope);
+
+  const result = await resetPasswordWithPhone(phoneNumber, smsCode, newPassword);
   if (result.success) {
     await clearActionAttemptFailures(attemptScope);
   } else {
