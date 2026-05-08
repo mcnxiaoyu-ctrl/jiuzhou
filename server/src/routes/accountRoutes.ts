@@ -11,6 +11,7 @@ import {
   sendCurrentPhoneChangeCode,
   sendNewPhoneChangeCode,
   sendPhoneBindingCode,
+  verifyCurrentPhoneForChange,
 } from '../services/marketPhoneBindingService.js';
 import {
   changePassword,
@@ -46,8 +47,12 @@ type PhoneBindingSendCodePayload = {
 
 type PhoneBindingChangePayload = {
   newPhoneNumber?: string;
-  currentPhoneCode?: string;
+  changeToken?: string;
   newPhoneCode?: string;
+};
+
+type PhoneBindingVerifyCurrentPayload = {
+  currentPhoneCode?: string;
 };
 
 type ChangePasswordPayload = {
@@ -122,22 +127,39 @@ router.post('/phone-binding/bind', requireAuth, asyncHandler(async (req, res) =>
   return sendSuccess(res, result);
 }));
 
+router.post('/phone-binding/change/verify-current', requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.userId!;
+  const payload = (req.body ?? {}) as PhoneBindingVerifyCurrentPayload;
+  const currentPhoneCode = payload.currentPhoneCode?.trim() ?? '';
+
+  if (!currentPhoneCode) {
+    throw new BusinessError('原手机号验证码不能为空');
+  }
+
+  const result = await verifyCurrentPhoneForChange(userId, currentPhoneCode);
+  return sendSuccess(res, result);
+}));
+
 router.post('/phone-binding/change', requireAuth, asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const payload = (req.body ?? {}) as PhoneBindingChangePayload;
   const newPhoneNumber = payload.newPhoneNumber?.trim() ?? '';
-  const currentPhoneCode = payload.currentPhoneCode?.trim() ?? '';
+  const changeToken = payload.changeToken?.trim() ?? '';
   const newPhoneCode = payload.newPhoneCode?.trim() ?? '';
 
   if (!newPhoneNumber) {
     throw new BusinessError('新手机号不能为空');
   }
 
-  if (!currentPhoneCode || !newPhoneCode) {
-    throw new BusinessError('原手机号验证码和新手机号验证码不能为空');
+  if (!changeToken) {
+    throw new BusinessError('请先完成原手机号验证');
   }
 
-  const result = await changeBoundPhoneNumber(userId, newPhoneNumber, currentPhoneCode, newPhoneCode);
+  if (!newPhoneCode) {
+    throw new BusinessError('新手机号验证码不能为空');
+  }
+
+  const result = await changeBoundPhoneNumber(userId, newPhoneNumber, changeToken, newPhoneCode);
   return sendSuccess(res, result);
 }));
 

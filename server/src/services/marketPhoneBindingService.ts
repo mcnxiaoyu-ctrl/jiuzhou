@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { redis } from '../config/redis.js';
 import { query } from '../config/database.js';
 import { BusinessError } from '../middleware/BusinessError.js';
@@ -20,20 +21,20 @@ import { maskPhoneNumber } from './shared/phoneNumber.js';
  * 坊市手机号绑定服务
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：集中处理手机号绑定状态读取、验证码发送、验证码校验、首次绑定与更换绑定写库逻辑。
+ * 1. 做什么：集中处理手机号绑定状态读取、验证码发送、验证码校验、首次绑定与两步式更换绑定写库逻辑。
  * 2. 做什么：把 `users.phone_number` 的账号级绑定口径与 Redis 发送冷却统一收敛，供账号接口、坊市守卫和聊天发言守卫复用。
  * 3. 不做什么：不处理 HTTP 响应，不直接挂载路由，也不负责前端倒计时展示。
  *
  * 输入/输出：
- * - 输入：用户 ID、手机号、原手机号验证码、新手机号验证码。
- * - 输出：绑定状态 DTO、发送成功结果、绑定/换绑成功后的脱敏手机号。
+ * - 输入：用户 ID、手机号、原手机号验证码、新手机号验证码、换绑凭证。
+ * - 输出：绑定状态 DTO、发送成功结果、换绑凭证、绑定/换绑成功后的脱敏手机号。
  *
  * 数据流/状态流：
  * 账号接口/坊市守卫 -> 本服务 -> 读配置/Redis/数据库 -> 返回状态或抛业务异常。
  *
  * 关键边界条件与坑点：
  * 1. 只有 `users.phone_number` 是最终真值来源；验证码真值由阿里云生成并核验，服务端本地只保留发送冷却，不保留验证码明文。
- * 2. 同一规则会被账号页、坊市守卫和聊天守卫复用，因此“是否开启”“是否已绑定”“手机号唯一性”“换绑双验证码”必须集中在本服务，不能在路由层重复判断。
+ * 2. 同一规则会被账号页、坊市守卫和聊天守卫复用，因此“是否开启”“是否已绑定”“手机号唯一性”“换绑两步凭证”必须集中在本服务，不能在路由层重复判断。
  */
 
 type UserPhoneBindingRow = {
@@ -54,10 +55,21 @@ type BindPhoneNumberResult = {
   maskedPhoneNumber: string;
 };
 
+type VerifyCurrentPhoneForChangeResult = {
+  changeToken: string;
+  expiresSeconds: number;
+};
+
+const PHONE_CHANGE_TOKEN_EXPIRE_SECONDS = 10 * 60;
+
 const buildCooldownKey = (
   userId: number,
   scene: 'bind' | 'change-current' | 'change-new',
 ): string => `market:phone-binding:cooldown:${scene}:${userId}`;
+const buildPhoneChangeTokenKey = (
+  userId: number,
+  changeToken: string,
+): string => `market:phone-binding:change-token:${userId}:${changeToken}`;
 const MARKET_PHONE_BINDING_REQUIRED_MESSAGE = '使用坊市功能前请先绑定手机号';
 const CHAT_PHONE_BINDING_REQUIRED_MESSAGE = '绑定手机号后才可在聊天频道发言';
 
@@ -233,20 +245,56 @@ export const bindPhoneNumber = async (
   };
 };
 
+export const verifyCurrentPhoneForChange = async (
+  userId: number,
+  currentPhoneVerificationCode: string,
+): Promise<VerifyCurrentPhoneForChangeResult> => {
+  assertFeatureEnabled();
+
+  const normalizedCode = currentPhoneVerificationCode.trim();
+  if (!/^\d{6}$/.test(normalizedCode)) {
+    throw new BusinessError('原手机号验证码格式错误');
+  }
+
+  const user = await assertUserExists(userId);
+  const currentPhoneNumber = user.phone_number;
+  if (!currentPhoneNumber) {
+    throw new BusinessError('当前账号尚未绑定手机号');
+  }
+
+  const currentVerified = await verifyAliyunSmsVerificationCode(currentPhoneNumber, normalizedCode);
+  if (!currentVerified) {
+    throw new BusinessError('原手机号验证码错误');
+  }
+
+  const changeToken = crypto.randomBytes(32).toString('hex');
+  await redis.set(
+    buildPhoneChangeTokenKey(userId, changeToken),
+    currentPhoneNumber,
+    'EX',
+    PHONE_CHANGE_TOKEN_EXPIRE_SECONDS,
+  );
+
+  return {
+    changeToken,
+    expiresSeconds: PHONE_CHANGE_TOKEN_EXPIRE_SECONDS,
+  };
+};
+
 export const changeBoundPhoneNumber = async (
   userId: number,
   rawNewPhoneNumber: string,
-  currentPhoneVerificationCode: string,
+  changeToken: string,
   newPhoneVerificationCode: string,
 ): Promise<BindPhoneNumberResult> => {
   assertFeatureEnabled();
 
   const newPhoneNumber = normalizeAuthPhoneNumberOrThrow(rawNewPhoneNumber);
-  const currentCode = currentPhoneVerificationCode.trim();
+  const normalizedChangeToken = changeToken.trim();
   const newCode = newPhoneVerificationCode.trim();
 
-  if (!/^\d{6}$/.test(currentCode)) {
-    throw new BusinessError('原手机号验证码格式错误');
+  if (!normalizedChangeToken) {
+    throw new BusinessError('请先完成原手机号验证');
   }
 
   if (!/^\d{6}$/.test(newCode)) {
@@ -260,9 +308,14 @@ export const changeBoundPhoneNumber = async (
     throw new BusinessError('当前账号尚未绑定手机号');
   }
 
-  const currentVerified = await verifyAliyunSmsVerificationCode(currentPhoneNumber, currentCode);
-  if (!currentVerified) {
-    throw new BusinessError('原手机号验证码错误');
+  const changeTokenKey = buildPhoneChangeTokenKey(userId, normalizedChangeToken);
+  const verifiedCurrentPhoneNumber = await redis.get(changeTokenKey);
+  if (!verifiedCurrentPhoneNumber) {
+    throw new BusinessError('原手机号验证已失效，请重新验证');
+  }
+
+  if (verifiedCurrentPhoneNumber !== currentPhoneNumber) {
+    throw new BusinessError('当前绑定手机号已变化，请重新验证');
   }
 
   const newVerified = await verifyAliyunSmsVerificationCode(newPhoneNumber, newCode);
@@ -274,6 +327,7 @@ export const changeBoundPhoneNumber = async (
     'UPDATE users SET phone_number = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
     [newPhoneNumber, userId],
   );
+  await redis.del(changeTokenKey);
 
   return {
     maskedPhoneNumber: maskPhoneNumber(newPhoneNumber),

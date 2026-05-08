@@ -34,6 +34,14 @@ export interface ChangeBoundPhoneNumberResponse {
   };
 }
 
+export interface VerifyCurrentPhoneForChangeResponse {
+  success: boolean;
+  data?: {
+    changeToken: string;
+    expiresSeconds: number;
+  };
+}
+
 export const getPhoneBindingStatus = (
   requestConfig?: AxiosRequestConfig,
 ): Promise<PhoneBindingStatusResponse> => {
@@ -79,15 +87,26 @@ export const sendNewPhoneChangeCode = (
   );
 };
 
+export const verifyCurrentPhoneForChange = (
+  currentPhoneCode: string,
+  requestConfig?: AxiosRequestConfig,
+): Promise<VerifyCurrentPhoneForChangeResponse> => {
+  return api.post(
+    '/account/phone-binding/change/verify-current',
+    { currentPhoneCode },
+    requestConfig,
+  );
+};
+
 export const changeBoundPhoneNumber = (
   newPhoneNumber: string,
-  currentPhoneCode: string,
+  changeToken: string,
   newPhoneCode: string,
   requestConfig?: AxiosRequestConfig,
 ): Promise<ChangeBoundPhoneNumberResponse> => {
   return api.post(
     '/account/phone-binding/change',
-    { newPhoneNumber, currentPhoneCode, newPhoneCode },
+    { newPhoneNumber, changeToken, newPhoneCode },
     requestConfig,
   );
 };
