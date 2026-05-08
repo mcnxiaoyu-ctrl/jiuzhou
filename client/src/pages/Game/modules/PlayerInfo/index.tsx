@@ -301,7 +301,7 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({
     || phoneBindingStatusLoading
     || Boolean(phoneBindingStatusErrorMessage)
     || !phoneBindingEnabled
-    || !phoneBindingBound
+    || phoneBindingEnabled
   );
 
   return (
@@ -445,6 +445,22 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({
                 查看绑定状态
               </Button>
             </div>
+          ) : phoneBindingEnabled && phoneBindingBound ? (
+            <div className="player-phone-binding-row">
+              <div className="player-phone-binding-tip">
+                当前绑定：{phoneBindingStatus?.maskedPhoneNumber ?? '已绑定手机号'}
+              </div>
+              <Button
+                type="primary"
+                size="small"
+                onClick={() => {
+                  ensurePhoneBindingStatusLoaded();
+                  setPhoneBindingDialogOpen(true);
+                }}
+              >
+                更换绑定
+              </Button>
+            </div>
           ) : phoneBindingEnabled ? (
             <div className="player-phone-binding-row">
               <div className="player-phone-binding-tip">绑定手机号后可使用物品坊市与伙伴坊市。</div>
@@ -577,6 +593,8 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({
         <PhoneBindingDialog
           open={phoneBindingDialogOpen}
           onClose={() => setPhoneBindingDialogOpen(false)}
+          mode={phoneBindingBound ? 'change' : 'bind'}
+          maskedCurrentPhoneNumber={phoneBindingStatus?.maskedPhoneNumber ?? null}
           onSuccess={async () => {
             await refreshPhoneBindingStatus();
           }}

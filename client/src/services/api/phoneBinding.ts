@@ -27,6 +27,13 @@ export interface BindPhoneNumberResponse {
   };
 }
 
+export interface ChangeBoundPhoneNumberResponse {
+  success: boolean;
+  data?: {
+    maskedPhoneNumber: string;
+  };
+}
+
 export const getPhoneBindingStatus = (
   requestConfig?: AxiosRequestConfig,
 ): Promise<PhoneBindingStatusResponse> => {
@@ -51,4 +58,36 @@ export const bindPhoneNumber = (
   requestConfig?: AxiosRequestConfig,
 ): Promise<BindPhoneNumberResponse> => {
   return api.post('/account/phone-binding/bind', { phoneNumber, code }, requestConfig);
+};
+
+export const sendCurrentPhoneChangeCode = (
+  captcha: UnifiedCaptchaPayload,
+  requestConfig?: AxiosRequestConfig,
+): Promise<SendPhoneBindingCodeResponse> => {
+  return api.post('/account/phone-binding/change/send-current-code', captcha, requestConfig);
+};
+
+export const sendNewPhoneChangeCode = (
+  phoneNumber: string,
+  captcha: UnifiedCaptchaPayload,
+  requestConfig?: AxiosRequestConfig,
+): Promise<SendPhoneBindingCodeResponse> => {
+  return api.post(
+    '/account/phone-binding/change/send-new-code',
+    { phoneNumber, ...captcha },
+    requestConfig,
+  );
+};
+
+export const changeBoundPhoneNumber = (
+  newPhoneNumber: string,
+  currentPhoneCode: string,
+  newPhoneCode: string,
+  requestConfig?: AxiosRequestConfig,
+): Promise<ChangeBoundPhoneNumberResponse> => {
+  return api.post(
+    '/account/phone-binding/change',
+    { newPhoneNumber, currentPhoneCode, newPhoneCode },
+    requestConfig,
+  );
 };

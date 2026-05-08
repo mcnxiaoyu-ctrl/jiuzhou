@@ -6,7 +6,10 @@ import { createQpsLimitMiddleware } from '../middleware/qpsLimit.js';
 import { sendResult, sendSuccess } from '../middleware/response.js';
 import {
   bindPhoneNumber,
+  changeBoundPhoneNumber,
   getPhoneBindingStatus,
+  sendCurrentPhoneChangeCode,
+  sendNewPhoneChangeCode,
   sendPhoneBindingCode,
 } from '../services/marketPhoneBindingService.js';
 import {
@@ -41,6 +44,12 @@ type PhoneBindingSendCodePayload = {
   randstr?: string;
 };
 
+type PhoneBindingChangePayload = {
+  newPhoneNumber?: string;
+  currentPhoneCode?: string;
+  newPhoneCode?: string;
+};
+
 type ChangePasswordPayload = {
   currentPassword?: string;
   newPassword?: string;
@@ -72,6 +81,31 @@ router.post('/phone-binding/send-code', requireAuth, asyncHandler(async (req, re
   return sendSuccess(res, result);
 }));
 
+router.post('/phone-binding/change/send-current-code', requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.userId!;
+  const payload = (req.body ?? {}) as PhoneBindingSendCodePayload;
+  const requestIp = resolveRequestIp(req);
+
+  await verifyCaptchaByProvider({ body: payload, userIp: requestIp });
+  const result = await sendCurrentPhoneChangeCode(userId);
+  return sendSuccess(res, result);
+}));
+
+router.post('/phone-binding/change/send-new-code', requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.userId!;
+  const payload = (req.body ?? {}) as PhoneBindingSendCodePayload;
+  const { phoneNumber } = payload;
+  const requestIp = resolveRequestIp(req);
+
+  if (!phoneNumber || !phoneNumber.trim()) {
+    throw new BusinessError('新手机号不能为空');
+  }
+
+  await verifyCaptchaByProvider({ body: payload, userIp: requestIp });
+  const result = await sendNewPhoneChangeCode(userId, phoneNumber);
+  return sendSuccess(res, result);
+}));
+
 router.post('/phone-binding/bind', requireAuth, asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const { phoneNumber, code } = req.body as { phoneNumber?: string; code?: string };
@@ -85,6 +119,25 @@ router.post('/phone-binding/bind', requireAuth, asyncHandler(async (req, res) =>
   }
 
   const result = await bindPhoneNumber(userId, phoneNumber, code);
+  return sendSuccess(res, result);
+}));
+
+router.post('/phone-binding/change', requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.userId!;
+  const payload = (req.body ?? {}) as PhoneBindingChangePayload;
+  const newPhoneNumber = payload.newPhoneNumber?.trim() ?? '';
+  const currentPhoneCode = payload.currentPhoneCode?.trim() ?? '';
+  const newPhoneCode = payload.newPhoneCode?.trim() ?? '';
+
+  if (!newPhoneNumber) {
+    throw new BusinessError('新手机号不能为空');
+  }
+
+  if (!currentPhoneCode || !newPhoneCode) {
+    throw new BusinessError('原手机号验证码和新手机号验证码不能为空');
+  }
+
+  const result = await changeBoundPhoneNumber(userId, newPhoneNumber, currentPhoneCode, newPhoneCode);
   return sendSuccess(res, result);
 }));
 

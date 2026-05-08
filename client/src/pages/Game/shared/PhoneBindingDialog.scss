@@ -91,6 +91,19 @@
   gap: 6px;
 }
 
+.phone-binding__current-phone {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--panel-bg-soft);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .phone-binding__label {
   font-size: 12px;
   font-weight: 500;
