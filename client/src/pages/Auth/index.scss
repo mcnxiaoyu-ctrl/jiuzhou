@@ -6,6 +6,13 @@
   --auth-card-border: color-mix(in srgb, var(--border-color) 88%, transparent);
   --auth-card-bg: color-mix(in srgb, var(--panel-bg) 94%, transparent);
   --auth-input-bg: var(--panel-bg-soft);
+  --auth-viewport-padding-block: 24px;
+  --auth-viewport-padding-total: 48px;
+  --auth-viewport-padding-inline: 16px;
+  --auth-card-padding-block: 28px;
+  --auth-card-padding-inline: 24px;
+  --auth-logo-width: 236px;
+  --auth-form-item-gap: 14px;
   --auth-control-height: 56px;
   --auth-control-radius: 14px;
   --auth-refresh-bg: color-mix(in srgb, var(--panel-bg-soft) 92%, var(--panel-bg));
@@ -16,11 +23,13 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  padding: var(--auth-viewport-padding-block) var(--auth-viewport-padding-inline);
   background:
     radial-gradient(circle at 12% 18%, var(--auth-orb-color) 0%, transparent 14%),
     radial-gradient(circle at 78% 74%, var(--auth-orb-color) 0%, transparent 12%),
     linear-gradient(180deg, var(--auth-shell-top) 0%, var(--auth-shell-bottom) 100%);
-  overflow-y: auto;
+  overflow: hidden;
   overflow-x: hidden;
 }
 
@@ -69,24 +78,30 @@
 .auth-card {
   margin: auto;
   width: 380px;
+  max-width: 100%;
+  max-height: calc(100dvh - var(--auth-viewport-padding-total));
   position: relative;
+  display: flex;
 }
 
 .card-face {
   width: 100%;
+  max-height: 100%;
   background: var(--auth-card-bg);
   border-radius: 16px;
   border: 1px solid var(--auth-card-border);
-  padding: 32px 24px;
+  padding: var(--auth-card-padding-block) var(--auth-card-padding-inline);
   box-shadow: var(--auth-card-shadow);
+  overflow: hidden;
 }
 
 .card-header {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 
   .logo {
-    width: 256px;
+    width: var(--auth-logo-width);
+    max-width: 100%;
     height: auto;
   }
 
@@ -117,7 +132,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 
   .auth-mode-tab.ant-btn {
     min-width: 0;
@@ -147,11 +162,27 @@
 }
 
 .auth-sms-captcha {
-  margin-bottom: 12px;
+  margin-bottom: var(--auth-form-item-gap);
 
   .captcha-challenge-input {
     --captcha-challenge-height: var(--auth-control-height);
     --captcha-challenge-radius: var(--auth-control-radius);
+  }
+
+  .captcha-challenge-input__row {
+    grid-template-columns: minmax(0, 1fr) clamp(96px, 34%, 128px);
+    gap: 0;
+  }
+
+  .captcha-challenge-input__field.ant-input-affix-wrapper {
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+  }
+
+  .captcha-challenge-input__image-button {
+    border-left: 0;
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
   }
 }
 
@@ -170,8 +201,16 @@
 }
 
 // Ant Design 样式覆盖
-  .auth-card {
-    .ant-input-affix-wrapper,
+.auth-card {
+  .ant-form-item {
+    margin-bottom: var(--auth-form-item-gap);
+  }
+
+  .ant-form-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .ant-input-affix-wrapper,
   .ant-input,
   .ant-input-group-addon {
     background: var(--auth-input-bg);
@@ -246,8 +285,14 @@
 // 手机端适配
 @media screen and (max-width: 480px) {
   .auth-container {
-    --auth-control-height: 48px;
-    padding: 20px 16px;
+    --auth-viewport-padding-block: 12px;
+    --auth-viewport-padding-total: 24px;
+    --auth-viewport-padding-inline: 12px;
+    --auth-card-padding-block: 18px;
+    --auth-card-padding-inline: 16px;
+    --auth-logo-width: 184px;
+    --auth-form-item-gap: 10px;
+    --auth-control-height: 44px;
   }
 
   .auth-card {
@@ -256,16 +301,11 @@
   }
 
   .card-face {
-    padding: 24px 20px;
     border-radius: 12px;
   }
 
   .card-header {
-    margin-bottom: 20px;
-
-    .logo {
-      width: 200px;
-    }
+    margin-bottom: 12px;
 
     p {
       font-size: 13px;
@@ -284,8 +324,16 @@
   }
 
   .auth-mode-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
+    margin-bottom: 10px;
+
+    .auth-mode-tab.ant-btn,
+    .auth-mode-tab.ant-btn-primary {
+      height: 34px;
+      padding-inline: 4px;
+      font-size: 12px;
+    }
   }
 
   .auth-sms-code-row__button {
@@ -295,5 +343,51 @@
 
   .auth-background .cloud {
     display: none;
+  }
+}
+
+@media screen and (max-height: 720px) {
+  .auth-container {
+    --auth-viewport-padding-block: 10px;
+    --auth-viewport-padding-total: 20px;
+    --auth-card-padding-block: 16px;
+    --auth-logo-width: 176px;
+    --auth-form-item-gap: 10px;
+    --auth-control-height: 44px;
+  }
+
+  .card-header {
+    margin-bottom: 10px;
+
+    p {
+      line-height: 1.25;
+    }
+  }
+
+  .auth-mode-tabs {
+    margin-bottom: 10px;
+
+    .auth-mode-tab.ant-btn,
+    .auth-mode-tab.ant-btn-primary {
+      height: 32px;
+    }
+  }
+
+  .auth-card {
+    .ant-btn-primary {
+      height: 40px;
+    }
+  }
+}
+
+@media screen and (max-height: 620px) {
+  .auth-container {
+    --auth-logo-width: 148px;
+    --auth-form-item-gap: 8px;
+    --auth-control-height: 40px;
+  }
+
+  .card-header {
+    margin-bottom: 8px;
   }
 }
