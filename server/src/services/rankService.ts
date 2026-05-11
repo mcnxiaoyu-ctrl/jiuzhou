@@ -188,8 +188,8 @@ const loadWealthRanks = async (limit: number): Promise<WealthRankRow[]> => {
         title,
         avatar,
         realm,
-        COALESCE(spirit_stones, 0)::int AS "spiritStones",
-        COALESCE(silver, 0)::int AS silver
+        COALESCE(spirit_stones, 0)::bigint AS "spiritStones",
+        COALESCE(silver, 0)::bigint AS silver
       FROM characters
       WHERE nickname IS NOT NULL AND nickname <> ''
       ORDER BY rank
