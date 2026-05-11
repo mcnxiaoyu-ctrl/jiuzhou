@@ -10,6 +10,7 @@ import {
   assertPhoneNumberAvailableForBinding,
   normalizeAuthPhoneNumberOrThrow,
 } from './accountPhoneVerificationService.js';
+import type { SmsVerificationTemplateScene } from './accountPhoneVerificationConfig.js';
 import { MARKET_PHONE_BINDING_CONFIG } from './marketPhoneBindingConfig.js';
 import {
   assertPhoneBindingSendLimitAvailable,
@@ -37,6 +38,8 @@ import { maskPhoneNumber } from './shared/phoneNumber.js';
  * 2. 游戏内坊市/聊天已不再读取绑定状态；账号接口仍集中在本服务，避免状态、发码与换绑规则散落到路由层。
  */
 
+type PhoneBindingSendScene = 'bind' | 'change-current' | 'change-new';
+
 type UserPhoneBindingRow = {
   phone_number: string | null;
 };
@@ -62,9 +65,18 @@ type VerifyCurrentPhoneForChangeResult = {
 
 const PHONE_CHANGE_TOKEN_EXPIRE_SECONDS = 10 * 60;
 
+const PHONE_BINDING_SMS_TEMPLATE_SCENE_BY_SEND_SCENE: Record<
+  PhoneBindingSendScene,
+  SmsVerificationTemplateScene
+> = {
+  bind: 'bindNewPhone',
+  'change-current': 'verifyBoundPhone',
+  'change-new': 'changeBoundPhone',
+};
+
 const buildCooldownKey = (
   userId: number,
-  scene: 'bind' | 'change-current' | 'change-new',
+  scene: PhoneBindingSendScene,
 ): string => `market:phone-binding:cooldown:${scene}:${userId}`;
 const buildPhoneChangeTokenKey = (
   userId: number,
@@ -135,7 +147,7 @@ const assertPhoneChangeTargetWritable = async (
 const sendPhoneCodeWithUserLimit = async (
   userId: number,
   phoneNumber: string,
-  scene: 'bind' | 'change-current' | 'change-new',
+  scene: PhoneBindingSendScene,
 ): Promise<SendPhoneBindingCodeResult> => {
   const cooldownKey = buildCooldownKey(userId, scene);
   const cooldownTtl = await redis.ttl(cooldownKey);
@@ -150,7 +162,10 @@ const sendPhoneCodeWithUserLimit = async (
   };
 
   await assertPhoneBindingSendLimitAvailable(userId, sendLimitConfig, requestTime);
-  await sendAliyunSmsVerificationCode(phoneNumber);
+  await sendAliyunSmsVerificationCode(
+    phoneNumber,
+    PHONE_BINDING_SMS_TEMPLATE_SCENE_BY_SEND_SCENE[scene],
+  );
   await recordPhoneBindingSendSuccess(userId, sendLimitConfig, requestTime);
 
   await redis.set(

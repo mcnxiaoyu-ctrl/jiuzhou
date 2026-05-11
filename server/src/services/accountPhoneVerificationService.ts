@@ -5,7 +5,10 @@ import {
   sendAliyunSmsVerificationCode,
   verifyAliyunSmsVerificationCode,
 } from './aliyunSmsVerificationService.js';
-import { ACCOUNT_PHONE_VERIFICATION_CONFIG } from './accountPhoneVerificationConfig.js';
+import {
+  ACCOUNT_PHONE_VERIFICATION_CONFIG,
+  type SmsVerificationTemplateScene,
+} from './accountPhoneVerificationConfig.js';
 import {
   assertPhoneBindingSendLimitAvailable,
   recordPhoneBindingSendSuccess,
@@ -33,7 +36,7 @@ import { maskPhoneNumber, normalizeMainlandPhoneNumber } from './shared/phoneNum
  *
  * 关键边界条件与坑点：
  * 1. `users.phone_number` 是手机号归属唯一真值来源，注册和绑定发码前必须先查库，不能只靠最终写库唯一索引兜底。
- * 2. 阿里云验证码由供应商生成和核验，服务端不保存明文验证码；本服务只保存发送冷却与窗口计数。
+ * 2. 阿里云验证码由供应商生成和核验，服务端不保存明文验证码；本服务只保存发送冷却与窗口计数，并只把业务用途映射为短信模板场景。
  */
 
 export type AuthPhoneCodePurpose = 'login' | 'register' | 'legacy-bind' | 'reset-password';
@@ -55,6 +58,16 @@ const normalizeAuthPhoneNumber = (rawPhoneNumber: string): string => {
     const message = error instanceof Error ? error.message : '手机号格式错误，请输入正确的大陆手机号';
     throw new BusinessError(message);
   }
+};
+
+const AUTH_PHONE_CODE_TEMPLATE_SCENE_BY_PURPOSE: Record<
+  AuthPhoneCodePurpose,
+  SmsVerificationTemplateScene
+> = {
+  login: 'loginRegister',
+  register: 'loginRegister',
+  'legacy-bind': 'bindNewPhone',
+  'reset-password': 'resetPassword',
 };
 
 export const parseAuthPhoneCodePurpose = (
@@ -169,7 +182,10 @@ export const sendAuthPhoneCode = async (
   const sendLimitSubject = buildSendLimitSubject(purpose, phoneNumber, requestIp);
 
   await assertPhoneBindingSendLimitAvailable(sendLimitSubject, sendLimitConfig, requestTime);
-  await sendAliyunSmsVerificationCode(phoneNumber);
+  await sendAliyunSmsVerificationCode(
+    phoneNumber,
+    AUTH_PHONE_CODE_TEMPLATE_SCENE_BY_PURPOSE[purpose],
+  );
   await recordPhoneBindingSendSuccess(sendLimitSubject, sendLimitConfig, requestTime);
 
   await redis.set(

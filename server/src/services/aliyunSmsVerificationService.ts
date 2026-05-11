@@ -3,7 +3,10 @@ import * as OpenApi from '@alicloud/openapi-client';
 import * as Util from '@alicloud/tea-util';
 import CredentialPackage from '@alicloud/credentials';
 import { BusinessError } from '../middleware/BusinessError.js';
-import { ACCOUNT_PHONE_VERIFICATION_CONFIG } from './accountPhoneVerificationConfig.js';
+import {
+  ACCOUNT_PHONE_VERIFICATION_CONFIG,
+  type SmsVerificationTemplateScene,
+} from './accountPhoneVerificationConfig.js';
 import { resolveAliyunSmsVerificationBusinessError } from './shared/aliyunSmsVerificationError.js';
 import {
   createAliyunCheckSmsVerifyCodeRequest,
@@ -19,11 +22,11 @@ import {
  * 3. 不做什么：不生成账号绑定状态、不写数据库，也不决定手机号是否允许绑定。
  *
  * 输入/输出：
- * - 输入：手机号、验证码。
+ * - 输入：手机号、短信发码场景、验证码。
  * - 输出：短信发送成功时无返回值；验证码核验成功时返回 `true`。
  *
  * 数据流/状态流：
- * 绑定服务请求发送短信 -> 本模块构造阿里云请求 -> 阿里云生成并发送验证码 -> 绑定服务继续写入 Redis 冷却状态。
+ * 绑定服务请求发送短信 -> 本模块按场景取模板 CODE 并构造阿里云请求 -> 阿里云生成并发送验证码 -> 绑定服务继续写入 Redis 冷却状态。
  * 绑定服务提交验证码 -> 本模块调用阿里云核验 -> 返回 PASS/UNKNOWN -> 绑定服务决定是否写库。
  *
  * 关键边界条件与坑点：
@@ -112,6 +115,7 @@ const assertAliyunSuccess = (
 
 export const sendAliyunSmsVerificationCode = async (
   phoneNumber: string,
+  scene: SmsVerificationTemplateScene,
 ): Promise<void> => {
   if (!ACCOUNT_PHONE_VERIFICATION_CONFIG.enabled) {
     throw new Error('手机号验证码功能未开启，禁止发送短信验证码');
@@ -120,7 +124,7 @@ export const sendAliyunSmsVerificationCode = async (
   const client = getClient();
   const request = createAliyunSendSmsVerifyCodeRequest(phoneNumber, {
     signName: ACCOUNT_PHONE_VERIFICATION_CONFIG.signName,
-    templateCode: ACCOUNT_PHONE_VERIFICATION_CONFIG.templateCode,
+    templateCode: ACCOUNT_PHONE_VERIFICATION_CONFIG.templateCodes[scene],
     codeExpireSeconds: ACCOUNT_PHONE_VERIFICATION_CONFIG.codeExpireSeconds,
     sendCooldownSeconds: ACCOUNT_PHONE_VERIFICATION_CONFIG.sendCooldownSeconds,
   });
