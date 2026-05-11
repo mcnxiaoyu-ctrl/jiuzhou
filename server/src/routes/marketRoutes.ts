@@ -6,7 +6,6 @@ import { requireItemMarketBuyTicket } from '../middleware/requireItemMarketBuyTi
 import { requireMarketPurchaseAttemptGuard } from '../middleware/requireMarketPurchaseAttemptGuard.js';
 import { requireMarketPurchaseTencentCaptcha } from '../middleware/requireMarketPurchaseTencentCaptcha.js';
 import { createQpsLimitMiddleware } from '../middleware/qpsLimit.js';
-import { requireMarketPhoneBinding } from '../middleware/requireMarketPhoneBinding.js';
 import { marketService, type MarketSort } from '../services/marketService.js';
 import {
   consumeMarketBuyTicket,
@@ -48,8 +47,8 @@ const partnerMarketTechniqueDetailQpsLimit = createMarketQpsLimit('partner-techn
 const partnerMarketListMutationQpsLimit = createMarketQpsLimit('partner-list', MARKET_MUTATION_QPS_LIMIT);
 const partnerMarketCancelMutationQpsLimit = createMarketQpsLimit('partner-cancel', MARKET_MUTATION_QPS_LIMIT);
 const partnerMarketBuyMutationQpsLimit = createMarketQpsLimit('partner-buy', MARKET_MUTATION_QPS_LIMIT);
-const marketAuthGuards = [requireAuth, requireMarketPhoneBinding];
-const marketCharacterGuards = [requireCharacter, requireMarketPhoneBinding];
+const marketAuthGuards = [requireAuth];
+const marketCharacterGuards = [requireCharacter];
 
 router.get('/listings', ...marketAuthGuards, marketListingsQpsLimit, asyncHandler(async (req, res) => {
   const userId = req.userId!;

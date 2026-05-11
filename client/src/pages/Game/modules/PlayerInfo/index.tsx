@@ -13,10 +13,8 @@ import {
 } from '../../../../services/api';
 import { CHARACTER_PRIMARY_ATTR_META_LIST } from '../../shared/characterPrimaryAttrMeta';
 import { formatPercent, formatRecovery } from '../../shared/formatAttr';
-import PhoneBindingDialog from '../../shared/PhoneBindingDialog';
 import PlayerName from '../../shared/PlayerName';
 import { useAvatarUploadFlow } from '../../shared/avatarUploadFlow';
-import { usePhoneBindingStatus } from '../../shared/usePhoneBindingStatus';
 import { useDeferredGameRequest } from '../../shared/useDeferredGameRequest';
 import {
   ATTRIBUTE_POINT_STEP_OPTIONS,
@@ -46,14 +44,6 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({
   const [realmOverview, setRealmOverview] = useState<RealmOverviewDto | null>(initialRealmOverview ?? null);
   const [processingPoint, setProcessingPoint] = useState<string | null>(null);
   const [attributePointStep, setAttributePointStep] = useState<AttributePointStep>(DEFAULT_ATTRIBUTE_POINT_STEP);
-  const [phoneBindingDialogOpen, setPhoneBindingDialogOpen] = useState(false);
-  const [shouldLoadPhoneBindingStatus, setShouldLoadPhoneBindingStatus] = useState(false);
-  const {
-    status: phoneBindingStatus,
-    loading: phoneBindingStatusLoading,
-    errorMessage: phoneBindingStatusErrorMessage,
-    refresh: refreshPhoneBindingStatus,
-  } = usePhoneBindingStatus(shouldLoadPhoneBindingStatus);
 
   useEffect(() => {
     messageRef.current = message;
@@ -121,10 +111,6 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({
     if (initialRealmOverview === undefined) return;
     setRealmOverview(initialRealmOverview ?? null);
   }, [initialRealmOverview]);
-
-  const ensurePhoneBindingStatusLoaded = useCallback(() => {
-    setShouldLoadPhoneBindingStatus(true);
-  }, []);
 
   const shouldLoadRealmOverview = Boolean(character?.realm) && !suspendInitialRealmOverviewLoad && realmOverview === null;
 
@@ -293,17 +279,6 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({
     { label: '灵气恢复', value: formatRecovery(character.lingqiHuifu) },
     { label: '福源', value: character.fuyuan },
   ];
-  const phoneBindingEnabled = phoneBindingStatus?.enabled === true;
-  const phoneBindingBound = phoneBindingStatus?.isBound === true;
-  const hasPhoneBindingSnapshot = phoneBindingStatus !== null;
-  const shouldShowPhoneBindingSection = (
-    !hasPhoneBindingSnapshot
-    || phoneBindingStatusLoading
-    || Boolean(phoneBindingStatusErrorMessage)
-    || !phoneBindingEnabled
-    || phoneBindingEnabled
-  );
-
   return (
     <div className="player-info">
       <div className="player-top">
@@ -413,74 +388,6 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({
 
       <PlayerGlobalBuffList buffs={character.globalBuffs} />
 
-      {shouldShowPhoneBindingSection ? (
-        <div className="attr-section">
-          <div className="attr-section-header">
-            <div className="attr-section-title">账号安全</div>
-          </div>
-          {phoneBindingStatusLoading ? (
-            <div className="player-phone-binding-tip">手机号状态读取中...</div>
-          ) : phoneBindingStatusErrorMessage ? (
-            <div className="player-phone-binding-row">
-              <div className="player-phone-binding-tip player-phone-binding-tip--error">{phoneBindingStatusErrorMessage}</div>
-              <Button
-                size="small"
-                onClick={() => {
-                  ensurePhoneBindingStatusLoaded();
-                  void refreshPhoneBindingStatus();
-                }}
-              >
-                重新加载
-              </Button>
-            </div>
-          ) : !hasPhoneBindingSnapshot ? (
-            <div className="player-phone-binding-row">
-              <div className="player-phone-binding-tip">需要时再读取手机号绑定状态，避免首页首屏提前请求安全校验接口。</div>
-              <Button
-                size="small"
-                onClick={() => {
-                  ensurePhoneBindingStatusLoaded();
-                }}
-              >
-                查看绑定状态
-              </Button>
-            </div>
-          ) : phoneBindingEnabled && phoneBindingBound ? (
-            <div className="player-phone-binding-row">
-              <div className="player-phone-binding-tip">
-                当前绑定：{phoneBindingStatus?.maskedPhoneNumber ?? '已绑定手机号'}
-              </div>
-              <Button
-                type="primary"
-                size="small"
-                onClick={() => {
-                  ensurePhoneBindingStatusLoaded();
-                  setPhoneBindingDialogOpen(true);
-                }}
-              >
-                更换绑定
-              </Button>
-            </div>
-          ) : phoneBindingEnabled ? (
-            <div className="player-phone-binding-row">
-              <div className="player-phone-binding-tip">绑定手机号后可使用物品坊市与伙伴坊市。</div>
-              <Button
-                type="primary"
-                size="small"
-                onClick={() => {
-                  ensurePhoneBindingStatusLoaded();
-                  setPhoneBindingDialogOpen(true);
-                }}
-              >
-                立即绑定
-              </Button>
-            </div>
-          ) : (
-            <div className="player-phone-binding-tip">当前服务器未开启坊市手机号绑定。</div>
-          )}
-        </div>
-      ) : null}
-
       <div className="attr-section">
         <div className="attr-section-header attr-section-header--point-control">
           <div className="attr-section-title">基础属性</div>
@@ -589,17 +496,6 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({
         </div>
       </div>
 
-      {phoneBindingDialogOpen ? (
-        <PhoneBindingDialog
-          open={phoneBindingDialogOpen}
-          onClose={() => setPhoneBindingDialogOpen(false)}
-          mode={phoneBindingBound ? 'change' : 'bind'}
-          maskedCurrentPhoneNumber={phoneBindingStatus?.maskedPhoneNumber ?? null}
-          onSuccess={async () => {
-            await refreshPhoneBindingStatus();
-          }}
-        />
-      ) : null}
     </div>
   );
 };

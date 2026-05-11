@@ -153,7 +153,6 @@ import {
   clearTaskOverviewRequestScope,
   loadSharedTaskOverviewSummary,
 } from './shared/taskOverviewRequests';
-import { hydratePhoneBindingStatus, invalidatePhoneBindingStatus } from './shared/usePhoneBindingStatus';
 import { useRealtimeMemberPresence } from './shared/useRealtimeMemberPresence';
 import type { BattleAdvanceMode } from './modules/BattleArea/autoNextPolicy';
 import {
@@ -2410,7 +2409,6 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         }
 
         const overview = response.data;
-        hydratePhoneBindingStatus(overview.phoneBinding);
         setShowSignInDot(!overview.signIn.signedToday);
         setAchievementClaimableCount(Math.max(0, Math.floor(overview.achievement.claimableCount)));
         setHomeOverviewRealmOverview(overview.realmOverview);
@@ -2453,7 +2451,6 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       setHomeOverviewRealmOverview(undefined);
       setHomeOverviewEquippedItems(null);
       setHomeOverviewIdleSession(undefined);
-      invalidatePhoneBindingStatus();
       applyTeamOverview({ info: null, role: null, applications: [] });
       applyMonthCardStatus(null);
       applyPartnerRecruitStatus(null);

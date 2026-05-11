@@ -41,7 +41,6 @@ import {
   areCharacterGlobalBuffSnapshotsEqual,
   loadActiveCharacterGlobalBuffSnapshotsByCharacterIds,
 } from "../services/shared/characterGlobalBuff.js";
-import { assertChatPhoneBindingReady } from "../services/marketPhoneBindingService.js";
 import { AsyncShutdownGate } from "../utils/asyncShutdownGate.js";
 import { emitLatestGameTimeSnapshot } from "../services/gameTimeService.js";
 import {
@@ -425,16 +424,6 @@ class GameServer {
               message: channel === "system" ? "系统频道不允许发言" : "无效频道",
             });
             return;
-          }
-
-          if (channel === "world" || channel === "team" || channel === "sect" || channel === "private") {
-            try {
-              await assertChatPhoneBindingReady(session.userId);
-            } catch (error) {
-              const message = error instanceof Error ? error.message : "绑定手机号后才可在聊天频道发言";
-              socket.emit("chat:error", { message });
-              return;
-            }
           }
 
           let chatContent = content;

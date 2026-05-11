@@ -5,13 +5,10 @@ import { gameSocket, type CharacterData, type OnlinePlayerDto } from '../../../.
 import type { InfoTarget } from '../InfoModal';
 import { parseBattleLootLine } from '../../shared/battleLoot';
 import PartnerPreviewOverlay from '../../shared/PartnerPreviewOverlay';
-import PhoneBindingDialog from '../../shared/PhoneBindingDialog';
 import PlayerName from '../../shared/PlayerName';
 import { buildPlayerInfoTarget } from '../../shared/playerInfoTarget';
 import TechniquePreviewOverlay from '../../shared/TechniquePreviewOverlay';
-import { useDeferredGameRequest } from '../../shared/useDeferredGameRequest';
 import { usePartnerPreview } from '../../shared/usePartnerPreview';
-import { usePhoneBindingStatus } from '../../shared/usePhoneBindingStatus';
 import { useTechniquePreview } from '../../shared/useTechniquePreview';
 import ChatChannelSelector from './ChatChannelSelector';
 import StatsShell from './StatsShell';
@@ -21,7 +18,6 @@ import './index.scss';
 
 const MAX_MESSAGES_PER_CHANNEL = 200;
 const MAX_MESSAGES_ALL = 1200;
-const CHAT_PHONE_BINDING_REQUIRED_MESSAGE = '绑定手机号后才可在聊天频道发言';
 
 interface Message {
   id: string;
@@ -413,7 +409,6 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
   const [inputValue, setInputValue] = useState('');
   const [messageBuckets, setMessageBuckets] = useState<MessageBuckets>(initialMessageBuckets);
   const [character, setCharacter] = useState<CharacterData | null>(gameSocket.getCharacter());
-  const [phoneBindingDialogOpen, setPhoneBindingDialogOpen] = useState(false);
   const [privateTargets, setPrivateTargets] = useState<PrivateTarget[]>(initialPrivateTargets);
   const [activePrivateTargetId, setActivePrivateTargetId] = useState<string>(initialPrivateTargets[0]?.id ?? '');
   const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayerDto[]>([]);
@@ -428,7 +423,6 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
   const [outputActor, setOutputActor] = useState<string | undefined>(undefined);
   const [battleStatsFromTs, setBattleStatsFromTs] = useState(0);
   const [onlineDrawerOpen, setOnlineDrawerOpen] = useState(false);
-  const [shouldLoadPhoneBindingStatus, setShouldLoadPhoneBindingStatus] = useState(false);
   const {
     previewPartner,
     openPartnerPreviewById,
@@ -440,10 +434,6 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
     openTechniquePreviewById,
     closeTechniquePreview,
   } = useTechniquePreview();
-  const {
-    status: phoneBindingStatus,
-    refresh: refreshPhoneBindingStatus,
-  } = usePhoneBindingStatus(shouldLoadPhoneBindingStatus);
   const mainMessagesRef = useRef<HTMLDivElement>(null);
   const mainMessagesContentRef = useRef<HTMLDivElement>(null);
   const privateMessagesRef = useRef<HTMLDivElement>(null);
@@ -461,12 +451,6 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
     }
     onPartnerPreviewOpen?.();
   }, [isMobile, onPartnerPreviewOpen, previewPartner]);
-
-  const ensurePhoneBindingStatusLoaded = useCallback(() => {
-    setShouldLoadPhoneBindingStatus(true);
-  }, []);
-
-  useDeferredGameRequest(true, ensurePhoneBindingStatusLoaded, 800);
 
   useEffect(() => {
     gameSocket.connect();
@@ -622,11 +606,6 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
     const unsubscribeChatError = gameSocket.onChatError((error) => {
       const content = String(error?.message ?? '').trim();
       if (!content) return;
-      if (content === CHAT_PHONE_BINDING_REQUIRED_MESSAGE) {
-        ensurePhoneBindingStatusLoaded();
-        setPhoneBindingDialogOpen(true);
-        void refreshPhoneBindingStatus().catch(() => undefined);
-      }
       setMessageBuckets((prev) =>
         appendMessage(prev, {
           id: `sys-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -644,7 +623,7 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
       unsubscribeChat();
       unsubscribeChatError();
     };
-  }, [refreshPhoneBindingStatus]);
+  }, []);
 
   useEffect(() => {
     const onAppend = (e: Event) => {
@@ -835,21 +814,6 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
     if (!content) return;
 
     const actualChannel: ChatChannel = activeChannel === 'all' ? 'world' : activeChannel;
-    if (phoneBindingStatus?.enabled === true && phoneBindingStatus.isBound !== true) {
-      ensurePhoneBindingStatusLoaded();
-      setPhoneBindingDialogOpen(true);
-      setMessageBuckets((prev) =>
-        appendMessage(prev, {
-          id: `sys-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          senderTitle: '',
-          senderName: '系统',
-          content: CHAT_PHONE_BINDING_REQUIRED_MESSAGE,
-          channel: 'system',
-          timestamp: Date.now(),
-        }),
-      );
-      return;
-    }
     if (actualChannel === 'system' || actualChannel === 'battle') {
       setMessageBuckets((prev) =>
         appendMessage(prev, {
@@ -1146,18 +1110,13 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
     return { details, byActorRows, bySkillRows, actors, skills };
   }, [battleMessages]);
 
-  const chatPhoneBindingBlocked = phoneBindingStatus?.enabled === true && phoneBindingStatus.isBound !== true;
-
   const canSend =
-    !chatPhoneBindingBlocked
-    && (activeChannel === 'private'
+    (activeChannel === 'private'
       ? Boolean(activePrivateTargetId && activePrivateTarget?.characterId)
       : activeChannel !== 'system' && activeChannel !== 'battle');
 
   const inputPlaceholder =
-    chatPhoneBindingBlocked
-      ? CHAT_PHONE_BINDING_REQUIRED_MESSAGE
-      : activeChannel === 'private'
+    activeChannel === 'private'
       ? activePrivateTarget
         ? activePrivateTarget.characterId
           ? `对 ${getDisplayName(activePrivateTarget.title, activePrivateTarget.name)} 私聊...`
@@ -1777,29 +1736,7 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
             />
           }
         />
-        {chatPhoneBindingBlocked ? (
-          <Button
-            type="primary"
-            onClick={() => {
-              ensurePhoneBindingStatusLoaded();
-              setPhoneBindingDialogOpen(true);
-            }}
-          >
-            绑定手机号
-          </Button>
-        ) : null}
       </div>
-      {phoneBindingDialogOpen ? (
-        <PhoneBindingDialog
-          open={phoneBindingDialogOpen}
-          onClose={() => setPhoneBindingDialogOpen(false)}
-          onSuccess={async () => {
-            await refreshPhoneBindingStatus();
-          }}
-          title="发言前请先绑定手机号"
-          description="当前账号尚未绑定手机号，所有聊天频道均已禁用。完成绑定后即可恢复世界、队伍、宗门与私聊发言。"
-        />
-      ) : null}
       <PartnerPreviewOverlay
         partner={previewPartner}
         isMobile={isMobile === true}

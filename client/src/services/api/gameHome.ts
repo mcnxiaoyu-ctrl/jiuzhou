@@ -3,7 +3,6 @@ import type { MainQuestProgressDto } from '../mainQuestApi';
 import type { TeamApplication, TeamInfo } from '../teamApi';
 import type { IdleSessionDto } from '../../pages/Game/modules/IdleBattle/types';
 import type { InventoryItemDto } from './inventory';
-import type { PhoneBindingStatusDto } from './phoneBinding';
 import type { RealmOverviewDto } from './combat-realm';
 import type {
   TaskOverviewSummaryRowDto,
@@ -26,7 +25,7 @@ import type {
  *
  * 关键边界条件与坑点：
  * 1. 这里的任务与主线数据只用于首页首屏初始化，后续交互刷新不能偷懒继续依赖这份静态快照。
- * 2. 手机号绑定状态是账号级共享数据，首页读到后应继续灌入共享缓存，保证坊市/聊天/玩家信息看到的是同一份状态。
+ * 2. 游戏内手机号绑定入口已移除，首页首屏不再携带账号安全状态，避免为不可见功能增加请求和缓存维护成本。
  */
 
 export interface GameHomeOverviewDto {
@@ -37,7 +36,6 @@ export interface GameHomeOverviewDto {
   achievement: {
     claimableCount: number;
   };
-  phoneBinding: PhoneBindingStatusDto;
   realmOverview: RealmOverviewDto | null;
   equippedItems: InventoryItemDto[];
   idleSession: IdleSessionDto | null;

@@ -33,7 +33,6 @@ import { toUnifiedApiError } from '../../../../services/api/error';
 import { gameSocket, type CharacterData } from '../../../../services/gameSocket';
 import { useIsMobile } from '../../shared/responsive';
 import { getElementToneClassName } from '../../shared/elementTheme';
-import PhoneBindingDialog from '../../shared/PhoneBindingDialog';
 import { getItemQualityClassName, getItemQualityTagClassName, normalizeItemQualityName } from '../../shared/itemQuality';
 import InventoryItemCell from '../../shared/InventoryItemCell';
 import { ITEM_CATEGORY_ALL_OPTION, ITEM_CATEGORY_LABELS, ITEM_CATEGORY_OPTIONS } from '../../shared/itemTaxonomy';
@@ -88,7 +87,6 @@ import {
 import { EquipmentDetailAttrList } from '../BagModal/EquipmentDetailAttrList';
 import { SetBonusDisplay } from '../BagModal/SetBonusDisplay';
 import type { SocketedGemEntry } from '../../shared/socketedGemDisplay';
-import { usePhoneBindingStatus } from '../../shared/usePhoneBindingStatus';
 import './index.scss';
 
 type MarketPanel = 'market' | 'my' | 'list' | 'records';
@@ -614,15 +612,7 @@ interface MarketModalProps {
 
 const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '我' }) => {
   const { message } = App.useApp();
-  const [phoneBindingDialogOpen, setPhoneBindingDialogOpen] = useState(false);
-  const [marketAccessGranted, setMarketAccessGranted] = useState(false);
-  const {
-    status: phoneBindingStatus,
-    loading: phoneBindingStatusLoading,
-    errorMessage: phoneBindingStatusErrorMessage,
-    refresh: refreshPhoneBindingStatus,
-  } = usePhoneBindingStatus(open);
-  const marketModalOpen = open && marketAccessGranted;
+  const marketModalOpen = open;
   useGameItemTaxonomy(marketModalOpen);
   const messageRef = useRef(message);
   useEffect(() => {
@@ -705,34 +695,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     triggerCaptcha: triggerMarketPurchaseCaptcha,
     sdkLoading: marketPurchaseCaptchaSdkLoading,
   } = useTencentCaptcha(marketPurchaseCaptchaConfig.tencentAppId ?? 0);
-
-  useEffect(() => {
-    if (!open) {
-      setPhoneBindingDialogOpen(false);
-      setMarketAccessGranted(false);
-      return;
-    }
-    if (phoneBindingStatusLoading) {
-      return;
-    }
-    if (phoneBindingStatusErrorMessage) {
-      messageRef.current.error(phoneBindingStatusErrorMessage);
-      onClose();
-      return;
-    }
-    if (!phoneBindingStatus) {
-      return;
-    }
-
-    if (!phoneBindingStatus.enabled || phoneBindingStatus.isBound) {
-      setPhoneBindingDialogOpen(false);
-      setMarketAccessGranted(true);
-      return;
-    }
-
-    setMarketAccessGranted(false);
-    setPhoneBindingDialogOpen(true);
-  }, [onClose, open, phoneBindingStatus, phoneBindingStatusErrorMessage, phoneBindingStatusLoading]);
 
   const resolveMarketTooltipPlacement = useCallback((event: React.MouseEvent<HTMLElement>) => {
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
@@ -2818,25 +2780,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
           )
         )}
       </Modal>
-
-      {phoneBindingDialogOpen ? (
-        <PhoneBindingDialog
-          open={phoneBindingDialogOpen}
-          onClose={() => {
-            setPhoneBindingDialogOpen(false);
-            onClose();
-          }}
-          onSuccess={async () => {
-            const nextStatus = await refreshPhoneBindingStatus();
-            if (nextStatus.enabled && !nextStatus.isBound) {
-              throw new Error('手机号绑定状态未更新');
-            }
-            setMarketAccessGranted(true);
-            setPhoneBindingDialogOpen(false);
-          }}
-          title="进入坊市前请先绑定手机号"
-        />
-      ) : null}
     </>
   );
 };

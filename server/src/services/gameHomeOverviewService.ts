@@ -1,7 +1,6 @@
 import { getAchievementClaimableCount } from './achievementService.js';
 import { inventoryService, type InventoryItemWithDef } from '../domains/inventory/index.js';
 import { getMainQuestProgress, type MainQuestProgressDto } from './mainQuest/index.js';
-import { getPhoneBindingStatus, type PhoneBindingStatusDto } from './marketPhoneBindingService.js';
 import { idleSessionService } from './idle/idleSessionService.js';
 import { toIdleSessionView } from './idle/idleSessionView.js';
 import { signInService } from './signInService.js';
@@ -21,7 +20,7 @@ import {
  * 首页概览聚合服务
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：把首页首屏需要的账号安全、签到红点、成就可领奖数、任务概览、主线追踪和队伍摘要收敛为单一读取入口。
+ * 1. 做什么：把首页首屏需要的签到红点、成就可领奖数、任务概览、主线追踪和队伍摘要收敛为单一读取入口。
  * 2. 做什么：复用各领域现有 service 的单一真值来源，避免前端首页把同一批初始化规则拆成多次请求、各自拼装。
  * 3. 不做什么：不改写任何领域 DTO，不做业务兜底转换，也不处理 HTTP 响应。
  *
@@ -30,7 +29,7 @@ import {
  * - 输出：首页概览 DTO，供首页首屏初始化直接消费。
  *
  * 数据流/状态流：
- * 首页请求 -> 本服务并发读取签到/成就/手机号/任务/主线/队伍 -> 聚合为统一 DTO -> 路由返回前端。
+ * 首页请求 -> 本服务并发读取签到/成就/任务/主线/队伍 -> 聚合为统一 DTO -> 路由返回前端。
  *
  * 关键边界条件与坑点：
  * 1. 首页概览只做“聚合”，各子领域的业务判断仍必须继续复用原 service，不能在这里重新实现一套轻量版规则。
@@ -48,7 +47,6 @@ export interface GameHomeOverviewDto {
   achievement: {
     claimableCount: number;
   };
-  phoneBinding: PhoneBindingStatusDto;
   realmOverview: RealmOverviewData | null;
   equippedItems: InventoryItemWithDef[];
   idleSession: Record<string, unknown> | null;
@@ -118,7 +116,6 @@ export const getGameHomeOverview = async (
   const [
     signInOverviewResult,
     claimableCount,
-    phoneBinding,
     realmOverviewResult,
     equippedItemsResult,
     idleSession,
@@ -128,7 +125,6 @@ export const getGameHomeOverview = async (
   ] = await Promise.all([
     signInService.getOverview(userId, currentMonth),
     getAchievementClaimableCount(characterId),
-    getPhoneBindingStatus(userId),
     realmService.getOverview(userId),
     inventoryService.getInventoryItemsWithDefs(characterId, 'equipped', 1, 200),
     idleSessionService.getActiveIdleSession(characterId),
@@ -149,7 +145,6 @@ export const getGameHomeOverview = async (
     achievement: {
       claimableCount,
     },
-    phoneBinding,
     realmOverview: realmOverviewResult.success ? (realmOverviewResult.data ?? null) : null,
     equippedItems: equippedItemsResult.items,
     idleSession: idleSession ? toIdleSessionView(idleSession) : null,

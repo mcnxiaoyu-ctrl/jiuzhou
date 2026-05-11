@@ -18,11 +18,11 @@ import {
 import { maskPhoneNumber } from './shared/phoneNumber.js';
 
 /**
- * 坊市手机号绑定服务
+ * 账号手机号绑定服务
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：集中处理手机号绑定状态读取、验证码发送、验证码校验、首次绑定与两步式更换绑定写库逻辑。
- * 2. 做什么：把 `users.phone_number` 的账号级绑定口径与 Redis 发送冷却统一收敛，供账号接口、坊市守卫和聊天发言守卫复用。
+ * 2. 做什么：把 `users.phone_number` 的账号级绑定口径与 Redis 发送冷却统一收敛，供账号接口复用。
  * 3. 不做什么：不处理 HTTP 响应，不直接挂载路由，也不负责前端倒计时展示。
  *
  * 输入/输出：
@@ -30,11 +30,11 @@ import { maskPhoneNumber } from './shared/phoneNumber.js';
  * - 输出：绑定状态 DTO、发送成功结果、换绑凭证、绑定/换绑成功后的脱敏手机号。
  *
  * 数据流/状态流：
- * 账号接口/坊市守卫 -> 本服务 -> 读配置/Redis/数据库 -> 返回状态或抛业务异常。
+ * 账号接口 -> 本服务 -> 读配置/Redis/数据库 -> 返回状态或抛业务异常。
  *
  * 关键边界条件与坑点：
  * 1. 只有 `users.phone_number` 是最终真值来源；验证码真值由阿里云生成并核验，服务端本地只保留发送冷却，不保留验证码明文。
- * 2. 同一规则会被账号页、坊市守卫和聊天守卫复用，因此“是否开启”“是否已绑定”“手机号唯一性”“换绑两步凭证”必须集中在本服务，不能在路由层重复判断。
+ * 2. 游戏内坊市/聊天已不再读取绑定状态；账号接口仍集中在本服务，避免状态、发码与换绑规则散落到路由层。
  */
 
 type UserPhoneBindingRow = {
@@ -70,8 +70,6 @@ const buildPhoneChangeTokenKey = (
   userId: number,
   changeToken: string,
 ): string => `market:phone-binding:change-token:${userId}:${changeToken}`;
-const MARKET_PHONE_BINDING_REQUIRED_MESSAGE = '使用坊市功能前请先绑定手机号';
-const CHAT_PHONE_BINDING_REQUIRED_MESSAGE = '绑定手机号后才可在聊天频道发言';
 
 const assertFeatureEnabled = (): void => {
   if (!MARKET_PHONE_BINDING_CONFIG.enabled) {
@@ -332,26 +330,4 @@ export const changeBoundPhoneNumber = async (
   return {
     maskedPhoneNumber: maskPhoneNumber(newPhoneNumber),
   };
-};
-
-const assertPhoneBindingReadyForScene = async (
-  userId: number,
-  requiredMessage: string,
-): Promise<void> => {
-  if (!MARKET_PHONE_BINDING_CONFIG.enabled) return;
-
-  const user = await assertUserExists(userId);
-  if (user.phone_number) {
-    return;
-  }
-
-  throw new BusinessError(requiredMessage, 403);
-};
-
-export const assertMarketPhoneBindingReady = async (userId: number): Promise<void> => {
-  await assertPhoneBindingReadyForScene(userId, MARKET_PHONE_BINDING_REQUIRED_MESSAGE);
-};
-
-export const assertChatPhoneBindingReady = async (userId: number): Promise<void> => {
-  await assertPhoneBindingReadyForScene(userId, CHAT_PHONE_BINDING_REQUIRED_MESSAGE);
 };
