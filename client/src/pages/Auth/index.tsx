@@ -55,6 +55,13 @@ const AUTH_MODE_TITLE: Record<AuthMode, string> = {
   'reset-password': '找回口令',
 };
 
+const AUTH_MODE_TABS: readonly { mode: AuthMode; label: string }[] = [
+  { mode: 'login', label: '登录' },
+  { mode: 'register', label: '注册' },
+  { mode: 'legacy-bind', label: '账号绑定' },
+  { mode: 'reset-password', label: '找回口令' },
+];
+
 const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
   const { message } = App.useApp();
   const [loginForm] = Form.useForm<PhoneLoginFormValues>();
@@ -167,30 +174,18 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
           </div>
 
           <div className="auth-mode-tabs" role="tablist" aria-label="登录方式">
-            <Button
-              type={mode === 'login' ? 'primary' : 'default'}
-              onClick={() => setMode('login')}
-            >
-              手机登录
-            </Button>
-            <Button
-              type={mode === 'register' ? 'primary' : 'default'}
-              onClick={() => setMode('register')}
-            >
-              注册
-            </Button>
-            <Button
-              type={mode === 'legacy-bind' ? 'primary' : 'default'}
-              onClick={() => setMode('legacy-bind')}
-            >
-              老账号绑定
-            </Button>
-            <Button
-              type={mode === 'reset-password' ? 'primary' : 'default'}
-              onClick={() => setMode('reset-password')}
-            >
-              找回口令
-            </Button>
+            {AUTH_MODE_TABS.map((tab) => (
+              <Button
+                key={tab.mode}
+                type={mode === tab.mode ? 'primary' : 'default'}
+                role="tab"
+                aria-selected={mode === tab.mode}
+                className="auth-mode-tab"
+                onClick={() => setMode(tab.mode)}
+              >
+                {tab.label}
+              </Button>
+            ))}
           </div>
 
           {mode === 'login' && (
