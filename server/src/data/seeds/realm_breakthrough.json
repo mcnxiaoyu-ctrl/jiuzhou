@@ -738,46 +738,67 @@
       "to": "炼虚合道·历劫期",
       "requirements": [
         {
-          "id": "version-lock-lijie",
-          "type": "version_locked",
-          "title": "境界开放进度",
-          "reason": "炼虚合道·历劫期及以上境界暂未开放"
-        },
-        {
           "id": "exp",
           "type": "exp_min",
-          "min": 7000000,
+          "min": 7600000,
           "title": "修为经验"
         },
         {
-          "id": "tech-count-2-layer-9",
+          "id": "tech-count-3-layer-9",
           "type": "techniques_count_min_layer",
-          "minCount": 2,
+          "minCount": 3,
           "minLayer": 9,
           "title": "九重功法圆满"
         },
         {
-          "id": "dungeon-clear-any-55",
+          "id": "dungeon-clear-wanlei-jiegong-4",
           "type": "dungeon_clear_min",
-          "minCount": 55,
-          "title": "秘境极限轮转"
+          "dungeonId": "dungeon-lianxu-wanlei-jiegong",
+          "minCount": 4,
+          "title": "万雷劫宫任意难度通关"
         },
         {
-          "id": "dungeon-clear-frost-abyss-24",
-          "type": "dungeon_clear_min",
-          "dungeonId": "dungeon-qiqi-frost-abyss",
-          "minCount": 24,
-          "title": "寒渊劫前淬炼"
+          "id": "chapter-9-complete",
+          "type": "main_quest_chapter_completed",
+          "chapterId": "mq-chapter-9",
+          "title": "第九章主线完成"
+        },
+        {
+          "id": "item-leisha-36",
+          "type": "item_qty_min",
+          "itemDefId": "mat-jieyun-leisha",
+          "qty": 36,
+          "title": "劫云雷砂准备"
+        },
+        {
+          "id": "item-jieyin-8",
+          "type": "item_qty_min",
+          "itemDefId": "mat-wanlei-jieyin",
+          "qty": 8,
+          "title": "万雷劫印准备"
         }
       ],
       "costs": [
         {
           "type": "spirit_stones",
-          "amount": 36000
+          "amount": 40000
         },
         {
           "type": "exp",
-          "amount": 7000000
+          "amount": 7600000
+        },
+        {
+          "type": "items",
+          "items": [
+            {
+              "itemDefId": "mat-jieyun-leisha",
+              "qty": 24
+            },
+            {
+              "itemDefId": "mat-wanlei-jieyin",
+              "qty": 5
+            }
+          ]
         }
       ],
       "rewards": {
@@ -786,12 +807,12 @@
           "max_qixue": 550
         },
         "pct": {
-          "max_qixue": 0.32,
-          "max_lingqi": 0.32,
-          "wugong": 0.22,
-          "fagong": 0.22,
-          "wufang": 0.22,
-          "fafang": 0.22
+          "max_qixue": 0.33,
+          "max_lingqi": 0.33,
+          "wugong": 0.23,
+          "fagong": 0.23,
+          "wufang": 0.23,
+          "fafang": 0.23
         },
         "addPercent": {
           "kongzhi_kangxing": 0.13

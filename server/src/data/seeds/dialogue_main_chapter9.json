@@ -1,0 +1,156 @@
+{
+  "dialogues": [
+    {
+      "id": "dlg-main-9-001",
+      "name": "第九章对白1",
+      "enabled": true,
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "引雷使",
+          "text": "九霄劫台不是战场，是天雷给修士立下的账册。先站稳，再谈历劫。",
+          "next": "objective"
+        },
+        {
+          "id": "objective",
+          "type": "system",
+          "text": "目标更新：抵达九霄劫台，并与引雷使交谈。"
+        }
+      ]
+    },
+    {
+      "id": "dlg-main-9-002",
+      "name": "第九章对白2",
+      "enabled": true,
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "引雷使",
+          "text": "劫云雷灵会追着你的气机回照，玄雷影则专斩破绽。清掉它们，劫台才会承认你的第一步。",
+          "next": "objective"
+        },
+        {
+          "id": "objective",
+          "type": "system",
+          "text": "目标更新：击败劫云雷灵6只、玄雷影6只。"
+        }
+      ]
+    },
+    {
+      "id": "dlg-main-9-003",
+      "name": "第九章对白3",
+      "enabled": true,
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "渡雷将",
+          "text": "劫云雷砂不可强夺，只能趁雷纹沉降时收束。带来十四份，我替你压第一道劫纹。",
+          "next": "objective"
+        },
+        {
+          "id": "objective",
+          "type": "system",
+          "text": "目标更新：收集劫云雷砂14个，并向渡雷将复命。"
+        }
+      ]
+    },
+    {
+      "id": "dlg-main-9-004",
+      "name": "第九章对白4",
+      "enabled": true,
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "守劫天工",
+          "text": "万雷劫宫会把你的术式、身法和神魂逐一照出。能走完一轮，才算有了承雷的底子。",
+          "next": "objective"
+        },
+        {
+          "id": "objective",
+          "type": "system",
+          "text": "目标更新：通关万雷劫宫 1 次。"
+        }
+      ]
+    },
+    {
+      "id": "dlg-main-9-005",
+      "name": "第九章对白5",
+      "enabled": true,
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "引雷使",
+          "text": "镇劫坛上的力卫与法相不会退让。击败它们，劫宫才会开放更深的雷序。",
+          "next": "objective"
+        },
+        {
+          "id": "objective",
+          "type": "system",
+          "text": "目标更新：击败镇劫力卫2只、天雷法相2只。"
+        }
+      ]
+    },
+    {
+      "id": "dlg-main-9-006",
+      "name": "第九章对白6",
+      "enabled": true,
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "守劫天工",
+          "text": "再入劫宫两轮，把你的劫印压实。半成的劫印只会在突破时反噬自身。",
+          "next": "objective"
+        },
+        {
+          "id": "objective",
+          "type": "system",
+          "text": "目标更新：通关万雷劫宫 2 次。"
+        }
+      ]
+    },
+    {
+      "id": "dlg-main-9-007",
+      "name": "第九章对白7",
+      "enabled": true,
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "守劫天工",
+          "text": "万雷劫印是历劫凭证，也是雷劫追偿的锚点。五枚劫印齐备，再来见我。",
+          "next": "objective"
+        },
+        {
+          "id": "objective",
+          "type": "system",
+          "text": "目标更新：收集万雷劫印5个，并向守劫天工复命。"
+        }
+      ]
+    },
+    {
+      "id": "dlg-main-9-008",
+      "name": "第九章对白8",
+      "enabled": true,
+      "nodes": [
+        {
+          "id": "start",
+          "type": "npc",
+          "speaker": "守劫天工",
+          "text": "最后收束三十六份劫云雷砂。材料齐了，劫台便会为你留下历劫名籍。",
+          "next": "objective"
+        },
+        {
+          "id": "objective",
+          "type": "system",
+          "text": "目标更新：收集劫云雷砂36个，并向守劫天工复命。"
+        }
+      ]
+    }
+  ]
+}

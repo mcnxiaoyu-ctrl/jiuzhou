@@ -3055,6 +3055,549 @@
         }
       ],
       "common_pool_ids": []
+    },
+    {
+      "id": "dp-lijie-jieyun-leiling",
+      "name": "劫云雷灵掉落池",
+      "mode": "prob",
+      "common_pool_ids": [
+        "dp-common-monster-lijie"
+      ],
+      "entries": [
+        {
+          "item_def_id": "mat-jieyun-leisha",
+          "chance": 0.52,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dp-lijie-xuanlei-ying",
+      "name": "玄雷影掉落池",
+      "mode": "prob",
+      "common_pool_ids": [
+        "dp-common-monster-lijie"
+      ],
+      "entries": [
+        {
+          "item_def_id": "mat-jieyun-leisha",
+          "chance": 0.5,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dp-lijie-elite-zhenjie-liwei",
+      "name": "镇劫力卫掉落池",
+      "mode": "prob",
+      "common_pool_ids": [
+        "dp-common-monster-lijie"
+      ],
+      "entries": [
+        {
+          "item_def_id": "mat-jieyun-leisha",
+          "chance": 0.86,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dp-lijie-elite-tianlei-faxiang",
+      "name": "天雷法相掉落池",
+      "mode": "prob",
+      "common_pool_ids": [
+        "dp-common-monster-lijie"
+      ],
+      "entries": [
+        {
+          "item_def_id": "mat-jieyun-leisha",
+          "chance": 0.88,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dp-lijie-jiegong-leishi",
+      "name": "劫宫雷侍掉落池",
+      "mode": "prob",
+      "common_pool_ids": [
+        "dp-common-monster-lijie"
+      ],
+      "entries": [
+        {
+          "item_def_id": "mat-jieyun-leisha",
+          "chance": 0.62,
+          "qty_min": 1,
+          "qty_max": 3,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dp-lijie-elite-dujie-tianjiang",
+      "name": "渡劫天将掉落池",
+      "mode": "prob",
+      "common_pool_ids": [
+        "dp-common-monster-lijie"
+      ],
+      "entries": [
+        {
+          "item_def_id": "mat-jieyun-leisha",
+          "chance": 0.9,
+          "qty_min": 2,
+          "qty_max": 4,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-wanlei-jieyin",
+          "chance": 0.12,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dp-lijie-boss-wanlei-jiezhu",
+      "name": "万雷劫主掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-wanlei-jieyin",
+          "chance": 1,
+          "qty_min": 3,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-jieyun-leisha",
+          "chance": 1,
+          "qty_min": 10,
+          "qty_max": 14,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-weapon",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-head",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-clothes",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-gloves",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-pants",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-necklace",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-accessory",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-artifact",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-weapon",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-head",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-clothes",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-gloves",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-pants",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-necklace",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-accessory",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-artifact",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-weapon",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-head",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-clothes",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-gloves",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-pants",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-necklace",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-accessory",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-artifact",
+          "chance": 0.13,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [],
+      "enabled": true
+    },
+    {
+      "id": "dp-dungeon-wanlei-n",
+      "name": "万雷劫宫普通掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-jieyun-leisha",
+          "chance": 0.86,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-wanlei-jieyin",
+          "chance": 0.14,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [],
+      "enabled": true
+    },
+    {
+      "id": "dp-dungeon-wanlei-h",
+      "name": "万雷劫宫困难掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-jieyun-leisha",
+          "chance": 0.82,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-wanlei-jieyin",
+          "chance": 0.18,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-clothes",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-gloves",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-pants",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-necklace",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-accessory",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-clothes",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-gloves",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-pants",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-necklace",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-accessory",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-clothes",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-gloves",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-pants",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-necklace",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-accessory",
+          "chance": 0.085,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [],
+      "enabled": true
+    },
+    {
+      "id": "dp-dungeon-wanlei-nm",
+      "name": "万雷劫宫噩梦掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-jieyun-leisha",
+          "chance": 0.76,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-wanlei-jieyin",
+          "chance": 0.24,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-weapon",
+          "chance": 0.075,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-head",
+          "chance": 0.075,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-jiexiao-artifact",
+          "chance": 0.075,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-weapon",
+          "chance": 0.075,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-head",
+          "chance": 0.075,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-yulei-artifact",
+          "chance": 0.075,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-weapon",
+          "chance": 0.075,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-head",
+          "chance": 0.075,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-duanye-artifact",
+          "chance": 0.075,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [],
+      "enabled": true
     }
   ]
 }

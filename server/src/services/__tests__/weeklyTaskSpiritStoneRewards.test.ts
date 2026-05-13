@@ -3,7 +3,7 @@
  *
  * 作用（做什么 / 不做什么）：
  * - 做什么：锁定所有已配置灵石奖励的周常任务数值，确保整条周常奖励梯度只在 `task_def.json` 这一处集中维护。
- * - 做什么：验证养神期周常灵石达到 52000，并保持更低境界按既定梯度递增，避免同类数值规则在别处散落复制。
+ * - 做什么：验证历劫准备周常灵石达到 78000，并保持更低境界按既定梯度递增，避免同类数值规则在别处散落复制。
  * - 不做什么：不验证周常任务的物品奖励、不执行任务结算流程，也不推导任何运行时公式。
  *
  * 输入/输出：
@@ -43,6 +43,9 @@ const EXPECTED_WEEKLY_SPIRIT_STONES = new Map<string, number>([
   ['task-jietai-weekly-002', 42000],
   ['task-huanxu-weekly-001', 46000],
   ['task-huanxu-weekly-002', 52000],
+  ['task-hedao-weekly-001', 58000],
+  ['task-zhengdao-weekly-001', 68000],
+  ['task-lijie-weekly-001', 78000],
 ]);
 
 const EXPECTED_REALM_STAGE_MAX = new Map<string, number>([
@@ -53,6 +56,8 @@ const EXPECTED_REALM_STAGE_MAX = new Map<string, number>([
   ['炼炁化神·采药期', 32000],
   ['炼炁化神·结胎期', 42000],
   ['炼神返虚·养神期', 52000],
+  ['炼神返虚·合道期', 68000],
+  ['炼虚合道·证道期', 78000],
 ]);
 
 const collectWeeklySpiritStoneRewards = (): Map<string, { realm: string; amount: number }> => {
@@ -90,7 +95,7 @@ test('周常任务灵石奖励应符合新的整体梯度表', () => {
   );
 });
 
-test('周常任务各境界阶段最大灵石奖励应逐档递增并以养神期 52000 封顶', () => {
+test('周常任务各境界阶段最大灵石奖励应逐档递增并以历劫准备 78000 封顶', () => {
   const rewardMap = collectWeeklySpiritStoneRewards();
   const stageMaxMap = new Map<string, number>();
 

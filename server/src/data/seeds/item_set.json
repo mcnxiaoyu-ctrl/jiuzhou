@@ -3664,6 +3664,412 @@
           "priority": 3
         }
       ]
+    },
+    {
+      "id": "set-jiexiao",
+      "name": "劫霄套装",
+      "description": "劫霄套装以劫云引雷、万象照返收束群体攻势，是历劫期法修压场与清场的核心装备。",
+      "quality_rank": 8,
+      "min_realm": "炼虚合道·历劫期",
+      "pieces": [
+        {
+          "equip_slot": "weapon",
+          "item_def_id": "set-jiexiao-weapon",
+          "piece_key": "weapon"
+        },
+        {
+          "equip_slot": "head",
+          "item_def_id": "set-jiexiao-head",
+          "piece_key": "head"
+        },
+        {
+          "equip_slot": "clothes",
+          "item_def_id": "set-jiexiao-clothes",
+          "piece_key": "clothes"
+        },
+        {
+          "equip_slot": "gloves",
+          "item_def_id": "set-jiexiao-gloves",
+          "piece_key": "gloves"
+        },
+        {
+          "equip_slot": "pants",
+          "item_def_id": "set-jiexiao-pants",
+          "piece_key": "pants"
+        },
+        {
+          "equip_slot": "necklace",
+          "item_def_id": "set-jiexiao-necklace",
+          "piece_key": "necklace"
+        },
+        {
+          "equip_slot": "accessory",
+          "item_def_id": "set-jiexiao-accessory",
+          "piece_key": "accessory"
+        },
+        {
+          "equip_slot": "artifact",
+          "item_def_id": "set-jiexiao-artifact",
+          "piece_key": "artifact"
+        }
+      ],
+      "bonuses": [
+        {
+          "piece_count": 2,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "fagong",
+                "value": 60,
+                "apply_type": "flat"
+              }
+            },
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "lengque_rating",
+                "value": 360,
+                "apply_type": "flat"
+              }
+            }
+          ],
+          "priority": 0
+        },
+        {
+          "piece_count": 4,
+          "effect_defs": [
+            {
+              "trigger": "after_skill",
+              "target": "enemy",
+              "effect_type": "spell_projection",
+              "params": {
+                "mode": "zhou_tian_yan_guang",
+                "projection_name": "周天衍光",
+                "single_split_rate": 0.42,
+                "multi_focus_rate": 0.78
+              }
+            }
+          ],
+          "priority": 1
+        },
+        {
+          "piece_count": 6,
+          "effect_defs": [
+            {
+              "trigger": "after_skill",
+              "target": "enemy",
+              "effect_type": "spell_projection",
+              "params": {
+                "mode": "zhou_tian_yan_guang",
+                "projection_name": "周天衍光",
+                "single_split_rate": 0.55,
+                "multi_focus_rate": 1,
+                "ignore_fafang_rate": 0.25
+              }
+            }
+          ],
+          "priority": 2
+        },
+        {
+          "piece_count": 8,
+          "effect_defs": [
+            {
+              "trigger": "after_skill",
+              "target": "enemy",
+              "effect_type": "spell_projection",
+              "params": {
+                "mode": "liang_yi_liu_zhao",
+                "projection_name": "周天衍光",
+                "single_split_rate": 0.55,
+                "multi_focus_rate": 1,
+                "single_return_rate": 0.72,
+                "multi_return_rate": 0.26,
+                "ignore_fafang_rate": 0.25,
+                "lingqi_restore": 12,
+                "cooldown_reduce_if_full": 1
+              }
+            }
+          ],
+          "priority": 3
+        }
+      ]
+    },
+    {
+      "id": "set-yulei",
+      "name": "御雷套装",
+      "description": "御雷套装以雷纹镇身、护盾承劫稳住战线，是历劫期高压战斗中的防御与反制装备。",
+      "quality_rank": 8,
+      "min_realm": "炼虚合道·历劫期",
+      "pieces": [
+        {
+          "equip_slot": "weapon",
+          "item_def_id": "set-yulei-weapon",
+          "piece_key": "weapon"
+        },
+        {
+          "equip_slot": "head",
+          "item_def_id": "set-yulei-head",
+          "piece_key": "head"
+        },
+        {
+          "equip_slot": "clothes",
+          "item_def_id": "set-yulei-clothes",
+          "piece_key": "clothes"
+        },
+        {
+          "equip_slot": "gloves",
+          "item_def_id": "set-yulei-gloves",
+          "piece_key": "gloves"
+        },
+        {
+          "equip_slot": "pants",
+          "item_def_id": "set-yulei-pants",
+          "piece_key": "pants"
+        },
+        {
+          "equip_slot": "necklace",
+          "item_def_id": "set-yulei-necklace",
+          "piece_key": "necklace"
+        },
+        {
+          "equip_slot": "accessory",
+          "item_def_id": "set-yulei-accessory",
+          "piece_key": "accessory"
+        },
+        {
+          "equip_slot": "artifact",
+          "item_def_id": "set-yulei-artifact",
+          "piece_key": "artifact"
+        }
+      ],
+      "bonuses": [
+        {
+          "piece_count": 2,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "max_qixue",
+                "value": 1240,
+                "apply_type": "flat"
+              }
+            },
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "wufang",
+                "value": 64,
+                "apply_type": "flat"
+              }
+            },
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "fafang",
+                "value": 64,
+                "apply_type": "flat"
+              }
+            }
+          ],
+          "priority": 0
+        },
+        {
+          "piece_count": 4,
+          "effect_defs": [
+            {
+              "trigger": "on_be_hit",
+              "target": "self",
+              "effect_type": "defer_damage",
+              "params": {
+                "mode": "cheng_jie_convert",
+                "threshold_max_qixue_rate": 0.08,
+                "convert_rate": 0.4,
+                "settle_rate": 0.5,
+                "remaining_rounds": 2,
+                "round_limit": 1
+              }
+            }
+          ],
+          "priority": 1
+        },
+        {
+          "piece_count": 6,
+          "effect_defs": [
+            {
+              "trigger": "on_turn_start",
+              "target": "self",
+              "effect_type": "defer_damage",
+              "params": {
+                "mode": "cheng_jie_guard",
+                "shield_rate": 0.35,
+                "settle_rate": 0.5,
+                "remaining_rounds": 2
+              }
+            }
+          ],
+          "priority": 2
+        },
+        {
+          "piece_count": 8,
+          "effect_defs": [
+            {
+              "trigger": "on_turn_start",
+              "target": "self",
+              "effect_type": "defer_damage",
+              "params": {
+                "mode": "cheng_jie_guard_reflect",
+                "shield_rate": 0.35,
+                "settle_rate": 0.5,
+                "remaining_rounds": 2,
+                "reflect_on_absorb": true
+              }
+            }
+          ],
+          "priority": 3
+        }
+      ]
+    },
+    {
+      "id": "set-duanye",
+      "name": "断业套装",
+      "description": "断业套装以破劫连斩夺取先手，适合历劫期物修在短窗口内压低首领血线。",
+      "quality_rank": 8,
+      "min_realm": "炼虚合道·历劫期",
+      "pieces": [
+        {
+          "equip_slot": "weapon",
+          "item_def_id": "set-duanye-weapon",
+          "piece_key": "weapon"
+        },
+        {
+          "equip_slot": "head",
+          "item_def_id": "set-duanye-head",
+          "piece_key": "head"
+        },
+        {
+          "equip_slot": "clothes",
+          "item_def_id": "set-duanye-clothes",
+          "piece_key": "clothes"
+        },
+        {
+          "equip_slot": "gloves",
+          "item_def_id": "set-duanye-gloves",
+          "piece_key": "gloves"
+        },
+        {
+          "equip_slot": "pants",
+          "item_def_id": "set-duanye-pants",
+          "piece_key": "pants"
+        },
+        {
+          "equip_slot": "necklace",
+          "item_def_id": "set-duanye-necklace",
+          "piece_key": "necklace"
+        },
+        {
+          "equip_slot": "accessory",
+          "item_def_id": "set-duanye-accessory",
+          "piece_key": "accessory"
+        },
+        {
+          "equip_slot": "artifact",
+          "item_def_id": "set-duanye-artifact",
+          "piece_key": "artifact"
+        }
+      ],
+      "bonuses": [
+        {
+          "piece_count": 2,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "wugong",
+                "value": 60,
+                "apply_type": "flat"
+              }
+            },
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "baoji_rating",
+                "value": 360,
+                "apply_type": "flat"
+              }
+            }
+          ],
+          "priority": 0
+        },
+        {
+          "piece_count": 4,
+          "effect_defs": [
+            {
+              "trigger": "on_hit",
+              "target": "self",
+              "effect_type": "extra_action",
+              "params": {
+                "mode": "ta_xu_grant",
+                "damage_threshold_max_qixue_rate": 0.12,
+                "max_actions_per_round": 1
+              }
+            }
+          ],
+          "priority": 1
+        },
+        {
+          "piece_count": 6,
+          "effect_defs": [
+            {
+              "trigger": "on_hit",
+              "target": "self",
+              "effect_type": "extra_action",
+              "params": {
+                "mode": "ta_xu_empowered",
+                "damage_threshold_max_qixue_rate": 0.12,
+                "max_actions_per_round": 1,
+                "free_cast": true,
+                "ignore_wufang_rate": 0.25
+              }
+            }
+          ],
+          "priority": 2
+        },
+        {
+          "piece_count": 8,
+          "effect_defs": [
+            {
+              "trigger": "on_hit",
+              "target": "self",
+              "effect_type": "extra_action",
+              "params": {
+                "mode": "ta_xu_heavenstep",
+                "damage_threshold_max_qixue_rate": 0.12,
+                "max_actions_per_round": 2,
+                "free_cast": true,
+                "ignore_wufang_rate": 0.25,
+                "kill_refund": true,
+                "low_qixue_refund_rate": 0.35
+              }
+            }
+          ],
+          "priority": 3
+        }
+      ]
     }
   ]
 }

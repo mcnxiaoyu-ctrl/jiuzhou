@@ -3638,6 +3638,457 @@
       "silver_reward_min": 1500,
       "silver_reward_max": 2240,
       "enabled": true
+    },
+    {
+      "id": "monster-lijie-jieyun-leiling",
+      "code": "lijie_jieyun_leiling",
+      "name": "劫云雷灵",
+      "title": "劫云游灵",
+      "realm": "炼虚合道·历劫期",
+      "level": 69,
+      "avatar": "/assets/monster/storm_wolf_lord.png",
+      "kind": "normal",
+      "element": "雷",
+      "base_attrs": {
+        "qixue": 39615,
+        "max_qixue": 39615,
+        "lingqi": 1049,
+        "max_lingqi": 1049,
+        "wugong": 435,
+        "fagong": 326,
+        "wufang": 283,
+        "fafang": 269,
+        "mingzhong": 1.938,
+        "shanbi": 0.135,
+        "zhaojia": 0.205,
+        "baoji": 0.271,
+        "baoshang": 3.329,
+        "kangbao": 0.205,
+        "sudu": 10,
+        "kongzhi_kangxing": 1.391
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.04,
+      "attr_multiplier_max": 1.28,
+      "ai_profile": {
+        "skills": [
+          "sk-jingmang-zhan",
+          "sk-jingjia-fanzhao"
+        ],
+        "skill_weights": {
+          "sk-jingmang-zhan": 56,
+          "sk-jingjia-fanzhao": 44
+        }
+      },
+      "drop_pool_id": "dp-lijie-jieyun-leiling",
+      "exp_reward": 2234,
+      "silver_reward_min": 638,
+      "silver_reward_max": 935,
+      "enabled": true
+    },
+    {
+      "id": "monster-lijie-xuanlei-ying",
+      "code": "lijie_xuanlei_ying",
+      "name": "玄雷影",
+      "title": "雷影游魂",
+      "realm": "炼虚合道·历劫期",
+      "level": 70,
+      "avatar": "/assets/monster/storm_wolf_lord.png",
+      "kind": "normal",
+      "element": "雷",
+      "base_attrs": {
+        "qixue": 40658,
+        "max_qixue": 40658,
+        "lingqi": 1076,
+        "max_lingqi": 1076,
+        "wugong": 447,
+        "fagong": 335,
+        "wufang": 290,
+        "fafang": 276,
+        "mingzhong": 1.989,
+        "shanbi": 0.138,
+        "zhaojia": 0.211,
+        "baoji": 0.278,
+        "baoshang": 3.416,
+        "kangbao": 0.211,
+        "sudu": 11,
+        "kongzhi_kangxing": 1.427
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.04,
+      "attr_multiplier_max": 1.28,
+      "ai_profile": {
+        "skills": [
+          "sk-jingmang-zhan",
+          "sk-jingjia-fanzhao"
+        ],
+        "skill_weights": {
+          "sk-jingmang-zhan": 56,
+          "sk-jingjia-fanzhao": 44
+        }
+      },
+      "drop_pool_id": "dp-lijie-xuanlei-ying",
+      "exp_reward": 2293,
+      "silver_reward_min": 655,
+      "silver_reward_max": 959,
+      "enabled": true
+    },
+    {
+      "id": "monster-elite-lijie-zhenjie-liwei",
+      "code": "elite_lijie_zhenjie_liwei",
+      "name": "镇劫力卫",
+      "title": "精英",
+      "realm": "炼虚合道·历劫期",
+      "level": 71,
+      "avatar": "/assets/monster/rune_golem.png",
+      "kind": "elite",
+      "element": "雷",
+      "base_attrs": {
+        "qixue": 93852,
+        "max_qixue": 93852,
+        "lingqi": 1932,
+        "max_lingqi": 1932,
+        "wugong": 651,
+        "fagong": 584,
+        "wufang": 428,
+        "fafang": 409,
+        "mingzhong": 2.116,
+        "shanbi": 0.136,
+        "zhaojia": 0.207,
+        "baoji": 0.287,
+        "baoshang": 3.542,
+        "jianbaoshang": 0.276,
+        "kangbao": 0.207,
+        "sudu": 10,
+        "kongzhi_kangxing": 1.61
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.4,
+      "attr_multiplier_max": 1.78,
+      "ai_profile": {
+        "skills": [
+          "sk-jingmang-zhan",
+          "sk-beishi-nilin"
+        ],
+        "skill_weights": {
+          "sk-jingmang-zhan": 42,
+          "sk-beishi-nilin": 58
+        },
+        "phase_triggers": [
+          {
+            "hp_percent": 0.6,
+            "action": "enrage",
+            "effects": [
+              {
+                "type": "buff",
+                "value": 0.24,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-zengshang-up",
+                "buffKind": "attr",
+                "attrKey": "zengshang",
+                "applyType": "flat"
+              }
+            ]
+          }
+        ]
+      },
+      "drop_pool_id": "dp-lijie-elite-zhenjie-liwei",
+      "exp_reward": 3473,
+      "silver_reward_min": 989,
+      "silver_reward_max": 1449,
+      "enabled": true
+    },
+    {
+      "id": "monster-elite-lijie-tianlei-faxiang",
+      "code": "elite_lijie_tianlei_faxiang",
+      "name": "天雷法相",
+      "title": "精英",
+      "realm": "炼虚合道·历劫期",
+      "level": 72,
+      "avatar": "/assets/monster/rune_golem.png",
+      "kind": "elite",
+      "element": "雷",
+      "base_attrs": {
+        "qixue": 96300,
+        "max_qixue": 96300,
+        "lingqi": 1982,
+        "max_lingqi": 1982,
+        "wugong": 668,
+        "fagong": 599,
+        "wufang": 439,
+        "fafang": 420,
+        "mingzhong": 2.171,
+        "shanbi": 0.139,
+        "zhaojia": 0.212,
+        "baoji": 0.295,
+        "baoshang": 3.634,
+        "jianbaoshang": 0.283,
+        "kangbao": 0.212,
+        "sudu": 11,
+        "kongzhi_kangxing": 1.652
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.4,
+      "attr_multiplier_max": 1.78,
+      "ai_profile": {
+        "skills": [
+          "sk-jingmang-zhan",
+          "sk-beishi-nilin"
+        ],
+        "skill_weights": {
+          "sk-jingmang-zhan": 42,
+          "sk-beishi-nilin": 58
+        },
+        "phase_triggers": [
+          {
+            "hp_percent": 0.6,
+            "action": "enrage",
+            "effects": [
+              {
+                "type": "buff",
+                "value": 0.24,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-zengshang-up",
+                "buffKind": "attr",
+                "attrKey": "zengshang",
+                "applyType": "flat"
+              }
+            ]
+          }
+        ]
+      },
+      "drop_pool_id": "dp-lijie-elite-tianlei-faxiang",
+      "exp_reward": 3564,
+      "silver_reward_min": 1015,
+      "silver_reward_max": 1487,
+      "enabled": true
+    },
+    {
+      "id": "monster-lijie-jiegong-leishi",
+      "code": "lijie_jiegong_leishi",
+      "name": "劫宫雷侍",
+      "title": "劫宫守卫",
+      "realm": "炼虚合道·历劫期",
+      "level": 71,
+      "avatar": "/assets/monster/storm_wolf_lord.png",
+      "kind": "normal",
+      "element": "雷",
+      "base_attrs": {
+        "qixue": 41700,
+        "max_qixue": 41700,
+        "lingqi": 1104,
+        "max_lingqi": 1104,
+        "wugong": 458,
+        "fagong": 343,
+        "wufang": 298,
+        "fafang": 283,
+        "mingzhong": 2.04,
+        "shanbi": 0.142,
+        "zhaojia": 0.216,
+        "baoji": 0.286,
+        "baoshang": 3.504,
+        "kangbao": 0.216,
+        "sudu": 11,
+        "kongzhi_kangxing": 1.464
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.04,
+      "attr_multiplier_max": 1.28,
+      "ai_profile": {
+        "skills": [
+          "sk-jingmang-zhan",
+          "sk-jingjia-fanzhao"
+        ],
+        "skill_weights": {
+          "sk-jingmang-zhan": 56,
+          "sk-jingjia-fanzhao": 44
+        }
+      },
+      "drop_pool_id": "dp-lijie-jiegong-leishi",
+      "exp_reward": 2352,
+      "silver_reward_min": 672,
+      "silver_reward_max": 984,
+      "enabled": true
+    },
+    {
+      "id": "monster-elite-lijie-dujie-tianjiang",
+      "code": "elite_lijie_dujie_tianjiang",
+      "name": "渡劫天将",
+      "title": "精英",
+      "realm": "炼虚合道·历劫期",
+      "level": 73,
+      "avatar": "/assets/monster/rune_golem.png",
+      "kind": "elite",
+      "element": "雷",
+      "base_attrs": {
+        "qixue": 101196,
+        "max_qixue": 101196,
+        "lingqi": 2083,
+        "max_lingqi": 2083,
+        "wugong": 702,
+        "fagong": 630,
+        "wufang": 461,
+        "fafang": 441,
+        "mingzhong": 2.282,
+        "shanbi": 0.146,
+        "zhaojia": 0.223,
+        "baoji": 0.31,
+        "baoshang": 3.819,
+        "jianbaoshang": 0.298,
+        "kangbao": 0.223,
+        "sudu": 11,
+        "kongzhi_kangxing": 1.736
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.4,
+      "attr_multiplier_max": 1.78,
+      "ai_profile": {
+        "skills": [
+          "sk-jingmang-zhan",
+          "sk-beishi-nilin"
+        ],
+        "skill_weights": {
+          "sk-jingmang-zhan": 42,
+          "sk-beishi-nilin": 58
+        },
+        "phase_triggers": [
+          {
+            "hp_percent": 0.6,
+            "action": "enrage",
+            "effects": [
+              {
+                "type": "buff",
+                "value": 0.24,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-zengshang-up",
+                "buffKind": "attr",
+                "attrKey": "zengshang",
+                "applyType": "flat"
+              }
+            ]
+          }
+        ]
+      },
+      "drop_pool_id": "dp-lijie-elite-dujie-tianjiang",
+      "exp_reward": 3745,
+      "silver_reward_min": 1066,
+      "silver_reward_max": 1562,
+      "enabled": true
+    },
+    {
+      "id": "monster-boss-lijie-wanlei-jiezhu",
+      "code": "boss_lijie_wanlei_jiezhu",
+      "name": "万雷劫主",
+      "title": "首领",
+      "realm": "炼虚合道·历劫期",
+      "level": 76,
+      "avatar": "/assets/monster/withered_ent.png",
+      "kind": "boss",
+      "element": "雷",
+      "base_attrs": {
+        "qixue": 208620,
+        "max_qixue": 208620,
+        "lingqi": 4465,
+        "max_lingqi": 4465,
+        "wugong": 1076,
+        "fagong": 1069,
+        "wufang": 727,
+        "fafang": 698,
+        "mingzhong": 2.66,
+        "shanbi": 0.137,
+        "zhaojia": 0.464,
+        "baoji": 0.339,
+        "baoshang": 4.05,
+        "jianbaoshang": 0.293,
+        "kangbao": 0.22,
+        "sudu": 10,
+        "kongzhi_kangxing": 1.976
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.52,
+      "attr_multiplier_max": 1.94,
+      "ai_profile": {
+        "skills": [
+          "sk-fantian-mingjing",
+          "sk-xuanjian-zhenmie",
+          "sk-jingyu-duanlv",
+          "sk-zheguang-huilv"
+        ],
+        "skill_weights": {
+          "sk-fantian-mingjing": 28,
+          "sk-xuanjian-zhenmie": 32,
+          "sk-jingyu-duanlv": 24,
+          "sk-zheguang-huilv": 16
+        },
+        "phase_triggers": [
+          {
+            "hp_percent": 0.72,
+            "action": "summon",
+            "summon_id": "monster-zhengdao-daogong-shouwei",
+            "summon_count": 2
+          },
+          {
+            "hp_percent": 0.56,
+            "action": "enrage",
+            "effects": [
+              {
+                "type": "buff",
+                "value": 0.16,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-wufang-up",
+                "buffKind": "attr",
+                "attrKey": "wufang",
+                "applyType": "percent"
+              },
+              {
+                "type": "buff",
+                "value": 0.16,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-fafang-up",
+                "buffKind": "attr",
+                "attrKey": "fafang",
+                "applyType": "percent"
+              }
+            ]
+          },
+          {
+            "hp_percent": 0.34,
+            "action": "enrage",
+            "effects": [
+              {
+                "type": "buff",
+                "value": 0.2,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-zengshang-up",
+                "buffKind": "attr",
+                "attrKey": "zengshang",
+                "applyType": "flat"
+              },
+              {
+                "type": "buff",
+                "value": 1,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-sudu-up",
+                "buffKind": "attr",
+                "attrKey": "sudu",
+                "applyType": "flat"
+              }
+            ]
+          }
+        ]
+      },
+      "drop_pool_id": "dp-lijie-boss-wanlei-jiezhu",
+      "exp_reward": 5588,
+      "silver_reward_min": 1830,
+      "silver_reward_max": 2733,
+      "enabled": true
     }
   ]
 }

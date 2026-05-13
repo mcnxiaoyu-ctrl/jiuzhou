@@ -1516,6 +1516,21 @@
         }
       ],
       "enabled": true
+    },
+    {
+      "id": "dp-common-monster-lijie",
+      "name": "炼虚合道·历劫期公共掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "box-014",
+          "chance": 0.04,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
     }
   ]
 }

@@ -1942,6 +1942,133 @@
       "prereq_task_ids": [],
       "enabled": true,
       "sort_weight": 743
+    },
+    {
+      "id": "task-lijie-daily-001",
+      "category": "daily",
+      "title": "劫台日课",
+      "realm": "炼虚合道·证道期",
+      "description": "完成九霄劫台日常巡修，收束雷砂并完成一次万雷劫宫试炼。",
+      "giver_npc_id": "npc-jietai-yinlei-shi",
+      "map_id": "map-jiuxiao-jietai",
+      "room_id": "room-jietai-yinlei-platform",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "kill_monster",
+          "params": {
+            "monster_id": "monster-lijie-jieyun-leiling"
+          },
+          "target": 4
+        },
+        {
+          "id": "obj-002",
+          "type": "kill_monster",
+          "params": {
+            "monster_id": "monster-lijie-xuanlei-ying"
+          },
+          "target": 4
+        },
+        {
+          "id": "obj-003",
+          "type": "gather_resource",
+          "params": {
+            "resource_id": "mat-jieyun-leisha"
+          },
+          "target": 8
+        },
+        {
+          "id": "obj-004",
+          "type": "dungeon_clear",
+          "params": {
+            "dungeon_id": "dungeon-lianxu-wanlei-jiegong"
+          },
+          "target": 1
+        }
+      ],
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 43000
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 4300
+        },
+        {
+          "type": "item",
+          "item_def_id": "box-014",
+          "qty": 1
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 930,
+      "version": 1
+    },
+    {
+      "id": "task-lijie-weekly-001",
+      "category": "event",
+      "title": "周常：劫宫承雷",
+      "realm": "炼虚合道·证道期",
+      "description": "完成万雷劫宫承雷轮战，收束劫云雷砂与万雷劫印。",
+      "giver_npc_id": "npc-jietai-shoujie-tiangong",
+      "map_id": "map-jiuxiao-jietai",
+      "room_id": "room-jietai-wanlei-gate",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "params": {
+            "dungeon_id": "dungeon-lianxu-wanlei-jiegong"
+          },
+          "target": 4
+        },
+        {
+          "id": "obj-002",
+          "type": "kill_monster",
+          "params": {
+            "monster_id": "monster-boss-lijie-wanlei-jiezhu"
+          },
+          "target": 2
+        },
+        {
+          "id": "obj-003",
+          "type": "gather_resource",
+          "params": {
+            "resource_id": "mat-jieyun-leisha"
+          },
+          "target": 30
+        },
+        {
+          "id": "obj-004",
+          "type": "collect",
+          "params": {
+            "item_id": "mat-wanlei-jieyin"
+          },
+          "target": 5
+        }
+      ],
+      "rewards": [
+        {
+          "type": "spirit_stones",
+          "amount": 78000
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-wanlei-jieyin",
+          "qty": 2
+        },
+        {
+          "type": "item",
+          "item_def_id": "box-014",
+          "qty": 2
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 931,
+      "version": 1
     }
   ]
 }

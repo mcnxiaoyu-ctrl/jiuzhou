@@ -1,0 +1,341 @@
+{
+  "chapters": [
+    {
+      "id": "mq-chapter-9",
+      "chapter_num": 9,
+      "name": "第九章：九霄历劫",
+      "description": "证道之后，九霄劫台降下万雷试炼，你需要收束雷砂、压成劫印，才能踏入历劫期。",
+      "background": "九霄劫台悬于万法天阙更上层，劫云会记录修士的每一次出手并以雷法反照。唯有在万雷劫宫中承受多轮劫压，集齐劫云雷砂与万雷劫印，才能真正完成历劫准备。",
+      "min_realm": "炼虚合道·证道期",
+      "chapter_rewards": {
+        "exp": 38000,
+        "silver": 50000,
+        "spirit_stones": 4300,
+        "items": [
+          {
+            "item_def_id": "box-014",
+            "quantity": 2
+          },
+          {
+            "item_def_id": "mat-wanlei-jieyin",
+            "quantity": 1
+          }
+        ]
+      },
+      "unlock_features": [
+        "map-jiuxiao-jietai",
+        "dungeon-lianxu-wanlei-jiegong"
+      ],
+      "sort_weight": 930,
+      "enabled": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "main-9-001",
+      "chapter_id": "mq-chapter-9",
+      "section_num": 1,
+      "map_id": "map-jiuxiao-jietai",
+      "room_id": "room-jietai-yinlei-platform",
+      "npc_id": "npc-jietai-yinlei-shi",
+      "dialogue_id": "dlg-main-9-001",
+      "description": "沿天阙雷阶抵达九霄劫台，并与引雷使确认历劫前的承雷规则。",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "reach",
+          "params": {
+            "room_id": "room-jietai-yinlei-platform"
+          },
+          "target": 1
+        },
+        {
+          "id": "obj-002",
+          "type": "talk_npc",
+          "params": {
+            "npc_id": "npc-jietai-yinlei-shi"
+          },
+          "target": 1
+        }
+      ],
+      "rewards": {
+        "exp": 2500,
+        "silver": 3600,
+        "spirit_stones": 300
+      },
+      "sort_weight": 930,
+      "enabled": true
+    },
+    {
+      "id": "main-9-002",
+      "chapter_id": "mq-chapter-9",
+      "section_num": 2,
+      "map_id": "map-jiuxiao-jietai",
+      "room_id": "room-jietai-jieyun-corridor",
+      "npc_id": "npc-jietai-yinlei-shi",
+      "dialogue_id": "dlg-main-9-002",
+      "description": "在劫云回廊击散雷灵与玄雷影，熟悉劫云回照的节奏。",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "kill_monster",
+          "params": {
+            "monster_id": "monster-lijie-jieyun-leiling"
+          },
+          "target": 6
+        },
+        {
+          "id": "obj-002",
+          "type": "kill_monster",
+          "params": {
+            "monster_id": "monster-lijie-xuanlei-ying"
+          },
+          "target": 6
+        }
+      ],
+      "rewards": {
+        "exp": 3000,
+        "silver": 4300,
+        "spirit_stones": 360,
+        "items": [
+          {
+            "item_def_id": "mat-jieyun-leisha",
+            "quantity": 5
+          }
+        ]
+      },
+      "sort_weight": 931,
+      "enabled": true
+    },
+    {
+      "id": "main-9-003",
+      "chapter_id": "mq-chapter-9",
+      "section_num": 3,
+      "map_id": "map-jiuxiao-jietai",
+      "room_id": "room-jietai-jieyun-corridor",
+      "npc_id": "npc-jietai-dulei-jiang",
+      "dialogue_id": "dlg-main-9-003",
+      "description": "收集劫云雷砂，交由渡雷将压入劫印底纹。",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "collect",
+          "params": {
+            "item_id": "mat-jieyun-leisha"
+          },
+          "target": 14
+        },
+        {
+          "id": "obj-002",
+          "type": "talk_npc",
+          "params": {
+            "npc_id": "npc-jietai-dulei-jiang"
+          },
+          "target": 1
+        }
+      ],
+      "rewards": {
+        "exp": 3500,
+        "silver": 5000,
+        "spirit_stones": 420,
+        "items": [
+          {
+            "item_def_id": "mat-wanlei-jieyin",
+            "quantity": 1
+          }
+        ]
+      },
+      "sort_weight": 932,
+      "enabled": true
+    },
+    {
+      "id": "main-9-004",
+      "chapter_id": "mq-chapter-9",
+      "section_num": 4,
+      "map_id": "map-jiuxiao-jietai",
+      "room_id": "room-jietai-wanlei-gate",
+      "npc_id": "npc-jietai-shoujie-tiangong",
+      "dialogue_id": "dlg-main-9-004",
+      "description": "进入万雷劫宫完成一次承雷试炼，确认你能承受历劫前的基础劫压。",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "params": {
+            "dungeon_id": "dungeon-lianxu-wanlei-jiegong"
+          },
+          "target": 1
+        }
+      ],
+      "rewards": {
+        "exp": 4000,
+        "silver": 5800,
+        "spirit_stones": 480,
+        "items": [
+          {
+            "item_def_id": "box-014",
+            "quantity": 1
+          }
+        ]
+      },
+      "sort_weight": 933,
+      "enabled": true
+    },
+    {
+      "id": "main-9-005",
+      "chapter_id": "mq-chapter-9",
+      "section_num": 5,
+      "map_id": "map-jiuxiao-jietai",
+      "room_id": "room-jietai-zhenjie-altar",
+      "npc_id": "npc-jietai-yinlei-shi",
+      "dialogue_id": "dlg-main-9-005",
+      "description": "在镇劫坛击败两类精英劫卫，证明你已能稳定承接高阶雷劫。",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "kill_monster",
+          "params": {
+            "monster_id": "monster-elite-lijie-zhenjie-liwei"
+          },
+          "target": 2
+        },
+        {
+          "id": "obj-002",
+          "type": "kill_monster",
+          "params": {
+            "monster_id": "monster-elite-lijie-tianlei-faxiang"
+          },
+          "target": 2
+        }
+      ],
+      "rewards": {
+        "exp": 4500,
+        "silver": 6600,
+        "spirit_stones": 560,
+        "items": [
+          {
+            "item_def_id": "mat-jieyun-leisha",
+            "quantity": 7
+          }
+        ]
+      },
+      "sort_weight": 934,
+      "enabled": true
+    },
+    {
+      "id": "main-9-006",
+      "chapter_id": "mq-chapter-9",
+      "section_num": 6,
+      "map_id": "map-jiuxiao-jietai",
+      "room_id": "room-jietai-wanlei-gate",
+      "npc_id": "npc-jietai-shoujie-tiangong",
+      "dialogue_id": "dlg-main-9-006",
+      "description": "完成两轮万雷劫宫试炼，让劫印真正压实。",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "params": {
+            "dungeon_id": "dungeon-lianxu-wanlei-jiegong"
+          },
+          "target": 2
+        }
+      ],
+      "rewards": {
+        "exp": 5000,
+        "silver": 7500,
+        "spirit_stones": 640,
+        "items": [
+          {
+            "item_def_id": "mat-wanlei-jieyin",
+            "quantity": 2
+          }
+        ]
+      },
+      "sort_weight": 935,
+      "enabled": true
+    },
+    {
+      "id": "main-9-007",
+      "chapter_id": "mq-chapter-9",
+      "section_num": 7,
+      "map_id": "map-jiuxiao-jietai",
+      "room_id": "room-jietai-wanlei-gate",
+      "npc_id": "npc-jietai-shoujie-tiangong",
+      "dialogue_id": "dlg-main-9-007",
+      "description": "收齐万雷劫印，向守劫天工提交历劫前的核心凭证。",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "collect",
+          "params": {
+            "item_id": "mat-wanlei-jieyin"
+          },
+          "target": 5
+        },
+        {
+          "id": "obj-002",
+          "type": "talk_npc",
+          "params": {
+            "npc_id": "npc-jietai-shoujie-tiangong"
+          },
+          "target": 1
+        }
+      ],
+      "rewards": {
+        "exp": 5600,
+        "silver": 8500,
+        "spirit_stones": 720,
+        "items": [
+          {
+            "item_def_id": "box-014",
+            "quantity": 1
+          }
+        ]
+      },
+      "sort_weight": 936,
+      "enabled": true
+    },
+    {
+      "id": "main-9-008",
+      "chapter_id": "mq-chapter-9",
+      "section_num": 8,
+      "map_id": "map-jiuxiao-jietai",
+      "room_id": "room-jietai-wanlei-gate",
+      "npc_id": "npc-jietai-shoujie-tiangong",
+      "dialogue_id": "dlg-main-9-008",
+      "description": "收束足量劫云雷砂并向守劫天工回报，完成历劫前全部准备。",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "collect",
+          "params": {
+            "item_id": "mat-jieyun-leisha"
+          },
+          "target": 36
+        },
+        {
+          "id": "obj-002",
+          "type": "talk_npc",
+          "params": {
+            "npc_id": "npc-jietai-shoujie-tiangong"
+          },
+          "target": 1
+        }
+      ],
+      "rewards": {
+        "exp": 6800,
+        "silver": 10000,
+        "spirit_stones": 860,
+        "items": [
+          {
+            "item_def_id": "mat-wanlei-jieyin",
+            "quantity": 1
+          }
+        ]
+      },
+      "sort_weight": 937,
+      "enabled": true
+    }
+  ]
+}

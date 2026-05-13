@@ -5596,6 +5596,671 @@
         "物攻",
         "证道期"
       ]
+    },
+    {
+      "id": "set-jiexiao-weapon",
+      "name": "劫霄雷尺",
+      "category": "equipment",
+      "sub_category": "sword",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-tianyan/01-weapon-set-tianyan-weapon.webp",
+      "equip_slot": "weapon",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "fagong": 97,
+        "lengque_rating": 149
+      },
+      "implicit_attrs": {
+        "fagong": 24,
+        "baoji_rating": 149
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-jiexiao",
+      "tags": [
+        "武器",
+        "劫霄套装",
+        "法攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-jiexiao-head",
+      "name": "劫霄雷冠",
+      "category": "equipment",
+      "sub_category": "hat",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-tianyan/02-head-set-tianyan-head.webp",
+      "equip_slot": "head",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "max_lingqi": 714,
+        "fagong": 66,
+        "kongzhi_kangxing_rating": 428
+      },
+      "implicit_attrs": {
+        "max_lingqi": 243,
+        "zhaojia_rating": 215
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-jiexiao",
+      "tags": [
+        "头盔",
+        "劫霄套装",
+        "法攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-jiexiao-clothes",
+      "name": "劫霄雷袍",
+      "category": "equipment",
+      "sub_category": "robe",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-tianyan/03-clothes-set-tianyan-clothes.webp",
+      "equip_slot": "clothes",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "max_lingqi": 1048,
+        "fagong": 79,
+        "fafang": 36
+      },
+      "implicit_attrs": {
+        "max_lingqi": 324
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-jiexiao",
+      "tags": [
+        "衣服",
+        "劫霄套装",
+        "法攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-jiexiao-gloves",
+      "name": "劫霄雷握",
+      "category": "equipment",
+      "sub_category": "gloves",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-tianyan/04-gloves-set-tianyan-gloves.webp",
+      "equip_slot": "gloves",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "fagong": 66,
+        "lengque_rating": 647
+      },
+      "implicit_attrs": {
+        "fagong": 17
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-jiexiao",
+      "tags": [
+        "护手",
+        "劫霄套装",
+        "法攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-jiexiao-pants",
+      "name": "劫霄雷履",
+      "category": "equipment",
+      "sub_category": "pants",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-tianyan/05-pants-set-tianyan-pants.webp",
+      "equip_slot": "pants",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "max_qixue": 531,
+        "fafang": 40,
+        "fagong": 45
+      },
+      "implicit_attrs": {
+        "fafang": 20
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-jiexiao",
+      "tags": [
+        "护腿",
+        "劫霄套装",
+        "法攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-jiexiao-necklace",
+      "name": "劫霄雷链",
+      "category": "equipment",
+      "sub_category": "necklace",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-tianyan/06-necklace-set-tianyan-necklace.webp",
+      "equip_slot": "necklace",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "fagong": 61,
+        "kongzhi_kangxing_rating": 428
+      },
+      "implicit_attrs": {
+        "fagong": 18,
+        "baoji_rating": 139
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-jiexiao",
+      "tags": [
+        "项链",
+        "劫霄套装",
+        "法攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-jiexiao-accessory",
+      "name": "劫霄雷玦",
+      "category": "equipment",
+      "sub_category": "ring",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-tianyan/07-accessory-set-tianyan-accessory.webp",
+      "equip_slot": "accessory",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "fagong": 70,
+        "lengque_rating": 355
+      },
+      "implicit_attrs": {
+        "fagong": 19,
+        "lengque_rating": 202
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-jiexiao",
+      "tags": [
+        "饰品",
+        "劫霄套装",
+        "法攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-jiexiao-artifact",
+      "name": "劫霄雷印",
+      "category": "equipment",
+      "sub_category": "token",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-tianyan/08-artifact-set-tianyan-artifact.webp",
+      "equip_slot": "artifact",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "kongzhi_kangxing_rating": 1417,
+        "lengque_rating": 531
+      },
+      "implicit_attrs": {
+        "kongzhi_kangxing_rating": 435
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-jiexiao",
+      "tags": [
+        "法宝",
+        "劫霄套装",
+        "法攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-yulei-weapon",
+      "name": "御雷玄锋",
+      "category": "equipment",
+      "sub_category": "sword",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-xuanheng/01-weapon-set-xuanheng-weapon.webp",
+      "equip_slot": "weapon",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "wugong": 86,
+        "wufang": 45
+      },
+      "implicit_attrs": {
+        "wugong": 20,
+        "wufang": 21
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-yulei",
+      "tags": [
+        "武器",
+        "御雷套装",
+        "承伤",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-yulei-head",
+      "name": "御雷玄盔",
+      "category": "equipment",
+      "sub_category": "hat",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-xuanheng/02-head-set-xuanheng-head.webp",
+      "equip_slot": "head",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "max_qixue": 794,
+        "wufang": 40,
+        "kangbao_rating": 473
+      },
+      "implicit_attrs": {
+        "max_qixue": 331
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-yulei",
+      "tags": [
+        "头盔",
+        "御雷套装",
+        "承伤",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-yulei-clothes",
+      "name": "御雷玄甲",
+      "category": "equipment",
+      "sub_category": "robe",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-xuanheng/03-clothes-set-xuanheng-clothes.webp",
+      "equip_slot": "clothes",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "max_qixue": 1084,
+        "wufang": 46,
+        "fafang": 36
+      },
+      "implicit_attrs": {
+        "max_qixue": 400
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-yulei",
+      "tags": [
+        "衣服",
+        "御雷套装",
+        "承伤",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-yulei-gloves",
+      "name": "御雷玄腕",
+      "category": "equipment",
+      "sub_category": "gloves",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-xuanheng/04-gloves-set-xuanheng-gloves.webp",
+      "equip_slot": "gloves",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "wufang": 36,
+        "zhaojia_rating": 855
+      },
+      "implicit_attrs": {
+        "zhaojia_rating": 362
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-yulei",
+      "tags": [
+        "护手",
+        "御雷套装",
+        "承伤",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-yulei-pants",
+      "name": "御雷玄胫",
+      "category": "equipment",
+      "sub_category": "pants",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-xuanheng/05-pants-set-xuanheng-pants.webp",
+      "equip_slot": "pants",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "max_qixue": 631,
+        "fafang": 36
+      },
+      "implicit_attrs": {
+        "fafang": 24
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-yulei",
+      "tags": [
+        "护腿",
+        "御雷套装",
+        "承伤",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-yulei-necklace",
+      "name": "御雷玄坠",
+      "category": "equipment",
+      "sub_category": "necklace",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-xuanheng/06-necklace-set-xuanheng-necklace.webp",
+      "equip_slot": "necklace",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "max_qixue": 443,
+        "kangbao_rating": 582
+      },
+      "implicit_attrs": {
+        "kangbao_rating": 362
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-yulei",
+      "tags": [
+        "项链",
+        "御雷套装",
+        "承伤",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-yulei-accessory",
+      "name": "御雷玄环",
+      "category": "equipment",
+      "sub_category": "ring",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-xuanheng/07-accessory-set-xuanheng-accessory.webp",
+      "equip_slot": "accessory",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "wufang": 43,
+        "fafang": 31
+      },
+      "implicit_attrs": {
+        "wufang": 23
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-yulei",
+      "tags": [
+        "饰品",
+        "御雷套装",
+        "承伤",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-yulei-artifact",
+      "name": "御雷玄衡",
+      "category": "equipment",
+      "sub_category": "token",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-xuanheng/08-artifact-set-xuanheng-artifact.webp",
+      "equip_slot": "artifact",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "kongzhi_kangxing_rating": 1231,
+        "zhaojia_rating": 655
+      },
+      "implicit_attrs": {
+        "kongzhi_kangxing_rating": 492
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-yulei",
+      "tags": [
+        "法宝",
+        "御雷套装",
+        "承伤",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-duanye-weapon",
+      "name": "断业劫刃",
+      "category": "equipment",
+      "sub_category": "sword",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-poxu/01-weapon-set-poxu-weapon.webp",
+      "equip_slot": "weapon",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "wugong": 97,
+        "baoji_rating": 149
+      },
+      "implicit_attrs": {
+        "wugong": 24,
+        "mingzhong_rating": 149
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-duanye",
+      "tags": [
+        "武器",
+        "断业套装",
+        "物攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-duanye-head",
+      "name": "断业劫冠",
+      "category": "equipment",
+      "sub_category": "hat",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-poxu/02-head-set-poxu-head.webp",
+      "equip_slot": "head",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "max_qixue": 714,
+        "wugong": 66,
+        "baoji_rating": 428
+      },
+      "implicit_attrs": {
+        "max_qixue": 243,
+        "wufang": 31
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-duanye",
+      "tags": [
+        "头盔",
+        "断业套装",
+        "物攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-duanye-clothes",
+      "name": "断业劫衣",
+      "category": "equipment",
+      "sub_category": "robe",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-poxu/03-clothes-set-poxu-clothes.webp",
+      "equip_slot": "clothes",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "max_qixue": 1048,
+        "wugong": 79,
+        "wufang": 36
+      },
+      "implicit_attrs": {
+        "max_qixue": 324
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-duanye",
+      "tags": [
+        "衣服",
+        "断业套装",
+        "物攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-duanye-gloves",
+      "name": "断业劫握",
+      "category": "equipment",
+      "sub_category": "gloves",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-poxu/04-gloves-set-poxu-gloves.webp",
+      "equip_slot": "gloves",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "wugong": 66,
+        "baoshang_rating": 647
+      },
+      "implicit_attrs": {
+        "wugong": 17
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-duanye",
+      "tags": [
+        "护手",
+        "断业套装",
+        "物攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-duanye-pants",
+      "name": "断业劫履",
+      "category": "equipment",
+      "sub_category": "pants",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-poxu/05-pants-set-poxu-pants.webp",
+      "equip_slot": "pants",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "max_qixue": 531,
+        "wufang": 40,
+        "wugong": 45
+      },
+      "implicit_attrs": {
+        "wufang": 20
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-duanye",
+      "tags": [
+        "护腿",
+        "断业套装",
+        "物攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-duanye-necklace",
+      "name": "断业劫链",
+      "category": "equipment",
+      "sub_category": "necklace",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-poxu/06-necklace-set-poxu-necklace.webp",
+      "equip_slot": "necklace",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "wugong": 61,
+        "mingzhong_rating": 428
+      },
+      "implicit_attrs": {
+        "wugong": 18,
+        "baoji_rating": 139
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-duanye",
+      "tags": [
+        "项链",
+        "断业套装",
+        "物攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-duanye-accessory",
+      "name": "断业劫符",
+      "category": "equipment",
+      "sub_category": "ring",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-poxu/07-accessory-set-poxu-accessory.webp",
+      "equip_slot": "accessory",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "wugong": 70,
+        "baoji_rating": 355
+      },
+      "implicit_attrs": {
+        "wugong": 19,
+        "baoshang_rating": 202
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-duanye",
+      "tags": [
+        "饰品",
+        "断业套装",
+        "物攻",
+        "历劫期"
+      ]
+    },
+    {
+      "id": "set-duanye-artifact",
+      "name": "断业劫令",
+      "category": "equipment",
+      "sub_category": "token",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/set-poxu/08-artifact-set-poxu-artifact.webp",
+      "equip_slot": "artifact",
+      "equip_req_realm": "炼虚合道·历劫期",
+      "base_attrs": {
+        "mingzhong_rating": 531,
+        "baoshang_rating": 1417
+      },
+      "implicit_attrs": {
+        "baoji_rating": 435
+      },
+      "affix_pool_id": "ap-equipment",
+      "set_id": "set-duanye",
+      "tags": [
+        "法宝",
+        "断业套装",
+        "物攻",
+        "历劫期"
+      ]
     }
   ]
 }

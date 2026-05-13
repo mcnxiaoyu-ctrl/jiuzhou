@@ -744,6 +744,48 @@
       "quest_giver_id": "qg-chapter8-main",
       "sort_weight": 264,
       "enabled": true
+    },
+    {
+      "id": "npc-jietai-yinlei-shi",
+      "code": "jietai_yinlei_shi",
+      "name": "引雷使",
+      "title": "九霄接引",
+      "gender": "未知",
+      "realm": "炼虚合道·历劫期",
+      "avatar": "/assets/npc/npc_elder.png",
+      "description": "负责记录入台修士雷纹的九霄使者。",
+      "npc_type": "quest",
+      "area": "九霄劫台",
+      "enabled": true,
+      "sort_weight": 930
+    },
+    {
+      "id": "npc-jietai-dulei-jiang",
+      "code": "jietai_dulei_jiang",
+      "name": "渡雷将",
+      "title": "劫印铸纹",
+      "gender": "未知",
+      "realm": "炼虚合道·历劫期",
+      "avatar": "/assets/npc/npc_guard.png",
+      "description": "以雷砂压制劫印底纹的镇台战将。",
+      "npc_type": "quest",
+      "area": "九霄劫台",
+      "enabled": true,
+      "sort_weight": 931
+    },
+    {
+      "id": "npc-jietai-shoujie-tiangong",
+      "code": "jietai_shoujie_tiangong",
+      "name": "守劫天工",
+      "title": "万雷审印",
+      "gender": "未知",
+      "realm": "炼虚合道·历劫期",
+      "avatar": "/assets/npc/npc_master.png",
+      "description": "掌管万雷劫宫劫印审验的天工。",
+      "npc_type": "quest",
+      "area": "九霄劫台",
+      "enabled": true,
+      "sort_weight": 932
     }
   ],
   "talk_trees": [

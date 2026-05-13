@@ -3663,6 +3663,108 @@
           "events": []
         }
       ]
+    },
+    {
+      "id": "map-jiuxiao-jietai",
+      "code": "jiuxiao_jietai",
+      "name": "九霄劫台",
+      "description": "悬于万法天阙上层的雷劫试炼场，劫云会按修士气机回照雷序。",
+      "background_image": "/assets/maps/wanfa_tianque.jpg",
+      "map_type": "field",
+      "parent_map_id": "map-wanfa-tianque",
+      "region": "炼虚合道",
+      "req_realm_min": "炼虚合道·证道期",
+      "safe_zone": false,
+      "pk_mode": "peace",
+      "revive_map_id": "map-jiuxiao-jietai",
+      "revive_room_id": "room-jietai-yinlei-platform",
+      "sort_weight": 930,
+      "enabled": true,
+      "rooms": [
+        {
+          "id": "room-jietai-yinlei-platform",
+          "name": "接引雷台",
+          "description": "引雷使守在雷台边缘，负责记录入台修士的第一道雷纹。",
+          "monsters": [],
+          "resources": [],
+          "npcs": [
+            "npc-jietai-yinlei-shi"
+          ],
+          "portals": [
+            {
+              "target_map_id": "map-wanfa-tianque",
+              "target_room_id": "room-tianque-daogong-gate",
+              "name": "万法天阙雷阶"
+            }
+          ]
+        },
+        {
+          "id": "room-jietai-jieyun-corridor",
+          "name": "劫云回廊",
+          "description": "劫云低垂，雷砂在回廊两侧随雷纹沉降。",
+          "monsters": [
+            {
+              "monster_def_id": "monster-lijie-jieyun-leiling",
+              "count": 3,
+              "respawn_sec": 58
+            },
+            {
+              "monster_def_id": "monster-lijie-xuanlei-ying",
+              "count": 2,
+              "respawn_sec": 62
+            }
+          ],
+          "resources": [
+            {
+              "resource_id": "mat-jieyun-leisha",
+              "count": 9,
+              "collect_limit": 9,
+              "respawn_sec": 360
+            }
+          ],
+          "npcs": [],
+          "portals": []
+        },
+        {
+          "id": "room-jietai-zhenjie-altar",
+          "name": "镇劫坛",
+          "description": "镇劫法阵压住雷序，精英劫卫在此巡守。",
+          "monsters": [
+            {
+              "monster_def_id": "monster-elite-lijie-zhenjie-liwei",
+              "count": 1,
+              "respawn_sec": 230
+            },
+            {
+              "monster_def_id": "monster-elite-lijie-tianlei-faxiang",
+              "count": 1,
+              "respawn_sec": 240
+            }
+          ],
+          "resources": [
+            {
+              "resource_id": "mat-jieyun-leisha",
+              "count": 7,
+              "collect_limit": 7,
+              "respawn_sec": 390
+            }
+          ],
+          "npcs": [],
+          "portals": []
+        },
+        {
+          "id": "room-jietai-wanlei-gate",
+          "name": "万雷殿门",
+          "description": "渡雷将与守劫天工在殿门前校验劫印，万雷劫宫入口由此开启。",
+          "monsters": [],
+          "resources": [],
+          "npcs": [
+            "npc-jietai-dulei-jiang",
+            "npc-jietai-shoujie-tiangong"
+          ],
+          "portals": []
+        }
+      ]
     }
   ]
 }

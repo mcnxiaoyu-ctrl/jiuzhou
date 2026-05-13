@@ -2787,6 +2787,86 @@
       "source_hint": [
         "洞府研修"
       ]
+    },
+    {
+      "id": "box-014",
+      "name": "历劫宝石袋",
+      "category": "consumable",
+      "sub_category": "box",
+      "quality": "天",
+      "stack_max": 99999,
+      "bind_type": "none",
+      "tradeable": true,
+      "icon": "/assets/items/Props-baodai-2.png",
+      "description": "打开后可随机获得1个6~7级宝石。",
+      "long_desc": "用于历劫阶段构筑强化，产出区间高于证道宝石袋。",
+      "tags": [
+        "宝箱",
+        "宝石",
+        "历劫",
+        "随机"
+      ],
+      "use_type": "instant",
+      "effect_defs": [
+        {
+          "trigger": "use",
+          "target": "self",
+          "effect_type": "loot",
+          "params": {
+            "loot_type": "random_gem",
+            "min_level": 6,
+            "max_level": 7,
+            "gems_per_use": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "mat-jieyun-leisha",
+      "name": "劫云雷砂",
+      "category": "material",
+      "sub_category": "technique",
+      "quality": "天",
+      "stack_max": 99999,
+      "bind_type": "none",
+      "tradeable": true,
+      "icon": "/assets/items/tianque-lingsha.webp",
+      "description": "九霄劫云沉降后留下的雷性砂晶，是压制劫印底纹的基础材料。",
+      "long_desc": "雷砂会随劫云明灭改变纹路，只有在雷序回落时才能完整收束，是历劫期野外循环与劫印锻底的基础资源。",
+      "tags": [
+        "材料",
+        "功法",
+        "历劫期"
+      ],
+      "source_hint": [
+        "九霄劫台采集",
+        "九霄劫台野外怪",
+        "历劫期日常/周常"
+      ]
+    },
+    {
+      "id": "mat-wanlei-jieyin",
+      "name": "万雷劫印",
+      "category": "material",
+      "sub_category": "breakthrough",
+      "quality": "天",
+      "stack_max": 99999,
+      "bind_type": "none",
+      "tradeable": true,
+      "icon": "/assets/items/zhendao-fayin.webp",
+      "description": "在万雷劫宫承受劫压后凝成的雷劫印记，是证道迈向历劫的核心凭证。",
+      "long_desc": "劫印必须在万雷劫宫的连续雷序中反复压实，既是突破材料，也是判断修士能否承受历劫反照的硬门槛。",
+      "tags": [
+        "材料",
+        "突破",
+        "劫印",
+        "历劫期"
+      ],
+      "source_hint": [
+        "第九章主线",
+        "万雷劫宫",
+        "历劫期周常"
+      ]
     }
   ]
 }
