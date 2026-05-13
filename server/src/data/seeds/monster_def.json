@@ -3672,12 +3672,12 @@
       "attr_multiplier_max": 1.28,
       "ai_profile": {
         "skills": [
-          "sk-jingmang-zhan",
-          "sk-jingjia-fanzhao"
+          "sk-lijie-leisha-dianji",
+          "sk-lijie-jieyun-huishan"
         ],
         "skill_weights": {
-          "sk-jingmang-zhan": 56,
-          "sk-jingjia-fanzhao": 44
+          "sk-lijie-leisha-dianji": 58,
+          "sk-lijie-jieyun-huishan": 42
         }
       },
       "drop_pool_id": "dp-lijie-jieyun-leiling",
@@ -3719,12 +3719,12 @@
       "attr_multiplier_max": 1.28,
       "ai_profile": {
         "skills": [
-          "sk-jingmang-zhan",
-          "sk-jingjia-fanzhao"
+          "sk-lijie-xuanlei-shanying",
+          "sk-lijie-leiying-fengmai"
         ],
         "skill_weights": {
-          "sk-jingmang-zhan": 56,
-          "sk-jingjia-fanzhao": 44
+          "sk-lijie-xuanlei-shanying": 54,
+          "sk-lijie-leiying-fengmai": 46
         }
       },
       "drop_pool_id": "dp-lijie-xuanlei-ying",
@@ -3767,21 +3767,31 @@
       "attr_multiplier_max": 1.78,
       "ai_profile": {
         "skills": [
-          "sk-jingmang-zhan",
-          "sk-beishi-nilin"
+          "sk-lijie-zhenjie-hudun",
+          "sk-lijie-leisha-dianji"
         ],
         "skill_weights": {
-          "sk-jingmang-zhan": 42,
-          "sk-beishi-nilin": 58
+          "sk-lijie-zhenjie-hudun": 56,
+          "sk-lijie-leisha-dianji": 44
         },
         "phase_triggers": [
           {
-            "hp_percent": 0.6,
+            "hp_percent": 0.58,
             "action": "enrage",
             "effects": [
               {
                 "type": "buff",
-                "value": 0.24,
+                "value": 0.18,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-wufang-up",
+                "buffKind": "attr",
+                "attrKey": "wufang",
+                "applyType": "percent"
+              },
+              {
+                "type": "buff",
+                "value": 0.12,
                 "duration": 99,
                 "stacks": 1,
                 "buffKey": "buff-zengshang-up",
@@ -3833,21 +3843,31 @@
       "attr_multiplier_max": 1.78,
       "ai_profile": {
         "skills": [
-          "sk-jingmang-zhan",
-          "sk-beishi-nilin"
+          "sk-lijie-tianlei-faxiang",
+          "sk-lijie-jieyun-huishan"
         ],
         "skill_weights": {
-          "sk-jingmang-zhan": 42,
-          "sk-beishi-nilin": 58
+          "sk-lijie-tianlei-faxiang": 58,
+          "sk-lijie-jieyun-huishan": 42
         },
         "phase_triggers": [
           {
-            "hp_percent": 0.6,
+            "hp_percent": 0.58,
             "action": "enrage",
             "effects": [
               {
                 "type": "buff",
-                "value": 0.24,
+                "value": 0.18,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-fagong-up",
+                "buffKind": "attr",
+                "attrKey": "fagong",
+                "applyType": "percent"
+              },
+              {
+                "type": "buff",
+                "value": 0.12,
                 "duration": 99,
                 "stacks": 1,
                 "buffKey": "buff-zengshang-up",
@@ -3898,12 +3918,12 @@
       "attr_multiplier_max": 1.28,
       "ai_profile": {
         "skills": [
-          "sk-jingmang-zhan",
-          "sk-jingjia-fanzhao"
+          "sk-lijie-jiegong-jiechi",
+          "sk-lijie-leisha-dianji"
         ],
         "skill_weights": {
-          "sk-jingmang-zhan": 56,
-          "sk-jingjia-fanzhao": 44
+          "sk-lijie-jiegong-jiechi": 52,
+          "sk-lijie-leisha-dianji": 48
         }
       },
       "drop_pool_id": "dp-lijie-jiegong-leishi",
@@ -3946,27 +3966,39 @@
       "attr_multiplier_max": 1.78,
       "ai_profile": {
         "skills": [
-          "sk-jingmang-zhan",
-          "sk-beishi-nilin"
+          "sk-lijie-zhenjie-hudun",
+          "sk-lijie-tianlei-faxiang",
+          "sk-lijie-jiegong-jiechi"
         ],
         "skill_weights": {
-          "sk-jingmang-zhan": 42,
-          "sk-beishi-nilin": 58
+          "sk-lijie-zhenjie-hudun": 36,
+          "sk-lijie-tianlei-faxiang": 34,
+          "sk-lijie-jiegong-jiechi": 30
         },
         "phase_triggers": [
           {
-            "hp_percent": 0.6,
+            "hp_percent": 0.52,
             "action": "enrage",
             "effects": [
               {
                 "type": "buff",
-                "value": 0.24,
+                "value": 0.18,
                 "duration": 99,
                 "stacks": 1,
-                "buffKey": "buff-zengshang-up",
+                "buffKey": "buff-wugong-up",
                 "buffKind": "attr",
-                "attrKey": "zengshang",
-                "applyType": "flat"
+                "attrKey": "wugong",
+                "applyType": "percent"
+              },
+              {
+                "type": "buff",
+                "value": 0.18,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-fagong-up",
+                "buffKind": "attr",
+                "attrKey": "fagong",
+                "applyType": "percent"
               }
             ]
           }
@@ -4012,63 +4044,47 @@
       "attr_multiplier_max": 1.94,
       "ai_profile": {
         "skills": [
-          "sk-fantian-mingjing",
-          "sk-xuanjian-zhenmie",
-          "sk-jingyu-duanlv",
-          "sk-zheguang-huilv"
+          "sk-lijie-wanlei-jieyin",
+          "sk-lijie-jieyun-fanshi",
+          "sk-lijie-jiuxiao-zhuihun",
+          "sk-lijie-tianjie-caijue"
         ],
         "skill_weights": {
-          "sk-fantian-mingjing": 28,
-          "sk-xuanjian-zhenmie": 32,
-          "sk-jingyu-duanlv": 24,
-          "sk-zheguang-huilv": 16
+          "sk-lijie-wanlei-jieyin": 32,
+          "sk-lijie-jieyun-fanshi": 22,
+          "sk-lijie-jiuxiao-zhuihun": 28,
+          "sk-lijie-tianjie-caijue": 18
         },
         "phase_triggers": [
           {
             "hp_percent": 0.72,
             "action": "summon",
-            "summon_id": "monster-zhengdao-daogong-shouwei",
+            "summon_id": "monster-lijie-jiegong-leishi",
             "summon_count": 2
           },
           {
-            "hp_percent": 0.56,
+            "hp_percent": 0.55,
             "action": "enrage",
             "effects": [
               {
                 "type": "buff",
-                "value": 0.16,
+                "value": 0.18,
                 "duration": 99,
                 "stacks": 1,
-                "buffKey": "buff-wufang-up",
+                "buffKey": "buff-fagong-up",
                 "buffKind": "attr",
-                "attrKey": "wufang",
+                "attrKey": "fagong",
                 "applyType": "percent"
               },
               {
                 "type": "buff",
-                "value": 0.16,
+                "value": 0.18,
                 "duration": 99,
                 "stacks": 1,
-                "buffKey": "buff-fafang-up",
+                "buffKey": "buff-wugong-up",
                 "buffKind": "attr",
-                "attrKey": "fafang",
+                "attrKey": "wugong",
                 "applyType": "percent"
-              }
-            ]
-          },
-          {
-            "hp_percent": 0.34,
-            "action": "enrage",
-            "effects": [
-              {
-                "type": "buff",
-                "value": 0.2,
-                "duration": 99,
-                "stacks": 1,
-                "buffKey": "buff-zengshang-up",
-                "buffKind": "attr",
-                "attrKey": "zengshang",
-                "applyType": "flat"
               },
               {
                 "type": "buff",
@@ -4078,6 +4094,32 @@
                 "buffKey": "buff-sudu-up",
                 "buffKind": "attr",
                 "attrKey": "sudu",
+                "applyType": "flat"
+              }
+            ]
+          },
+          {
+            "hp_percent": 0.35,
+            "action": "enrage",
+            "effects": [
+              {
+                "type": "buff",
+                "value": 0.22,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-zengshang-up",
+                "buffKind": "attr",
+                "attrKey": "zengshang",
+                "applyType": "flat"
+              },
+              {
+                "type": "buff",
+                "value": 0.18,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-kongzhi-kangxing-up",
+                "buffKind": "attr",
+                "attrKey": "kongzhi_kangxing",
                 "applyType": "flat"
               }
             ]

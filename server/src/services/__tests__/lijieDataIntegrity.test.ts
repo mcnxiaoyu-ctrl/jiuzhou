@@ -41,6 +41,43 @@ import {
 const LIJIE_DUNGEON_FILE = 'dungeon_qi_cultivation_16.json';
 const LIJIE_DUNGEON_ID = 'dungeon-lianxu-wanlei-jiegong';
 const LIJIE_BOSS_ID = 'monster-boss-lijie-wanlei-jiezhu';
+const LIJIE_SKILL_IDS = [
+  'sk-lijie-leisha-dianji',
+  'sk-lijie-jieyun-huishan',
+  'sk-lijie-xuanlei-shanying',
+  'sk-lijie-leiying-fengmai',
+  'sk-lijie-zhenjie-hudun',
+  'sk-lijie-tianlei-faxiang',
+  'sk-lijie-jiegong-jiechi',
+  'sk-lijie-wanlei-jieyin',
+  'sk-lijie-jieyun-fanshi',
+  'sk-lijie-jiuxiao-zhuihun',
+  'sk-lijie-tianjie-caijue',
+] as const;
+const FORBIDDEN_LIJIE_REUSED_SKILL_IDS = new Set([
+  'sk-jingmang-zhan',
+  'sk-jingjia-fanzhao',
+  'sk-beishi-nilin',
+  'sk-fantian-mingjing',
+  'sk-xuanjian-zhenmie',
+  'sk-jingyu-duanlv',
+  'sk-zheguang-huilv',
+]);
+const EXPECTED_LIJIE_MONSTER_SKILLS = new Map<string, readonly string[]>([
+  ['monster-lijie-jieyun-leiling', ['sk-lijie-leisha-dianji', 'sk-lijie-jieyun-huishan']],
+  ['monster-lijie-xuanlei-ying', ['sk-lijie-xuanlei-shanying', 'sk-lijie-leiying-fengmai']],
+  ['monster-elite-lijie-zhenjie-liwei', ['sk-lijie-zhenjie-hudun', 'sk-lijie-leisha-dianji']],
+  ['monster-elite-lijie-tianlei-faxiang', ['sk-lijie-tianlei-faxiang', 'sk-lijie-jieyun-huishan']],
+  ['monster-lijie-jiegong-leishi', ['sk-lijie-jiegong-jiechi', 'sk-lijie-leisha-dianji']],
+  [
+    'monster-elite-lijie-dujie-tianjiang',
+    ['sk-lijie-zhenjie-hudun', 'sk-lijie-tianlei-faxiang', 'sk-lijie-jiegong-jiechi'],
+  ],
+  [
+    LIJIE_BOSS_ID,
+    ['sk-lijie-wanlei-jieyin', 'sk-lijie-jieyun-fanshi', 'sk-lijie-jiuxiao-zhuihun', 'sk-lijie-tianjie-caijue'],
+  ],
+]);
 const LIJIE_SET_IDS = ['set-jiexiao', 'set-yulei', 'set-duanye'] as const;
 const LIJIE_SET_ITEM_IDS = {
   all: new Set([
@@ -135,6 +172,81 @@ test('历劫期主线、地图、秘境与任务应统一处于开放态', async
   assert.ok(weeklyTask, '缺少历劫期周常任务定义');
   assert.equal(weeklyTask?.enabled, true, '历劫期周常任务应开放');
   assert.notEqual(await getTaskDefinitionById('task-lijie-weekly-001'), null, '运行时应暴露历劫期周常任务');
+});
+
+test('历劫期技能应使用雷劫主题机制且只依赖现有战斗效果类型', () => {
+  const skillSeed = loadSeed('skill_def.json');
+  const skillById = buildObjectMap(asArray(skillSeed.skills), 'id');
+
+  for (const skillId of LIJIE_SKILL_IDS) {
+    const skill = skillById.get(skillId);
+    assert.ok(skill, `缺少历劫技能: ${skillId}`);
+    assert.notEqual(skill?.enabled, false, `${skillId} enabled 字段允许省略；如配置则不能为 false`);
+    assert.equal(asText(skill?.source_type), 'innate', `${skillId} 应为怪物 innate 技能`);
+  }
+
+  const leisha = skillById.get('sk-lijie-jieyun-huishan');
+  const leishaEffects = asArray(leisha?.effects).map((entry) => asObject(entry));
+  assert.equal(leishaEffects.some((effect) => asText(effect?.buffKind) === 'dot'), true, '劫云回闪应包含雷砂 DOT');
+
+  const shadow = skillById.get('sk-lijie-leiying-fengmai');
+  const shadowEffects = asArray(shadow?.effects).map((entry) => asObject(entry));
+  assert.equal(
+    shadowEffects.some((effect) => asText(effect?.type) === 'control' && asText(effect?.controlType) === 'silence'),
+    true,
+    '雷影封脉应包含沉默控制',
+  );
+
+  const guard = skillById.get('sk-lijie-zhenjie-hudun');
+  const guardEffects = asArray(guard?.effects).map((entry) => asObject(entry));
+  assert.equal(guardEffects.some((effect) => asText(effect?.type) === 'shield'), true, '镇劫护盾应包含护盾');
+  assert.equal(guardEffects.some((effect) => asText(effect?.buffKind) === 'reflect_damage'), true, '镇劫护盾应包含反伤');
+
+  const bossJudgement = skillById.get('sk-lijie-tianjie-caijue');
+  const bossJudgementEffects = asArray(bossJudgement?.effects).map((entry) => asObject(entry));
+  assert.equal(
+    bossJudgementEffects.some((effect) => asText(effect?.type) === 'control' && asText(effect?.controlType) === 'stun'),
+    true,
+    '天劫裁决应包含低概率眩晕',
+  );
+});
+
+test('历劫期怪物应全部切换为雷劫主题技能，且不再引用证道镜律技能', () => {
+  const monsterSeed = loadSeed('monster_def.json');
+  const monsterById = buildObjectMap(asArray(monsterSeed.monsters), 'id');
+
+  for (const [monsterId, expectedSkills] of EXPECTED_LIJIE_MONSTER_SKILLS) {
+    const monster = monsterById.get(monsterId);
+    assert.ok(monster, `缺少历劫怪物: ${monsterId}`);
+    const aiProfile = asObject(monster?.ai_profile);
+    const skills = asArray(aiProfile?.skills).map((entry) => asText(entry)).filter(Boolean);
+    assert.deepEqual(skills, expectedSkills, `${monsterId} 技能列表不符合雷劫机制设计`);
+    for (const skillId of skills) {
+      assert.equal(FORBIDDEN_LIJIE_REUSED_SKILL_IDS.has(skillId), false, `${monsterId} 不应继续引用证道技能 ${skillId}`);
+    }
+    const weights = asObject(aiProfile?.skill_weights);
+    for (const skillId of expectedSkills) {
+      assert.ok(Number(weights?.[skillId] ?? 0) > 0, `${monsterId} 缺少技能权重: ${skillId}`);
+    }
+  }
+});
+
+test('万雷劫主阶段机制应召唤历劫怪并进入两段雷劫强化', () => {
+  const monsterSeed = loadSeed('monster_def.json');
+  const monsterById = buildObjectMap(asArray(monsterSeed.monsters), 'id');
+  const boss = monsterById.get(LIJIE_BOSS_ID);
+  const triggers = asArray(asObject(boss?.ai_profile)?.phase_triggers).map((entry) => asObject(entry));
+
+  assert.equal(triggers.length, 3, '万雷劫主应包含3段阶段触发');
+  assert.equal(Number(triggers[0]?.hp_percent ?? 0), 0.72);
+  assert.equal(asText(triggers[0]?.action), 'summon');
+  assert.equal(asText(triggers[0]?.summon_id), 'monster-lijie-jiegong-leishi');
+  assert.equal(Number(triggers[0]?.summon_count ?? 0), 2);
+
+  assert.equal(Number(triggers[1]?.hp_percent ?? 0), 0.55);
+  assert.equal(asText(triggers[1]?.action), 'enrage');
+  assert.equal(Number(triggers[2]?.hp_percent ?? 0), 0.35);
+  assert.equal(asText(triggers[2]?.action), 'enrage');
 });
 
 test('第九章主线目标应只引用已存在地图/NPC/怪物/物品/秘境', () => {
@@ -446,5 +558,5 @@ test('历劫期地图怪与 Boss 应属于正确境界，且 Boss 可被运行�
   if (!resolved.success) return;
 
   const bossSkills = resolved.monsterSkillsMap[LIJIE_BOSS_ID] ?? [];
-  assert.ok(bossSkills.some((skill) => skill.id === 'sk-fantian-mingjing'), '万雷劫主应携带返天明镜运行时技能');
+  assert.ok(bossSkills.some((skill) => skill.id === 'sk-lijie-jieyun-fanshi'), '万雷劫主应携带劫云反噬运行时技能');
 });

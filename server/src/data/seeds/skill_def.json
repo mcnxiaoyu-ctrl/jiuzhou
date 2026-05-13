@@ -4040,6 +4040,429 @@
       "ai_priority": 86,
       "sort_weight": 430,
       "enabled": true
+    },
+    {
+      "id": "sk-lijie-leisha-dianji",
+      "code": "sk_lijie_leisha_dianji",
+      "name": "雷砂电击",
+      "description": "劫云雷砂凝成电弧，击穿单体并压低身法。",
+      "icon": "/assets/skills/icon_skill_36.png",
+      "source_type": "innate",
+      "cost_lingqi": 24,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.34
+        },
+        {
+          "type": "debuff",
+          "duration": 2,
+          "value": 1.8,
+          "buffKey": "debuff-sudu-down",
+          "buffKind": "attr",
+          "attrKey": "sudu",
+          "applyType": "flat"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 78,
+      "sort_weight": 460,
+      "enabled": true
+    },
+    {
+      "id": "sk-lijie-jieyun-huishan",
+      "code": "sk_lijie_jieyun_huishan",
+      "name": "劫云回闪",
+      "description": "劫云回照全场，在敌阵中留下持续雷砂灼蚀。",
+      "icon": "/assets/skills/icon_skill_37.png",
+      "source_type": "innate",
+      "cost_lingqi": 30,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.68
+        },
+        {
+          "type": "debuff",
+          "duration": 2,
+          "value": 42,
+          "bonusTargetMaxQixueRate": 0.006,
+          "chance": 0.72,
+          "buffKey": "debuff-lijie-leisha-dot",
+          "buffKind": "dot"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 84,
+      "sort_weight": 461,
+      "enabled": true
+    },
+    {
+      "id": "sk-lijie-xuanlei-shanying",
+      "code": "sk_lijie_xuanlei_shanying",
+      "name": "玄雷闪影",
+      "description": "玄雷影掠过目标后短暂虚化，规避下一次攻击。",
+      "icon": "/assets/skills/icon_skill_38.png",
+      "source_type": "innate",
+      "cost_lingqi": 24,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.28
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "duration": 1,
+          "stacks": 1,
+          "buffKey": "buff-dodge-next",
+          "buffKind": "dodge_next"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 82,
+      "sort_weight": 462,
+      "enabled": true
+    },
+    {
+      "id": "sk-lijie-leiying-fengmai",
+      "code": "sk_lijie_leiying_fengmai",
+      "name": "雷影封脉",
+      "description": "玄雷封锁经脉，造成法伤并有概率沉默目标。",
+      "icon": "/assets/skills/icon_skill_39.png",
+      "source_type": "innate",
+      "cost_lingqi": 28,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.18
+        },
+        {
+          "type": "control",
+          "controlType": "silence",
+          "duration": 1,
+          "chance": 0.36
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 86,
+      "sort_weight": 463,
+      "enabled": true
+    },
+    {
+      "id": "sk-lijie-zhenjie-hudun",
+      "code": "sk_lijie_zhenjie_hudun",
+      "name": "镇劫护盾",
+      "description": "镇劫雷纹护住自身，并把部分来袭伤害返照给攻击者。",
+      "icon": "/assets/skills/icon_skill_34.png",
+      "source_type": "innate",
+      "cost_lingqi": 30,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "self",
+      "target_count": 1,
+      "damage_type": "none",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "shield",
+          "valueType": "scale",
+          "scaleAttr": "max_qixue",
+          "scaleRate": 0.16,
+          "duration": 2
+        },
+        {
+          "type": "buff",
+          "duration": 2,
+          "value": 0.34,
+          "buffKey": "buff-reflect-damage",
+          "buffKind": "reflect_damage"
+        },
+        {
+          "type": "buff",
+          "duration": 2,
+          "value": 0.12,
+          "buffKey": "buff-wufang-up",
+          "buffKind": "attr",
+          "attrKey": "wufang",
+          "applyType": "percent"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 90,
+      "sort_weight": 464,
+      "enabled": true
+    },
+    {
+      "id": "sk-lijie-tianlei-faxiang",
+      "code": "sk_lijie_tianlei_faxiang",
+      "name": "天雷法相",
+      "description": "天雷法相压落全场，削弱法防并短暂定身。",
+      "icon": "/assets/skills/icon_skill_40.png",
+      "source_type": "innate",
+      "cost_lingqi": 34,
+      "cost_qixue": 0,
+      "cooldown": 6,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.82
+        },
+        {
+          "type": "debuff",
+          "duration": 2,
+          "value": 0.14,
+          "buffKey": "debuff-fafang-down",
+          "buffKind": "attr",
+          "attrKey": "fafang",
+          "applyType": "percent"
+        },
+        {
+          "type": "control",
+          "controlType": "root",
+          "duration": 1,
+          "chance": 0.28
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 88,
+      "sort_weight": 465,
+      "enabled": true
+    },
+    {
+      "id": "sk-lijie-jiegong-jiechi",
+      "code": "sk_lijie_jiegong_jiechi",
+      "name": "劫宫戒敕",
+      "description": "劫宫雷敕斩断敌方兵势，并有概率缴械。",
+      "icon": "/assets/skills/icon_skill_41.png",
+      "source_type": "innate",
+      "cost_lingqi": 28,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.44
+        },
+        {
+          "type": "control",
+          "controlType": "disarm",
+          "duration": 1,
+          "chance": 0.32
+        },
+        {
+          "type": "debuff",
+          "duration": 2,
+          "value": 0.12,
+          "buffKey": "debuff-wufang-down",
+          "buffKind": "attr",
+          "attrKey": "wufang",
+          "applyType": "percent"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 84,
+      "sort_weight": 466,
+      "enabled": true
+    },
+    {
+      "id": "sk-lijie-wanlei-jieyin",
+      "code": "sk_lijie_wanlei_jieyin",
+      "name": "万雷劫印",
+      "description": "万雷劫印压落敌阵，造成群体雷伤并留下雷砂灼蚀。",
+      "icon": "/assets/skills/icon_skill_42.png",
+      "source_type": "innate",
+      "cost_lingqi": 38,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.88
+        },
+        {
+          "type": "debuff",
+          "duration": 3,
+          "value": 58,
+          "bonusTargetMaxQixueRate": 0.008,
+          "chance": 0.78,
+          "buffKey": "debuff-lijie-leisha-dot",
+          "buffKind": "dot"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 90,
+      "sort_weight": 467,
+      "enabled": true
+    },
+    {
+      "id": "sk-lijie-jieyun-fanshi",
+      "code": "sk_lijie_jieyun_fanshi",
+      "name": "劫云反噬",
+      "description": "劫云反照自身，形成护盾并反弹来袭伤害。",
+      "icon": "/assets/skills/icon_skill_34.png",
+      "source_type": "innate",
+      "cost_lingqi": 36,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "self",
+      "target_count": 1,
+      "damage_type": "none",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "shield",
+          "valueType": "scale",
+          "scaleAttr": "max_qixue",
+          "scaleRate": 0.14,
+          "duration": 2
+        },
+        {
+          "type": "buff",
+          "duration": 2,
+          "value": 0.42,
+          "buffKey": "buff-reflect-damage",
+          "buffKind": "reflect_damage"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 92,
+      "sort_weight": 468,
+      "enabled": true
+    },
+    {
+      "id": "sk-lijie-jiuxiao-zhuihun",
+      "code": "sk_lijie_jiuxiao_zhuihun",
+      "name": "九霄追魂",
+      "description": "雷光追索两名敌人，击中后有概率封住灵脉。",
+      "icon": "/assets/skills/icon_skill_43.png",
+      "source_type": "innate",
+      "cost_lingqi": 34,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "random_enemy",
+      "target_count": 2,
+      "damage_type": "magic",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.12
+        },
+        {
+          "type": "control",
+          "controlType": "silence",
+          "duration": 1,
+          "chance": 0.28
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 86,
+      "sort_weight": 469,
+      "enabled": true
+    },
+    {
+      "id": "sk-lijie-tianjie-caijue",
+      "code": "sk_lijie_tianjie_caijue",
+      "name": "天劫裁决",
+      "description": "终劫雷霆裁决全场，压低双防并有低概率眩晕。",
+      "icon": "/assets/skills/icon_skill_44.png",
+      "source_type": "innate",
+      "cost_lingqi": 42,
+      "cost_qixue": 0,
+      "cooldown": 7,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "lei",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.02
+        },
+        {
+          "type": "debuff",
+          "duration": 2,
+          "value": 0.14,
+          "buffKey": "debuff-wufang-down",
+          "buffKind": "attr",
+          "attrKey": "wufang",
+          "applyType": "percent"
+        },
+        {
+          "type": "debuff",
+          "duration": 2,
+          "value": 0.14,
+          "buffKey": "debuff-fafang-down",
+          "buffKind": "attr",
+          "attrKey": "fafang",
+          "applyType": "percent"
+        },
+        {
+          "type": "control",
+          "controlType": "stun",
+          "duration": 1,
+          "chance": 0.18
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 94,
+      "sort_weight": 470,
+      "enabled": true
     }
   ]
 }
