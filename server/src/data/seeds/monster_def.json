@@ -4058,14 +4058,31 @@
         "phase_triggers": [
           {
             "hp_percent": 0.72,
-            "action": "summon",
+            "action": "tribulation",
+            "self_effects": [
+              {
+                "type": "shield",
+                "valueType": "scale",
+                "scaleAttr": "max_qixue",
+                "scaleRate": 0.08,
+                "duration": 2
+              },
+              {
+                "type": "buff",
+                "value": 0.16,
+                "duration": 2,
+                "stacks": 1,
+                "buffKey": "buff-lijie-jieguang-fantan",
+                "buffKind": "reflect_damage"
+              }
+            ],
             "summon_id": "monster-lijie-jiegong-leishi",
             "summon_count": 2
           },
           {
             "hp_percent": 0.55,
-            "action": "enrage",
-            "effects": [
+            "action": "tribulation",
+            "self_effects": [
               {
                 "type": "buff",
                 "value": 0.18,
@@ -4088,7 +4105,7 @@
               },
               {
                 "type": "buff",
-                "value": 1,
+                "value": 10,
                 "duration": 99,
                 "stacks": 1,
                 "buffKey": "buff-sudu-up",
@@ -4096,12 +4113,35 @@
                 "attrKey": "sudu",
                 "applyType": "flat"
               }
-            ]
+            ],
+            "enemy_effects": [
+              {
+                "type": "debuff",
+                "value": 20,
+                "duration": 2,
+                "stacks": 1,
+                "buffKey": "debuff-lijie-jieya-sudu-down",
+                "buffKind": "attr",
+                "attrKey": "sudu",
+                "applyType": "flat"
+              },
+              {
+                "type": "debuff",
+                "value": 0.12,
+                "duration": 2,
+                "stacks": 1,
+                "buffKey": "debuff-lijie-jieya-fafang-down",
+                "buffKind": "attr",
+                "attrKey": "fafang",
+                "applyType": "percent"
+              }
+            ],
+            "cast_skill_id": "sk-lijie-wanlei-jieyin"
           },
           {
             "hp_percent": 0.35,
-            "action": "enrage",
-            "effects": [
+            "action": "tribulation",
+            "self_effects": [
               {
                 "type": "buff",
                 "value": 0.22,
@@ -4122,7 +4162,42 @@
                 "attrKey": "kongzhi_kangxing",
                 "applyType": "flat"
               }
-            ]
+            ],
+            "enemy_effects": [
+              {
+                "type": "debuff",
+                "value": 0.14,
+                "duration": 2,
+                "stacks": 1,
+                "buffKey": "debuff-lijie-tianwei-wufang-down",
+                "buffKind": "attr",
+                "attrKey": "wufang",
+                "applyType": "percent"
+              },
+              {
+                "type": "debuff",
+                "value": 0.14,
+                "duration": 2,
+                "stacks": 1,
+                "buffKey": "debuff-lijie-tianwei-fafang-down",
+                "buffKind": "attr",
+                "attrKey": "fafang",
+                "applyType": "percent"
+              },
+              {
+                "type": "debuff",
+                "value": 58,
+                "duration": 2,
+                "stacks": 1,
+                "buffKey": "debuff-lijie-leihen-dot",
+                "buffKind": "dot",
+                "damageType": "true",
+                "element": "lei",
+                "bonusTargetMaxQixueRate": 0.008,
+                "chance": 1
+              }
+            ],
+            "cast_skill_id": "sk-lijie-tianjie-caijue"
           }
         ]
       },

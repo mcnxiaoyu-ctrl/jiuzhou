@@ -59,7 +59,9 @@ import {
 
 // ------ 常量 ------
 
-const MONSTER_PHASE_ACTION_SET = new Set(["enrage", "summon"]);
+const MONSTER_PHASE_ACTION_SET = new Set(["enrage", "summon", "tribulation"]);
+const PHASE_EFFECT_VALUE_TYPE_SET = new Set(["flat", "percent", "scale", "combined"]);
+const PHASE_EFFECT_DAMAGE_TYPE_SET = new Set(["physical", "magic", "true"]);
 
 // ------ 内部类型 ------
 
@@ -252,6 +254,199 @@ export function parsePhaseEffects(
   return { success: true, effects };
 }
 
+function normalizePhaseEffectValueType(value: string): SkillEffect["valueType"] | null {
+  return PHASE_EFFECT_VALUE_TYPE_SET.has(value)
+    ? (value as SkillEffect["valueType"])
+    : null;
+}
+
+function normalizePhaseEffectDamageType(value: string): SkillEffect["damageType"] | null {
+  return PHASE_EFFECT_DAMAGE_TYPE_SET.has(value)
+    ? (value as SkillEffect["damageType"])
+    : null;
+}
+
+function parsePhaseDuration(effect: Record<string, unknown>): number {
+  const durationRaw = toNumber(effect.duration);
+  return durationRaw === null ? 1 : Math.max(1, Math.floor(durationRaw));
+}
+
+function parsePhaseStacks(effect: Record<string, unknown>): number {
+  const stacksRaw = toNumber(effect.stacks);
+  return stacksRaw === null ? 1 : Math.max(1, Math.floor(stacksRaw));
+}
+
+function parseTribulationPhaseEffects(
+  raw: unknown,
+  monsterId: string,
+  triggerIndex: number,
+  fieldName: "self_effects" | "enemy_effects",
+):
+  | { success: true; effects: SkillEffect[] }
+  | { success: false; error: string } {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return { success: true, effects: [] };
+  }
+
+  const effects: SkillEffect[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const effect = toRecord(raw[i]);
+    const effectType = toText(effect.type);
+    const duration = parsePhaseDuration(effect);
+
+    if (effectType === "shield") {
+      const valueTypeRaw = toText(effect.valueType);
+      const valueType = valueTypeRaw
+        ? normalizePhaseEffectValueType(valueTypeRaw)
+        : "flat";
+      if (!valueType) {
+        return {
+          success: false,
+          error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个effect的valueType非法: ${valueTypeRaw}`,
+        };
+      }
+
+      const value = toNumber(effect.value);
+      const scaleAttr = toText(effect.scaleAttr);
+      const scaleRate = toNumber(effect.scaleRate);
+      if (valueType === "scale" && (!scaleAttr || scaleRate === null || scaleRate <= 0)) {
+        return {
+          success: false,
+          error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个护盾缺少合法scaleAttr/scaleRate`,
+        };
+      }
+      if (valueType !== "scale" && (value === null || value <= 0)) {
+        return {
+          success: false,
+          error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个护盾value必须>0`,
+        };
+      }
+
+      effects.push({
+        type: "shield",
+        value: value ?? undefined,
+        valueType,
+        scaleAttr: scaleAttr || undefined,
+        scaleRate: scaleRate ?? undefined,
+        duration,
+      });
+      continue;
+    }
+
+    if (effectType !== "buff" && effectType !== "debuff") {
+      return {
+        success: false,
+        error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个effect仅支持shield/buff/debuff`,
+      };
+    }
+
+    const buffKind = normalizeBuffKind(effect.buffKind);
+    const value = toNumber(effect.value);
+    if (value === null || value <= 0) {
+      return {
+        success: false,
+        error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个effect的value必须>0`,
+      };
+    }
+
+    if (buffKind === "attr") {
+      const attrKey = normalizeBuffAttrKey(toText(effect.attrKey));
+      if (!attrKey) {
+        return {
+          success: false,
+          error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个属性效果缺少合法attrKey`,
+        };
+      }
+
+      const applyTypeRaw = toText(effect.applyType);
+      const applyType = applyTypeRaw ? normalizeBuffApplyType(applyTypeRaw) : null;
+      if (applyTypeRaw && !applyType) {
+        return {
+          success: false,
+          error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个属性效果applyType非法: ${applyTypeRaw}`,
+        };
+      }
+
+      const buffKeyRaw = toText(effect.buffKey);
+      const buffKey = buffKeyRaw || resolveBuffEffectKey({
+        type: effectType,
+        buffKind: "attr",
+        attrKey,
+      });
+      effects.push({
+        type: effectType,
+        buffKind: "attr",
+        buffKey,
+        attrKey,
+        applyType: applyType ?? undefined,
+        value,
+        duration,
+        stacks: parsePhaseStacks(effect),
+      });
+      continue;
+    }
+
+    if (buffKind === "dot") {
+      if (effectType !== "debuff") {
+        return {
+          success: false,
+          error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个dot必须为debuff`,
+        };
+      }
+      const damageTypeRaw = toText(effect.damageType);
+      const damageType = damageTypeRaw
+        ? normalizePhaseEffectDamageType(damageTypeRaw)
+        : "true";
+      if (!damageType) {
+        return {
+          success: false,
+          error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个dot伤害类型非法: ${damageTypeRaw}`,
+        };
+      }
+      const bonusTargetMaxQixueRate = toNumber(effect.bonusTargetMaxQixueRate);
+      const chance = toNumber(effect.chance);
+      effects.push({
+        type: "debuff",
+        buffKind: "dot",
+        buffKey: toText(effect.buffKey) || `debuff-${monsterId}-phase-dot`,
+        value,
+        duration,
+        stacks: parsePhaseStacks(effect),
+        damageType,
+        element: toText(effect.element) || undefined,
+        bonusTargetMaxQixueRate: bonusTargetMaxQixueRate ?? undefined,
+        chance: chance ?? undefined,
+      });
+      continue;
+    }
+
+    if (buffKind === "reflect_damage") {
+      if (effectType !== "buff") {
+        return {
+          success: false,
+          error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个反伤必须为buff`,
+        };
+      }
+      effects.push({
+        type: "buff",
+        buffKind: "reflect_damage",
+        buffKey: toText(effect.buffKey) || "buff-reflect-damage",
+        value,
+        duration,
+        stacks: parsePhaseStacks(effect),
+      });
+      continue;
+    }
+
+    return {
+      success: false,
+      error: `怪物[${monsterId}] 第${triggerIndex}条历劫机制${fieldName}第${i + 1}个buffKind非法: ${toText(effect.buffKind)}`,
+    };
+  }
+
+  return { success: true, effects };
+}
+
 // ------ 核心递归解析 ------
 
 export function resolveMonsterRuntime(
@@ -356,7 +551,101 @@ export function resolveMonsterRuntime(
         hpPercent: hpPercentRaw,
         action: "enrage",
         effects: effectResult.effects,
+        selfEffects: [],
+        enemyEffects: [],
         summonCount: 1,
+      });
+      continue;
+    }
+
+    if (action === "tribulation") {
+      const selfEffectResult = parseTribulationPhaseEffects(
+        triggerRaw.self_effects,
+        monsterId,
+        i + 1,
+        "self_effects",
+      );
+      if (!selfEffectResult.success) {
+        resolvingPath.delete(monsterId);
+        return { success: false, error: selfEffectResult.error };
+      }
+      const enemyEffectResult = parseTribulationPhaseEffects(
+        triggerRaw.enemy_effects,
+        monsterId,
+        i + 1,
+        "enemy_effects",
+      );
+      if (!enemyEffectResult.success) {
+        resolvingPath.delete(monsterId);
+        return { success: false, error: enemyEffectResult.error };
+      }
+
+      const castSkillId = toText(triggerRaw.cast_skill_id);
+      const castSkillDef = castSkillId ? skillDefMap.get(castSkillId) : null;
+      if (castSkillId && (!castSkillDef || castSkillDef.enabled === false)) {
+        resolvingPath.delete(monsterId);
+        return {
+          success: false,
+          error: `怪物[${monsterId}] 第${i + 1}条历劫机制引用了不存在的技能: ${castSkillId}`,
+        };
+      }
+
+      const summonMonsterId = toText(triggerRaw.summon_id);
+      let summonCount = 1;
+      let summonTemplate: MonsterAIPhaseTrigger["summonTemplate"];
+      if (summonMonsterId) {
+        const summonCountRaw = toNumber(triggerRaw.summon_count);
+        summonCount =
+          summonCountRaw === null ? 1 : Math.max(1, Math.floor(summonCountRaw));
+        const summonResult = resolveMonsterRuntime(
+          summonMonsterId,
+          monsterDefMap,
+          skillDefMap,
+          cache,
+          resolvingPath,
+        );
+        if (!summonResult.success) {
+          resolvingPath.delete(monsterId);
+          return { success: false, error: summonResult.error };
+        }
+        summonTemplate = {
+          id: summonMonsterId,
+          name: summonResult.entry.monster.name,
+          realm: summonResult.entry.monster.realm,
+          element: summonResult.entry.monster.element,
+          baseAttrs: { ...summonResult.entry.attrs },
+          skills: summonResult.entry.battleSkills.map((skill) =>
+            cloneBattleSkill(skill),
+          ),
+          aiProfile: summonResult.entry.aiProfile,
+        };
+      }
+
+      if (
+        selfEffectResult.effects.length === 0
+        && enemyEffectResult.effects.length === 0
+        && !summonTemplate
+        && !castSkillDef
+      ) {
+        resolvingPath.delete(monsterId);
+        return {
+          success: false,
+          error: `怪物[${monsterId}] 第${i + 1}条历劫机制至少需要配置一个效果/召唤/立即技能`,
+        };
+      }
+
+      phaseTriggers.push({
+        id: triggerId,
+        hpPercent: hpPercentRaw,
+        action: "tribulation",
+        effects: [],
+        selfEffects: selfEffectResult.effects,
+        enemyEffects: enemyEffectResult.effects,
+        castSkillId: castSkillId || undefined,
+        castSkill: castSkillDef ? toBattleSkill(toBattleSkillData(castSkillDef)) : undefined,
+        summonMonsterId: summonMonsterId || undefined,
+        summonCount,
+        summonTemplate,
       });
       continue;
     }
@@ -388,6 +677,8 @@ export function resolveMonsterRuntime(
       hpPercent: hpPercentRaw,
       action: "summon",
       effects: [],
+      selfEffects: [],
+      enemyEffects: [],
       summonMonsterId,
       summonCount,
       summonTemplate: {

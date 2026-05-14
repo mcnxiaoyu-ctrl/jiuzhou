@@ -231,7 +231,7 @@ test('历劫期怪物应全部切换为雷劫主题技能，且不再引用证�
   }
 });
 
-test('万雷劫主阶段机制应召唤历劫怪并进入两段雷劫强化', () => {
+test('万雷劫主阶段机制应组合召唤、压速、群体劫压与立即裁决', () => {
   const monsterSeed = loadSeed('monster_def.json');
   const monsterById = buildObjectMap(asArray(monsterSeed.monsters), 'id');
   const boss = monsterById.get(LIJIE_BOSS_ID);
@@ -239,14 +239,55 @@ test('万雷劫主阶段机制应召唤历劫怪并进入两段雷劫强化', ()
 
   assert.equal(triggers.length, 3, '万雷劫主应包含3段阶段触发');
   assert.equal(Number(triggers[0]?.hp_percent ?? 0), 0.72);
-  assert.equal(asText(triggers[0]?.action), 'summon');
+  assert.equal(asText(triggers[0]?.action), 'tribulation');
   assert.equal(asText(triggers[0]?.summon_id), 'monster-lijie-jiegong-leishi');
   assert.equal(Number(triggers[0]?.summon_count ?? 0), 2);
+  assert.equal(
+    asArray(triggers[0]?.self_effects).some((effect) => asText(asObject(effect)?.type) === 'shield'),
+    true,
+    '72% 阶段应有自保护盾，而不是只召唤',
+  );
+  assert.equal(
+    asArray(triggers[0]?.self_effects).some((effect) => asText(asObject(effect)?.buffKind) === 'reflect_damage'),
+    true,
+    '72% 阶段应有反伤劫光，形成召唤后的防守窗口',
+  );
 
   assert.equal(Number(triggers[1]?.hp_percent ?? 0), 0.55);
-  assert.equal(asText(triggers[1]?.action), 'enrage');
+  assert.equal(asText(triggers[1]?.action), 'tribulation');
+  assert.equal(asText(triggers[1]?.cast_skill_id), 'sk-lijie-wanlei-jieyin');
+  const midSelfEffects = asArray(triggers[1]?.self_effects).map((entry) => asObject(entry));
+  const midEnemyEffects = asArray(triggers[1]?.enemy_effects).map((entry) => asObject(entry));
+  assert.equal(
+    midSelfEffects.some((effect) => asText(effect?.attrKey) === 'sudu' && Number(effect?.value ?? 0) === 10),
+    true,
+    '55% 阶段 Boss 提速应为 +10',
+  );
+  assert.equal(
+    midEnemyEffects.some((effect) => asText(effect?.attrKey) === 'sudu' && Number(effect?.value ?? 0) === 20),
+    true,
+    '55% 阶段敌方压速应为 -20',
+  );
+
   assert.equal(Number(triggers[2]?.hp_percent ?? 0), 0.35);
-  assert.equal(asText(triggers[2]?.action), 'enrage');
+  assert.equal(asText(triggers[2]?.action), 'tribulation');
+  assert.equal(asText(triggers[2]?.cast_skill_id), 'sk-lijie-tianjie-caijue');
+  const lowEnemyEffects = asArray(triggers[2]?.enemy_effects).map((entry) => asObject(entry));
+  assert.equal(
+    lowEnemyEffects.some((effect) => asText(effect?.buffKind) === 'dot'),
+    true,
+    '35% 阶段应施加雷痕 DOT，不能只是自身加成',
+  );
+  assert.equal(
+    lowEnemyEffects.some((effect) => asText(effect?.attrKey) === 'wufang' && Number(effect?.value ?? 0) === 0.14),
+    true,
+    '35% 阶段应压低物防',
+  );
+  assert.equal(
+    lowEnemyEffects.some((effect) => asText(effect?.attrKey) === 'fafang' && Number(effect?.value ?? 0) === 0.14),
+    true,
+    '35% 阶段应压低法防',
+  );
 });
 
 test('第九章主线目标应只引用已存在地图/NPC/怪物/物品/秘境', () => {
@@ -559,4 +600,12 @@ test('历劫期地图怪与 Boss 应属于正确境界，且 Boss 可被运行�
 
   const bossSkills = resolved.monsterSkillsMap[LIJIE_BOSS_ID] ?? [];
   assert.ok(bossSkills.some((skill) => skill.id === 'sk-lijie-jieyun-fanshi'), '万雷劫主应携带劫云反噬运行时技能');
+
+  const runtimeTriggers = resolved.monsters[0]?.ai_profile?.phaseTriggers ?? [];
+  assert.equal(runtimeTriggers.length, 3, '万雷劫主运行时应解析出3段阶段机制');
+  assert.equal(runtimeTriggers.every((trigger) => trigger.action === 'tribulation'), true, 'Boss 阶段触发运行时应全部为历劫机制');
+  assert.equal(runtimeTriggers[0]?.summonTemplate?.id, 'monster-lijie-jiegong-leishi', '72% 阶段运行时应解析召唤模板');
+  assert.equal(runtimeTriggers[1]?.selfEffects.some((effect) => effect.attrKey === 'sudu' && effect.value === 10), true, '55% 阶段运行时应保留 +10 速度');
+  assert.equal(runtimeTriggers[1]?.enemyEffects.some((effect) => effect.attrKey === 'sudu' && effect.value === 20), true, '55% 阶段运行时应保留 -20 压速值');
+  assert.equal(runtimeTriggers[2]?.castSkill?.id, 'sk-lijie-tianjie-caijue', '35% 阶段运行时应解析立即裁决技能');
 });

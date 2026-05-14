@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import type { SkillEffect } from '../battle/types.js';
 import {
   getGeneratedSkillDefinitions,
   getGeneratedTechniqueDefinitions,
@@ -244,7 +245,10 @@ export type MapDefConfig = {
 export type MonsterPhaseTriggerConfig = {
   hp_percent?: number;
   action?: string;
-  effects?: unknown[];
+  effects?: SkillEffect[];
+  self_effects?: SkillEffect[];
+  enemy_effects?: SkillEffect[];
+  cast_skill_id?: string;
   summon_id?: string;
   summon_count?: number;
 };

@@ -6,6 +6,7 @@
 import type {
   BattleState,
   BattleUnit,
+  BattleAttrs,
   RoundLog,
   ActionLog,
   AttrModifier,
@@ -17,7 +18,7 @@ import type {
 import { BATTLE_CONSTANTS } from './types.js';
 import { appendBattleLog } from './logStream.js';
 import { validateBattleState, validateSkillUse, validatePlayerAction } from './utils/validation.js';
-import { addBuff, processRoundStartEffects, processRoundEndBuffs } from './modules/buff.js';
+import { addBuff, addShield, processRoundStartEffects, processRoundEndBuffs } from './modules/buff.js';
 import { executeSkill, getNormalAttack } from './modules/skill.js';
 import { makeAIDecision, makePartnerSkillPolicyDecision, selectTargets } from './modules/ai.js';
 import { isFeared, isStunned } from './modules/control.js';
@@ -47,6 +48,9 @@ import type { BattleSkill } from './types.js';
 export type PlayerSkillSelector = (unit: BattleUnit) => BattleSkill;
 const PHASE_PERCENT_BUFF_ATTR_SET = DEFAULT_PERCENT_BUFF_ATTR_SET;
 type BuffOrDebuffEffect = SkillEffect & { type: 'buff' | 'debuff' };
+type PhaseApplicableEffect = SkillEffect & { type: 'shield' | 'buff' | 'debuff' };
+type PhaseBuffOrDebuffEffect = SkillEffect & { type: 'buff' | 'debuff' };
+type PhaseBattleAttrKey = keyof BattleAttrs;
 
 function toFiniteNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -69,6 +73,44 @@ function buildPhaseAttrModifiers(effect: BuffOrDebuffEffect): AttrModifier[] {
     ?? (PHASE_PERCENT_BUFF_ATTR_SET.has(attr) ? 'percent' : 'flat');
 
   return [{ attr, value: finalValue, mode }];
+}
+
+function getNumericBattleAttr(
+  unit: BattleUnit,
+  attrKey: string | undefined,
+  fallbackAttr: PhaseBattleAttrKey,
+): number {
+  const resolvedAttr = attrKey && attrKey in unit.currentAttrs
+    ? (attrKey as PhaseBattleAttrKey)
+    : fallbackAttr;
+  const value = unit.currentAttrs[resolvedAttr];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function resolvePhaseEffectValue(
+  caster: BattleUnit,
+  effect: SkillEffect,
+  fallbackAttr: PhaseBattleAttrKey,
+): number {
+  const valueType = effect.valueType ?? 'flat';
+  const baseValue = toFiniteNumber(effect.value, 0);
+  const scaleAttrValue = getNumericBattleAttr(caster, effect.scaleAttr, fallbackAttr);
+  const scaleRate = Math.max(0, toFiniteNumber(effect.scaleRate, 0));
+
+  if (valueType === 'scale') {
+    return Math.floor(scaleAttrValue * scaleRate);
+  }
+  if (valueType === 'combined') {
+    return Math.floor(toFiniteNumber(effect.baseValue, baseValue) + scaleAttrValue * scaleRate);
+  }
+  if (valueType === 'percent') {
+    return Math.floor(scaleAttrValue * baseValue);
+  }
+  return Math.floor(baseValue);
+}
+
+function isPhaseBuffOrDebuffEffect(effect: SkillEffect): effect is PhaseBuffOrDebuffEffect {
+  return effect.type === 'buff' || effect.type === 'debuff';
 }
 
 export type BattleLogAppender = (log: BattleLogEntry) => void;
@@ -516,11 +558,145 @@ export class BattleEngine {
           '阶段触发·召唤',
           targets
         );
+      } else if (trigger.action === 'tribulation') {
+        this.executeTribulationTrigger(unit, trigger);
       }
 
       triggeredSet.add(trigger.id);
       unit.triggeredPhaseIds.push(trigger.id);
     }
+  }
+
+  private executeTribulationTrigger(unit: BattleUnit, trigger: MonsterAIPhaseTrigger): void {
+    const targets: TargetResult[] = [];
+    targets.push(...this.applyTribulationEffects(unit, [unit], trigger.selfEffects));
+    targets.push(...this.applyTribulationEffects(
+      unit,
+      this.getOpposingAliveUnits(unit),
+      trigger.enemyEffects,
+    ));
+
+    const summonedUnits = this.summonByTrigger(unit, trigger);
+    for (const summoned of summonedUnits) {
+      targets.push({
+        targetId: summoned.id,
+        targetName: summoned.name,
+        hits: [],
+        buffsApplied: ['召唤入劫'],
+      });
+    }
+
+    this.appendPhaseActionLog(
+      unit,
+      `proc-phase-tribulation-${trigger.id}`,
+      '阶段触发·历劫',
+      targets.length > 0 ? targets : [{
+        targetId: unit.id,
+        targetName: unit.name,
+        hits: [],
+        buffsApplied: ['劫云翻涌'],
+      }],
+    );
+
+    if (!trigger.castSkill) return;
+    const phaseCastSkill: BattleSkill = {
+      ...trigger.castSkill,
+      id: `phase-cast-${trigger.id}-${trigger.castSkill.id}`,
+      cost: {},
+      cooldown: 0,
+      effects: trigger.castSkill.effects.map((effect) => ({ ...effect })),
+    };
+    const targetIds = selectTargets(this.state, unit, phaseCastSkill);
+    executeSkill(this.state, unit, phaseCastSkill, targetIds);
+  }
+
+  private applyTribulationEffects(
+    source: BattleUnit,
+    targets: BattleUnit[],
+    effects: SkillEffect[],
+  ): TargetResult[] {
+    if (effects.length === 0 || targets.length === 0) return [];
+
+    return targets.map((target) => {
+      const result: TargetResult = {
+        targetId: target.id,
+        targetName: target.name,
+        hits: [],
+        buffsApplied: [],
+      };
+
+      for (const effect of effects) {
+        const appliedName = this.applyTribulationEffect(source, target, effect);
+        if (appliedName) {
+          result.buffsApplied?.push(appliedName);
+        }
+      }
+      return result;
+    });
+  }
+
+  private applyTribulationEffect(
+    source: BattleUnit,
+    target: BattleUnit,
+    effect: SkillEffect,
+  ): string | null {
+    if (effect.type === 'shield') {
+      const shieldValue = Math.max(1, resolvePhaseEffectValue(source, effect, 'max_qixue'));
+      addShield(target, {
+        value: shieldValue,
+        maxValue: shieldValue,
+        duration: Math.max(1, Math.floor(toFiniteNumber(effect.duration, 2))),
+        absorbType: 'all',
+        priority: 1,
+        sourceSkillId: `phase-${source.id}`,
+      }, `phase-${source.id}`);
+      return '护盾';
+    }
+
+    if (!isPhaseBuffOrDebuffEffect(effect)) return null;
+    return this.applyTribulationBuffEffect(source, target, effect);
+  }
+
+  private applyTribulationBuffEffect(
+    source: BattleUnit,
+    target: BattleUnit,
+    effect: PhaseBuffOrDebuffEffect,
+  ): string | null {
+    const buffId = resolveBuffEffectKey(effect);
+    if (!buffId) return null;
+    const attrModifiers = buildPhaseAttrModifiers(effect);
+    const buffKind = normalizeBuffKind(effect.buffKind);
+    const dot = buffKind === 'dot'
+      ? {
+        damage: Math.max(1, resolvePhaseEffectValue(source, effect, 'fagong')),
+        damageType: effect.damageType ?? 'true',
+        element: effect.element,
+        bonusTargetMaxQixueRate: effect.bonusTargetMaxQixueRate,
+      }
+      : undefined;
+    const reflectDamage = buffKind === 'reflect_damage'
+      ? { rate: Math.max(0, toFiniteNumber(effect.value, 0)) }
+      : undefined;
+
+    if (attrModifiers.length === 0 && !dot && !reflectDamage) return null;
+
+    const stacks = Math.max(1, Math.floor(toFiniteNumber(effect.stacks, 1)));
+    const duration = Math.max(1, Math.floor(toFiniteNumber(effect.duration, 1)));
+    addBuff(target, {
+      id: `phase-${buffId}-${Date.now()}`,
+      buffDefId: buffId,
+      name: buffId,
+      type: effect.type,
+      category: 'phase',
+      sourceUnitId: source.id,
+      maxStacks: stacks,
+      attrModifiers: attrModifiers.length > 0 ? attrModifiers : undefined,
+      dot,
+      reflectDamage,
+      tags: ['phase_trigger', 'tribulation'],
+      dispellable: true,
+    }, duration, stacks);
+    return buffId;
   }
 
   private applyPhaseTriggerEffects(unit: BattleUnit, trigger: MonsterAIPhaseTrigger): string[] {
@@ -625,6 +801,12 @@ export class BattleEngine {
   private resolveTeamKey(unit: BattleUnit): 'attacker' | 'defender' {
     const isAttacker = this.state.teams.attacker.units.some((entry) => entry.id === unit.id);
     return isAttacker ? 'attacker' : 'defender';
+  }
+
+  private getOpposingAliveUnits(unit: BattleUnit): BattleUnit[] {
+    const teamKey = this.resolveTeamKey(unit);
+    const opposingTeam = teamKey === 'attacker' ? this.state.teams.defender : this.state.teams.attacker;
+    return opposingTeam.units.filter((entry) => entry.isAlive);
   }
 
   private appendPhaseActionLog(

@@ -8,7 +8,7 @@ import type { PartnerSkillPolicySlotDto } from '../services/shared/partnerSkillP
 // ============================================
 // 怪物AI配置
 // ============================================
-export type MonsterPhaseTriggerAction = 'enrage' | 'summon';
+export type MonsterPhaseTriggerAction = 'enrage' | 'summon' | 'tribulation';
 
 export interface MonsterAISummonTemplate {
   id: string;
@@ -25,6 +25,10 @@ export interface MonsterAIPhaseTrigger {
   hpPercent: number;
   action: MonsterPhaseTriggerAction;
   effects: SkillEffect[];
+  selfEffects: SkillEffect[];
+  enemyEffects: SkillEffect[];
+  castSkillId?: string;
+  castSkill?: BattleSkill;
   summonMonsterId?: string;
   summonCount: number;
   summonTemplate?: MonsterAISummonTemplate;
