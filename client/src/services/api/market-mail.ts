@@ -3,6 +3,7 @@ import api from './core';
 import type { TencentCaptchaVerifyPayload } from './auth-character';
 import type { PartnerDisplayDto, PartnerTechniqueDetailResponse } from './partner';
 import type { GrantedRewardResultDto } from '../reward';
+import { withRequestParams } from './requestConfig';
 
 export type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
 
@@ -37,10 +38,33 @@ export interface MarketListingDto {
   buyTicket?: string | null;
 }
 
+export interface MarketListingSummaryDto {
+  id: number;
+  itemInstanceId: number;
+  itemDefId: string;
+  name: string;
+  icon: string | null;
+  quality: string | null;
+  category: string | null;
+  subCategory: string | null;
+  baseAttrs: Record<string, number>;
+  equipSlot: string | null;
+  strengthenLevel: number;
+  refineLevel: number;
+  identified: boolean;
+  generatedTechniqueId: string | null;
+  qty: number;
+  unitPriceSpiritStones: number;
+  sellerCharacterId: number;
+  sellerName: string;
+  listedAt: number;
+  buyTicket?: string | null;
+}
+
 export interface MarketListingsResponse {
   success: boolean;
   message: string;
-  data?: { listings: MarketListingDto[]; total: number };
+  data?: { listings: MarketListingSummaryDto[]; total: number };
 }
 
 export interface MarketMyListingsResponse {
@@ -79,10 +103,49 @@ export interface MarketPartnerListingDto {
   buyTicket?: string | null;
 }
 
+export interface MarketListingDetailResponse {
+  success: boolean;
+  message: string;
+  data?: { listing: MarketListingDto };
+}
+
+export interface MarketPartnerListingSummaryDto {
+  id: number;
+  partner: {
+    id: number;
+    partnerDefId: string;
+    name: string;
+    nickname: string;
+    avatar: string | null;
+    quality: string;
+    element: string;
+    role: string;
+    level: number;
+    currentEffectiveLevel: number;
+  };
+  unitPriceSpiritStones: number;
+  sellerCharacterId: number;
+  sellerName: string;
+  listedAt: number;
+  buyTicket?: string | null;
+}
+
 export interface MarketPartnerListingsResponse {
   success: boolean;
   message: string;
+  data?: { listings: MarketPartnerListingSummaryDto[]; total: number };
+}
+
+export interface MarketPartnerMyListingsResponse {
+  success: boolean;
+  message: string;
   data?: { listings: MarketPartnerListingDto[]; total: number };
+}
+
+export interface MarketPartnerListingDetailResponse {
+  success: boolean;
+  message: string;
+  data?: { listing: MarketPartnerListingDto };
 }
 
 export interface MarketPartnerTradeRecordDto {
@@ -112,6 +175,13 @@ export const getMarketListings = (params?: {
   pageSize?: number;
 }): Promise<MarketListingsResponse> => {
   return api.get('/market/listings', { params });
+};
+
+export const getMarketListingDetail = (
+  listingId: number,
+  requestConfig?: AxiosRequestConfig,
+): Promise<MarketListingDetailResponse> => {
+  return api.get('/market/listing-detail', withRequestParams(requestConfig, { listingId }));
 };
 
 export const getMyMarketListings = (params?: {
@@ -167,8 +237,15 @@ export const getMyPartnerMarketListings = (params?: {
   status?: 'active' | 'sold' | 'cancelled';
   page?: number;
   pageSize?: number;
-}): Promise<MarketPartnerListingsResponse> => {
+}): Promise<MarketPartnerMyListingsResponse> => {
   return api.get('/market/partner-my-listings', { params });
+};
+
+export const getPartnerMarketListingDetail = (
+  listingId: number,
+  requestConfig?: AxiosRequestConfig,
+): Promise<MarketPartnerListingDetailResponse> => {
+  return api.get('/market/partner-listing-detail', withRequestParams(requestConfig, { listingId }));
 };
 
 export const createPartnerMarketListing = (body: {

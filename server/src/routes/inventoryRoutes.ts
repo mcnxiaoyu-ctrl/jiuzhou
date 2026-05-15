@@ -135,6 +135,17 @@ router.get('/warehouse/snapshot', asyncHandler(async (req, res) => {
 }));
 
 // ============================================
+// 获取市场上架背包候选
+// GET /api/inventory/sale-candidates
+// ============================================
+router.get('/sale-candidates', asyncHandler(async (req, res) => {
+    const characterId = req.characterId!;
+    const items = await inventoryService.getInventorySaleCandidates(characterId);
+
+    sendSuccess(res, { items });
+}));
+
+// ============================================
 // 获取背包物品列表
 // GET /api/inventory/items?location=bag&page=1&pageSize=100
 // ============================================

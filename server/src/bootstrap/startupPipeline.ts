@@ -96,9 +96,13 @@ import {
 } from "../services/eventLoopMonitorService.js";
 import {
   resolveJiuzhouRuntimeRole,
+  shouldRecoverHttpBattleState,
+  shouldRecoverIdleSessions,
+  shouldStartScheduledBackgroundServices,
   shouldStartGeneralBackgroundWorkers,
   shouldStartHttpServer,
   shouldStartOnlineSettlementRunner,
+  shouldStartWorkerPool,
 } from "../config/runtimeRole.js";
 
 export interface StartServerOptions {
@@ -149,29 +153,33 @@ export const startServerWithPipeline = async (
   await runStartupStep("动态伙伴快照失效", refreshGeneratedPartnerSnapshots);
   await runStartupStep("数据准备", initTables);
   await runStartupStep("性能索引同步", ensurePerformanceIndexes);
-  await runStartupStep("角色资源 Delta 聚合器初始化", initializeCharacterSettlementResourceDeltaService);
-  await runStartupStep("角色物品授予 Delta 聚合器初始化", initializeCharacterItemGrantDeltaService);
-  await runStartupStep("角色实例 Mutation 聚合器初始化", initializeCharacterItemInstanceMutationService);
-  await runStartupStep("角色软进度 Delta 聚合器初始化", initializeTaskProgressDeltaFlushService);
+  if (shouldStartScheduledBackgroundServices(runtimeRole)) {
+    await runStartupStep("角色资源 Delta 聚合器初始化", initializeCharacterSettlementResourceDeltaService);
+    await runStartupStep("角色物品授予 Delta 聚合器初始化", initializeCharacterItemGrantDeltaService);
+    await runStartupStep("角色实例 Mutation 聚合器初始化", initializeCharacterItemInstanceMutationService);
+    await runStartupStep("角色软进度 Delta 聚合器初始化", initializeTaskProgressDeltaFlushService);
+  }
   await runStartupStep("头像清理检查", clearAllAvatarsOnce);
   await runStartupStep("异常物品数据清理", () => itemDataCleanupService.cleanupUndefinedItemDataOnStartup());
 
-  // 初始化 Worker 池
-  console.log("正在初始化 Worker 池...");
-  const cpuCount = cpus().length;
-  const workerCount = process.env.IDLE_WORKER_COUNT
-    ? parseInt(process.env.IDLE_WORKER_COUNT, 10)
-    : Math.max(1, cpuCount - 1);
+  if (shouldStartWorkerPool(runtimeRole)) {
+    // 初始化 Worker 池
+    console.log("正在初始化 Worker 池...");
+    const cpuCount = cpus().length;
+    const workerCount = process.env.IDLE_WORKER_COUNT
+      ? parseInt(process.env.IDLE_WORKER_COUNT, 10)
+      : Math.max(1, cpuCount - 1);
 
-  console.log(`  - CPU 核心数: ${cpuCount}，启动 ${workerCount} 个 Worker`);
-  console.log("  - 挂机战斗怪物解析复用普通战斗服务配置");
+    console.log(`  - CPU 核心数: ${cpuCount}，启动 ${workerCount} 个 Worker`);
+    console.log("  - 挂机战斗怪物解析复用普通战斗服务配置");
 
-  await runStartupStep("Worker 池初始化", () =>
-    initializeWorkerPool({
-      workerCount,
-    }),
-  );
-  console.log(`✓ Worker 池已就绪（${workerCount} 个 Worker）\n`);
+    await runStartupStep("Worker 池初始化", () =>
+      initializeWorkerPool({
+        workerCount,
+      }),
+    );
+    console.log(`✓ Worker 池已就绪（${workerCount} 个 Worker）\n`);
+  }
   if (shouldStartGeneralBackgroundWorkers(runtimeRole)) {
     await runStartupStep("洞府研修 worker 协调器初始化", initializeTechniqueGenerationJobRunner);
     console.log("✓ 洞府研修 worker 协调器已就绪\n");
@@ -211,20 +219,22 @@ export const startServerWithPipeline = async (
   }
   await runStartupStep("事件循环监控初始化", initializeEventLoopMonitor);
   console.log("✓ 事件循环监控已就绪\n");
-  await runStartupStep("爱发电私信重试调度器初始化", initializeAfdianMessageRetryService);
-  console.log("✓ 爱发电私信重试调度器已就绪\n");
-  await runStartupStep("角色排行榜快照夜间刷新调度器初始化", initializeRankSnapshotNightlyRefreshScheduler);
-  console.log("✓ 角色排行榜快照夜间刷新调度器已就绪\n");
+  if (shouldStartScheduledBackgroundServices(runtimeRole)) {
+    await runStartupStep("爱发电私信重试调度器初始化", initializeAfdianMessageRetryService);
+    console.log("✓ 爱发电私信重试调度器已就绪\n");
+    await runStartupStep("角色排行榜快照夜间刷新调度器初始化", initializeRankSnapshotNightlyRefreshScheduler);
+    console.log("✓ 角色排行榜快照夜间刷新调度器已就绪\n");
 
-  await runStartupStep("游戏时间服务初始化", initGameTimeService);
-  await runStartupStep("竞技场周结算服务初始化", async () => {
-    initArenaWeeklySettlementService();
-  });
-  await runStartupStep("清理 Worker 启动", async () => {
-    await startCleanupWorker();
-  });
+    await runStartupStep("游戏时间服务初始化", initGameTimeService);
+    await runStartupStep("竞技场周结算服务初始化", async () => {
+      initArenaWeeklySettlementService();
+    });
+    await runStartupStep("清理 Worker 启动", async () => {
+      await startCleanupWorker();
+    });
+  }
 
-  if (redisConnected) {
+  if (shouldRecoverHttpBattleState(runtimeRole) && redisConnected) {
     await runStartupStep("战斗状态恢复", async () => {
       console.log("正在恢复战斗状态...");
       await recoverBattlesFromRedis();
@@ -235,7 +245,9 @@ export const startServerWithPipeline = async (
     });
   }
 
-  await runStartupStep("挂机会话恢复", recoverActiveIdleSessions);
+  if (shouldRecoverIdleSessions(runtimeRole)) {
+    await runStartupStep("挂机会话恢复", recoverActiveIdleSessions);
+  }
 
   if (shouldStartHttpServer(runtimeRole)) {
     await new Promise<void>((resolve, reject) => {

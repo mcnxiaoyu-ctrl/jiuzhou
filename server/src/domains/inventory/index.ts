@@ -17,6 +17,7 @@ export type {
   InventoryInfo,
   InventoryItem,
   InventoryItemWithDef,
+  InventorySaleCandidateDto,
   InventoryLocation,
   SlottedInventoryLocation,
 } from '../../services/inventory/index.js';

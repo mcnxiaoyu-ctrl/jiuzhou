@@ -11,7 +11,7 @@
  * - 输出：`all | api | worker` 之一，以及启动决策函数。
  *
  * 数据流 / 状态流：
- * process.env -> resolveJiuzhouRuntimeRole -> startupPipeline -> 按角色启动 HTTP 或后台任务。
+ * process.env -> resolveJiuzhouRuntimeRole -> startupPipeline -> 按角色启动 HTTP、Worker 池、恢复任务或后台调度。
  *
  * 复用设计说明：
  * - 运行角色是部署级高频变化点，集中在 config 模块后，后续新增 worker 类型不需要散改 startupPipeline。
@@ -38,5 +38,21 @@ export const shouldStartOnlineSettlementRunner = (role: JiuzhouRuntimeRole): boo
 };
 
 export const shouldStartGeneralBackgroundWorkers = (role: JiuzhouRuntimeRole): boolean => {
+  return role === 'all' || role === 'worker';
+};
+
+export const shouldStartWorkerPool = (role: JiuzhouRuntimeRole): boolean => {
+  return role === 'all' || role === 'worker';
+};
+
+export const shouldStartScheduledBackgroundServices = (role: JiuzhouRuntimeRole): boolean => {
+  return role === 'all' || role === 'worker';
+};
+
+export const shouldRecoverHttpBattleState = (role: JiuzhouRuntimeRole): boolean => {
+  return role === 'all' || role === 'api';
+};
+
+export const shouldRecoverIdleSessions = (role: JiuzhouRuntimeRole): boolean => {
   return role === 'all' || role === 'worker';
 };

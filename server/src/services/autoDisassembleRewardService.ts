@@ -7,6 +7,11 @@ import {
   type AutoDisassembleCandidateMeta,
   type AutoDisassembleSetting,
 } from './autoDisassembleRules.js';
+import {
+  appendAutoDisassembleRewardBatchEntry,
+  createAutoDisassembleRewardBatch,
+  finalizeAutoDisassembleRewardBatch,
+} from './autoDisassembleRewardBatch.js';
 export type { AutoDisassembleRuleSet, AutoDisassembleSetting } from './autoDisassembleRules.js';
 
 export type PendingMailItem = {
@@ -154,6 +159,12 @@ const createEmptyResult = (): GrantRewardItemWithAutoDisassembleResult => ({
   warnings: [],
   gainedSilver: 0,
 });
+
+const hasMaterializedRewardSideEffect = (
+  result: GrantRewardItemWithAutoDisassembleResult,
+): boolean => {
+  return result.gainedSilver > 0 || result.grantedItems.some((item) => item.itemIds.length > 0);
+};
 
 const AUTO_DISASSEMBLE_EXCLUDED_SOURCES = new Set<string>([
   'task_reward',
@@ -531,6 +542,11 @@ export const grantRewardItemWithAutoDisassemble = async (
     return result;
   }
 
+  const sourceFallbacks: Array<() => Promise<void>> = [];
+  const disassembleRewardBatch = createAutoDisassembleRewardBatch();
+  const disassembledFallbackIndexSet = new Set<number>();
+  let batchedSilver = 0;
+
   for (let i = 0; i < normalizedQty; i++) {
     let sourceEquipOptionsForCreate = input.sourceEquipOptions;
     let sourceEquipOptionsForMail = input.sourceEquipOptions;
@@ -574,6 +590,8 @@ export const grantRewardItemWithAutoDisassemble = async (
 
       result.warnings.push(`物品创建失败: ${input.itemDefId}, ${sourceCreateResult.message}`);
     };
+    const fallbackIndex = sourceFallbacks.length;
+    sourceFallbacks.push(createSourceItem);
 
     if (!allowAutoDisassemble) {
       await createSourceItem();
@@ -642,66 +660,73 @@ export const grantRewardItemWithAutoDisassemble = async (
       continue;
     }
 
-    const tempResult = createEmptyResult();
-    let rewardApplySuccess = true;
-
-    for (const rewardItem of rewardPlan.rewards.items) {
-      const rewardCreateResult = await measureAsyncMetric(
-        input.metrics,
-        'createDisassembleRewardCostMs',
-        () => input.createItem({
-          itemDefId: rewardItem.itemDefId,
-          qty: rewardItem.qty,
-          obtainedFrom: 'auto_disassemble',
-        }),
-        'disassembleRewardCreateCallCount',
-      );
-
-      if (rewardCreateResult.success) {
-        appendGrantedItem(tempResult, rewardItem.itemDefId, rewardItem.qty, normalizeItemIds(rewardCreateResult.itemIds));
-        continue;
-      }
-
-      if (rewardCreateResult.message === '背包已满') {
-        appendPendingMailItem(tempResult, {
-          item_def_id: rewardItem.itemDefId,
-          qty: rewardItem.qty,
-        });
-        appendGrantedItem(tempResult, rewardItem.itemDefId, rewardItem.qty, []);
-        continue;
-      }
-
-      rewardApplySuccess = false;
-      result.warnings.push(`自动分解奖励入包失败: ${rewardItem.itemDefId}, ${rewardCreateResult.message}`);
-      break;
-    }
-
-    if (rewardApplySuccess && rewardPlan.rewards.silver > 0) {
-      if (!input.addSilver) {
-        rewardApplySuccess = false;
-        result.warnings.push(`自动分解银两发放失败: ${input.itemDefId}, 缺少addSilver实现`);
-      } else {
-        const addSilverResult = await measureAsyncMetric(
-          input.metrics,
-          'addSilverCostMs',
-          () => input.addSilver!(input.characterId, rewardPlan.rewards.silver),
-        );
-        if (!addSilverResult.success) {
-          rewardApplySuccess = false;
-          result.warnings.push(`自动分解银两发放失败: ${input.itemDefId}, ${addSilverResult.message}`);
-        } else {
-          tempResult.gainedSilver += rewardPlan.rewards.silver;
-        }
-      }
-    }
-
-    if (!rewardApplySuccess) {
-      await createSourceItem();
-      continue;
-    }
-
-    mergeResult(result, tempResult);
+    appendAutoDisassembleRewardBatchEntry(disassembleRewardBatch, {
+      fallbackIndex,
+      rewards: rewardPlan.rewards.items,
+    });
+    disassembledFallbackIndexSet.add(fallbackIndex);
+    batchedSilver += rewardPlan.rewards.silver;
   }
 
+  const batchResult = createEmptyResult();
+  let batchResultMerged = false;
+  const mergeBatchResultOnce = (): void => {
+    if (batchResultMerged) return;
+    mergeResult(result, batchResult);
+    batchResultMerged = true;
+  };
+  const fallbackDisassembledSourceItems = async (): Promise<void> => {
+    for (const fallbackIndex of [...disassembledFallbackIndexSet].sort((a, b) => a - b)) {
+      await sourceFallbacks[fallbackIndex]?.();
+    }
+  };
+
+  if (batchedSilver > 0 && !input.addSilver) {
+    result.warnings.push(`自动分解银两发放失败: ${input.itemDefId}, 缺少addSilver实现`);
+    await fallbackDisassembledSourceItems();
+    return result;
+  }
+
+  for (const rewardItem of finalizeAutoDisassembleRewardBatch(disassembleRewardBatch)) {
+    const chunkGrantResult = await grantAutoDisassembleRewardItemInChunks(
+      batchResult,
+      input.createItem,
+      input.metrics,
+      rewardItem,
+    );
+    if (!chunkGrantResult.success) {
+      result.warnings.push(
+        chunkGrantResult.message ?? `自动分解奖励入包失败: ${rewardItem.itemDefId}`,
+      );
+      if (hasMaterializedRewardSideEffect(batchResult)) {
+        result.warnings.push('自动分解奖励已部分入包，跳过原装备回退以避免重复发放');
+        mergeBatchResultOnce();
+      } else {
+        await fallbackDisassembledSourceItems();
+      }
+      return result;
+    }
+  }
+
+  if (batchedSilver > 0) {
+    const addSilverResult = await measureAsyncMetric(
+      input.metrics,
+      'addSilverCostMs',
+      () => input.addSilver!(input.characterId, batchedSilver),
+    );
+    if (!addSilverResult.success) {
+      result.warnings.push(`自动分解银两发放失败: ${input.itemDefId}, ${addSilverResult.message}`);
+      if (hasMaterializedRewardSideEffect(batchResult)) {
+        result.warnings.push('自动分解奖励已部分入包，跳过原装备回退以避免重复发放');
+        mergeBatchResultOnce();
+      } else {
+        await fallbackDisassembledSourceItems();
+      }
+      return result;
+    }
+    batchResult.gainedSilver += batchedSilver;
+  }
+
+  mergeBatchResultOnce();
   return result;
 };

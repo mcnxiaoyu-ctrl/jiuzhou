@@ -87,6 +87,37 @@ export interface InventoryItemsResponse {
   };
 }
 
+export interface InventorySaleCandidateDto {
+  id: number;
+  itemDefId: string;
+  name: string;
+  icon: string | null;
+  quality: string | null;
+  category: string;
+  subCategory: string | null;
+  qty: number;
+  locked: boolean;
+  bindType: string;
+  strengthenLevel: number;
+  refineLevel: number;
+  location: InventoryLocation;
+  equippedSlot: string | null;
+  stackMax: number;
+  canDisassemble: boolean;
+  equipSlot: string | null;
+  baseAttrs: Record<string, number>;
+  baseAttrsRaw: Record<string, number> | null;
+  identified: boolean;
+}
+
+export interface InventorySaleCandidatesResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    items: InventorySaleCandidateDto[];
+  };
+}
+
 export interface InventoryBagSnapshotResponse {
   success: boolean;
   message?: string;
@@ -140,6 +171,12 @@ export const getInventoryItems = (
       pageSize,
     },
   });
+};
+
+export const getInventorySaleCandidates = (
+  requestConfig?: AxiosRequestConfig,
+): Promise<InventorySaleCandidatesResponse> => {
+  return api.get('/inventory/sale-candidates', requestConfig);
 };
 
 export interface InventoryMoveResponse {

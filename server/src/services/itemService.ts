@@ -175,6 +175,21 @@ type ItemUseLootItem = {
   qty: number;
 };
 
+type ItemUseCharacterSnapshotDelta = {
+  exp: number;
+  silver: number;
+  spiritStones: number;
+  qixue?: number;
+  lingqi?: number;
+  stamina?: number;
+};
+
+type ItemUseReloadFlags = {
+  hasLearnTechnique: boolean;
+  hasEquipmentUnbindEffect: boolean;
+  hasExpandEffect: boolean;
+};
+
 /**
  * 物品使用 loot 物品聚合器
  *
@@ -213,6 +228,68 @@ const aggregateItemUseLootItems = (
     itemDefId,
     qty: itemQty,
   }));
+};
+
+/**
+ * 物品使用角色返回快照合成器
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把 useItem 当前请求内已经确定的奖励与资源结果合成到返回角色快照。
+ * 2. 做什么：允许 qixue/lingqi/stamina 使用资源服务返回的上限裁剪后数值覆盖。
+ * 3. 不做什么：不重新计算功法、装备、背包容量等会影响整份角色派生属性的结构性变化。
+ *
+ * 输入 / 输出：
+ * - 输入：基础 CharacterComputedRow，以及 exp/silver/spiritStones 增量和可选资源覆盖值。
+ * - 输出：供路由直接返回给前端的 CharacterComputedRow。
+ *
+ * 数据流 / 状态流：
+ * computedBefore 或 reload 后角色快照 -> buildItemUseCharacterSnapshot -> ItemUseResult.character。
+ *
+ * 复用设计说明：
+ * - 快路径与完整 reload 路径共用同一奖励叠加入口，避免货币与经验补丁散落在两个返回分支。
+ * - qixue/lingqi/stamina 是高频变化点，集中在这里接收服务端裁剪后的覆盖值，禁止调用方按 delta 盲加。
+ *
+ * 关键边界条件与坑点：
+ * 1. exp/silver/spiritStones 来自 rewardDelta 缓冲，本请求内不能等待落库后再读。
+ * 2. qixue/lingqi/stamina 只有拿到资源服务返回值时才覆盖，否则沿用基础快照。
+ */
+const buildItemUseCharacterSnapshot = (
+  base: CharacterComputedRow,
+  delta: ItemUseCharacterSnapshotDelta,
+): CharacterComputedRow => ({
+  ...base,
+  exp: base.exp + delta.exp,
+  silver: base.silver + delta.silver,
+  spirit_stones: base.spirit_stones + delta.spiritStones,
+  qixue: delta.qixue ?? base.qixue,
+  lingqi: delta.lingqi ?? base.lingqi,
+  stamina: delta.stamina ?? base.stamina,
+});
+
+/**
+ * 物品使用后角色重载判定
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把会改变角色派生结构的 useItem 效果集中判定为完整 reload。
+ * 2. 不做什么：不把简单资源、货币、掉落物品和伙伴侧学习误判为角色重载。
+ *
+ * 输入 / 输出：
+ * - 输入：效果解析阶段收敛出的结构性变化标记。
+ * - 输出：是否需要绕过静态缓存重新加载 CharacterComputedRow。
+ *
+ * 数据流 / 状态流：
+ * effect_defs 解析标记 -> shouldReloadCharacterAfterUseItem -> 最终 character 返回分支。
+ *
+ * 复用设计说明：
+ * - useItem 只保留一个重载策略出口，避免不同效果分支各自决定是否 reload。
+ * - hasLearnTechnique / hasEquipmentUnbindEffect / hasExpandEffect 是高频业务变化点，集中在这里维护。
+ *
+ * 关键边界条件与坑点：
+ * 1. 伙伴学习功法不改变当前角色计算属性，不应触发角色完整 reload。
+ * 2. 简单消耗品的 qixue/lingqi/stamina 已由专用服务裁剪返回，不应因资源变化触发完整 reload。
+ */
+const shouldReloadCharacterAfterUseItem = (flags: ItemUseReloadFlags): boolean => {
+  return flags.hasLearnTechnique || flags.hasEquipmentUnbindEffect || flags.hasExpandEffect;
 };
 
 export interface ItemUseResult {
@@ -637,6 +714,7 @@ class ItemService {
     if (!computedBefore) {
       return { success: false, message: '角色数据异常' };
     }
+    slowLogger.mark('loadUseContext');
 
     await lockCharacterInventoryMutex(characterId);
     slowLogger.mark('lockInventoryMutex');
@@ -757,6 +835,8 @@ class ItemService {
     let totalExpandSize = 0;
     let deltaSilver = 0;
     let deltaSpiritStones = 0;
+    let appliedResourceDelta: Awaited<ReturnType<typeof applyCharacterResourceDeltaByCharacterId>> = null;
+    let recoveredStamina: Awaited<ReturnType<typeof recoverStaminaByCharacterId>> = null;
 
     for (const effect of effectDefs) {
       normalizedEffects.push(effect);
@@ -1071,6 +1151,16 @@ class ItemService {
       deltaStamina += resourceDelta.stamina;
       deltaExp += resourceDelta.exp;
     }
+    slowLogger.mark('applyUseEffects', {
+      effectCount: normalizedEffects.length,
+      lootItemCount: lootItemsToAdd.length,
+      hasLoot,
+      hasLearnTechnique,
+      hasLearnPartnerTechnique,
+      hasEquipmentUnbindEffect,
+      hasPartnerBaseAttrRerollEffect,
+      hasExpandEffect,
+    });
 
     if (
       deltaQixue === 0 &&
@@ -1101,6 +1191,12 @@ class ItemService {
     if (rewardDelta.exp !== 0 || rewardDelta.silver !== 0 || rewardDelta.spiritStones !== 0) {
       await applyCharacterRewardDeltas(new Map([[characterId, rewardDelta]]));
     }
+    slowLogger.mark('settleUseRewards', {
+      hasExpandEffect,
+      rewardDeltaExp: rewardDelta.exp,
+      rewardDeltaSilver: rewardDelta.silver,
+      rewardDeltaSpiritStones: rewardDelta.spiritStones,
+    });
 
     const aggregatedLootItemsToAdd = aggregateItemUseLootItems(lootItemsToAdd);
     slowLogger.mark('aggregateLootItems', {
@@ -1158,9 +1254,15 @@ class ItemService {
         [characterId, itemDefId, qty]
       );
     }
+    slowLogger.mark('writeUseBookkeeping', {
+      effectiveCdSec,
+      dailyLimit,
+      totalLimit,
+    });
 
     // 扣除物品
     const consumeItemResult = await consumeSpecificItemInstance(characterId, instanceId, qty);
+    slowLogger.mark('consumeUsedItem');
     if (!consumeItemResult.success) {
       return { success: false, message: consumeItemResult.message };
     }
@@ -1171,7 +1273,7 @@ class ItemService {
       };
     }
     if (deltaQixue !== 0 || deltaLingqi !== 0) {
-      await applyCharacterResourceDeltaByCharacterId(characterId, {
+      appliedResourceDelta = await applyCharacterResourceDeltaByCharacterId(characterId, {
         qixue: deltaQixue,
         lingqi: deltaLingqi,
       });
@@ -1181,18 +1283,48 @@ class ItemService {
       if (!staminaResult) {
         throw new Error('角色体力数据异常');
       }
+      recoveredStamina = staminaResult;
     }
+    slowLogger.mark('applyRuntimeResources', {
+      hasPartnerTechniqueResult: Boolean(partnerTechniqueResult),
+      deltaQixue,
+      deltaLingqi,
+      deltaStamina,
+    });
 
-    const updatedCharBase = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
-    slowLogger.mark('loadUpdatedCharacter');
-    const updatedChar = updatedCharBase
-      ? {
-          ...updatedCharBase,
-          exp: updatedCharBase.exp + rewardDelta.exp,
-          silver: updatedCharBase.silver + rewardDelta.silver,
-          spirit_stones: updatedCharBase.spirit_stones + rewardDelta.spiritStones,
-        }
-      : undefined;
+    const shouldReloadCharacter = shouldReloadCharacterAfterUseItem({
+      hasLearnTechnique,
+      hasEquipmentUnbindEffect,
+      hasExpandEffect,
+    });
+    let updatedChar: CharacterComputedRow | undefined;
+    if (shouldReloadCharacter) {
+      const updatedCharBase = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
+      updatedChar = updatedCharBase
+        ? buildItemUseCharacterSnapshot(updatedCharBase, {
+            exp: rewardDelta.exp,
+            silver: rewardDelta.silver,
+            spiritStones: rewardDelta.spiritStones,
+          })
+        : undefined;
+    } else {
+      const fastSnapshotDelta: ItemUseCharacterSnapshotDelta = {
+        exp: rewardDelta.exp,
+        silver: rewardDelta.silver,
+        spiritStones: rewardDelta.spiritStones,
+      };
+      if (appliedResourceDelta) {
+        fastSnapshotDelta.qixue = appliedResourceDelta.qixue;
+        fastSnapshotDelta.lingqi = appliedResourceDelta.lingqi;
+      }
+      if (recoveredStamina) {
+        fastSnapshotDelta.stamina = recoveredStamina.stamina;
+      }
+      updatedChar = buildItemUseCharacterSnapshot(computedBefore, fastSnapshotDelta);
+    }
+    slowLogger.mark('buildCharacterSnapshot', {
+      reloadedCharacter: shouldReloadCharacter,
+    });
     success = true;
     return {
       success: true,

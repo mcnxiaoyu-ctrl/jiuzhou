@@ -81,6 +81,29 @@ export type MarketListingDto = {
   buyTicket?: string | null;
 };
 
+export type MarketListingSummaryDto = {
+  id: number;
+  itemInstanceId: number;
+  itemDefId: string;
+  name: string;
+  icon: string | null;
+  quality: string | null;
+  category: string | null;
+  subCategory: string | null;
+  baseAttrs: Record<string, number>;
+  equipSlot: string | null;
+  strengthenLevel: number;
+  refineLevel: number;
+  identified: boolean;
+  generatedTechniqueId: string | null;
+  qty: number;
+  unitPriceSpiritStones: number;
+  sellerCharacterId: number;
+  sellerName: string;
+  listedAt: number;
+  buyTicket?: string | null;
+};
+
 export type MarketTradeRecordDto = {
   id: number;
   type: "买入" | "卖出";
@@ -105,7 +128,7 @@ type MarketListingsQuery = {
 };
 
 type MarketListingsCacheData = {
-  listings: MarketListingDto[];
+  listings: MarketListingSummaryDto[];
   total: number;
 };
 
@@ -297,6 +320,93 @@ const toListingDto = (
   };
 };
 
+/**
+ * 公开物品坊市 summary DTO 构建器。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把公开列表 SQL 行压缩为列表展示与购买入口所需字段。
+ * 2. 不做什么：不读取或返回长描述、效果、词条、宝石等 Tooltip 详情大字段。
+ *
+ * 输入 / 输出：
+ * - 输入：market_listing + 少量 item_instance 标量列。
+ * - 输出：`MarketListingSummaryDto`；静态定义缺失时返回 null。
+ *
+ * 数据流 / 状态流：
+ * 公开列表 SQL -> 静态物品定义 -> 品质/基础属性折算 -> summary DTO -> cache/route/frontend。
+ *
+ * 复用设计说明：
+ * - 公开列表和缓存共用本入口，避免列表瘦身规则散落在路由或前端。
+ * - 完整 Tooltip/预览继续复用 `toListingDto` 和详情接口，summary 不混入条件分支。
+ *
+ * 关键边界条件与坑点：
+ * 1. 生成功法书在 summary 中只展示模板名，真实生成名称与技能信息留给详情接口。
+ * 2. 装备基础属性只计算本体基础值，词条和宝石详情留给详情接口懒加载。
+ */
+const toListingSummaryDto = (
+  row: Record<string, unknown>,
+): MarketListingSummaryDto | null => {
+  const itemDefId = String(row.item_def_id || "").trim();
+  if (!itemDefId) return null;
+  const itemDef = getItemDefinitionById(itemDefId);
+  if (!itemDef) return null;
+  const category = resolveMarketItemCategory(itemDef);
+  const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
+  const resolvedQualityRank =
+    Number(row.instance_quality_rank) ||
+    resolveQualityRankFromName(row.instance_quality, defQualityRank);
+  const baseAttrsRaw =
+    itemDef.base_attrs && typeof itemDef.base_attrs === "object"
+      ? itemDef.base_attrs
+      : {};
+  const baseAttrs =
+    category === "equipment"
+      ? buildEquipmentDisplayBaseAttrs({
+          baseAttrsRaw,
+          defQualityRankRaw: defQualityRank,
+          resolvedQualityRankRaw: resolvedQualityRank,
+          strengthenLevelRaw: row.strengthen_level,
+          refineLevelRaw: row.refine_level,
+          socketedGemsRaw: [],
+        })
+      : baseAttrsRaw;
+
+  return {
+    id: Number(row.id),
+    itemInstanceId: Number(row.item_instance_id),
+    itemDefId,
+    name: String(itemDef.name ?? ""),
+    icon:
+      itemDef.icon === null || itemDef.icon === undefined
+        ? null
+        : String(itemDef.icon),
+    quality:
+      row.instance_quality === null || row.instance_quality === undefined
+        ? itemDef.quality === null || itemDef.quality === undefined
+            ? null
+            : String(itemDef.quality)
+        : String(row.instance_quality),
+    category: category || null,
+    subCategory:
+      itemDef.sub_category === null || itemDef.sub_category === undefined
+        ? null
+        : String(itemDef.sub_category),
+    baseAttrs,
+    equipSlot:
+      itemDef.equip_slot === null || itemDef.equip_slot === undefined
+        ? null
+        : String(itemDef.equip_slot),
+    strengthenLevel: Math.max(0, Math.floor(Number(row.strengthen_level) || 0)),
+    refineLevel: Math.max(0, Math.floor(Number(row.refine_level) || 0)),
+    identified: Boolean(row.identified),
+    generatedTechniqueId: null,
+    qty: Number(row.qty),
+    unitPriceSpiritStones: Number(row.unit_price_spirit_stones),
+    sellerCharacterId: Number(row.seller_character_id),
+    sellerName: String(row.seller_name ?? ""),
+    listedAt: new Date(String(row.listed_at ?? "")).getTime(),
+  };
+};
+
 const normalizeMarketListingsQuery = (params: {
   category?: string;
   quality?: string;
@@ -420,10 +530,7 @@ const loadMarketListingsCacheData = async (
       ii.quality_rank AS instance_quality_rank,
       ii.strengthen_level,
       ii.refine_level,
-      ii.socketed_gems,
       ii.identified,
-      ii.affixes,
-      ii.metadata,
       c.nickname AS seller_name
     FROM market_listing ml
     JOIN item_instance ii ON ii.id = ml.item_instance_id
@@ -446,15 +553,11 @@ const loadMarketListingsCacheData = async (
     query(countSql, values.slice(0, values.length - 2)),
   ]);
   const total = Number(countResult.rows[0]?.cnt ?? 0);
-  const affixPoolCache = new Map<
-    string,
-    ReturnType<typeof loadAffixPoolForReroll>
-  >();
-  const listings: MarketListingDto[] = listResult.rows
+  const listings: MarketListingSummaryDto[] = listResult.rows
     .map((row) =>
-      toListingDto(row as Record<string, unknown>, affixPoolCache),
+      toListingSummaryDto(row as Record<string, unknown>),
     )
-    .filter((entry): entry is MarketListingDto => entry !== null);
+    .filter((entry): entry is MarketListingSummaryDto => entry !== null);
 
   return { listings, total };
 };
@@ -484,7 +587,7 @@ class MarketService {
   }): Promise<{
     success: boolean;
     message: string;
-    data?: { listings: MarketListingDto[]; total: number };
+    data?: { listings: MarketListingSummaryDto[]; total: number };
   }> {
     const normalizedQuery = normalizeMarketListingsQuery(params);
     const versionedKey = await marketListingsCacheVersion.buildVersionedKey(
@@ -495,6 +598,63 @@ class MarketService {
       total: 0,
     };
     return { success: true, message: "ok", data };
+  }
+
+  // 纯读方法，不加 @Transactional
+  async getMarketListingDetail(params: {
+    characterId: number;
+    listingId: number;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    data?: { listing: MarketListingDto };
+  }> {
+    const listingId = parsePositiveInt(params.listingId);
+    if (listingId === null) return { success: false, message: "listingId参数错误" };
+
+    const listingResult = await query(
+      `
+        SELECT
+          ml.id,
+          ml.item_instance_id,
+          ml.item_def_id,
+          ml.qty,
+          ml.unit_price_spirit_stones,
+          ml.seller_character_id,
+          ml.listed_at,
+          ml.status,
+          ii.quality AS instance_quality,
+          ii.quality_rank AS instance_quality_rank,
+          ii.strengthen_level,
+          ii.refine_level,
+          ii.socketed_gems,
+          ii.identified,
+          ii.affixes,
+          ii.metadata,
+          c.nickname AS seller_name
+        FROM market_listing ml
+        JOIN item_instance ii ON ii.id = ml.item_instance_id
+        JOIN characters c ON c.id = ml.seller_character_id
+        WHERE ml.id = $1
+        LIMIT 1
+      `,
+      [listingId],
+    );
+    const row = listingResult.rows[0] as (Record<string, unknown> & { status?: string; seller_character_id?: number }) | undefined;
+    if (!row) return { success: false, message: "上架记录不存在" };
+
+    const sellerCharacterId = Number(row.seller_character_id);
+    const canViewListing = String(row.status) === "active" || sellerCharacterId === params.characterId;
+    if (!canViewListing) return { success: false, message: "当前挂单不可查看" };
+
+    const affixPoolCache = new Map<
+      string,
+      ReturnType<typeof loadAffixPoolForReroll>
+    >();
+    const listing = toListingDto(row, affixPoolCache);
+    if (!listing) return { success: false, message: "物品配置不存在" };
+
+    return { success: true, message: "获取成功", data: { listing } };
   }
 
   // 纯读方法，不加 @Transactional

@@ -36,7 +36,11 @@ test('useItem 应在 bufferSimpleCharacterItemGrants 前聚合 loot item', () =>
 test('useItem 应输出分段慢日志', () => {
   assert.match(source, /label: 'itemService\.useItem'/u);
   assert.match(source, /slowLogger\.mark\('lockInventoryMutex'/u);
+  assert.match(source, /slowLogger\.mark\('settleUseRewards'/u);
   assert.match(source, /slowLogger\.mark\('aggregateLootItems'/u);
   assert.match(source, /slowLogger\.mark\('bufferLootItems'/u);
-  assert.match(source, /slowLogger\.mark\('loadUpdatedCharacter'/u);
+  assert.match(source, /slowLogger\.mark\('writeUseBookkeeping'/u);
+  assert.match(source, /slowLogger\.mark\('consumeUsedItem'/u);
+  assert.match(source, /slowLogger\.mark\('applyRuntimeResources'/u);
+  assert.match(source, /slowLogger\.mark\('buildCharacterSnapshot'/u);
 });

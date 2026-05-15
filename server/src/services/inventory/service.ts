@@ -29,7 +29,7 @@ import type { CharacterBagSlotAllocator } from "../shared/characterBagSlotAlloca
 import type { CharacterInventoryMutationContext } from "../shared/characterInventoryMutationContext.js";
 import type { InventorySlotSession } from "../shared/inventorySlotSession.js";
 import type { GetInventoryInfoOptions } from "./bag.js";
-import type { WarehouseInventorySnapshot } from "./itemQuery.js";
+import type { InventorySaleCandidateDto, WarehouseInventorySnapshot } from "./itemQuery.js";
 
 import {
   getInventoryInfo,
@@ -63,6 +63,7 @@ import { flushCharacterPendingItemGrantsNow } from "../shared/characterItemGrant
 import { flushCharacterPendingItemInstanceMutationsNow } from "../shared/characterItemInstanceMutationService.js";
 import {
   getBagInventorySnapshot,
+  getInventorySaleCandidates,
   getInventoryItemsWithDefs,
   getEquippedItemDefIds,
   getWarehouseInventorySnapshot,
@@ -119,6 +120,10 @@ class InventoryService {
     } = {},
   ): Promise<{ items: InventoryItemWithDef[]; total: number }> {
     return getInventoryItemsWithDefs(characterId, location, page, pageSize, options);
+  }
+
+  async getInventorySaleCandidates(characterId: number): Promise<InventorySaleCandidateDto[]> {
+    return getInventorySaleCandidates(characterId);
   }
 
   async getBagInventorySnapshot(characterId: number): Promise<{

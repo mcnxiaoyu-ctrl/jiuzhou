@@ -10,9 +10,11 @@ import {
   cancelMarketListing,
   createPartnerMarketListing,
   createMarketListing,
-  getInventoryItems,
+  getMarketListingDetail,
+  getInventorySaleCandidates,
   getMyPartnerMarketListings,
   getMarketListings,
+  getPartnerMarketListingDetail,
   getPartnerMarketListings,
   getPartnerMarketTradeRecords,
   getPartnerOverview,
@@ -22,7 +24,11 @@ import {
 } from '../../../../services/api';
 import type {
   MarketListingDto,
+  MarketListingSummaryDto,
+  InventoryItemDto,
+  InventorySaleCandidateDto,
   MarketPartnerListingDto,
+  MarketPartnerListingSummaryDto,
   MarketPartnerTradeRecordDto,
   MarketTradeRecordDto,
   PartnerDetailDto,
@@ -423,15 +429,18 @@ type ListingItem = {
   buyTicket: string | null;
 };
 
-type PartnerListingItem = {
+type PartnerListingBase<TPartner> = {
   id: number;
-  partner: PartnerDisplayDto;
+  partner: TPartner;
   unitPrice: number;
   seller: string;
   sellerCharacterId: number;
   listedAt: number;
   buyTicket: string | null;
 };
+
+type PartnerListingItem = PartnerListingBase<MarketPartnerListingSummaryDto['partner']>;
+type PartnerListingPreviewItem = PartnerListingBase<PartnerDisplayDto>;
 
 type TradeRecordType = '买入' | '卖出';
 
@@ -475,14 +484,24 @@ const toNonNegativeIntegerOrUndefined = (value: string): number | undefined => {
   return Math.max(0, Math.floor(parsed));
 };
 
-const buildListingItem = (dto: MarketListingDto): ListingItem => {
+type MarketListingSourceDto = MarketListingDto | MarketListingSummaryDto;
+
+const isFullMarketListingDto = (dto: MarketListingSourceDto): dto is MarketListingDto => {
+  return 'description' in dto;
+};
+
+const buildListingItem = (
+  dto: MarketListingSourceDto,
+  buyTicketOverride?: string | null,
+): ListingItem => {
+  const fullDto = isFullMarketListingDto(dto) ? dto : null;
   const quality = normalizeQuality(dto.quality);
   const category = normalizeMarketCategory(dto.category);
   const socketedGems =
-    typeof dto.socketedGems === 'string'
-      ? dto.socketedGems
-      : Array.isArray(dto.socketedGems)
-        ? (dto.socketedGems as SocketedGemEntry[])
+    typeof fullDto?.socketedGems === 'string'
+      ? fullDto.socketedGems
+      : Array.isArray(fullDto?.socketedGems)
+        ? (fullDto.socketedGems as SocketedGemEntry[])
         : null;
   const strengthenLevel = Math.max(0, Math.floor(Number(dto.strengthenLevel) || 0));
   const refineLevel = Math.max(0, Math.floor(Number(dto.refineLevel) || 0));
@@ -495,22 +514,22 @@ const buildListingItem = (dto: MarketListingDto): ListingItem => {
     quality,
     category,
     subCategory: dto.subCategory === null || dto.subCategory === undefined ? null : String(dto.subCategory),
-    description: dto.description === null || dto.description === undefined ? null : String(dto.description),
-    longDesc: dto.longDesc === null || dto.longDesc === undefined ? null : String(dto.longDesc),
-    tags: dto.tags ?? null,
-    effectDefs: dto.effectDefs ?? null,
+    description: fullDto?.description === null || fullDto?.description === undefined ? null : String(fullDto.description),
+    longDesc: fullDto?.longDesc === null || fullDto?.longDesc === undefined ? null : String(fullDto.longDesc),
+    tags: fullDto?.tags ?? null,
+    effectDefs: fullDto?.effectDefs ?? null,
     baseAttrs: dto.baseAttrs && typeof dto.baseAttrs === 'object' ? (dto.baseAttrs as Record<string, number>) : {},
     equipSlot: dto.equipSlot === null || dto.equipSlot === undefined ? null : String(dto.equipSlot),
-    equipReqRealm: dto.equipReqRealm === null || dto.equipReqRealm === undefined ? null : String(dto.equipReqRealm),
-    useType: dto.useType === null || dto.useType === undefined ? null : String(dto.useType),
+    equipReqRealm: fullDto?.equipReqRealm === null || fullDto?.equipReqRealm === undefined ? null : String(fullDto.equipReqRealm),
+    useType: fullDto?.useType === null || fullDto?.useType === undefined ? null : String(fullDto.useType),
     strengthenLevel,
     refineLevel,
     identified: Boolean(dto.identified),
-    affixes: dto.affixes ?? [],
+    affixes: fullDto?.affixes ?? [],
     socketedGems,
     learnableTechniqueId: getLearnableTechniqueId({
       generated_technique_id: dto.generatedTechniqueId,
-      effect_defs: dto.effectDefs,
+      effect_defs: fullDto?.effectDefs,
     }),
     equipmentSummary: buildMarketEquipmentSummary({
       category,
@@ -523,7 +542,11 @@ const buildListingItem = (dto: MarketListingDto): ListingItem => {
     seller: String(dto.sellerName ?? ''),
     sellerCharacterId: Number(dto.sellerCharacterId) || 0,
     listedAt: Number(dto.listedAt) || 0,
-    buyTicket: typeof dto.buyTicket === 'string' && dto.buyTicket.trim() ? dto.buyTicket : null,
+    buyTicket: typeof buyTicketOverride === 'string' && buyTicketOverride.trim()
+      ? buyTicketOverride
+      : typeof dto.buyTicket === 'string' && dto.buyTicket.trim()
+        ? dto.buyTicket
+        : null,
   };
 };
 
@@ -541,7 +564,71 @@ const buildTradeRecord = (dto: MarketTradeRecordDto): TradeRecord => {
   };
 };
 
-const buildPartnerListingItem = (dto: MarketPartnerListingDto): PartnerListingItem => {
+/**
+ * 市场上架候选轻量转换。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把 `/inventory/sale-candidates` 的瘦身 DTO 转成现有上架面板消费的 `BagItem`。
+ * 2. 不做什么：不补拉完整物品详情，不填充长描述、效果、套装、词条等大字段。
+ *
+ * 输入 / 输出：
+ * - 输入：服务端 sale candidate DTO。
+ * - 输出：可被当前市场上架 UI 直接渲染的 `BagItem`，转换失败时返回 null。
+ *
+ * 数据流 / 状态流：
+ * sale candidate -> 兼容 `buildBagItem` 的轻量 InventoryItemDto -> BagItem -> 上架选择列表。
+ *
+ * 复用设计说明：
+ * - 继续复用 BagModal 的 `buildBagItem`，避免市场弹窗复制品质、绑定、基础属性等展示规则。
+ * - 所有缺失详情字段统一在这里置空，避免多个渲染点各自判断瘦身 DTO。
+ *
+ * 关键边界条件与坑点：
+ * 1. 这里刻意不填充效果、套装和词条，所以上架候选不会展示完整详情。
+ * 2. `baseAttrsRaw` 缺失时只回退到已折算基础属性，保证装备属性区仍可展示。
+ */
+const buildSaleCandidateBagItem = (dto: InventorySaleCandidateDto): BagItem | null => {
+  const itemDto = {
+    id: dto.id,
+    item_def_id: dto.itemDefId,
+    qty: dto.qty,
+    quality: dto.quality,
+    quality_rank: null,
+    location: dto.location,
+    location_slot: null,
+    equipped_slot: dto.equippedSlot,
+    strengthen_level: dto.strengthenLevel,
+    refine_level: dto.refineLevel,
+    affixes: [],
+    identified: dto.identified,
+    locked: dto.locked,
+    bind_type: dto.bindType,
+    socketed_gems: [],
+    created_at: '',
+    def: {
+      id: dto.itemDefId,
+      name: dto.name,
+      icon: dto.icon,
+      quality: dto.quality ?? '黄',
+      category: dto.category,
+      sub_category: dto.subCategory,
+      can_disassemble: dto.canDisassemble,
+      stack_max: dto.stackMax,
+      description: null,
+      long_desc: null,
+      tags: [],
+      effect_defs: [],
+      base_attrs: dto.baseAttrs,
+      base_attrs_raw: dto.baseAttrsRaw ?? dto.baseAttrs,
+      equip_slot: dto.equipSlot,
+      use_type: null,
+      equip_req_realm: null,
+    },
+  } satisfies InventoryItemDto;
+
+  return buildBagItem(itemDto);
+};
+
+const buildPartnerListingItem = (dto: MarketPartnerListingSummaryDto): PartnerListingItem => {
   return {
     id: Number(dto.id),
     partner: dto.partner,
@@ -553,6 +640,21 @@ const buildPartnerListingItem = (dto: MarketPartnerListingDto): PartnerListingIt
   };
 };
 
+const buildPartnerListingPreviewItem = (
+  dto: MarketPartnerListingDto,
+  buyTicket: string | null = null,
+): PartnerListingPreviewItem => {
+  return {
+    id: Number(dto.id),
+    partner: dto.partner,
+    unitPrice: Number(dto.unitPriceSpiritStones) || 0,
+    seller: String(dto.sellerName ?? ''),
+    sellerCharacterId: Number(dto.sellerCharacterId) || 0,
+    listedAt: Number(dto.listedAt) || 0,
+    buyTicket: buyTicket ?? (typeof dto.buyTicket === 'string' && dto.buyTicket.trim() ? dto.buyTicket : null),
+  };
+};
+
 const buildPartnerTechniqueDetailSource = (partner: PartnerDisplayDto): MarketPartnerTechniqueDetailSource => {
   return {
     kind: 'partner',
@@ -560,7 +662,7 @@ const buildPartnerTechniqueDetailSource = (partner: PartnerDisplayDto): MarketPa
   };
 };
 
-const buildListingTechniqueDetailSource = (listing: PartnerListingItem): MarketPartnerTechniqueDetailSource => {
+const buildListingTechniqueDetailSource = (listing: Pick<PartnerListingBase<PartnerDisplayDto>, 'id'>): MarketPartnerTechniqueDetailSource => {
   return {
     kind: 'listing',
     listingId: listing.id,
@@ -660,6 +762,9 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
 
   const [marketLoading, setMarketLoading] = useState(false);
   const [marketListings, setMarketListings] = useState<ListingItem[]>([]);
+  const [marketListingDetailsById, setMarketListingDetailsById] = useState<Map<number, ListingItem>>(
+    () => new Map<number, ListingItem>(),
+  );
   const [marketTotal, setMarketTotal] = useState(0);
   const [partnerMarketLoading, setPartnerMarketLoading] = useState(false);
   const [partnerMarketListings, setPartnerMarketListings] = useState<PartnerListingItem[]>([]);
@@ -669,7 +774,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const [myListings, setMyListings] = useState<ListingItem[]>([]);
   const [myTotal, setMyTotal] = useState(0);
   const [myPartnerLoading, setMyPartnerLoading] = useState(false);
-  const [myPartnerListings, setMyPartnerListings] = useState<PartnerListingItem[]>([]);
+  const [myPartnerListings, setMyPartnerListings] = useState<PartnerListingPreviewItem[]>([]);
   const [myPartnerTotal, setMyPartnerTotal] = useState(0);
 
   const [recordsLoading, setRecordsLoading] = useState(false);
@@ -684,7 +789,9 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const [partnerOverviewLoading, setPartnerOverviewLoading] = useState(false);
   const [partnerOverview, setPartnerOverview] = useState<PartnerDetailDto[]>([]);
   const [selectedPartnerId, setSelectedPartnerId] = useState<number | null>(null);
-  const [previewPartnerListing, setPreviewPartnerListing] = useState<PartnerListingItem | null>(null);
+  const [previewPartnerListing, setPreviewPartnerListing] = useState<PartnerListingPreviewItem | null>(null);
+  const [partnerPreviewLoadingId, setPartnerPreviewLoadingId] = useState<number | null>(null);
+  const partnerPreviewRequestSeqRef = useRef(0);
   const [partnerListPrice, setPartnerListPrice] = useState('');
   const [partnerListingActionLoading, setPartnerListingActionLoading] = useState(false);
   const {
@@ -804,16 +911,18 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const mobilePreviewListing = useMemo(() => {
     if (!mobileListingPreview) return null;
     const sourceListings = mobileListingPreview.source === 'market' ? marketListings : myListings;
-    return sourceListings.find((listing) => listing.id === mobileListingPreview.listingId) ?? null;
-  }, [marketListings, mobileListingPreview, myListings]);
+    const summary = sourceListings.find((listing) => listing.id === mobileListingPreview.listingId) ?? null;
+    if (mobileListingPreview.source !== 'market' || !summary) return summary;
+    return marketListingDetailsById.get(summary.id) ?? summary;
+  }, [marketListingDetailsById, marketListings, mobileListingPreview, myListings]);
 
   const refreshBag = useCallback(async () => {
     setBagLoading(true);
     try {
-      const res = await getInventoryItems('bag', 1, 200);
+      const res = await getInventorySaleCandidates();
       if (!res.success || !res.data) throw new Error(res.message || '获取背包物品失败');
       const next = res.data.items
-        .map(buildBagItem)
+        .map(buildSaleCandidateBagItem)
         .filter((v): v is BagItem => !!v)
         .filter((v) => v.qty > 0);
       setBagItems(next);
@@ -845,7 +954,8 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
           pageSize,
         });
         if (!res.success || !res.data) throw new Error(res.message || '获取坊市列表失败');
-        setMarketListings(res.data.listings.map(buildListingItem));
+        setMarketListings(res.data.listings.map((listing) => buildListingItem(listing)));
+        setMarketListingDetailsById(new Map<number, ListingItem>());
         setMarketTotal(Number(res.data.total) || 0);
       } catch (error: unknown) {
         void 0;
@@ -864,7 +974,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       try {
         const res = await getMyMarketListings({ status: 'active', page, pageSize });
         if (!res.success || !res.data) throw new Error(res.message || '获取我的上架失败');
-        setMyListings(res.data.listings.map(buildListingItem));
+        setMyListings(res.data.listings.map((listing) => buildListingItem(listing)));
         setMyTotal(Number(res.data.total) || 0);
       } catch (error: unknown) {
         void 0;
@@ -876,6 +986,23 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     },
     [pageSize, messageRef],
   );
+
+  const loadMarketListingDetail = useCallback(async (row: ListingItem): Promise<void> => {
+    if (marketListingDetailsById.has(row.id)) return;
+    try {
+      const res = await getMarketListingDetail(row.id, SILENT_API_REQUEST_CONFIG);
+      if (!res.success || !res.data) return;
+      const detail = buildListingItem(res.data.listing, row.buyTicket);
+      setMarketListingDetailsById((prev) => {
+        if (prev.has(row.id)) return prev;
+        const next = new Map(prev);
+        next.set(row.id, detail);
+        return next;
+      });
+    } catch (error: unknown) {
+      void 0;
+    }
+  }, [marketListingDetailsById]);
 
   const refreshRecords = useCallback(
     async (page: number) => {
@@ -928,7 +1055,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       try {
         const res = await getMyPartnerMarketListings({ status: 'active', page, pageSize });
         if (!res.success || !res.data) throw new Error(res.message || '获取我的伙伴上架失败');
-        setMyPartnerListings(res.data.listings.map(buildPartnerListingItem));
+        setMyPartnerListings(res.data.listings.map((listing) => buildPartnerListingPreviewItem(listing)));
         setMyPartnerTotal(Number(res.data.total) || 0);
       } catch (error: unknown) {
         void 0;
@@ -977,6 +1104,18 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     }
   }, []);
 
+  const closePartnerListingPreview = useCallback(() => {
+    partnerPreviewRequestSeqRef.current += 1;
+    setPreviewPartnerListing(null);
+    setPartnerPreviewLoadingId(null);
+  }, []);
+
+  const openLoadedPartnerListingPreview = useCallback((row: PartnerListingPreviewItem) => {
+    partnerPreviewRequestSeqRef.current += 1;
+    setPartnerPreviewLoadingId(null);
+    setPreviewPartnerListing(row);
+  }, []);
+
   const resetAll = useCallback(() => {
     setAssetType('item');
     setPanel('market');
@@ -994,6 +1133,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     setMyPage(1);
     setRecordPage(1);
     setSelectedBagId(null);
+    setMarketListingDetailsById(new Map<number, ListingItem>());
     setListPrice('');
     setListQty('1');
       setPartnerListPrice('');
@@ -1002,7 +1142,8 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       setMobileFilterOpen(false);
       setMobileListingPreview(null);
       setBuyDialogListing(null);
-    }, []);
+      closePartnerListingPreview();
+    }, [closePartnerListingPreview]);
 
   const menuItems = useMemo(
     () => [
@@ -1277,7 +1418,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       );
       if (!res.success) throw new Error(res.message || '购买失败');
       messageRef.current.success(res.message || '购买成功');
-      setPreviewPartnerListing(null);
+      closePartnerListingPreview();
       await Promise.all([
         refreshPartnerMarket(marketPage),
         refreshMyPartnerListings(myPage),
@@ -1289,6 +1430,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       marketPage,
       myPage,
       recordPage,
+      closePartnerListingPreview,
       refreshMyPartnerListings,
       refreshPartnerMarket,
       refreshPartnerOverview,
@@ -1378,8 +1520,31 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     }
   }, [listPrice, listQty, marketPage, myPage, refreshBag, refreshMarket, refreshMy, selectedBagItem]);
 
-  const buyPartnerListing = useCallback(
+  const openPartnerMarketListingPreview = useCallback(
     async (row: PartnerListingItem) => {
+      const requestSeq = partnerPreviewRequestSeqRef.current + 1;
+      partnerPreviewRequestSeqRef.current = requestSeq;
+      setPartnerPreviewLoadingId(row.id);
+      try {
+        const res = await getPartnerMarketListingDetail(row.id, SILENT_API_REQUEST_CONFIG);
+        if (partnerPreviewRequestSeqRef.current !== requestSeq) return;
+        if (!res.success || !res.data) throw new Error(res.message || '获取伙伴详情失败');
+        setPreviewPartnerListing(buildPartnerListingPreviewItem(res.data.listing, row.buyTicket));
+      } catch (error) {
+        if (partnerPreviewRequestSeqRef.current !== requestSeq) return;
+        const normalizedError = toUnifiedApiError(error, '获取伙伴详情失败');
+        messageRef.current.error(normalizedError.message);
+      } finally {
+        if (partnerPreviewRequestSeqRef.current === requestSeq) {
+          setPartnerPreviewLoadingId(null);
+        }
+      }
+    },
+    [messageRef],
+  );
+
+  const buyPartnerListing = useCallback(
+    async (row: PartnerListingPreviewItem) => {
       if (characterId !== null && row.sellerCharacterId === characterId) return;
       if (!row.buyTicket) {
         messageRef.current.error('购买凭证已失效，请刷新列表后重试');
@@ -1395,17 +1560,17 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       } catch (error) {
         const normalizedError = toUnifiedApiError(error, '购买失败');
         if (isPartnerMarketBuyTicketInvalidCode(normalizedError.code)) {
-          setPreviewPartnerListing(null);
+          closePartnerListingPreview();
           await refreshPartnerMarket(marketPage);
         }
         messageRef.current.error(normalizedError.message);
       }
     },
-    [characterId, executePartnerPurchase, marketPage, refreshPartnerMarket, resolveMarketPurchaseCaptchaPayload],
+    [characterId, closePartnerListingPreview, executePartnerPurchase, marketPage, refreshPartnerMarket, resolveMarketPurchaseCaptchaPayload],
   );
 
   const unlistPartner = useCallback(
-    async (row: PartnerListingItem) => {
+    async (row: Pick<PartnerListingBase<PartnerDisplayDto>, 'id'>) => {
       try {
         const res = await cancelPartnerMarketListing(row.id);
         if (!res.success) throw new Error(res.message || '下架失败');
@@ -1662,11 +1827,15 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                   className={`market-mobile-card ${getItemQualityClassName(row.quality)}`}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setMobileListingPreview({ source: 'market', listingId: row.id })}
+                  onClick={() => {
+                    setMobileListingPreview({ source: 'market', listingId: row.id });
+                    void loadMarketListingDetail(row);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter' && event.key !== ' ') return;
                     event.preventDefault();
                     setMobileListingPreview({ source: 'market', listingId: row.id });
+                    void loadMarketListingDetail(row);
                   }}
                 >
                   <div className="market-mobile-card-head">
@@ -1738,10 +1907,16 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                       placement={marketTooltipPlacement}
                       autoAdjustOverflow
                       mouseEnterDelay={0.15}
-                      title={<MarketItemTooltipContent item={row} />}
+                      title={<MarketItemTooltipContent item={marketListingDetailsById.get(row.id) ?? row} />}
                       getPopupContainer={getMarketTooltipPopupContainer}
                     >
-                      <div className={`market-item ${getItemQualityClassName(row.quality)}`} onMouseEnter={resolveMarketTooltipPlacement}>
+                      <div
+                        className={`market-item ${getItemQualityClassName(row.quality)}`}
+                        onMouseEnter={(event) => {
+                          resolveMarketTooltipPlacement(event);
+                          void loadMarketListingDetail(row);
+                        }}
+                      >
                         <img className={`market-item-icon ${getItemQualityClassName(row.quality)}`} src={row.icon} alt={row.name} />
                         <div className="market-item-meta">
                           <div className="market-item-name">{row.name}</div>
@@ -1821,7 +1996,9 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                   <div 
                     className="market-mobile-card-head"
                     style={{ cursor: 'pointer' }}
-                    onClick={() => setPreviewPartnerListing(row)}
+                    onClick={() => {
+                      void openPartnerMarketListingPreview(row);
+                    }}
                   >
                     <img className="market-partner-avatar" src={resolvePartnerAvatar(row.partner.avatar)} alt={row.partner.name} />
                     <div className="market-mobile-head-main">
@@ -1855,8 +2032,9 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                       <Button
                         type="primary"
                         size="small"
+                        loading={partnerPreviewLoadingId === row.id}
                         onClick={() => {
-                          setPreviewPartnerListing(row);
+                          void openPartnerMarketListingPreview(row);
                         }}
                       >
                         购买伙伴
@@ -2043,7 +2221,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                 <div 
                   className="market-mobile-card-head"
                   style={{ cursor: 'pointer' }}
-                  onClick={() => setPreviewPartnerListing(row)}
+                  onClick={() => openLoadedPartnerListingPreview(row)}
                 >
                   <img className="market-partner-avatar" src={resolvePartnerAvatar(row.partner.avatar)} alt={row.partner.name} />
                   <div className="market-mobile-head-main">
@@ -2760,7 +2938,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
               unitPrice={previewPartnerListing.unitPrice}
               sellerCharacterId={previewPartnerListing.sellerCharacterId}
               myCharacterId={characterId}
-              onClose={() => setPreviewPartnerListing(null)}
+              onClose={closePartnerListingPreview}
                 onBuy={() => {
                   void buyPartnerListing(previewPartnerListing);
                 }}
@@ -2772,7 +2950,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
               unitPrice={previewPartnerListing.unitPrice}
               sellerCharacterId={previewPartnerListing.sellerCharacterId}
               myCharacterId={characterId}
-              onClose={() => setPreviewPartnerListing(null)}
+              onClose={closePartnerListingPreview}
                 onBuy={() => {
                   void buyPartnerListing(previewPartnerListing);
                 }}

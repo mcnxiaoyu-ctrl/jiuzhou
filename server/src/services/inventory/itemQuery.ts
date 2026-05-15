@@ -29,6 +29,7 @@ import {
   getItemDefinitionById,
   getItemDefinitionsByIds,
   getItemSetDefinitions,
+  type ItemDefConfig,
 } from "../staticConfigLoader.js";
 import {
   buildEquipmentDisplayBaseAttrs,
@@ -94,6 +95,101 @@ export type WarehouseInventorySnapshot = {
   info: InventoryInfo;
   bagItems: InventoryItemWithDef[];
   warehouseItems: InventoryItemWithDef[];
+};
+
+export type InventorySaleCandidateDto = {
+  id: number;
+  itemDefId: string;
+  name: string;
+  icon: string | null;
+  quality: string | null;
+  category: string;
+  subCategory: string | null;
+  qty: number;
+  locked: boolean;
+  bindType: string;
+  strengthenLevel: number;
+  refineLevel: number;
+  location: InventoryLocation;
+  equippedSlot: string | null;
+  stackMax: number;
+  canDisassemble: boolean;
+  equipSlot: string | null;
+  baseAttrs: Record<string, number>;
+  baseAttrsRaw: Record<string, number> | null;
+  identified: boolean;
+};
+
+/**
+ * 背包上架候选轻量 DTO 构建器。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把背包实例与静态物品定义压缩成上架选择所需字段。
+ * 2. 不做什么：不返回长描述、效果定义、套装效果、完整词条元数据等详情字段。
+ *
+ * 输入 / 输出：
+ * - 输入：背包实例、静态定义，以及可选的生成功法书展示名。
+ * - 输出：`InventorySaleCandidateDto`，供市场上架面板直接渲染候选项。
+ *
+ * 数据流 / 状态流：
+ * getInventoryItems(bag) -> getItemDefinitionById 静态定义索引 -> 装备基础属性折算 -> 轻量 DTO。
+ *
+ * 复用设计说明：
+ * - 将市场上架候选字段收敛在 inventory 查询层，避免前端继续复用富化列表并传输大字段。
+ * - `getInventorySaleCandidates` 与路由、InventoryService 共享这一构建入口，后续候选字段变化只维护一处。
+ *
+ * 关键边界条件与坑点：
+ * 1. 缺少静态定义的实例会被跳过，否则前端无法得到名称、分类、堆叠上限等上架必需字段。
+ * 2. 装备基础属性必须按实例品质、强化、精炼和宝石折算；但词条只用于完整详情，不进入候选载荷。
+ */
+const buildInventorySaleCandidateDto = (
+  item: InventoryItem,
+  itemDef: ItemDefConfig,
+): InventorySaleCandidateDto => {
+  const generatedTechniqueBookDisplay = resolveGeneratedTechniqueBookDisplay(
+    item.item_def_id,
+    item.metadata,
+  );
+  const resolvedQuality = item.quality ?? generatedTechniqueBookDisplay?.quality ?? itemDef.quality ?? null;
+  const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
+  const resolvedQualityRank = Math.max(
+    1,
+    Math.floor(Number(item.quality_rank) || defQualityRank),
+  );
+  const baseAttrsRaw = itemDef.base_attrs ?? null;
+  const baseAttrs = itemDef.category === "equipment"
+    ? buildEquipmentDisplayBaseAttrs({
+        baseAttrsRaw,
+        defQualityRankRaw: defQualityRank,
+        resolvedQualityRankRaw: resolvedQualityRank,
+        strengthenLevelRaw: item.strengthen_level,
+        refineLevelRaw: item.refine_level,
+        socketedGemsRaw: item.socketed_gems,
+      })
+    : itemDef.base_attrs ?? {};
+
+  return {
+    id: item.id,
+    itemDefId: item.item_def_id,
+    name: generatedTechniqueBookDisplay?.name ?? itemDef.name,
+    icon: itemDef.icon ?? null,
+    quality: resolvedQuality,
+    category: itemDef.category,
+    subCategory: itemDef.sub_category ?? null,
+    qty: item.qty,
+    locked: item.locked,
+    bindType: item.bind_type,
+    strengthenLevel: item.strengthen_level,
+    refineLevel: item.refine_level,
+    location: item.location,
+    equippedSlot: item.equipped_slot,
+    stackMax: Math.max(1, Math.floor(Number(itemDef.stack_max) || 1)),
+    canDisassemble: resolveItemCanDisassemble(itemDef),
+    equipSlot: itemDef.equip_slot ?? null,
+    baseAttrs,
+    baseAttrsRaw,
+    identified: item.identified,
+  };
 };
 
 /**
@@ -437,6 +533,50 @@ export const getInventoryItemsWithDefs = async (
   const items = enrichInventoryItemsWithDefs(result.items, context);
 
   return { items, total: result.total };
+};
+
+/**
+ * 查询背包上架候选轻量列表。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：只读取背包前 200 个实例，并按静态定义补齐市场上架选择所需的轻量展示字段。
+ * 2. 不做什么：不调用 `getInventoryItemsWithDefs`，不加载套装、效果、长描述与词条池元数据。
+ *
+ * 输入 / 输出：
+ * - 输入：角色 ID。
+ * - 输出：可上架候选 DTO 数组。
+ *
+ * 数据流 / 状态流：
+ * characterId -> getInventoryItems(characterId, "bag", 1, 200) -> getItemDefinitionById 去重读取静态定义 -> DTO。
+ *
+ * 复用设计说明：
+ * - 让市场上架面板复用独立轻量入口，避免和背包详情弹窗共享富化接口导致载荷膨胀。
+ * - 定义读取使用本函数内 `Map` 去重，重复堆叠或同名实例不会重复查静态定义。
+ *
+ * 关键边界条件与坑点：
+ * 1. 只返回当前背包页上限内实例，与旧市场上架读取 `pageSize=200` 的可见范围保持一致。
+ * 2. 静态定义缺失时跳过该实例，避免下发无法渲染或无法上架的半成品候选。
+ */
+export const getInventorySaleCandidates = async (
+  characterId: number,
+): Promise<InventorySaleCandidateDto[]> => {
+  const result = await getInventoryItems(characterId, "bag", 1, 200);
+  if (result.items.length <= 0) return [];
+
+  const itemDefCache = new Map<string, ItemDefConfig | null>();
+  const candidates: InventorySaleCandidateDto[] = [];
+  for (const item of result.items) {
+    const itemDefId = String(item.item_def_id || "").trim();
+    if (!itemDefId) continue;
+    if (!itemDefCache.has(itemDefId)) {
+      itemDefCache.set(itemDefId, getItemDefinitionById(itemDefId));
+    }
+    const itemDef = itemDefCache.get(itemDefId) ?? null;
+    if (!itemDef) continue;
+    candidates.push(buildInventorySaleCandidateDto(item, itemDef));
+  }
+
+  return candidates;
 };
 
 /**

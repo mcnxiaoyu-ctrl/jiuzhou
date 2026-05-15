@@ -35,6 +35,7 @@ const createMarketQpsLimit = (routeKey: string, limit: number) => createQpsLimit
 });
 
 const marketListingsQpsLimit = createMarketQpsLimit('listings', MARKET_QUERY_QPS_LIMIT);
+const marketListingDetailQpsLimit = createMarketQpsLimit('listing-detail', MARKET_QUERY_QPS_LIMIT);
 const marketMyListingsQpsLimit = createMarketQpsLimit('my-listings', MARKET_QUERY_QPS_LIMIT);
 const marketRecordsQpsLimit = createMarketQpsLimit('records', MARKET_QUERY_QPS_LIMIT);
 const marketListMutationQpsLimit = createMarketQpsLimit('list', MARKET_MUTATION_QPS_LIMIT);
@@ -44,6 +45,7 @@ const partnerMarketListingsQpsLimit = createMarketQpsLimit('partner-listings', M
 const partnerMarketMyListingsQpsLimit = createMarketQpsLimit('partner-my-listings', MARKET_QUERY_QPS_LIMIT);
 const partnerMarketRecordsQpsLimit = createMarketQpsLimit('partner-records', MARKET_QUERY_QPS_LIMIT);
 const partnerMarketTechniqueDetailQpsLimit = createMarketQpsLimit('partner-technique-detail', MARKET_QUERY_QPS_LIMIT);
+const partnerMarketListingDetailQpsLimit = createMarketQpsLimit('partner-listing-detail', MARKET_QUERY_QPS_LIMIT);
 const partnerMarketListMutationQpsLimit = createMarketQpsLimit('partner-list', MARKET_MUTATION_QPS_LIMIT);
 const partnerMarketCancelMutationQpsLimit = createMarketQpsLimit('partner-cancel', MARKET_MUTATION_QPS_LIMIT);
 const partnerMarketBuyMutationQpsLimit = createMarketQpsLimit('partner-buy', MARKET_MUTATION_QPS_LIMIT);
@@ -96,6 +98,21 @@ router.get('/captcha/config', ...marketAuthGuards, asyncHandler(async (_req, res
       ? { tencentAppId: marketPurchaseTencentCaptchaConfig.appId }
       : {}),
   });
+}));
+
+router.get('/listing-detail', ...marketCharacterGuards, marketListingDetailQpsLimit, asyncHandler(async (req, res) => {
+  const characterId = req.characterId!;
+  const listingId = parseFiniteNumber(getSingleQueryValue(req.query.listingId));
+  if (!listingId) {
+    sendResult(res, { success: false, message: 'listingId 参数无效' });
+    return;
+  }
+
+  const result = await marketService.getMarketListingDetail({
+    characterId,
+    listingId,
+  });
+  return sendResult(res, result);
 }));
 
 router.get('/my-listings', ...marketCharacterGuards, marketMyListingsQpsLimit, asyncHandler(async (req, res) => {
@@ -205,6 +222,21 @@ router.get('/partner-listings', ...marketAuthGuards, partnerMarketListingsQpsLim
       })),
     };
   }
+  return sendResult(res, result);
+}));
+
+router.get('/partner-listing-detail', ...marketCharacterGuards, partnerMarketListingDetailQpsLimit, asyncHandler(async (req, res) => {
+  const characterId = req.characterId!;
+  const listingId = parseFiniteNumber(getSingleQueryValue(req.query.listingId));
+  if (!listingId) {
+    sendResult(res, { success: false, message: 'listingId 参数无效' });
+    return;
+  }
+
+  const result = await partnerMarketService.getPartnerListingDetail({
+    characterId,
+    listingId,
+  });
   return sendResult(res, result);
 }));
 

@@ -71,6 +71,27 @@ export interface MarketPartnerListingDto {
   buyTicket?: string | null;
 }
 
+export interface MarketPartnerListingSummaryDto {
+  id: number;
+  partner: {
+    id: number;
+    partnerDefId: string;
+    name: string;
+    nickname: string;
+    avatar: string | null;
+    quality: string;
+    element: string;
+    role: string;
+    level: number;
+    currentEffectiveLevel: number;
+  };
+  unitPriceSpiritStones: number;
+  sellerCharacterId: number;
+  sellerName: string;
+  listedAt: number;
+  buyTicket?: string | null;
+}
+
 export interface MarketPartnerTradeRecordDto {
   id: number;
   type: '买入' | '卖出';
@@ -91,13 +112,35 @@ type PartnerListingsQuery = {
 };
 
 type PartnerListingsCacheData = {
-  listings: MarketPartnerListingDto[];
+  listings: MarketPartnerListingSummaryDto[];
   total: number;
 };
 
 type PartnerListingRow = {
   id: number;
   partner_snapshot: PartnerDisplayDto | null;
+  unit_price_spirit_stones: number | string | bigint;
+  seller_character_id: number;
+  seller_name: string;
+  listed_at: Date | string;
+};
+
+type PartnerListingDetailRow = PartnerListingRow & {
+  status: string;
+};
+
+type PartnerListingSummaryRow = {
+  id: number;
+  partner_id: number | string | bigint;
+  partner_def_id: string;
+  partner_name: string;
+  partner_nickname: string;
+  partner_quality: string;
+  partner_element: string;
+  partner_level: number | string | bigint;
+  partner_avatar: string | null;
+  partner_role: string | null;
+  partner_current_effective_level: number | string | bigint | null;
   unit_price_spirit_stones: number | string | bigint;
   seller_character_id: number;
   seller_name: string;
@@ -183,6 +226,55 @@ const buildListingDto = async (row: PartnerListingRow): Promise<MarketPartnerLis
   };
 };
 
+/**
+ * 公开伙伴挂单 summary DTO 构建器。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把挂单冗余列与少量 JSON 标量压缩成公开列表展示字段。
+ * 2. 不做什么：不读取整块 `partner_snapshot`，不加载静态伙伴定义，不返回 `techniques`、成长、计算属性等详情大字段。
+ *
+ * 输入 / 输出：
+ * - 输入：伙伴挂单 summary SQL 行。
+ * - 输出：公开列表使用的 `MarketPartnerListingSummaryDto`，无有效伙伴快照时返回 null。
+ *
+ * 数据流 / 状态流：
+ * market_partner_listing 冗余列 + 少量 JSON 标量 -> summary DTO。
+ *
+ * 复用设计说明：
+ * - `getPartnerListings` 与缓存层共用该构建器，保证公开列表只有一个瘦身出口。
+ * - 完整详情保留 `buildListingDto`，避免 summary 与详情字段在同一函数里通过条件分支混杂维护。
+ *
+ * 关键边界条件与坑点：
+ * 1. summary 只负责列表展示，完整定义校验与功法读取统一留给详情接口。
+ * 2. 旧挂单若缺少 JSON 标量，头像返回 null、角色返回空字符串，不在列表热路径补拉定义兜底。
+ */
+const buildPartnerListingSummaryDto = (
+  row: PartnerListingSummaryRow,
+): MarketPartnerListingSummaryDto | null => {
+  const partnerDefId = normalizeText(row.partner_def_id);
+  if (!partnerDefId) return null;
+  const partnerLevel = normalizeInteger(row.partner_level, 1);
+  return {
+    id: Number(row.id),
+    partner: {
+      id: normalizeInteger(row.partner_id),
+      partnerDefId,
+      name: normalizeText(row.partner_name),
+      nickname: normalizeText(row.partner_nickname),
+      avatar: normalizeText(row.partner_avatar) || null,
+      quality: normalizeText(row.partner_quality),
+      element: normalizeText(row.partner_element),
+      role: normalizeText(row.partner_role),
+      level: partnerLevel,
+      currentEffectiveLevel: normalizeInteger(row.partner_current_effective_level, partnerLevel),
+    },
+    unitPriceSpiritStones: Number(row.unit_price_spirit_stones),
+    sellerCharacterId: Number(row.seller_character_id),
+    sellerName: String(row.seller_name ?? ''),
+    listedAt: new Date(String(row.listed_at ?? '')).getTime(),
+  };
+};
+
 const normalizePartnerListingsQuery = (params: {
   quality?: string;
   element?: string;
@@ -242,7 +334,16 @@ const loadPartnerListingsCacheData = async (
   const listSql = `
     SELECT
       mpl.id,
-      mpl.partner_snapshot,
+      mpl.partner_id,
+      mpl.partner_def_id,
+      mpl.partner_name,
+      mpl.partner_nickname,
+      mpl.partner_quality,
+      mpl.partner_element,
+      mpl.partner_level,
+      mpl.partner_snapshot ->> 'avatar' AS partner_avatar,
+      mpl.partner_snapshot ->> 'role' AS partner_role,
+      mpl.partner_snapshot ->> 'currentEffectiveLevel' AS partner_current_effective_level,
       mpl.unit_price_spirit_stones,
       mpl.seller_character_id,
       seller.nickname AS seller_name,
@@ -265,9 +366,9 @@ const loadPartnerListingsCacheData = async (
     query(countSql, values.slice(0, values.length - 2)),
   ]);
 
-  const listings = (await Promise.all((listResult.rows as PartnerListingRow[])
-    .map((row) => buildListingDto(row))))
-    .filter((row): row is MarketPartnerListingDto => row !== null);
+  const listings = (listResult.rows as PartnerListingSummaryRow[])
+    .map((row) => buildPartnerListingSummaryDto(row))
+    .filter((row): row is MarketPartnerListingSummaryDto => row !== null);
 
   return {
     listings,
@@ -331,7 +432,7 @@ class PartnerMarketService {
   }): Promise<{
     success: boolean;
     message: string;
-    data?: { listings: MarketPartnerListingDto[]; total: number };
+    data?: { listings: MarketPartnerListingSummaryDto[]; total: number };
   }> {
     const normalizedQuery = normalizePartnerListingsQuery(params);
     const versionedKey = await partnerMarketListingsCacheVersion.buildVersionedKey(
@@ -345,6 +446,59 @@ class PartnerMarketService {
       success: true,
       message: 'ok',
       data,
+    };
+  }
+
+  async getPartnerListingDetail(params: {
+    characterId: number;
+    listingId: number;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    data?: { listing: MarketPartnerListingDto };
+  }> {
+    const listingId = parsePositiveInt(params.listingId);
+    if (listingId === null) return { success: false, message: 'listingId参数错误' };
+
+    const listingResult = await query<PartnerListingDetailRow>(
+      `
+        SELECT
+          mpl.id,
+          mpl.partner_snapshot,
+          mpl.unit_price_spirit_stones,
+          mpl.seller_character_id,
+          seller.nickname AS seller_name,
+          mpl.listed_at,
+          mpl.status
+        FROM market_partner_listing mpl
+        JOIN characters seller ON seller.id = mpl.seller_character_id
+        WHERE mpl.id = $1
+        LIMIT 1
+      `,
+      [listingId],
+    );
+    const listing = listingResult.rows[0] ?? null;
+    if (!listing) {
+      return { success: false, message: '伙伴挂单不存在' };
+    }
+
+    const sellerCharacterId = normalizeInteger(listing.seller_character_id);
+    const canViewListing = listing.status === 'active' || sellerCharacterId === params.characterId;
+    if (!canViewListing) {
+      return { success: false, message: '当前挂单不可查看' };
+    }
+
+    const dto = await buildListingDto(listing);
+    if (!dto) {
+      return { success: false, message: '伙伴快照不存在' };
+    }
+
+    return {
+      success: true,
+      message: '获取成功',
+      data: {
+        listing: dto,
+      },
     };
   }
 
