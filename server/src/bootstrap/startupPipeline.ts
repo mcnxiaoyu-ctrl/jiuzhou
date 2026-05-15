@@ -94,6 +94,12 @@ import {
   initializeEventLoopMonitor,
   stopEventLoopMonitor,
 } from "../services/eventLoopMonitorService.js";
+import {
+  resolveJiuzhouRuntimeRole,
+  shouldStartGeneralBackgroundWorkers,
+  shouldStartHttpServer,
+  shouldStartOnlineSettlementRunner,
+} from "../config/runtimeRole.js";
 
 export interface StartServerOptions {
   httpServer: HttpServer;
@@ -126,6 +132,8 @@ export const startServerWithPipeline = async (
   options: StartServerOptions,
 ): Promise<void> => {
   console.log("\n🎮 九州修仙录 服务启动中...\n");
+  const runtimeRole = resolveJiuzhouRuntimeRole();
+  console.log(`运行角色: ${runtimeRole}`);
 
   const dbConnected = await testConnection();
   if (!dbConnected) {
@@ -164,16 +172,18 @@ export const startServerWithPipeline = async (
     }),
   );
   console.log(`✓ Worker 池已就绪（${workerCount} 个 Worker）\n`);
-  await runStartupStep("洞府研修 worker 协调器初始化", initializeTechniqueGenerationJobRunner);
-  console.log("✓ 洞府研修 worker 协调器已就绪\n");
-  await runStartupStep("AI 伙伴招募 worker 协调器初始化", initializePartnerRecruitJobRunner);
-  console.log("✓ AI 伙伴招募 worker 协调器已就绪\n");
-  await runStartupStep("三魂归契 worker 协调器初始化", initializePartnerFusionJobRunner);
-  console.log("✓ 三魂归契 worker 协调器已就绪\n");
-  await runStartupStep("归元洗髓 worker 协调器初始化", initializePartnerReboneJobRunner);
-  console.log("✓ 归元洗髓 worker 协调器已就绪\n");
-  await runStartupStep("云游奇遇 worker 协调器初始化", initializeWanderJobRunner);
-  console.log("✓ 云游奇遇 worker 协调器已就绪\n");
+  if (shouldStartGeneralBackgroundWorkers(runtimeRole)) {
+    await runStartupStep("洞府研修 worker 协调器初始化", initializeTechniqueGenerationJobRunner);
+    console.log("✓ 洞府研修 worker 协调器已就绪\n");
+    await runStartupStep("AI 伙伴招募 worker 协调器初始化", initializePartnerRecruitJobRunner);
+    console.log("✓ AI 伙伴招募 worker 协调器已就绪\n");
+    await runStartupStep("三魂归契 worker 协调器初始化", initializePartnerFusionJobRunner);
+    console.log("✓ 三魂归契 worker 协调器已就绪\n");
+    await runStartupStep("归元洗髓 worker 协调器初始化", initializePartnerReboneJobRunner);
+    console.log("✓ 归元洗髓 worker 协调器已就绪\n");
+    await runStartupStep("云游奇遇 worker 协调器初始化", initializeWanderJobRunner);
+    console.log("✓ 云游奇遇 worker 协调器已就绪\n");
+  }
   const expiredDungeonCleanupSummary = await runStartupStep(
     "过期秘境实例收口",
     () => dungeonExpiredInstanceCleanupService.runCleanupOnce(),
@@ -195,8 +205,10 @@ export const startServerWithPipeline = async (
   console.log(
     `✓ 在线战斗投影已预热（活跃角色 ${onlineBattleWarmupSummary.characterCount} / 竞技场 ${onlineBattleWarmupSummary.arenaCount} / 秘境 ${onlineBattleWarmupSummary.dungeonCount} / 千层塔 ${onlineBattleWarmupSummary.towerCount}）\n`,
   );
-  await runStartupStep("在线战斗延迟结算协调器初始化", initializeOnlineBattleSettlementRunner);
-  console.log("✓ 在线战斗延迟结算协调器已就绪\n");
+  if (shouldStartOnlineSettlementRunner(runtimeRole)) {
+    await runStartupStep("在线战斗延迟结算协调器初始化", initializeOnlineBattleSettlementRunner);
+    console.log("✓ 在线战斗延迟结算协调器已就绪\n");
+  }
   await runStartupStep("事件循环监控初始化", initializeEventLoopMonitor);
   console.log("✓ 事件循环监控已就绪\n");
   await runStartupStep("爱发电私信重试调度器初始化", initializeAfdianMessageRetryService);
@@ -225,15 +237,19 @@ export const startServerWithPipeline = async (
 
   await runStartupStep("挂机会话恢复", recoverActiveIdleSessions);
 
-  await new Promise<void>((resolve, reject) => {
-    options.httpServer.listen(options.port, options.host, () => {
-      console.log(
-        `🚀 服务已启动: http://${options.host}:${options.port} (或 http://localhost:${options.port})\n`,
-      );
-      resolve();
+  if (shouldStartHttpServer(runtimeRole)) {
+    await new Promise<void>((resolve, reject) => {
+      options.httpServer.listen(options.port, options.host, () => {
+        console.log(
+          `🚀 服务已启动: http://${options.host}:${options.port} (或 http://localhost:${options.port})\n`,
+        );
+        resolve();
+      });
+      options.httpServer.once("error", reject);
     });
-    options.httpServer.once("error", reject);
-  });
+  } else {
+    console.log("✓ Worker 角色不监听 HTTP 端口\n");
+  }
 };
 
 /**

@@ -131,6 +131,7 @@ type CharacterWalletRow = {
 const PARTNER_MARKET_TAX_RATE = 0;
 const PARTNER_MARKET_LISTINGS_CACHE_REDIS_TTL_SEC = 8;
 const PARTNER_MARKET_LISTINGS_CACHE_MEMORY_TTL_MS = 2_000;
+const PARTNER_MARKET_PUBLIC_LISTINGS_PAGE_SIZE_MAX = 40;
 
 const clampInt = (n: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, n));
@@ -196,7 +197,7 @@ const normalizePartnerListingsQuery = (params: {
     query: parseMaybeString(params.query),
     sort: params.sort ?? 'timeDesc',
     page: clampInt(parsePositiveInt(params.page) ?? 1, 1, 1_000_000),
-    pageSize: clampInt(parsePositiveInt(params.pageSize) ?? 20, 1, 100),
+    pageSize: clampInt(parsePositiveInt(params.pageSize) ?? 20, 1, PARTNER_MARKET_PUBLIC_LISTINGS_PAGE_SIZE_MAX),
   };
 };
 

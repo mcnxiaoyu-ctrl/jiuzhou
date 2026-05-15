@@ -16,7 +16,9 @@ import {
   grantRewardItemWithAutoDisassemble,
   type AutoDisassembleSetting,
   type GrantRewardItemWithAutoDisassembleMetrics,
+  type PendingMailItem,
 } from './autoDisassembleRewardService.js';
+import { buildBattleDropGrantUnits, type BattleDropGrantInput } from './battleDropGrantUnit.js';
 import { normalizeAutoDisassembleSetting } from './autoDisassembleRules.js';
 import type { MonsterData } from '../battle/battleFactory.js';
 import { getItemDefinitionById, getMonsterDefinitions } from './staticConfigLoader.js';
@@ -122,6 +124,7 @@ type BattleDropGrantContext = {
 type PendingBattleDropMailEntry = {
   userId: number;
   items: MailAttachItem[];
+  itemByMergeKey: Map<string, MailAttachItem>;
 };
 
 type BattleDropSettlementTransactionResult = {
@@ -129,15 +132,6 @@ type BattleDropSettlementTransactionResult = {
   pendingMailByReceiver: Map<number, PendingBattleDropMailEntry>;
   collectEventCount: number;
   pendingMailCount: number;
-};
-
-type BattleRewardPendingMailItem = {
-  item_def_id: string;
-  qty: number;
-  options?: {
-    bindType?: string;
-    equipOptions?: unknown;
-  };
 };
 
 // 掉落结果
@@ -248,8 +242,8 @@ class BattleDropService {
   private rewardMonsterDataCache = new Map<string, MonsterData | null>();
   private rewardItemMetaCache = new Map<string, RewardItemMeta>();
 
-  private pushPendingMailItem(bucket: MailAttachItem[], mailItem: MailAttachItem): void {
-    const buildMergeKey = (entry: MailAttachItem): string => JSON.stringify({
+  private buildPendingMailItemMergeKey(entry: MailAttachItem): string {
+    return JSON.stringify({
       itemDefId: String(entry.item_def_id || '').trim(),
       bindType: String(entry.options?.bindType || '').trim(),
       metadata: entry.options?.metadata ?? null,
@@ -257,22 +251,38 @@ class BattleDropService {
       qualityRank: entry.options?.qualityRank ?? null,
       equipOptions: entry.options?.equipOptions ?? null,
     });
+  }
 
-    const mergeKey = buildMergeKey(mailItem);
-    const found = bucket.find((entry) => buildMergeKey(entry) === mergeKey);
+  private pushPendingMailItem(
+    bucket: MailAttachItem[],
+    itemByMergeKey: Map<string, MailAttachItem>,
+    mailItem: MailAttachItem,
+  ): void {
+    const mergeKey = this.buildPendingMailItemMergeKey(mailItem);
+    const found = itemByMergeKey.get(mergeKey);
     if (found) {
       found.qty += mailItem.qty;
       return;
     }
 
-    bucket.push({
+    const normalizedMailItem: MailAttachItem = {
       item_def_id: mailItem.item_def_id,
       qty: mailItem.qty,
       ...(mailItem.options ? { options: { ...mailItem.options } } : {}),
-    });
+    };
+    itemByMergeKey.set(mergeKey, normalizedMailItem);
+    bucket.push(normalizedMailItem);
   }
 
-  private normalizePendingMailItem(mailItem: BattleRewardPendingMailItem): MailAttachItem {
+  private createPendingBattleDropMailEntry(userId: number): PendingBattleDropMailEntry {
+    return {
+      userId,
+      items: [],
+      itemByMergeKey: new Map<string, MailAttachItem>(),
+    };
+  }
+
+  private normalizePendingMailItem(mailItem: PendingMailItem): MailAttachItem {
     const options = mailItem.options
       ? {
           ...(mailItem.options.bindType ? { bindType: mailItem.options.bindType } : {}),
@@ -870,6 +880,7 @@ class BattleDropService {
     }
 
     const pendingMailItems: MailAttachItem[] = [];
+    const pendingMailItemByMergeKey = new Map<string, MailAttachItem>();
     const grantContext = await this.getBattleDropGrantContext(receiverCharacterId, new Map());
 
     for (const dropPlan of plan.dropPlans) {
@@ -938,7 +949,11 @@ class BattleDropService {
       }
 
       for (const mailItem of grantResult.pendingMailItems) {
-        this.pushPendingMailItem(pendingMailItems, this.normalizePendingMailItem(mailItem));
+        this.pushPendingMailItem(
+          pendingMailItems,
+          pendingMailItemByMergeKey,
+          this.normalizePendingMailItem(mailItem),
+        );
       }
 
       if (grantResult.gainedSilver > 0) {
@@ -1396,15 +1411,42 @@ class BattleDropService {
         }
       }
 
+      const rewardMetaByItemDefId = new Map<string, RewardItemMeta>();
+      const getCachedRewardItemMeta = (itemDefId: string): RewardItemMeta => {
+        const cachedMeta = rewardMetaByItemDefId.get(itemDefId);
+        if (cachedMeta) return cachedMeta;
+        const rewardMeta = this.getRewardItemMeta(itemDefId);
+        rewardMetaByItemDefId.set(itemDefId, rewardMeta);
+        return rewardMeta;
+      };
+
+      const grantInputStartedAt = Date.now();
+      const grantInputs: BattleDropGrantInput[] = [];
       for (const drop of plan.drops) {
         const receiverCharacterId = Number(drop.receiverCharacterId);
         if (!Number.isInteger(receiverCharacterId) || receiverCharacterId <= 0) {
           console.warn(`奖励分发跳过：非法角色ID ${String(drop.receiverCharacterId)}`);
           continue;
         }
+        const sourceMeta = getCachedRewardItemMeta(drop.itemDefId);
+        grantInputs.push({
+          receiverCharacterId,
+          receiverUserId: drop.receiverUserId,
+          receiverFuyuan: drop.receiverFuyuan,
+          itemDefId: drop.itemDefId,
+          quantity: drop.quantity,
+          bindType: drop.bindType,
+          category: sourceMeta.category,
+          ...(drop.qualityWeights ? { qualityWeights: drop.qualityWeights } : {}),
+        });
+      }
+      const grantUnits = buildBattleDropGrantUnits(grantInputs);
+      grantRewardMetaCostMs += Date.now() - grantInputStartedAt;
 
+      for (const drop of grantUnits) {
+        const receiverCharacterId = drop.receiverCharacterId;
         const metaStartedAt = Date.now();
-        const sourceMeta = this.getRewardItemMeta(drop.itemDefId);
+        const sourceMeta = getCachedRewardItemMeta(drop.itemDefId);
         const createOptions: CreateItemOptions = {
           location: 'bag',
           bindType: drop.bindType,
@@ -1422,12 +1464,12 @@ class BattleDropService {
           ?? normalizeAutoDisassembleSetting({ enabled: false, rules: undefined });
         grantRewardMetaCostMs += Date.now() - metaStartedAt;
         if (sourceMeta.category === 'equipment') {
-          equipmentDropCount += 1;
+          equipmentDropCount += drop.sourceDropCount;
         } else {
-          nonEquipmentDropCount += 1;
+          nonEquipmentDropCount += drop.sourceDropCount;
         }
         if (receiverAutoDisassemble.enabled) {
-          autoDisassembleEnabledDropCount += 1;
+          autoDisassembleEnabledDropCount += drop.sourceDropCount;
         }
 
         const grantStartedAt = Date.now();
@@ -1509,12 +1551,15 @@ class BattleDropService {
         const pendingMailStartedAt = Date.now();
         pendingMailItemCount += grantResult.pendingMailItems.length;
         if (grantResult.pendingMailItems.length > 0) {
-          const pendingMailEntry = pendingMailByReceiver.get(receiverCharacterId) ?? {
-            userId: drop.receiverUserId,
-            items: [],
-          };
+          const pendingMailEntry =
+            pendingMailByReceiver.get(receiverCharacterId)
+            ?? this.createPendingBattleDropMailEntry(drop.receiverUserId);
           for (const mailItem of grantResult.pendingMailItems) {
-            this.pushPendingMailItem(pendingMailEntry.items, this.normalizePendingMailItem(mailItem));
+            this.pushPendingMailItem(
+              pendingMailEntry.items,
+              pendingMailEntry.itemByMergeKey,
+              this.normalizePendingMailItem(mailItem),
+            );
           }
           pendingMailByReceiver.set(receiverCharacterId, pendingMailEntry);
         }
@@ -1535,7 +1580,7 @@ class BattleDropService {
           const grantedMeta =
             granted.itemDefId === drop.itemDefId
               ? sourceMeta
-              : this.getRewardItemMeta(granted.itemDefId);
+              : getCachedRewardItemMeta(granted.itemDefId);
           appendCollectCount(receiverCharacterId, granted.itemDefId, granted.qty);
           appendRewardRecord(receiverCharacterId, granted.itemDefId, grantedMeta.name, granted.qty, granted.itemIds);
         }
@@ -1543,6 +1588,9 @@ class BattleDropService {
       }
 
         slowLogger.mark('grantRewardDrops', {
+          rawDropCount: plan.drops.length,
+          grantUnitCount: grantUnits.length,
+          mergedDropCount: plan.drops.length - grantUnits.length,
           grantedDropCount: result.rewards.items.length,
           pendingMailReceiverCount: pendingMailByReceiver.size,
           grantRewardMetaCostMs,

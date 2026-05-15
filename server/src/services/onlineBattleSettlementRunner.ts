@@ -27,7 +27,13 @@ import { recordKillMonsterEvents } from './taskService.js';
 import { getGameServer } from '../game/gameServer.js';
 import { createScopedLogger } from '../utils/logger.js';
 import { createSlowOperationLogger } from '../utils/slowOperationLogger.js';
-import { shouldContinueOnlineBattleSettlementDispatch } from './onlineBattleSettlementDrainPolicy.js';
+import { getLatestEventLoopHealthSnapshot } from './eventLoopMonitorService.js';
+import {
+  resolveOnlineBattleSettlementDispatchBudget,
+  resolveOnlineBattleSettlementTaskStartLimit,
+  shouldContinueOnlineBattleSettlementDispatch,
+  shouldSampleOnlineBattleSettlementTaskStage,
+} from './onlineBattleSettlementDrainPolicy.js';
 import {
   settleDungeonClearInDb,
   settleDungeonStartConsumptionInDb,
@@ -45,9 +51,8 @@ import {
 const RUNNER_INTERVAL_MS = 1500;
 const MAX_CONCURRENT_SETTLEMENT_TASKS = 4;
 const SETTLEMENT_TICK_DRAIN_TAIL_RESERVE_MS = 350;
-const SETTLEMENT_TICK_DISPATCH_BUDGET_MS =
-  RUNNER_INTERVAL_MS - SETTLEMENT_TICK_DRAIN_TAIL_RESERVE_MS;
 const MAX_SETTLEMENT_TASKS_PER_TICK = MAX_CONCURRENT_SETTLEMENT_TASKS * 2;
+const ONLINE_BATTLE_SETTLEMENT_TASK_STAGE_SAMPLE_LIMIT = 16;
 const settlementRunnerLogger = createScopedLogger('onlineBattle.settlementRunner');
 
 type DeferredSettlementMonsterSnapshot = DeferredSettlementTask['payload']['monsters'][number];
@@ -615,16 +620,29 @@ class OnlineBattleSettlementRunner {
     }
 
     this.drainPromise = (async () => {
+      const eventLoopSnapshot = getLatestEventLoopHealthSnapshot();
+      const dispatchBudget = resolveOnlineBattleSettlementDispatchBudget({
+        drainAll: options?.drainAll === true,
+        baseMaxConcurrency: MAX_CONCURRENT_SETTLEMENT_TASKS,
+        baseMaxDispatchedTaskCount: MAX_SETTLEMENT_TASKS_PER_TICK,
+        tickBudgetMs: RUNNER_INTERVAL_MS,
+        drainTailReserveMs: SETTLEMENT_TICK_DRAIN_TAIL_RESERVE_MS,
+        eventLoopUtilization: eventLoopSnapshot?.utilization,
+        eventLoopDelayP95Ms: eventLoopSnapshot?.p95DelayMs,
+      });
       const slowLogger = createSlowOperationLogger({
         label: 'onlineBattleSettlementRunner.tick',
         fields: {
           onlyArena: options?.onlyArena === true,
-          maxConcurrency: MAX_CONCURRENT_SETTLEMENT_TASKS,
           drainAll: options?.drainAll === true,
           tickBudgetMs: RUNNER_INTERVAL_MS,
-          dispatchBudgetMs: SETTLEMENT_TICK_DISPATCH_BUDGET_MS,
           drainTailReserveMs: SETTLEMENT_TICK_DRAIN_TAIL_RESERVE_MS,
-          maxDispatchedTaskCount: MAX_SETTLEMENT_TASKS_PER_TICK,
+          eventLoopBackpressured: dispatchBudget.eventLoopBackpressured,
+          eventLoopUtilization: eventLoopSnapshot?.utilization,
+          eventLoopDelayP95Ms: eventLoopSnapshot?.p95DelayMs,
+          maxConcurrency: dispatchBudget.maxConcurrency,
+          dispatchBudgetMs: dispatchBudget.dispatchBudgetMs,
+          maxDispatchedTaskCount: dispatchBudget.maxDispatchedTaskCount,
         },
         thresholdMs: RUNNER_INTERVAL_MS,
       });
@@ -632,7 +650,41 @@ class OnlineBattleSettlementRunner {
       let failedTaskCount = 0;
       let skippedTaskCount = 0;
       let dispatchedTaskCount = 0;
+      let maxActiveTaskCount = 0;
+      let taskStageSampledCount = 0;
       const drainStartedAt = Date.now();
+
+      const markDispatchTaskStage = (
+        taskId: string,
+        activeTaskCount: number,
+      ): void => {
+        if (!shouldSampleOnlineBattleSettlementTaskStage({
+          sampledCount: taskStageSampledCount,
+          sampleLimit: ONLINE_BATTLE_SETTLEMENT_TASK_STAGE_SAMPLE_LIMIT,
+        })) {
+          return;
+        }
+        taskStageSampledCount += 1;
+        slowLogger.mark('dispatchTask', {
+          taskId,
+          activeTaskCount,
+        });
+      };
+
+      const markTaskSettledStage = (params: {
+        taskId: string;
+        activeTaskCount: number;
+        outcome: 'success' | 'failed' | 'skipped';
+      }): void => {
+        if (!shouldSampleOnlineBattleSettlementTaskStage({
+          sampledCount: taskStageSampledCount,
+          sampleLimit: ONLINE_BATTLE_SETTLEMENT_TASK_STAGE_SAMPLE_LIMIT,
+        })) {
+          return;
+        }
+        taskStageSampledCount += 1;
+        slowLogger.mark('taskSettled', params);
+      };
 
       try {
         const activePromises = new Map<
@@ -641,19 +693,24 @@ class OnlineBattleSettlementRunner {
         >();
 
         for (;;) {
-          const availableSlots = MAX_CONCURRENT_SETTLEMENT_TASKS - activePromises.size;
+          const availableSlots = dispatchBudget.maxConcurrency - activePromises.size;
+          const taskStartLimit = resolveOnlineBattleSettlementTaskStartLimit({
+            drainAll: options?.drainAll === true,
+            availableSlots,
+            dispatchedTaskCount,
+            maxDispatchedTaskCount: dispatchBudget.maxDispatchedTaskCount,
+          });
           if (
-            availableSlots > 0
+            taskStartLimit > 0
             && shouldContinueOnlineBattleSettlementDispatch({
               drainAll: options?.drainAll === true,
               elapsedMs: Date.now() - drainStartedAt,
               dispatchedTaskCount,
-              tickBudgetMs: RUNNER_INTERVAL_MS,
-              drainTailReserveMs: SETTLEMENT_TICK_DRAIN_TAIL_RESERVE_MS,
-              maxDispatchedTaskCount: MAX_SETTLEMENT_TASKS_PER_TICK,
+              dispatchBudgetMs: dispatchBudget.dispatchBudgetMs,
+              maxDispatchedTaskCount: dispatchBudget.maxDispatchedTaskCount,
             })
           ) {
-            const tasksToStart = this.pickRunnableTasks(availableSlots, options);
+            const tasksToStart = this.pickRunnableTasks(taskStartLimit, options);
             for (const task of tasksToStart) {
               this.activeTaskIds.add(task.taskId);
               const serializationKeys = getDeferredSettlementSerializationKeys(task);
@@ -666,10 +723,8 @@ class OnlineBattleSettlementRunner {
               }));
               activePromises.set(task.taskId, taskPromise);
               dispatchedTaskCount += 1;
-              slowLogger.mark('dispatchTask', {
-                taskId: task.taskId,
-                activeTaskCount: activePromises.size,
-              });
+              maxActiveTaskCount = Math.max(maxActiveTaskCount, activePromises.size);
+              markDispatchTaskStage(task.taskId, activePromises.size);
             }
           }
 
@@ -686,7 +741,7 @@ class OnlineBattleSettlementRunner {
           } else {
             skippedTaskCount += 1;
           }
-          slowLogger.mark('taskSettled', {
+          markTaskSettledStage({
             taskId: settledTask.taskId,
             activeTaskCount: activePromises.size,
             outcome: settledTask.outcome,
@@ -698,6 +753,9 @@ class OnlineBattleSettlementRunner {
           processedTaskCount,
           failedTaskCount,
           skippedTaskCount,
+          maxActiveTaskCount,
+          taskStageSampleLimit: ONLINE_BATTLE_SETTLEMENT_TASK_STAGE_SAMPLE_LIMIT,
+          taskStageSampledCount,
         });
       }
     })();

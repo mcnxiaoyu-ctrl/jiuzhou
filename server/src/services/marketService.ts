@@ -111,6 +111,7 @@ type MarketListingsCacheData = {
 
 const MARKET_LISTINGS_CACHE_REDIS_TTL_SEC = 8;
 const MARKET_LISTINGS_CACHE_MEMORY_TTL_MS = 2_000;
+const MARKET_PUBLIC_LISTINGS_PAGE_SIZE_MAX = 40;
 
 const clampInt = (n: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, n));
@@ -314,7 +315,7 @@ const normalizeMarketListingsQuery = (params: {
     maxPrice: parseNonNegativeInt(params.maxPrice),
     sort: (params.sort ?? "timeDesc") as MarketSort,
     page: clampInt(parsePositiveInt(params.page) ?? 1, 1, 1000000),
-    pageSize: clampInt(parsePositiveInt(params.pageSize) ?? 20, 1, 100),
+    pageSize: clampInt(parsePositiveInt(params.pageSize) ?? 20, 1, MARKET_PUBLIC_LISTINGS_PAGE_SIZE_MAX),
   };
 };
 

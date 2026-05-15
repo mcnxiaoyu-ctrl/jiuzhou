@@ -12,7 +12,7 @@ import { shouldContinueOnlineBattleSettlementDispatch } from '../onlineBattleSet
  * 3. 不做什么：不执行真实 runner、不创建 Promise，也不验证任务执行结果。
  *
  * 输入 / 输出：
- * - 输入：不同的预算模式、累计耗时、已派发任务数、tick 总预算与收尾预留窗口。
+ * - 输入：不同的预算模式、累计耗时、已派发任务数、派发预算窗口与最大派发数。
  * - 输出：当前 tick 是否允许继续补派新任务。
  *
  * 数据流 / 状态流：
@@ -33,8 +33,7 @@ test('shouldContinueOnlineBattleSettlementDispatch: 常规 tick 未超预算时�
       drainAll: false,
       elapsedMs: 400,
       dispatchedTaskCount: 3,
-      tickBudgetMs: 1500,
-      drainTailReserveMs: 350,
+      dispatchBudgetMs: 1150,
       maxDispatchedTaskCount: 8,
     }),
     true,
@@ -47,8 +46,7 @@ test('shouldContinueOnlineBattleSettlementDispatch: 命中派发截止时间时�
       drainAll: false,
       elapsedMs: 1150,
       dispatchedTaskCount: 3,
-      tickBudgetMs: 1500,
-      drainTailReserveMs: 350,
+      dispatchBudgetMs: 1150,
       maxDispatchedTaskCount: 8,
     }),
     false,
@@ -61,8 +59,7 @@ test('shouldContinueOnlineBattleSettlementDispatch: 收尾预留窗口内应停�
       drainAll: false,
       elapsedMs: 1149,
       dispatchedTaskCount: 7,
-      tickBudgetMs: 1500,
-      drainTailReserveMs: 350,
+      dispatchBudgetMs: 1150,
       maxDispatchedTaskCount: 8,
     }),
     true,
@@ -73,8 +70,7 @@ test('shouldContinueOnlineBattleSettlementDispatch: 收尾预留窗口内应停�
       drainAll: false,
       elapsedMs: 1150,
       dispatchedTaskCount: 7,
-      tickBudgetMs: 1500,
-      drainTailReserveMs: 350,
+      dispatchBudgetMs: 1150,
       maxDispatchedTaskCount: 8,
     }),
     false,
@@ -87,8 +83,7 @@ test('shouldContinueOnlineBattleSettlementDispatch: 命中单轮派发上限时�
       drainAll: false,
       elapsedMs: 200,
       dispatchedTaskCount: 8,
-      tickBudgetMs: 1500,
-      drainTailReserveMs: 350,
+      dispatchBudgetMs: 1150,
       maxDispatchedTaskCount: 8,
     }),
     false,
@@ -101,8 +96,7 @@ test('shouldContinueOnlineBattleSettlementDispatch: drainAll 模式应始终允�
       drainAll: true,
       elapsedMs: 30_000,
       dispatchedTaskCount: 999,
-      tickBudgetMs: 1500,
-      drainTailReserveMs: 350,
+      dispatchBudgetMs: 1150,
       maxDispatchedTaskCount: 8,
     }),
     true,

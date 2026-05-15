@@ -11,3 +11,10 @@ export const safePushCharacterUpdate = async (userId: number): Promise<void> => 
     await gameServer.pushCharacterUpdate(userId);
   } catch { /* 推送失败不阻塞主流程 */ }
 };
+
+// 只用于响应后的非阻塞补推，不改变当前请求响应结果。
+export const scheduleSafeCharacterUpdate = (userId: number): void => {
+  setImmediate(() => {
+    void safePushCharacterUpdate(userId);
+  });
+};

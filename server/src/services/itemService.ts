@@ -51,6 +51,7 @@ import { applyCharacterRewardDeltas, createCharacterRewardDelta } from './shared
 import { bufferSimpleCharacterItemGrants } from './shared/characterItemGrantDeltaService.js';
 import { bufferCharacterItemInstanceMutations, loadProjectedCharacterItemInstanceById } from './shared/characterItemInstanceMutationService.js';
 import { consumeSpecificItemInstance } from './inventory/shared/consume.js';
+import { createSlowOperationLogger } from '../utils/slowOperationLogger.js';
 
 // 物品定义接口
 export interface ItemDef {
@@ -168,6 +169,51 @@ export interface ItemUseLootResult {
   name?: string;
   amount: number;
 }
+
+type ItemUseLootItem = {
+  itemDefId: string;
+  qty: number;
+};
+
+/**
+ * 物品使用 loot 物品聚合器
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把 useItem 解析出的多个物品 loot 按 itemDefId 聚合，减少待入包奖励缓冲写入次数。
+ * 2. 做什么：过滤空 itemDefId 和非正数数量，保证后续 buffer 只处理有效条目。
+ * 3. 不做什么：不处理货币、功法学习、伙伴结果，也不读取静态配置。
+ *
+ * 输入 / 输出：
+ * - 输入：效果解析阶段产生的 itemDefId 与 qty 列表。
+ * - 输出：按首次出现顺序聚合后的 itemDefId 与 qty 列表。
+ *
+ * 数据流 / 状态流：
+ * effect_defs -> lootItemsToAdd -> aggregateItemUseLootItems -> bufferSimpleCharacterItemGrants / lootResults。
+ *
+ * 复用设计说明：
+ * - useItem 内的礼包、多物品 loot、随机宝石袋共用同一聚合入口，避免每个 effect 分支各自维护 Map 逻辑。
+ * - itemDefId 是高频业务变化点，聚合只依赖这个稳定键，不把展示名、货币等非物品结果混入。
+ *
+ * 关键边界条件与坑点：
+ * 1. 只按 itemDefId 合并，不能影响货币奖励和功法学习结果。
+ * 2. 聚合保留首次出现顺序，避免前端展示结果在同一请求内无意义跳序。
+ */
+const aggregateItemUseLootItems = (
+  lootItems: readonly ItemUseLootItem[],
+): ItemUseLootItem[] => {
+  const qtyByItemDefId = new Map<string, number>();
+  for (const lootItem of lootItems) {
+    const itemDefId = lootItem.itemDefId.trim();
+    const itemQty = Math.max(0, Math.floor(Number(lootItem.qty) || 0));
+    if (!itemDefId || itemQty <= 0) continue;
+    qtyByItemDefId.set(itemDefId, (qtyByItemDefId.get(itemDefId) ?? 0) + itemQty);
+  }
+
+  return [...qtyByItemDefId.entries()].map(([itemDefId, itemQty]) => ({
+    itemDefId,
+    qty: itemQty,
+  }));
+};
 
 export interface ItemUseResult {
   success: boolean;
@@ -571,6 +617,18 @@ class ItemService {
     qty: number = 1,
     options: { targetItemInstanceId?: number; partnerId?: number } = {},
   ): Promise<ItemUseResult> {
+    const slowLogger = createSlowOperationLogger({
+      label: 'itemService.useItem',
+      thresholdMs: 200,
+      fields: {
+        characterId,
+        itemInstanceId: instanceId,
+        qty,
+      },
+    });
+    let success = false;
+
+    try {
     const realmSnapshot = await loadCharacterRealmSnapshot(characterId);
     if (!realmSnapshot) {
       return { success: false, message: '角色不存在' };
@@ -581,6 +639,7 @@ class ItemService {
     }
 
     await lockCharacterInventoryMutex(characterId);
+    slowLogger.mark('lockInventoryMutex');
 
     // 获取物品实例
     const item = await loadProjectedCharacterItemInstanceById(characterId, instanceId);
@@ -1043,19 +1102,28 @@ class ItemService {
       await applyCharacterRewardDeltas(new Map([[characterId, rewardDelta]]));
     }
 
-    if (lootItemsToAdd.length > 0) {
+    const aggregatedLootItemsToAdd = aggregateItemUseLootItems(lootItemsToAdd);
+    slowLogger.mark('aggregateLootItems', {
+      rawLootItemCount: lootItemsToAdd.length,
+      aggregatedLootItemCount: aggregatedLootItemsToAdd.length,
+    });
+
+    if (aggregatedLootItemsToAdd.length > 0) {
       await bufferSimpleCharacterItemGrants(
         characterId,
         userId,
-        lootItemsToAdd.map((lootItem) => ({
+        aggregatedLootItemsToAdd.map((lootItem) => ({
           itemDefId: lootItem.itemDefId,
           qty: lootItem.qty,
           obtainedFrom: `use_item:${itemDef.id}`,
         })),
       );
     }
+    slowLogger.mark('bufferLootItems', {
+      lootItemCount: aggregatedLootItemsToAdd.length,
+    });
 
-    for (const lootItem of lootItemsToAdd) {
+    for (const lootItem of aggregatedLootItemsToAdd) {
       const itemName = getItemDefinitionById(lootItem.itemDefId)?.name || lootItem.itemDefId;
       lootResults.push({ type: 'item', name: itemName, amount: lootItem.qty });
     }
@@ -1116,6 +1184,7 @@ class ItemService {
     }
 
     const updatedCharBase = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
+    slowLogger.mark('loadUpdatedCharacter');
     const updatedChar = updatedCharBase
       ? {
           ...updatedCharBase,
@@ -1124,6 +1193,7 @@ class ItemService {
           spirit_stones: updatedCharBase.spirit_stones + rewardDelta.spiritStones,
         }
       : undefined;
+    success = true;
     return {
       success: true,
       message: '使用成功',
@@ -1133,6 +1203,9 @@ class ItemService {
       partnerTechniqueResult,
       partnerReboneJob,
     };
+    } finally {
+      slowLogger.flush({ success });
+    }
   }
 
   /**

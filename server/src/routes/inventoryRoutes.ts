@@ -11,7 +11,7 @@ import {
   type InventoryLocation,
   itemService,
 } from '../domains/inventory/index.js';
-import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
+import { safePushCharacterUpdate, scheduleSafeCharacterUpdate } from '../middleware/pushUpdate.js';
 import { getSingleQueryValue, parseNonEmptyText, parsePositiveInt } from '../services/shared/httpParam.js';
 import { getCharacterComputedByCharacterId } from '../services/characterComputedService.js';
 import { enqueuePartnerReboneJob } from '../services/partnerReboneJobRunner.js';
@@ -409,13 +409,15 @@ router.post('/use', prepareInventoryConcreteState, asyncHandler(async (req, res)
       }
     }
 
-    await safePushCharacterUpdate(userId);
-
-    return sendSuccess(res, {
+    const responseData = {
       character: result.character,
       lootResults: result.lootResults,
       partnerTechniqueResult: result.partnerTechniqueResult,
-    });
+    };
+
+    sendSuccess(res, responseData);
+    scheduleSafeCharacterUpdate(userId);
+    return;
 }));
 
 // ============================================
