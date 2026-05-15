@@ -81,6 +81,7 @@ let generatedTechniqueDefsCache: GeneratedTechniqueDefLite[] = [];
 let generatedSkillDefsCache: GeneratedSkillDefLite[] = [];
 let generatedTechniqueLayerCache: GeneratedTechniqueLayerLite[] = [];
 let generatedTechniqueByIdCache = new Map<string, GeneratedTechniqueDefLite>();
+let reloadGeneratedTechniqueConfigStorePromise: Promise<void> | null = null;
 
 const asString = (raw: unknown): string => (typeof raw === 'string' ? raw.trim() : '');
 
@@ -216,7 +217,7 @@ const LOAD_PUBLISHED_GENERATED_LAYERS_SQL = `
  * 1) 若表尚未初始化（42P01），返回空缓存，不抛错。
  * 2) 仅读取已发布且 enabled 的内容，草稿不会进入全局读取链路。
  */
-export const reloadGeneratedTechniqueConfigStore = async (): Promise<void> => {
+const reloadGeneratedTechniqueConfigStoreInternal = async (): Promise<void> => {
   try {
     const [defRes, skillRes, layerRes] = await Promise.all([
       query(
@@ -368,6 +369,22 @@ export const reloadGeneratedTechniqueConfigStore = async (): Promise<void> => {
       return;
     }
     throw error;
+  }
+};
+
+export const reloadGeneratedTechniqueConfigStore = async (): Promise<void> => {
+  if (reloadGeneratedTechniqueConfigStorePromise) {
+    return reloadGeneratedTechniqueConfigStorePromise;
+  }
+
+  const reloadPromise = reloadGeneratedTechniqueConfigStoreInternal();
+  reloadGeneratedTechniqueConfigStorePromise = reloadPromise;
+  try {
+    await reloadPromise;
+  } finally {
+    if (reloadGeneratedTechniqueConfigStorePromise === reloadPromise) {
+      reloadGeneratedTechniqueConfigStorePromise = null;
+    }
   }
 };
 

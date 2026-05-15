@@ -90,6 +90,10 @@ import {
   initializeTaskProgressDeltaFlushService,
   shutdownTaskProgressDeltaFlushService,
 } from "../services/taskService.js";
+import {
+  initializeEventLoopMonitor,
+  stopEventLoopMonitor,
+} from "../services/eventLoopMonitorService.js";
 
 export interface StartServerOptions {
   httpServer: HttpServer;
@@ -193,6 +197,7 @@ export const startServerWithPipeline = async (
   );
   await runStartupStep("在线战斗延迟结算协调器初始化", initializeOnlineBattleSettlementRunner);
   console.log("✓ 在线战斗延迟结算协调器已就绪\n");
+  await runStartupStep("事件循环监控初始化", initializeEventLoopMonitor);
   console.log("✓ 事件循环监控已就绪\n");
   await runStartupStep("爱发电私信重试调度器初始化", initializeAfdianMessageRetryService);
   console.log("✓ 爱发电私信重试调度器已就绪\n");
@@ -256,6 +261,9 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
 
       // 2. 停止所有后台任务和定时器
       console.log("正在停止后台服务...");
+
+      stopEventLoopMonitor();
+      console.log("✓ 事件循环监控已停止");
 
       await stopGameTimeService();
       console.log("✓ 游戏时间服务已停止");

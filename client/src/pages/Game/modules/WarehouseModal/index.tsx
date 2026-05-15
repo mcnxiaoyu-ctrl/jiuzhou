@@ -2,9 +2,7 @@ import { App, Button, Drawer, Modal, Segmented, Spin, Tabs, Tooltip } from 'antd
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveIconUrl } from '../../shared/resolveIcon';
 import {
-  INVENTORY_ITEMS_PAGE_SIZE_MAX,
-  getInventoryInfo,
-  getInventoryItems,
+  getWarehouseInventorySnapshot,
   moveInventoryItem,
   type InventoryItemDto,
   type ItemDefLite,
@@ -166,42 +164,19 @@ const WarehouseModal: React.FC<WarehouseModalProps> = ({ open, onClose }) => {
   );
   const mobilePreviewSide = mobilePreview?.side ?? null;
 
-  const fetchAllInventoryItems = useCallback(async (location: 'bag' | 'warehouse'): Promise<InventoryItemDto[]> => {
-    const pageSize = INVENTORY_ITEMS_PAGE_SIZE_MAX;
-    const out: InventoryItemDto[] = [];
-    let page = 1;
-    for (; ;) {
-      const res = await getInventoryItems(location, page, pageSize);
-      if (!res?.success || !res.data) return out;
-      const items = res.data.items ?? [];
-      out.push(...items);
-      const totalRaw = Number(res.data.total);
-      const hasValidTotal = Number.isFinite(totalRaw) && totalRaw >= 0;
-      // 终止条件基于“是否还有数据”而不是“是否小于请求页大小”，
-      // 避免服务端 pageSize 上限与前端请求值不一致时提前结束分页。
-      if (items.length === 0 || (hasValidTotal && out.length >= totalRaw)) return out;
-      page += 1;
-      if (page > 50) return out;
-    }
-  }, []);
-
   const refreshAll = useCallback(async (options?: { keepLoading?: boolean }) => {
     const keepLoading = Boolean(options?.keepLoading);
     if (!keepLoading) setLoading(true);
     try {
-      const [infoRes, bagItems, warehouseItems] = await Promise.all([
-        getInventoryInfo(),
-        fetchAllInventoryItems('bag'),
-        fetchAllInventoryItems('warehouse'),
-      ]);
-      const nextBagCap = infoRes?.success && infoRes.data ? Number(infoRes.data.bag_capacity || 0) : 0;
-      const nextWhCap = infoRes?.success && infoRes.data ? Number(infoRes.data.warehouse_capacity || 0) : 0;
+      const snapshotRes = await getWarehouseInventorySnapshot();
+      const snapshot = snapshotRes.success ? snapshotRes.data : undefined;
+      const nextBagCap = snapshot ? Number(snapshot.info.bag_capacity || 0) : 0;
+      const nextWhCap = snapshot ? Number(snapshot.info.warehouse_capacity || 0) : 0;
       setBagCapacity(nextBagCap);
       setWarehouseCapacity(nextWhCap);
-      setBagSlots(buildSlots(nextBagCap, bagItems));
-      setWarehouseSlots(buildSlots(nextWhCap, warehouseItems));
-    } catch (e: unknown) {
-      void 0;
+      setBagSlots(buildSlots(nextBagCap, snapshot?.bagItems ?? []));
+      setWarehouseSlots(buildSlots(nextWhCap, snapshot?.warehouseItems ?? []));
+    } catch {
       setBagSlots([]);
       setBagCapacity(0);
       setWarehouseSlots([]);
@@ -209,7 +184,7 @@ const WarehouseModal: React.FC<WarehouseModalProps> = ({ open, onClose }) => {
     } finally {
       if (!keepLoading) setLoading(false);
     }
-  }, [fetchAllInventoryItems, message]);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -254,12 +229,12 @@ const WarehouseModal: React.FC<WarehouseModalProps> = ({ open, onClose }) => {
       }
       setLoading(true);
       moveInventoryItem({ itemId: it.id, targetLocation: toSide, targetSlot: emptyIndex })
-        .then((res) => {
+        .then(async (res) => {
           if (!res.success) {
             void 0;
             return;
           }
-          void refreshAll({ keepLoading: true });
+          await refreshAll({ keepLoading: true });
         })
         .catch(() => {
           void 0;
@@ -281,12 +256,12 @@ const WarehouseModal: React.FC<WarehouseModalProps> = ({ open, onClose }) => {
       if (!it) return;
       setLoading(true);
       moveInventoryItem({ itemId: it.id, targetLocation: to.side, targetSlot: to.index })
-        .then((res) => {
+        .then(async (res) => {
           if (!res.success) {
             void 0;
             return;
           }
-          void refreshAll({ keepLoading: true });
+          await refreshAll({ keepLoading: true });
         })
         .catch(() => {
           void 0;

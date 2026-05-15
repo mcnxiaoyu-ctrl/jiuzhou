@@ -7,6 +7,7 @@
  * 输入/输出：
  * - getInventoryItemsWithDefs(characterId, location, page, pageSize) — 单 location 聚合查询
  * - getBagInventorySnapshot(characterId) — 背包弹窗所需快照（容量 + 背包物品 + 已穿戴物品）
+ * - getWarehouseInventorySnapshot(characterId) — 仓库弹窗所需快照（容量 + 背包物品 + 仓库物品）
  * - getEquippedItemDefIds(characterId) — 已装备物品定义 ID 列表
  *
  * 数据流：
@@ -87,6 +88,12 @@ type GetInventoryItemsWithDefsOptions = {
    * 2. 开启后 `pendingMutations` 必须固定为空数组，避免 `getEquippedSetPieceCountMap` 又回退去读取 Redis。
    */
   knownConcreteState?: boolean;
+};
+
+export type WarehouseInventorySnapshot = {
+  info: InventoryInfo;
+  bagItems: InventoryItemWithDef[];
+  warehouseItems: InventoryItemWithDef[];
 };
 
 /**
@@ -502,5 +509,96 @@ export const getBagInventorySnapshot = async (
     info,
     bagItems: enrichInventoryItemsWithDefs(bagResult.items, context),
     equippedItems: enrichInventoryItemsWithDefs(equippedResult.items, context),
+  };
+};
+
+/**
+ * 仓库弹窗快照查询
+ *
+ * 作用：
+ * - 一次性返回仓库弹窗所需的容量信息、背包物品与仓库物品，收敛前端打开仓库时的多次请求。
+ * - 保持纯 projected 读语义：列表只展示真实 projected 实例，容量通过 `getInventoryInfo` 叠加 pending grant 占用。
+ * - 不做写入、不触发 pending grant flush，也不返回待 flush 奖励生成的临时实例 ID。
+ *
+ * 输入/输出：
+ * - 输入：角色 ID。
+ * - 输出：`info`、`bagItems`、`warehouseItems` 三段只读快照数据。
+ *
+ * 数据流/状态流：
+ * pending item instance mutations -> 单次 projected item instances -> bag/equipped/warehouse 分桶
+ * -> 容量信息 -> 背包、已装备与仓库分页并发读取 -> 单次上下文构建 -> 单次富化后按 ID 索引拆回两侧。
+ *
+ * 复用设计说明：
+ * - 复用 `partitionProjectedInventoryItemsByLocation`，避免 bag/equipped/warehouse 各自读取并过滤同一批快照。
+ * - 复用 `buildInventoryItemDefContext` 与 `enrichInventoryItemsWithDefs`，把仓库弹窗和背包弹窗的展示富化规则收敛到同一入口。
+ * - `sourceItems` 合并后只富化一次，使词条池缓存和静态定义上下文在背包、仓库两侧共享。
+ *
+ * 关键边界条件与坑点：
+ * 1. 空仓库或空背包仍必须返回容量信息，不能因为物品为空跳过 `info`。
+ * 2. 待 flush 普通奖励只参与容量 overlay，不进入可点击物品列表，避免前端拿到不存在的实例 ID。
+ */
+export const getWarehouseInventorySnapshot = async (
+  characterId: number,
+): Promise<WarehouseInventorySnapshot> => {
+  const pendingMutations = await loadCharacterPendingItemInstanceMutations(characterId);
+  const projectedItems = await loadProjectedCharacterItemInstances(characterId, {
+    pendingMutations,
+  });
+  const {
+    bag: bagProjectedItems,
+    equipped: equippedProjectedItems,
+    warehouse: warehouseProjectedItems,
+  } = partitionProjectedInventoryItemsByLocation(projectedItems);
+
+  const info = await getInventoryInfo(characterId, {
+    bagProjectedItems,
+    warehouseProjectedItems,
+  });
+  const warehousePageSize = Math.max(warehouseProjectedItems.length, info.warehouse_capacity);
+  const [bagResult, warehouseResult, equippedResult] = await Promise.all([
+    getInventoryItems(characterId, "bag", 1, 200, {
+      projectedItems: bagProjectedItems,
+      pendingMutations,
+    }),
+    getInventoryItems(characterId, "warehouse", 1, warehousePageSize, {
+      projectedItems: warehouseProjectedItems,
+      pendingMutations,
+    }),
+    getInventoryItems(characterId, "equipped", 1, 200, {
+      projectedItems: equippedProjectedItems,
+      pendingMutations,
+    }),
+  ]);
+
+  const sourceItems = [...bagResult.items, ...warehouseResult.items];
+  if (sourceItems.length <= 0) {
+    return {
+      info,
+      bagItems: [],
+      warehouseItems: [],
+    };
+  }
+
+  const context = await buildInventoryItemDefContext(characterId, sourceItems, {
+    equippedItems: equippedResult.items,
+    pendingMutations,
+  });
+  const enrichedItems = enrichInventoryItemsWithDefs(sourceItems, context);
+  const bagItemIdSet = new Set(bagResult.items.map((item) => item.id));
+  const bagItems: InventoryItemWithDef[] = [];
+  const warehouseItems: InventoryItemWithDef[] = [];
+
+  for (const item of enrichedItems) {
+    if (bagItemIdSet.has(item.id)) {
+      bagItems.push(item);
+      continue;
+    }
+    warehouseItems.push(item);
+  }
+
+  return {
+    info,
+    bagItems,
+    warehouseItems,
   };
 };

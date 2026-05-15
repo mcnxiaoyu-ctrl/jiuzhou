@@ -214,7 +214,7 @@ const mapProjectedSnapshotsToInventoryItems = (
   snapshots: readonly CharacterItemInstanceSnapshot[],
 ): InventoryItem[] => snapshots.map((snapshot) => mapProjectedSnapshotToInventoryItem(snapshot));
 
-type GetInventoryInfoOptions = {
+export type GetInventoryInfoOptions = {
   bagProjectedItems?: readonly CharacterItemInstanceSnapshot[];
   warehouseProjectedItems?: readonly CharacterItemInstanceSnapshot[];
   knownPendingGrantsFlushed?: boolean;

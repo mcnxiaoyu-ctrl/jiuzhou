@@ -1544,7 +1544,7 @@ class BattleDropService {
 
         slowLogger.mark('grantRewardDrops', {
           grantedDropCount: result.rewards.items.length,
-          pendingMailReceiverCount: 0,
+          pendingMailReceiverCount: pendingMailByReceiver.size,
           grantRewardMetaCostMs,
           grantRewardCreateCostMs,
           grantRewardWarningCostMs,
@@ -1586,7 +1586,7 @@ class BattleDropService {
 
       pendingMailCount = [...pendingMailByReceiver.values()].reduce((total, entry) => total + entry.items.length, 0);
 
-      slowLogger.mark('sendPendingMail', {
+      slowLogger.mark('recordPendingMail', {
         pendingMailCount,
         pendingMailReceiverCount: pendingMailByReceiver.size,
       });

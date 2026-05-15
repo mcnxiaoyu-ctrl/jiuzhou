@@ -20,7 +20,7 @@
  *
  * 关键边界条件与坑点：
  * 1. 测试必须走 `plan.drops.length > 0` 分支，否则角色锁与自动分解配置读取阶段不会出现。
- * 2. 这里故意不产生补发邮件，避免让 `sendPendingMail` 阶段掺入额外断言噪音；只锁定主干热点阶段。
+ * 2. 这里显式产生一条补发邮件，确保 `grantRewardDrops` 与 `recordPendingMail` 阶段使用同一份真实收敛结果。
  */
 
 import assert from 'node:assert/strict';
@@ -30,6 +30,7 @@ import * as database from '../../config/database.js';
 import * as autoDisassembleRewardService from '../autoDisassembleRewardService.js';
 import { battleDropService, type BattleRewardSettlementPlan } from '../battleDropService.js';
 import { itemService } from '../itemService.js';
+import * as mailService from '../mailService.js';
 import * as inventoryMutex from '../inventoryMutex.js';
 import * as inventorySlotSessionModule from '../shared/inventorySlotSession.js';
 import * as characterBagSlotAllocatorModule from '../shared/characterBagSlotAllocator.js';
@@ -43,6 +44,7 @@ import * as taskService from '../taskService.js';
 test('battleDropService.settleBattleRewardPlan: 应输出真实发奖分段慢日志', async (t) => {
   const marks: Array<{ name: string; fields?: Record<string, boolean | number | string | null | undefined> }> = [];
   const flushes: Array<Record<string, boolean | number | string | null | undefined> | undefined> = [];
+  const collectEventBatchCalls: Array<Parameters<typeof taskService.recordCollectItemEventsBatch>[0]> = [];
   const plan: BattleRewardSettlementPlan = {
     totalExp: 120,
     totalSilver: 36,
@@ -113,53 +115,118 @@ test('battleDropService.settleBattleRewardPlan: 应输出真实发奖分段慢�
     quality: '黄',
     disassemblable: true,
   }) as never);
-  t.mock.method(autoDisassembleRewardService, 'grantRewardItemWithAutoDisassemble', async () => ({
-    grantedItems: [
-      {
-        itemDefId: 'weapon_test_blade',
-        qty: 1,
-        itemIds: [9001],
-      },
-    ],
-    pendingMailItems: [],
-    gainedSilver: 0,
-    warnings: [],
-  }));
-  t.mock.method(taskService, 'recordCollectItemEvents', async () => undefined);
+  t.mock.method(
+    autoDisassembleRewardService,
+    'grantRewardItemWithAutoDisassemble',
+    async (input: Parameters<typeof autoDisassembleRewardService.grantRewardItemWithAutoDisassemble>[0]) => {
+      const { metrics } = input;
+      assert.ok(metrics, '战斗掉落发奖必须向自动分解服务传入 metrics');
+      metrics.originalItemCreateCallCount += 1;
+      metrics.equipmentGenerateCount += 1;
+      return {
+        grantedItems: [
+          {
+            itemDefId: 'weapon_test_blade',
+            qty: 1,
+            itemIds: [9001],
+          },
+        ],
+        pendingMailItems: [
+          {
+            item_def_id: 'weapon_test_blade',
+            qty: 1,
+          },
+        ],
+        gainedSilver: 0,
+        warnings: [],
+      };
+    },
+  );
+  t.mock.method(
+    taskService,
+    'recordCollectItemEventsBatch',
+    async (inputs: Parameters<typeof taskService.recordCollectItemEventsBatch>[0]) => {
+      collectEventBatchCalls.push(inputs);
+    },
+  );
   t.mock.method(characterRewardSettlement, 'applyCharacterRewardDeltas', async () => undefined);
+  t.mock.method(
+    mailService,
+    'sendSystemMail',
+    async (
+      userId: number,
+      characterId: number,
+      title: string,
+      content: string,
+      attachments: Parameters<typeof mailService.sendSystemMail>[4],
+      expireDays: number,
+    ) => {
+      assert.equal(userId, 101);
+      assert.equal(characterId, 1001);
+      assert.equal(title, '战斗掉落补发');
+      assert.equal(content, '由于背包空间不足，部分战斗掉落已通过邮件补发，请前往邮箱领取。');
+      assert.deepEqual(attachments, {
+        items: [
+          {
+            item_def_id: 'weapon_test_blade',
+            qty: 1,
+          },
+        ],
+      });
+      assert.equal(expireDays, 30);
+      return { success: true, message: 'ok', mailId: 7001 };
+    },
+  );
 
   await battleDropService.settleBattleRewardPlan(plan);
 
   assert.deepEqual(marks.map((entry) => entry.name), [
     'aggregateRewardDeltas',
-    'lockCharacterRewardInventoryTargets',
     'loadAutoDisassembleSettings',
     'grantRewardDrops',
     'recordCollectItemEvents',
-    'sendPendingMail',
+    'recordPendingMail',
     'applyCharacterRewardDeltas',
   ]);
-  assert.equal(marks[3]?.fields?.grantedDropCount, 1);
-  assert.equal(marks[3]?.fields?.pendingMailReceiverCount, 0);
-  assert.equal(marks[4]?.fields?.collectEventCount, 1);
-  assert.equal(marks[5]?.fields?.pendingMailCount, 0);
-  assert.equal(marks[6]?.fields?.rewardDeltaCharacterCount, 1);
+  const grantRewardMark = marks.find((mark) => mark.name === 'grantRewardDrops');
+  assert.equal(grantRewardMark?.fields?.grantedDropCount, 1);
+  assert.equal(grantRewardMark?.fields?.grantRewardOriginalItemCreateCallCount, 1);
+  assert.equal(grantRewardMark?.fields?.grantRewardDisassembleRewardCreateCallCount, 0);
+  assert.equal(grantRewardMark?.fields?.grantRewardEquipmentGenerateCount, 1);
+  assert.equal(grantRewardMark?.fields?.pendingMailReceiverCount, 1);
+  const collectEventMark = marks.find((mark) => mark.name === 'recordCollectItemEvents');
+  assert.equal(collectEventMark?.fields?.collectEventCount, 1);
+  const recordPendingMailMark = marks.find((mark) => mark.name === 'recordPendingMail');
+  assert.equal(recordPendingMailMark?.fields?.pendingMailCount, 1);
+  assert.equal(recordPendingMailMark?.fields?.pendingMailReceiverCount, 1);
+  const rewardDeltasMark = marks.find((mark) => mark.name === 'applyCharacterRewardDeltas');
+  assert.equal(rewardDeltasMark?.fields?.rewardDeltaCharacterCount, 1);
+  assert.deepEqual(collectEventBatchCalls, [
+    [
+      {
+        characterId: 1001,
+        events: [
+          {
+            itemId: 'weapon_test_blade',
+            count: 1,
+          },
+        ],
+      },
+    ],
+  ]);
   assert.deepEqual(flushes, [
     {
       success: true,
       rewardPlayerCount: 1,
       dropCount: 1,
       collectEventCount: 1,
-      pendingMailCount: 0,
+      pendingMailCount: 1,
     },
   ]);
 });
 
 test('battleDropService.settleBattleRewardPlan: 应按角色批量记录收集事件', async (t) => {
-  const collectEventCalls: Array<{
-    characterId: number;
-    events: Array<{ itemId: string; count: number }>;
-  }> = [];
+  const collectEventBatchCalls: Array<Parameters<typeof taskService.recordCollectItemEventsBatch>[0]> = [];
   const plan: BattleRewardSettlementPlan = {
     totalExp: 120,
     totalSilver: 36,
@@ -231,25 +298,27 @@ test('battleDropService.settleBattleRewardPlan: 应按角色批量记录收集�
   );
   t.mock.method(
     taskService,
-    'recordCollectItemEvents',
-    async (characterId: number, events: Array<{ itemId: string; count: number }>) => {
-      collectEventCalls.push({ characterId, events });
+    'recordCollectItemEventsBatch',
+    async (inputs: Parameters<typeof taskService.recordCollectItemEventsBatch>[0]) => {
+      collectEventBatchCalls.push(inputs);
     },
   );
   t.mock.method(characterRewardSettlement, 'applyCharacterRewardDeltas', async () => undefined);
 
   await battleDropService.settleBattleRewardPlan(plan);
 
-  assert.deepEqual(collectEventCalls, [
-    {
-      characterId: 1001,
-      events: [
-        {
-          itemId: 'material_herb',
-          count: 3,
-        },
-      ],
-    },
+  assert.deepEqual(collectEventBatchCalls, [
+    [
+      {
+        characterId: 1001,
+        events: [
+          {
+            itemId: 'material_herb',
+            count: 3,
+          },
+        ],
+      },
+    ],
   ]);
 });
 

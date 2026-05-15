@@ -97,6 +97,16 @@ export interface InventoryBagSnapshotResponse {
   };
 }
 
+export interface InventoryWarehouseSnapshotResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    info: InventoryInfoData;
+    bagItems: InventoryItemDto[];
+    warehouseItems: InventoryItemDto[];
+  };
+}
+
 export const getInventoryInfo = (): Promise<InventoryInfoResponse> => {
   return api.get('/inventory/info');
 };
@@ -105,6 +115,12 @@ export const getBagInventorySnapshot = (
   requestConfig?: AxiosRequestConfig,
 ): Promise<InventoryBagSnapshotResponse> => {
   return api.get('/inventory/bag/snapshot', requestConfig);
+};
+
+export const getWarehouseInventorySnapshot = (
+  requestConfig?: AxiosRequestConfig,
+): Promise<InventoryWarehouseSnapshotResponse> => {
+  return api.get('/inventory/warehouse/snapshot', requestConfig);
 };
 
 export const getInventoryItems = (

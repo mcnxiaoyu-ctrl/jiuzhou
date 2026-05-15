@@ -21,7 +21,7 @@
  * 2. 慢请求日志和后续 battle 诊断都只读同一份最新快照，减少重复系统调用，也避免不同模块各自解释 ELU 阈值。
  *
  * 关键边界条件与坑点：
- * 1. `performance.eventLoopUtilization` 必须按“上一基线 -> 当前值”做差分，不能直接把累计值当成本轮采样结果。
+ * 1. `performance.eventLoopUtilization` 必须按“当前值、上一基线”做差分，不能直接把累计值当成本轮采样结果。
  * 2. histogram 采样后必须 reset，否则延迟分位数会越积越大，失去“最近窗口”诊断意义。
  */
 
@@ -79,8 +79,8 @@ const sampleEventLoopHealth = (): EventLoopHealthSnapshot | null => {
 
   const currentEventLoopUtilization = performance.eventLoopUtilization();
   const deltaEventLoopUtilization = performance.eventLoopUtilization(
-    previousEventLoopUtilization,
     currentEventLoopUtilization,
+    previousEventLoopUtilization,
   );
   previousEventLoopUtilization = currentEventLoopUtilization;
 

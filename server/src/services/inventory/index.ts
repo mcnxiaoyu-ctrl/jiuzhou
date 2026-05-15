@@ -89,7 +89,12 @@ export {
 export {
   getInventoryItemsWithDefs,
   getBagInventorySnapshot,
+  getWarehouseInventorySnapshot,
   getEquippedItemDefIds,
+} from "./itemQuery.js";
+
+export type {
+  WarehouseInventorySnapshot,
 } from "./itemQuery.js";
 
 // ============================================

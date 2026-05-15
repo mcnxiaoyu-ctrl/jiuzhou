@@ -717,12 +717,18 @@ const flushSingleCharacterItemGrants = async (
     };
   }
 
+  const distinctItemDefIds = new Set<string>();
+  for (const grant of grants) {
+    distinctItemDefIds.add(grant.payload.itemDefId);
+  }
+
   const slowLogger = createSlowOperationLogger({
     label: 'characterItemGrant.flush.phase1',
     thresholdMs: ITEM_GRANT_FLUSH_SLOW_THRESHOLD_MS,
     fields: {
       characterId,
       item_grant_flush_batch_size: grants.length,
+      item_grant_distinct_item_def_count: distinctItemDefIds.size,
     },
   });
 
@@ -738,6 +744,8 @@ const flushSingleCharacterItemGrants = async (
     const pendingMailItems: MailAttachItem[] = [];
     const idleBagFullSessionIds = new Set<string>();
     let receiverUserId = 0;
+    let createdGrantCount = 0;
+    let pendingMailGrantCount = 0;
 
     slowLogger.mark('prepareInventoryContext');
 
@@ -764,10 +772,12 @@ const flushSingleCharacterItemGrants = async (
       );
 
       if (createResult.success) {
+        createdGrantCount += 1;
         continue;
       }
 
       if (createResult.message === '背包已满') {
+        pendingMailGrantCount += 1;
         if (grant.payload.idleSessionId) {
           idleBagFullSessionIds.add(grant.payload.idleSessionId);
         }
@@ -790,6 +800,8 @@ const flushSingleCharacterItemGrants = async (
 
     slowLogger.mark('createItems', {
       item_grant_overflow_count: pendingMailItems.length,
+      item_grant_created_count: createdGrantCount,
+      item_grant_pending_mail_item_count: pendingMailGrantCount,
     });
 
     const outboxEntries: CharacterItemGrantOverflowMailOutboxEntry[] = [];

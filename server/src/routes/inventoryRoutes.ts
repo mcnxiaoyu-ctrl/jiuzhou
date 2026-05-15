@@ -105,7 +105,7 @@ const prepareInventoryConcreteState = asyncHandler(async (req, _res, next) => {
 // 获取背包信息
 // GET /api/inventory/info
 // ============================================
-router.get('/info', prepareInventoryConcreteState, asyncHandler(async (req, res) => {
+router.get('/info', asyncHandler(async (req, res) => {
     const characterId = req.characterId!;
 
     const info = await inventoryService.getInventoryInfo(characterId);
@@ -124,10 +124,21 @@ router.get('/bag/snapshot', asyncHandler(async (req, res) => {
 }));
 
 // ============================================
+// 获取仓库弹窗快照
+// GET /api/inventory/warehouse/snapshot
+// ============================================
+router.get('/warehouse/snapshot', asyncHandler(async (req, res) => {
+    const characterId = req.characterId!;
+
+    const snapshot = await inventoryService.getWarehouseInventorySnapshot(characterId);
+    sendSuccess(res, snapshot);
+}));
+
+// ============================================
 // 获取背包物品列表
 // GET /api/inventory/items?location=bag&page=1&pageSize=100
 // ============================================
-router.get('/items', prepareInventoryConcreteState, asyncHandler(async (req, res) => {
+router.get('/items', asyncHandler(async (req, res) => {
     const characterId = req.characterId!;
 
     const location = parseNonEmptyText(getSingleQueryValue(req.query.location)) ?? 'bag';
@@ -137,9 +148,7 @@ router.get('/items', prepareInventoryConcreteState, asyncHandler(async (req, res
     const page = parsePositiveInt(getSingleQueryValue(req.query.page)) ?? 1;
     const pageSize = Math.min(parsePositiveInt(getSingleQueryValue(req.query.pageSize)) ?? 100, 200);
 
-    const result = await inventoryService.getInventoryItemsWithDefs(characterId, location, page, pageSize, {
-      knownConcreteState: true,
-    });
+    const result = await inventoryService.getInventoryItemsWithDefs(characterId, location, page, pageSize);
 
     sendSuccess(res, {
       items: result.items,

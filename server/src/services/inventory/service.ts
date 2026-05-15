@@ -28,6 +28,8 @@ import type { SocketedGemEntry } from "../equipmentGrowthRules.js";
 import type { CharacterBagSlotAllocator } from "../shared/characterBagSlotAllocator.js";
 import type { CharacterInventoryMutationContext } from "../shared/characterInventoryMutationContext.js";
 import type { InventorySlotSession } from "../shared/inventorySlotSession.js";
+import type { GetInventoryInfoOptions } from "./bag.js";
+import type { WarehouseInventorySnapshot } from "./itemQuery.js";
 
 import {
   getInventoryInfo,
@@ -63,6 +65,7 @@ import {
   getBagInventorySnapshot,
   getInventoryItemsWithDefs,
   getEquippedItemDefIds,
+  getWarehouseInventorySnapshot,
 } from "./itemQuery.js";
 
 class InventoryService {
@@ -90,8 +93,11 @@ class InventoryService {
     await flushCharacterPendingItemInstanceMutationsNow(characterId);
   }
 
-  async getInventoryInfo(characterId: number): Promise<InventoryInfo> {
-    return getInventoryInfo(characterId, { knownPendingGrantsFlushed: true });
+  async getInventoryInfo(
+    characterId: number,
+    options: GetInventoryInfoOptions = {},
+  ): Promise<InventoryInfo> {
+    return getInventoryInfo(characterId, options);
   }
 
   async getInventoryItems(
@@ -121,6 +127,10 @@ class InventoryService {
     equippedItems: InventoryItemWithDef[];
   }> {
     return getBagInventorySnapshot(characterId);
+  }
+
+  async getWarehouseInventorySnapshot(characterId: number): Promise<WarehouseInventorySnapshot> {
+    return getWarehouseInventorySnapshot(characterId);
   }
 
   async getEquippedItemDefIds(characterId: number): Promise<string[]> {
