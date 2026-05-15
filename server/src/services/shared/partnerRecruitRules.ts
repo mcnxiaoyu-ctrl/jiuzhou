@@ -164,9 +164,9 @@ const PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_GUIDE_BY_QUALITY: Record<
 
 export const PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY: Record<PartnerRecruitQuality, number> = {
   黄: 200,
-  玄: 300,
-  地: 400,
-  天: 500,
+  玄: 250,
+  地: 300,
+  天: 350,
 };
 
 const normalizePartnerRecruitRandomSeed = (seed: number): number => {
