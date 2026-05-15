@@ -24,6 +24,7 @@ import {
 } from '../partnerRecruitService.js';
 import {
   buildPartnerRecruitPromptNoiseHash,
+  PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY,
   rollPartnerRecruitPrimaryAttackGrowthTarget,
 } from '../shared/partnerRecruitRules.js';
 import {
@@ -78,6 +79,27 @@ test('buildPartnerRecruitTextModelRequest: 传入自定义底模时应优先使�
   assert.equal(parsedUserMessage.baseModel, '雪狐');
   assert.equal(
     parsedUserMessage.constraints?.includes('玩家指定的底模「雪狐」仅作为伙伴主体形态、种族特征、气质、文风与属性流派倾向参考，不得作为基础属性、成长数值、天生功法收益或整体强度的具体数值参考'),
+    true,
+  );
+});
+
+test('buildPartnerRecruitTextModelRequest: 应约束各品质伙伴气血成长上限', () => {
+  const request = buildPartnerRecruitTextModelRequest({
+    quality: '天',
+    seed: 20260515,
+  });
+  const parsedUserMessage = JSON.parse(request.userMessage) as {
+    maxQixueGrowthByQuality?: Record<string, number>;
+    currentMaxQixueGrowth?: number;
+    constraints?: string[];
+  };
+
+  assert.deepEqual(parsedUserMessage.maxQixueGrowthByQuality, PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY);
+  assert.equal(parsedUserMessage.currentMaxQixueGrowth, 500);
+  assert.equal(
+    parsedUserMessage.constraints?.includes(
+      'partner.levelAttrGains.max_qixue 必须按当前 quality=天 小于等于 currentMaxQixueGrowth=500；各品质气血成长上限固定为：黄级200、玄级300、地级400、天级500',
+    ),
     true,
   );
 });

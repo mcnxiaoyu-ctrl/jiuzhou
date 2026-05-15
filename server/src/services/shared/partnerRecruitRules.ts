@@ -162,6 +162,13 @@ const PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_GUIDE_BY_QUALITY: Record<
   天: { ceiling: 50, preferredMin: 25 },
 };
 
+export const PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY: Record<PartnerRecruitQuality, number> = {
+  黄: 200,
+  玄: 300,
+  地: 400,
+  天: 500,
+};
+
 const normalizePartnerRecruitRandomSeed = (seed: number): number => {
   if (!Number.isFinite(seed)) {
     throw new Error('伙伴招募主攻成长随机 seed 非法');
@@ -931,6 +938,7 @@ export const buildPartnerRecruitPromptInput = (
     ? asString((referencePartnerExample.partner as Record<string, unknown>).name)
     : '';
   const promptNoiseHash = normalizeTextModelPromptNoiseHash(options.promptNoiseHash);
+  const maxQixueGrowth = PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY[quality];
   const primaryAttackGrowthTarget = normalizePartnerRecruitPrimaryAttackGrowthTarget(
     quality,
     options.primaryAttackGrowthTarget ?? PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_GUIDE_BY_QUALITY[quality].preferredMin,
@@ -967,6 +975,8 @@ export const buildPartnerRecruitPromptInput = (
     referencePartnerExample,
     fusionReferencePartners,
     passiveValueGuideByKey,
+    maxQixueGrowthByQuality: PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY,
+    currentMaxQixueGrowth: maxQixueGrowth,
     promptNoiseHash,
     primaryAttackGrowthTarget,
     constraints: [
@@ -991,6 +1001,7 @@ export const buildPartnerRecruitPromptInput = (
       'partner.baseAttrs 与 partner.levelAttrGains 必须完整包含 requiredAttrKeys 中的全部字段，禁止缺项',
       '每个天生功法 passiveValue 必须 > 0，且不得超过 passiveValueGuideByKey[passiveKey].maxTotal；百分比继续使用小数表示，例如 0.18 表示 18%',
       'partner.baseAttrs 中 integerAttrKeys 的属性必须使用非负整数；partner.levelAttrGains 的全部属性都使用非负数字，允许按参考模板写小数成长',
+      `partner.levelAttrGains.max_qixue 必须按当前 quality=${quality} 小于等于 currentMaxQixueGrowth=${maxQixueGrowth}；各品质气血成长上限固定为：黄级200、玄级300、地级400、天级500`,
       'percentAttrKeys 中的属性必须使用非负数字，小数表示百分比，例如 0.18 表示 18%',
       '品质高低顺序固定为 黄 < 玄 < 地 < 天；referencePartnerExample 中青木小偶的 quality=黄，表示它是最低品质参考模板，最终强度与风格仍必须以当前 quality 字段为准',
       ...buildPartnerRecruitQualityStrengthConstraints(
