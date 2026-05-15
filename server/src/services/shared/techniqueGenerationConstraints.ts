@@ -221,6 +221,7 @@ export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   '当 triggerType=passive 时，技能必须为自目标常驻被动：targetType=self、targetCount=1、cooldown=0、costLingqi=0、costLingqiRate=0、costQixue=0、costQixueRate=0',
   'buffKind=aura 时必须提供 auraTarget 和 auraEffects，auraEffects 中每个子效果遵循对应 type 的标准校验规则；子效果不允许嵌套光环，也不允许使用 next_skill_bonus 这类“下一次技能强化”瞬时机制',
   buildTechniqueAuraPolarityPromptRule(),
+  'skill.description、technique.description、longDesc 与 layerDesc 只能描述已由 effects/passives/upgrades 结构化实现的效果；禁止写“周围敌人”“回复等量气血”“反噬自身与敌人”等结构化字段无法实际结算的额外效果',
   'buffKind=aura 的 auraEffects 若包含进攻类百分比 attr 增益（如法攻/物攻/暴击/暴伤/增伤），请参考接近天品强度的建议范围设计总和，不要再按品质拆固定上限，也不要为了凑满范围硬塞数值。',
   'buffKind=aura 的光环效果只能用于 triggerType=passive 的被动技能，costLingqi/costQixue/cooldown 必须为 0，进场自动生效，永久存在',
 ] as const;
@@ -287,7 +288,7 @@ export const buildTechniqueAuraAttackPercentSoftRangePromptRule = (): string => 
 };
 
 export function buildTechniqueAuraPolarityPromptRule(): string {
-  return 'buffKind=aura 时，光环外层 type/buffKey 必须与 auraEffects 的实际语义一致，而不是只看 auraTarget：整体为正向常驻效果时使用 type=buff + buff-aura；整体为负向常驻效果时使用 type=debuff + debuff-aura。允许给敌方施加增益光环，也允许给自身/友方施加负面光环，但禁止返回“外层 buff-aura，auraEffects 却全是 debuff/持续伤害/禁疗/减资源等负向效果”这类自相矛盾结构。';
+  return 'buffKind=aura 时，同一个 auraEffects 会全部施加到同一个 auraTarget，必须整体同向：正向常驻效果使用 type=buff + buff-aura，负向常驻效果使用 type=debuff + debuff-aura；禁止在同一 auraEffects 里混合 damage/debuff/负 resource 与 heal/buff/restore_lingqi/正 resource。若要表达“伤害敌人并治疗自身”，必须拆成两个顶层 aura effect（all_enemy 负向光环 + self 正向光环），不要写成一个混合光环。';
 }
 
 const buildTechniquePromptBuffConfigRules = () => {
@@ -338,6 +339,7 @@ const buildTechniquePromptBuffConfigRules = () => {
           'auraEffects 子效果也不需要 duration；子效果持续时间由宿主光环统一维持',
           'auraTarget 必须在 auraTargetEnum 中（all_ally/all_enemy/self）',
           'auraEffects 必须是非空数组，长度 ≤ 4',
+          '同一个 auraEffects 的所有子效果都会施加到同一个 auraTarget，禁止混合正向与负向子效果；跨目标联动必须拆成多个顶层 aura effect',
           '子效果 type 必须在 auraSubEffectTypeEnum 中（damage/heal/buff/debuff/resource/restore_lingqi）',
           '子效果中的 buff/debuff 不允许 buffKind=aura（禁止嵌套），也不允许 buffKind=next_skill_bonus',
         ],
@@ -595,7 +597,7 @@ export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
       'buffKind=aura 时不需要 duration，光环永久存在直到施法者死亡',
       'auraEffects 子效果不需要 duration；光环每回合自动续上子效果',
       'auraEffects 不允许出现 buffKind=next_skill_bonus；下一次技能强化只能作为普通短时 buff 单独存在',
-      'buff 类型的 aura 用于表达整体正向的常驻效果；即使 auraTarget=all_enemy，只要子效果整体是增益也允许继续使用 type=buff + buff-aura',
+      'buff 类型的 aura 只能表达整体正向的常驻效果；同一个 auraEffects 不得混入 damage/debuff/负 resource 等负向子效果',
       'auraEffects 若同时给多个进攻类百分比 attr Buff（如法攻/物攻/暴击/暴伤/增伤），请参考 numericRanges.effect.auraAttackPercentSuggestedRange 设计总和，不要再按品质拆固定档位，也不要为了凑满范围硬塞数值',
     ],
     defaultTemplate: {
@@ -624,7 +626,7 @@ export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
       'buffKind=aura 时不需要 duration，光环永久存在直到施法者死亡',
       'auraEffects 子效果不需要 duration；光环每回合自动续上子效果',
       'auraEffects 不允许出现 buffKind=next_skill_bonus；下一次技能强化只能作为普通短时 buff 单独存在',
-      'debuff 类型的 aura 用于表达整体负向的常驻效果；只要子效果整体是削弱、持续伤害、禁疗、减资源等负向语义，外层就必须保持 type=debuff + debuff-aura，而不是误写成 buff-aura',
+      'debuff 类型的 aura 只能表达整体负向的常驻效果；同一个 auraEffects 不得混入 heal/buff/restore_lingqi/正 resource 等正向子效果',
     ],
     defaultTemplate: {
       type: 'debuff',
@@ -879,6 +881,7 @@ export const TECHNIQUE_PROMPT_OUTPUT_CHECKLIST = [
   'layers.passives[].key 必须来自 allowedPassiveKeys，且 value 必须满足 passiveValueGuideByKey 的单层/累计上限',
   'buffKind=aura 时必须提供 auraTarget 和 auraEffects，子效果不允许嵌套光环，也不允许使用 next_skill_bonus',
   buildTechniqueAuraPolarityPromptRule(),
+  '同一 auraEffects 的所有子效果只会作用于同一 auraTarget；跨目标效果必须拆成多个顶层 effect，禁止让描述承诺结构化效果无法实现的治疗、伤害或范围',
   'buffKind=aura 若包含多个进攻类百分比 attr Buff，请参考 numericRanges.effect.auraAttackPercentSuggestedRange 设计总和，不要再按品质拆固定上限',
 ] as const;
 

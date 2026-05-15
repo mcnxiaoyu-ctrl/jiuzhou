@@ -463,8 +463,20 @@ test('buildTechniqueGenerationTextModelRequest: 主提示应明确升级链路�
     true,
   );
   assert.equal(
+    parsedUserMessage.constraints?.generalRules?.includes(
+      'skill.description、technique.description、longDesc 与 layerDesc 只能描述已由 effects/passives/upgrades 结构化实现的效果；禁止写“周围敌人”“回复等量气血”“反噬自身与敌人”等结构化字段无法实际结算的额外效果',
+    ),
+    true,
+  );
+  assert.equal(
     parsedUserMessage.constraints?.outputChecklist?.includes(
       'buffKind=aura 若包含多个进攻类百分比 attr Buff，请参考 numericRanges.effect.auraAttackPercentSuggestedRange 设计总和，不要再按品质拆固定上限',
+    ),
+    true,
+  );
+  assert.equal(
+    parsedUserMessage.constraints?.outputChecklist?.includes(
+      '同一 auraEffects 的所有子效果只会作用于同一 auraTarget；跨目标效果必须拆成多个顶层 effect，禁止让描述承诺结构化效果无法实现的治疗、伤害或范围',
     ),
     true,
   );

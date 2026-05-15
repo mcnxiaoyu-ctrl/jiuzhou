@@ -30,6 +30,7 @@ import {
   MOMENTUM_ID_LIST,
   MOMENTUM_OPERATION_LIST,
 } from '../../battle/modules/momentum.js';
+import { validateAuraHostEffectSemantics } from '../../shared/auraSemantic.js';
 import type { GeneratedTechniqueQuality } from './techniquePassiveValueBudget.js';
 import { validateTechniqueStructuredBuffEffect } from './techniqueStructuredBuffCatalog.js';
 
@@ -410,6 +411,15 @@ const validateAuraEffect = (
     if (!subValidation.success) {
       return { success: false, reason: `auraEffects 子效果校验失败: ${subValidation.reason}` };
     }
+  }
+
+  const semanticValidation = validateAuraHostEffectSemantics({
+    type: effect.type,
+    buffKey: effect.buffKey,
+    auraEffects: normalizedAuraEffects,
+  });
+  if (!semanticValidation.success) {
+    return semanticValidation;
   }
 
   return { success: true };

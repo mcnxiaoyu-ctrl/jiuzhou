@@ -29,6 +29,10 @@ import type { SkillEffect } from '../battle/types.js';
 export type AuraHostEffectType = 'buff' | 'debuff';
 export type AuraHostMismatchKind = 'should_be_buff_aura' | 'should_be_debuff_aura';
 
+export type AuraHostSemanticValidationResult =
+  | { success: true }
+  | { success: false; reason: string };
+
 export type AuraSemanticSummary = {
   buffCount: number;
   debuffCount: number;
@@ -154,4 +158,35 @@ export function normalizeAuraHostEffect(effect: SkillEffect): SkillEffect {
     type: expectedType,
     buffKey: expectedBuffKey,
   };
+}
+
+export function validateAuraHostEffectSemantics(
+  effect: Pick<SkillEffect, 'type' | 'buffKey' | 'auraEffects'>,
+): AuraHostSemanticValidationResult {
+  const summary = summarizeAuraSubEffectSemantics(effect.auraEffects);
+
+  if (summary.positiveCount > 0 && summary.negativeCount > 0) {
+    return {
+      success: false,
+      reason: 'auraEffects 不能混合正向和负向子效果；同一光环会把所有子效果施加到同一个 auraTarget，若要伤敌并治疗自身，请拆成多个顶层 aura effect',
+    };
+  }
+
+  const expectedType = resolveExpectedAuraHostType(effect);
+  if (!expectedType) {
+    return {
+      success: false,
+      reason: 'auraEffects 必须至少包含一个明确正向或负向的可结算子效果',
+    };
+  }
+
+  const expectedBuffKey = resolveCanonicalAuraHostBuffKey(expectedType);
+  if (effect.type !== expectedType || effect.buffKey !== expectedBuffKey) {
+    return {
+      success: false,
+      reason: `光环外层必须匹配子效果语义：当前应使用 type=${expectedType} + buffKey=${expectedBuffKey}`,
+    };
+  }
+
+  return { success: true };
 }

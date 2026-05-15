@@ -22,6 +22,7 @@ import type { SkillEffect } from '../../battle/types.js';
 import {
   TECHNIQUE_UPGRADE_DAMAGE_EFFECT_MAX_TOTAL_SCALE_RATE,
   validateTechniqueSkillEffect,
+  validateTechniqueSkillEffectList,
   validateTechniqueSkillTargetCount,
   validateTechniqueSkillUpgrade,
 } from '../shared/techniqueSkillGenerationSpec.js';
@@ -312,6 +313,97 @@ test('光环子效果不应允许 next_skill_bonus', () => {
     success: false,
     reason: 'auraEffects 子效果不允许使用 buffKind=next_skill_bonus',
   });
+});
+
+test('同一光环不应混合伤害敌人与治疗自身这类跨目标语义', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'buff',
+    buffKind: 'aura',
+    buffKey: 'buff-aura',
+    auraTarget: 'all_enemy',
+    auraEffects: [
+      {
+        type: 'damage',
+        valueType: 'scale',
+        scaleAttr: 'max_qixue',
+        scaleRate: 0.35,
+        damageType: 'true',
+      },
+      {
+        type: 'heal',
+        valueType: 'scale',
+        scaleAttr: 'max_qixue',
+        scaleRate: 0.25,
+      },
+    ],
+  });
+
+  assert.deepEqual(validation, {
+    success: false,
+    reason: 'auraEffects 不能混合正向和负向子效果；同一光环会把所有子效果施加到同一个 auraTarget，若要伤敌并治疗自身，请拆成多个顶层 aura effect',
+  });
+});
+
+test('负向光环外层不应伪装成增益光环', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'buff',
+    buffKind: 'aura',
+    buffKey: 'buff-aura',
+    auraTarget: 'all_enemy',
+    auraEffects: [
+      {
+        type: 'damage',
+        valueType: 'scale',
+        scaleAttr: 'max_qixue',
+        scaleRate: 0.2,
+        damageType: 'true',
+      },
+    ],
+  });
+
+  assert.deepEqual(validation, {
+    success: false,
+    reason: '光环外层必须匹配子效果语义：当前应使用 type=debuff + buffKey=debuff-aura',
+  });
+});
+
+test('伤敌并治疗自身应拆成两个顶层光环 effect', () => {
+  const validation = validateTechniqueSkillEffectList(
+    [
+      {
+        type: 'debuff',
+        buffKind: 'aura',
+        buffKey: 'debuff-aura',
+        auraTarget: 'all_enemy',
+        auraEffects: [
+          {
+            type: 'damage',
+            valueType: 'scale',
+            scaleAttr: 'max_qixue',
+            scaleRate: 0.2,
+            damageType: 'true',
+          },
+        ],
+      },
+      {
+        type: 'buff',
+        buffKind: 'aura',
+        buffKey: 'buff-aura',
+        auraTarget: 'self',
+        auraEffects: [
+          {
+            type: 'heal',
+            valueType: 'scale',
+            scaleAttr: 'max_qixue',
+            scaleRate: 0.15,
+          },
+        ],
+      },
+    ],
+    'skill.effects',
+  );
+
+  assert.deepEqual(validation, { success: true });
 });
 
 test('升级项中的旧式 effectChanges 字段应被拒绝', () => {
