@@ -76,6 +76,10 @@ import {
   validatePartnerRecruitRequestedBaseModelSelection,
 } from './shared/partnerRecruitBaseModel.js';
 import {
+  PARTNER_RECRUIT_INITIAL_PROGRESS_STAGE,
+  type PartnerRecruitProgressStage,
+} from './shared/partnerRecruitProgress.js';
+import {
   buildPartnerRecruitUnlockState,
   type PartnerRecruitUnlockState,
 } from './shared/partnerRecruitUnlock.js';
@@ -119,6 +123,8 @@ type RecruitJobRow = {
   errorMessage: string | null;
   requestedBaseModel: string | null;
   previewPartnerDefId: string | null;
+  progressStage: PartnerRecruitProgressStage;
+  progressUpdatedAt: string | null;
 };
 
 const asString = (raw: unknown): string => (typeof raw === 'string' ? raw.trim() : '');
@@ -278,7 +284,9 @@ class PartnerRecruitService {
           viewed_at,
           error_message,
           requested_base_model,
-          preview_partner_def_id
+          preview_partner_def_id,
+          progress_stage,
+          progress_updated_at
         FROM partner_recruit_job
         WHERE character_id = $1
         ORDER BY created_at DESC
@@ -300,7 +308,28 @@ class PartnerRecruitService {
       errorMessage: asString(row.error_message) || null,
       requestedBaseModel: asString(row.requested_base_model) || null,
       previewPartnerDefId: asString(row.preview_partner_def_id) || null,
+      progressStage: (asString(row.progress_stage) as PartnerRecruitProgressStage) || PARTNER_RECRUIT_INITIAL_PROGRESS_STAGE,
+      progressUpdatedAt: toIsoString(row.progress_updated_at),
     };
+  }
+
+  private async updateRecruitJobProgressStage(
+    characterId: number,
+    generationId: string,
+    stage: PartnerRecruitProgressStage,
+  ): Promise<void> {
+    await query(
+      `
+        UPDATE partner_recruit_job
+        SET progress_stage = $3,
+            progress_updated_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $1
+          AND character_id = $2
+          AND status = 'pending'
+      `,
+      [generationId, characterId, stage],
+    );
   }
 
   private async loadLatestRecruitCooldownStartedAt(
@@ -480,6 +509,8 @@ class PartnerRecruitService {
         errorMessage: latestJob.errorMessage,
         previewExpireAt: buildPartnerRecruitPreviewExpireAt(latestJob.finishedAt),
         requestedBaseModel: latestJob.requestedBaseModel,
+        progressStage: latestJob.progressStage,
+        progressUpdatedAt: latestJob.progressUpdatedAt,
         preview,
       }
       : null);
@@ -636,11 +667,13 @@ class PartnerRecruitService {
           spirit_stones_cost,
           requested_base_model,
           used_custom_base_model_token,
+          progress_stage,
+          progress_updated_at,
           cooldown_started_at,
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, 'pending', $3, $4, $5, $6, NOW(), NOW(), NOW()
+          $1, $2, 'pending', $3, $4, $5, $6, $7, NOW(), NOW(), NOW(), NOW()
         )
       `,
       [
@@ -650,6 +683,7 @@ class PartnerRecruitService {
         PARTNER_RECRUIT_SPIRIT_STONES_COST,
         requestedBaseModelValidation.value,
         shouldUseCustomBaseModelToken,
+        PARTNER_RECRUIT_INITIAL_PROGRESS_STAGE,
       ],
     );
 
@@ -711,12 +745,12 @@ class PartnerRecruitService {
       attachSpiritStones: spiritStonesCost,
       attachItems: usedCustomBaseModelToken
         ? [
-            {
-              item_def_id: PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID,
-              item_name: getPartnerRecruitCustomBaseModelTokenName(),
-              qty: PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_COST,
-            },
-          ]
+          {
+            item_def_id: PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID,
+            item_name: getPartnerRecruitCustomBaseModelTokenName(),
+            qty: PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_COST,
+          },
+        ]
         : undefined,
       expireDays: 30,
       source: 'partner_recruit_refund',
@@ -871,6 +905,11 @@ class PartnerRecruitService {
     }
 
     const requestedBaseModel = asString(jobRow.requested_base_model) || null;
+    await this.updateRecruitJobProgressStage(
+      args.characterId,
+      args.generationId,
+      'reviewing_base_model',
+    );
     const baseModelReviewResult = await reviewPartnerRecruitCustomBaseModel(
       requestedBaseModel,
     );
@@ -894,6 +933,11 @@ class PartnerRecruitService {
     let lastModelName = '';
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      await this.updateRecruitJobProgressStage(
+        args.characterId,
+        args.generationId,
+        'summoning_partner_spirit',
+      );
       const result = await tryCallGeneratedPartnerTextModel({
         quality: args.quality,
         requestedBaseModel,
@@ -906,6 +950,11 @@ class PartnerRecruitService {
 
       try {
         const partnerDefId = buildGeneratedPartnerDefId();
+        await this.updateRecruitJobProgressStage(
+          args.characterId,
+          args.generationId,
+          'shaping_appearance_and_techniques',
+        );
         const { techniques, avatarUrl } = await executePartnerRecruitVisualGeneration({
           characterId: args.characterId,
           generationId: args.generationId,
@@ -913,6 +962,11 @@ class PartnerRecruitService {
           partnerDefId,
         });
 
+        await this.updateRecruitJobProgressStage(
+          args.characterId,
+          args.generationId,
+          'preparing_preview',
+        );
         const persist = await this.persistGeneratedRecruitDraftTx({
           characterId: args.characterId,
           generationId: args.generationId,

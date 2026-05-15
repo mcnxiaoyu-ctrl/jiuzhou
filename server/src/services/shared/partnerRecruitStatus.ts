@@ -21,6 +21,7 @@ import type { PartnerRecruitPreviewDto } from './partnerRecruitJobShared.js';
 import type { PartnerRecruitUnlockState } from './partnerRecruitUnlock.js';
 import { PARTNER_RECRUIT_CUSTOM_BASE_MODEL_MAX_LENGTH } from './partnerRecruitBaseModel.js';
 import type { PartnerRecruitQualityRateEntry } from './partnerRecruitRules.js';
+import type { PartnerRecruitProgressDto } from './partnerRecruitProgress.js';
 
 export type PartnerRecruitResultStatus = 'generated_draft' | 'failed' | null;
 
@@ -31,6 +32,7 @@ export interface PartnerRecruitJobDto {
   finishedAt: string | null;
   previewExpireAt: string | null;
   requestedBaseModel: string | null;
+  progress: PartnerRecruitProgressDto;
   preview: PartnerRecruitPreviewDto | null;
   errorMessage: string | null;
 }

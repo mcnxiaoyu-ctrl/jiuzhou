@@ -195,6 +195,24 @@ export type PartnerRecruitJobStatusDto =
 
 export type PartnerRecruitResultStatusDto = 'generated_draft' | 'failed' | null;
 
+export type PartnerRecruitProgressStageDto =
+  | 'queued'
+  | 'reviewing_base_model'
+  | 'summoning_partner_spirit'
+  | 'shaping_appearance_and_techniques'
+  | 'preparing_preview';
+
+export type PartnerRecruitProgressDto = {
+  stage: PartnerRecruitProgressStageDto;
+  label: string;
+  description: string;
+  completedStages: number;
+  totalStages: number;
+  remainingStages: number;
+  percent: number;
+  updatedAt: string | null;
+};
+
 export type PartnerRecruitQualityRateDto = {
   quality: '黄' | '玄' | '地' | '天';
   weight: number;
@@ -208,6 +226,7 @@ export type PartnerRecruitJobDto = {
   finishedAt: string | null;
   previewExpireAt: string | null;
   requestedBaseModel: string | null;
+  progress: PartnerRecruitProgressDto;
   preview: PartnerRecruitPreviewDto | null;
   errorMessage: string | null;
 };
@@ -397,19 +416,19 @@ export interface PartnerLearnTechniqueResponse {
   success: boolean;
   message: string;
   data?:
-    | {
-        mode: 'learned';
-        result: {
-          partner: PartnerDetailDto;
-          learnedTechnique: PartnerTechniqueDto;
-          replacedTechnique: PartnerTechniqueDto | null;
-          remainingBooks: PartnerBookDto[];
-        };
-      }
-    | {
-        mode: 'preview_replace';
-        preview: PartnerTechniqueLearnPreviewDto;
-      };
+  | {
+    mode: 'learned';
+    result: {
+      partner: PartnerDetailDto;
+      learnedTechnique: PartnerTechniqueDto;
+      replacedTechnique: PartnerTechniqueDto | null;
+      remainingBooks: PartnerBookDto[];
+    };
+  }
+  | {
+    mode: 'preview_replace';
+    preview: PartnerTechniqueLearnPreviewDto;
+  };
 }
 
 export interface PartnerConfirmLearnTechniqueResponse {

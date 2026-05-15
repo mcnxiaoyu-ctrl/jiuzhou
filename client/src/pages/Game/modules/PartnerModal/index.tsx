@@ -91,6 +91,7 @@ import {
   resolvePartnerRecruitLayoutState,
   resolvePartnerRecruitActionState,
   resolvePartnerRecruitPanelView,
+  resolvePartnerRecruitProgressView,
   resolvePartnerRecruitQualityRateItems,
   resolvePartnerRecruitSubmitState,
 } from './partnerRecruitShared';
@@ -1702,18 +1703,40 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose, onRecruitSta
           </div>
         ) : null}
 
-        {recruitPanelView.kind === 'pending' ? (
-          <div className="partner-recruit-state-card">
-            <div className="partner-section-title">生成中</div>
-            <div className="partner-meta">
-              正在推演新的伙伴灵识与天生功法，请稍候片刻。任务编号：{recruitPanelView.job.generationId}
+        {recruitPanelView.kind === 'pending' ? (() => {
+          const progressView = resolvePartnerRecruitProgressView(recruitPanelView.job);
+          return (
+            <div className="partner-recruit-state-card partner-recruit-progress-card">
+              <div className="partner-section-title">
+                <span>招募进行中</span>
+                <Tag color="blue">{progressView.stageCountText}</Tag>
+              </div>
+              <div className="partner-recruit-progress-copy">
+                <div className="partner-recruit-progress-label">{progressView.currentActionText}</div>
+                <div className="partner-meta">{progressView.description}</div>
+              </div>
+              <div className="partner-recruit-progress-bar-wrap">
+                <Progress
+                  percent={progressView.percent}
+                  strokeColor="var(--primary-color)"
+                  format={() => progressView.percentText}
+                />
+                <div className="partner-recruit-progress-meta">
+                  <span>{progressView.stageCountText}</span>
+                  <span>{progressView.remainingText}</span>
+                  {progressView.updatedAtText ? <span>{progressView.updatedAtText}</span> : null}
+                </div>
+              </div>
+              {renderRecruitRequestedBaseModel(recruitPanelView.job.requestedBaseModel)}
+              <div className="partner-meta partner-recruit-progress-job-id">
+                招募编号：{recruitPanelView.job.generationId}
+              </div>
+              <Button loading disabled>
+                招募进行中
+              </Button>
             </div>
-            {renderRecruitRequestedBaseModel(recruitPanelView.job.requestedBaseModel)}
-            <Button loading disabled>
-              正在招募中
-            </Button>
-          </div>
-        ) : null}
+          );
+        })() : null}
 
         {recruitPanelView.kind === 'locked' ? (
           <div className="partner-recruit-state-card">

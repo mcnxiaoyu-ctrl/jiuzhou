@@ -65,6 +65,37 @@ export type PartnerRecruitQualityRateItem = {
   rateText: string;
 };
 
+export type PartnerRecruitProgressView = {
+  label: string;
+  currentActionText: string;
+  description: string;
+  percent: number;
+  percentText: string;
+  stageCountText: string;
+  remainingText: string;
+  updatedAtText: string | null;
+};
+
+export const resolvePartnerRecruitProgressView = (
+  job: PartnerRecruitJobDto,
+): PartnerRecruitProgressView => {
+  const completedStages = Math.max(0, Math.floor(job.progress.completedStages));
+  const totalStages = Math.max(1, Math.floor(job.progress.totalStages));
+  const remainingStages = Math.max(0, Math.floor(job.progress.remainingStages));
+  const percent = Math.max(0, Math.min(100, Math.round(job.progress.percent)));
+
+  return {
+    label: job.progress.label,
+    currentActionText: `当前正在：${job.progress.label}`,
+    description: job.progress.description,
+    percent,
+    percentText: `${percent}%`,
+    stageCountText: `已完成 ${completedStages} / ${totalStages} 阶段`,
+    remainingText: remainingStages > 0 ? `还剩 ${remainingStages} 阶段` : '全部阶段已完成',
+    updatedAtText: job.progress.updatedAt ? `阶段更新于 ${new Date(job.progress.updatedAt).toLocaleTimeString()}` : null,
+  };
+};
+
 export const resolvePartnerRecruitGuaranteeText = (
   status: PartnerRecruitStatusData | null,
 ): string => {

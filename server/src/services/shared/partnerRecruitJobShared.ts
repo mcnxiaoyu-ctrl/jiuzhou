@@ -18,6 +18,11 @@
  * 2) `accepted/discarded` 必须从当前任务视图里隐去，否则确认收下后结果卡不会消失。
  */
 import type { GeneratedPartnerPreviewDto } from './partnerGeneratedPreview.js';
+import {
+  buildPartnerRecruitProgress,
+  type PartnerRecruitProgressDto,
+  type PartnerRecruitProgressStage,
+} from './partnerRecruitProgress.js';
 
 export type PartnerRecruitJobStatus =
   | 'pending'
@@ -38,6 +43,8 @@ export type PartnerRecruitJobStateInput = {
   errorMessage: string | null;
   previewExpireAt: string | null;
   requestedBaseModel: string | null;
+  progressStage: PartnerRecruitProgressStage;
+  progressUpdatedAt: string | null;
   preview: PartnerRecruitPreviewDto | null;
 };
 
@@ -48,6 +55,7 @@ export type PartnerRecruitJobView = {
   finishedAt: string | null;
   previewExpireAt: string | null;
   requestedBaseModel: string | null;
+  progress: PartnerRecruitProgressDto;
   preview: PartnerRecruitPreviewDto | null;
   errorMessage: string | null;
 };
@@ -88,6 +96,11 @@ export const buildPartnerRecruitJobState = (
     finishedAt: input.finishedAt,
     previewExpireAt: input.previewExpireAt,
     requestedBaseModel: input.requestedBaseModel,
+    progress: buildPartnerRecruitProgress({
+      stage: input.progressStage,
+      updatedAt: input.progressUpdatedAt,
+      completed: input.status === 'generated_draft',
+    }),
     preview: input.preview,
     errorMessage: input.errorMessage,
   };

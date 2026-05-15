@@ -1267,6 +1267,8 @@ model partner_recruit_job {
   spirit_stones_cost     BigInt
   requested_base_model   String?                @db.VarChar(32)
   used_custom_base_model_token Boolean          @default(false)
+  progress_stage         String                 @default("queued") @db.VarChar(48)
+  progress_updated_at    DateTime?              @db.Timestamptz(6)
   cooldown_started_at    DateTime               @db.Timestamptz(6)
   finished_at            DateTime?              @db.Timestamptz(6)
   viewed_at              DateTime?              @db.Timestamptz(6)
