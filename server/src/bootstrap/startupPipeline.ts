@@ -99,9 +99,9 @@ import {
   shouldRecoverHttpBattleState,
   shouldRecoverIdleSessions,
   shouldStartScheduledBackgroundServices,
-  shouldStartGeneralBackgroundWorkers,
   shouldStartHttpServer,
   shouldStartOnlineSettlementRunner,
+  shouldStartRequestBoundJobWorkers,
   shouldStartWorkerPool,
 } from "../config/runtimeRole.js";
 
@@ -180,7 +180,7 @@ export const startServerWithPipeline = async (
     );
     console.log(`✓ Worker 池已就绪（${workerCount} 个 Worker）\n`);
   }
-  if (shouldStartGeneralBackgroundWorkers(runtimeRole)) {
+  if (shouldStartRequestBoundJobWorkers(runtimeRole)) {
     await runStartupStep("洞府研修 worker 协调器初始化", initializeTechniqueGenerationJobRunner);
     console.log("✓ 洞府研修 worker 协调器已就绪\n");
     await runStartupStep("AI 伙伴招募 worker 协调器初始化", initializePartnerRecruitJobRunner);

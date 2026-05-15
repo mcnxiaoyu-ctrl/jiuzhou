@@ -2,8 +2,8 @@
  * 服务运行角色启动策略测试
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：锁定 API 角色不启动 worker 池、通用后台任务、在线战斗延迟结算 runner 与后台调度。
- * 2. 做什么：锁定 worker 角色不监听 HTTP 端口、不恢复 HTTP 战斗状态，但恢复挂机会话。
+ * 1. 做什么：锁定 API 角色启动请求型 AI/挂机 Worker，不启动定时后台调度和在线战斗延迟结算。
+ * 2. 做什么：锁定 worker 角色不监听 HTTP 端口、不承接请求型内存队列，只运行可独立调度的后台服务。
  * 3. 不做什么：不启动真实服务，不修改 Docker Swarm。
  *
  * 输入 / 输出：
@@ -11,14 +11,14 @@
  * - 输出：行为矩阵断言和轻量静态 guard 断言。
  *
  * 数据流 / 状态流：
- * JIUZHOU_RUNTIME_ROLE -> runtimeRole helpers -> startupPipeline 按角色启动 HTTP、恢复任务或后台任务。
+ * JIUZHOU_RUNTIME_ROLE -> runtimeRole helpers -> startupPipeline 按角色启动 HTTP、请求型 Worker、恢复任务或后台调度。
  *
  * 复用设计说明：
  * - 用单一 runtimeRole 模块集中解释环境变量，避免 startupPipeline 各处直接解析字符串。
  *
  * 关键边界条件与坑点：
  * 1. 默认 all 保持当前单服务行为，降低部署切换风险。
- * 2. worker 角色仍需数据库、Redis、事件循环监控和必要静态配置预热，但不能接受 HTTP 流量。
+ * 2. worker 角色仍需数据库、Redis、事件循环监控和必要静态配置预热，但不能接受 HTTP 流量，也不能承接 API 进程内存队列。
  */
 
 import assert from 'node:assert/strict';
@@ -28,9 +28,9 @@ import {
   resolveJiuzhouRuntimeRole,
   shouldRecoverHttpBattleState,
   shouldRecoverIdleSessions,
-  shouldStartGeneralBackgroundWorkers,
   shouldStartHttpServer,
   shouldStartOnlineSettlementRunner,
+  shouldStartRequestBoundJobWorkers,
   shouldStartScheduledBackgroundServices,
   shouldStartWorkerPool,
   type JiuzhouRuntimeRole,
@@ -39,7 +39,7 @@ import {
 interface RuntimeRolePolicySnapshot {
   httpServer: boolean;
   onlineSettlementRunner: boolean;
-  generalBackgroundWorkers: boolean;
+  requestBoundJobWorkers: boolean;
   workerPool: boolean;
   scheduledBackgroundServices: boolean;
   httpBattleStateRecovery: boolean;
@@ -55,7 +55,7 @@ const readRuntimeRolePolicy = (role: JiuzhouRuntimeRole): RuntimeRolePolicySnaps
   return {
     httpServer: shouldStartHttpServer(role),
     onlineSettlementRunner: shouldStartOnlineSettlementRunner(role),
-    generalBackgroundWorkers: shouldStartGeneralBackgroundWorkers(role),
+    requestBoundJobWorkers: shouldStartRequestBoundJobWorkers(role),
     workerPool: shouldStartWorkerPool(role),
     scheduledBackgroundServices: shouldStartScheduledBackgroundServices(role),
     httpBattleStateRecovery: shouldRecoverHttpBattleState(role),
@@ -109,7 +109,7 @@ test('runtimeRole 应按 all/api/worker 返回启动策略矩阵', () => {
       expected: {
         httpServer: true,
         onlineSettlementRunner: true,
-        generalBackgroundWorkers: true,
+        requestBoundJobWorkers: true,
         workerPool: true,
         scheduledBackgroundServices: true,
         httpBattleStateRecovery: true,
@@ -121,11 +121,11 @@ test('runtimeRole 应按 all/api/worker 返回启动策略矩阵', () => {
       expected: {
         httpServer: true,
         onlineSettlementRunner: false,
-        generalBackgroundWorkers: false,
-        workerPool: false,
+        requestBoundJobWorkers: true,
+        workerPool: true,
         scheduledBackgroundServices: false,
         httpBattleStateRecovery: true,
-        idleSessionsRecovery: false,
+        idleSessionsRecovery: true,
       },
     },
     {
@@ -133,11 +133,11 @@ test('runtimeRole 应按 all/api/worker 返回启动策略矩阵', () => {
       expected: {
         httpServer: false,
         onlineSettlementRunner: true,
-        generalBackgroundWorkers: true,
-        workerPool: true,
+        requestBoundJobWorkers: false,
+        workerPool: false,
         scheduledBackgroundServices: true,
         httpBattleStateRecovery: false,
-        idleSessionsRecovery: true,
+        idleSessionsRecovery: false,
       },
     },
   ];
@@ -169,7 +169,7 @@ test('startupPipeline 应导入运行角色 guard helper', () => {
   assertStartupSourceContains(runtimeRoleImportBlock, 'resolveJiuzhouRuntimeRole');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartHttpServer');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartOnlineSettlementRunner');
-  assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartGeneralBackgroundWorkers');
+  assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartRequestBoundJobWorkers');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartWorkerPool');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartScheduledBackgroundServices');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldRecoverHttpBattleState');
@@ -180,16 +180,16 @@ test('startupPipeline 应保留关键启动副作用的角色 guard', () => {
   const source = readFileSync(new URL('../../bootstrap/startupPipeline.ts', import.meta.url), 'utf8');
   assertStartupSourceContains(source, 'const runtimeRole = resolveJiuzhouRuntimeRole();');
   assertStartupSourceContains(source, 'if (shouldStartOnlineSettlementRunner(runtimeRole))');
-  assertStartupSourceContains(source, 'if (shouldStartGeneralBackgroundWorkers(runtimeRole))');
+  assertStartupSourceContains(source, 'if (shouldStartRequestBoundJobWorkers(runtimeRole))');
   assertStartupSourceContains(source, 'if (shouldStartHttpServer(runtimeRole))');
 
   assertGuardNearStartupEffect(source, 'if (shouldStartWorkerPool(runtimeRole))', 'initializeWorkerPool');
   assertGuardNearStartupEffect(source, 'if (shouldStartOnlineSettlementRunner(runtimeRole))', 'initializeOnlineBattleSettlementRunner');
-  assertGuardNearStartupEffect(source, 'if (shouldStartGeneralBackgroundWorkers(runtimeRole))', 'initializeTechniqueGenerationJobRunner');
-  assertGuardNearStartupEffect(source, 'if (shouldStartGeneralBackgroundWorkers(runtimeRole))', 'initializePartnerRecruitJobRunner');
-  assertGuardNearStartupEffect(source, 'if (shouldStartGeneralBackgroundWorkers(runtimeRole))', 'initializePartnerFusionJobRunner');
-  assertGuardNearStartupEffect(source, 'if (shouldStartGeneralBackgroundWorkers(runtimeRole))', 'initializePartnerReboneJobRunner');
-  assertGuardNearStartupEffect(source, 'if (shouldStartGeneralBackgroundWorkers(runtimeRole))', 'initializeWanderJobRunner');
+  assertGuardNearStartupEffect(source, 'if (shouldStartRequestBoundJobWorkers(runtimeRole))', 'initializeTechniqueGenerationJobRunner');
+  assertGuardNearStartupEffect(source, 'if (shouldStartRequestBoundJobWorkers(runtimeRole))', 'initializePartnerRecruitJobRunner');
+  assertGuardNearStartupEffect(source, 'if (shouldStartRequestBoundJobWorkers(runtimeRole))', 'initializePartnerFusionJobRunner');
+  assertGuardNearStartupEffect(source, 'if (shouldStartRequestBoundJobWorkers(runtimeRole))', 'initializePartnerReboneJobRunner');
+  assertGuardNearStartupEffect(source, 'if (shouldStartRequestBoundJobWorkers(runtimeRole))', 'initializeWanderJobRunner');
   assertGuardNearStartupEffect(source, 'if (shouldStartScheduledBackgroundServices(runtimeRole))', 'initializeAfdianMessageRetryService');
   assertGuardNearStartupEffect(source, 'if (shouldStartScheduledBackgroundServices(runtimeRole))', 'initializeCharacterSettlementResourceDeltaService');
   assertGuardNearStartupEffect(source, 'if (shouldStartScheduledBackgroundServices(runtimeRole))', 'initializeCharacterItemGrantDeltaService');
