@@ -2,7 +2,7 @@
  * 历劫期数据完整性测试
  *
  * 作用（做什么 / 不做什么）：
- * - 做什么：锁定第九章、九霄劫台、万雷劫宫、历劫期材料、掉落池与三套套装的关键引用关系，避免开放后出现断链。
+ * - 做什么：锁定第九章、九霄劫台、万雷劫宫、历劫期材料、掉落池与三套套装的关键引用关系，并确认未调整完前入口关闭。
  * - 做什么：额外校验“野外不掉套装、装备只从秘境链路掉落”的唯一口径，防止后续把套装误塞回公共池或地图怪掉落。
  * - 不做什么：不执行真实战斗，不验证随机掉率统计，也不覆盖 UI 文案排版。
  *
@@ -128,7 +128,7 @@ const LIJIE_DUNGEON_MONSTER_IDS = [
   LIJIE_BOSS_ID,
 ] as const;
 
-test('历劫期主线、地图、秘境与任务应统一处于开放态', async () => {
+test('历劫期主线、地图、秘境与任务应暂时关闭运行时入口', async () => {
   const mainQuestSeed = loadSeed('main_quest_chapter9.json');
   const dialogueSeed = loadSeed('dialogue_main_chapter9.json');
   const mapSeed = loadSeed('map_def.json');
@@ -147,31 +147,31 @@ test('历劫期主线、地图、秘境与任务应统一处于开放态', async
   const weeklyTask = taskById.get('task-lijie-weekly-001');
 
   assert.ok(chapter, '缺少第九章章节定义');
-  assert.equal(chapter?.enabled, true, '第九章应开放');
-  assert.notEqual(getEnabledMainQuestChapterById('mq-chapter-9'), null, '运行时应暴露第九章章节');
+  assert.equal(chapter?.enabled, false, '第九章应暂时关闭');
+  assert.equal(getEnabledMainQuestChapterById('mq-chapter-9'), null, '运行时不应暴露第九章章节');
 
   assert.ok(openingDialogue, '缺少第九章对白定义');
-  assert.equal(openingDialogue?.enabled, true, '第九章对白应开放');
-  assert.notEqual(await loadDialogue('dlg-main-9-001'), null, '运行时应暴露第九章对白');
+  assert.equal(openingDialogue?.enabled, false, '第九章对白应暂时关闭');
+  assert.equal(await loadDialogue('dlg-main-9-001'), null, '运行时不应暴露第九章对白');
 
   assert.ok(map, '缺少九霄劫台地图定义');
-  assert.equal(map?.enabled, true, '九霄劫台地图应开放');
-  assert.equal(isMapEnabled(map as { enabled?: boolean | null }), true, '地图可用性判定应识别九霄劫台为开放态');
-  assert.notEqual(await getMapDefById('map-jiuxiao-jietai'), null, '运行时应可读取九霄劫台地图');
-  assert.notEqual((await getRoomsInMap('map-jiuxiao-jietai')).length, 0, '开放地图后应返回房间列表');
-  assert.notEqual(await getRoomInMap('map-jiuxiao-jietai', 'room-jietai-yinlei-platform'), null, '开放地图后应返回接引雷台房间');
+  assert.equal(map?.enabled, false, '九霄劫台地图应暂时关闭');
+  assert.equal(isMapEnabled(map as { enabled?: boolean | null }), false, '地图可用性判定应识别九霄劫台为关闭态');
+  assert.equal(await getMapDefById('map-jiuxiao-jietai'), null, '运行时不应读取九霄劫台地图');
+  assert.equal((await getRoomsInMap('map-jiuxiao-jietai')).length, 0, '关闭地图后不应返回房间列表');
+  assert.equal(await getRoomInMap('map-jiuxiao-jietai', 'room-jietai-yinlei-platform'), null, '关闭地图后不应返回接引雷台房间');
 
   assert.ok(dungeonDef, '缺少万雷劫宫秘境定义');
-  assert.equal(dungeonDef?.enabled, true, '万雷劫宫秘境应开放');
-  assert.notEqual(getDungeonDefById(LIJIE_DUNGEON_ID), null, '运行时应暴露万雷劫宫秘境');
+  assert.equal(dungeonDef?.enabled, false, '万雷劫宫秘境应暂时关闭');
+  assert.equal(getDungeonDefById(LIJIE_DUNGEON_ID), null, '运行时不应暴露万雷劫宫秘境');
 
   assert.ok(dailyTask, '缺少历劫期日常任务定义');
-  assert.equal(dailyTask?.enabled, true, '历劫期日常任务应开放');
-  assert.notEqual(await getTaskDefinitionById('task-lijie-daily-001'), null, '运行时应暴露历劫期日常任务');
+  assert.equal(dailyTask?.enabled, false, '历劫期日常任务应暂时关闭');
+  assert.equal(await getTaskDefinitionById('task-lijie-daily-001'), null, '运行时不应暴露历劫期日常任务');
 
   assert.ok(weeklyTask, '缺少历劫期周常任务定义');
-  assert.equal(weeklyTask?.enabled, true, '历劫期周常任务应开放');
-  assert.notEqual(await getTaskDefinitionById('task-lijie-weekly-001'), null, '运行时应暴露历劫期周常任务');
+  assert.equal(weeklyTask?.enabled, false, '历劫期周常任务应暂时关闭');
+  assert.equal(await getTaskDefinitionById('task-lijie-weekly-001'), null, '运行时不应暴露历劫期周常任务');
 });
 
 test('历劫期技能应使用雷劫主题机制且只依赖现有战斗效果类型', () => {

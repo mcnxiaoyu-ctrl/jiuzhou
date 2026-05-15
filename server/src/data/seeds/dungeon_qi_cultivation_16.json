@@ -27,7 +27,7 @@
           "万雷劫宫"
         ],
         "sort_weight": 120,
-        "enabled": true,
+        "enabled": false,
         "version": 1
       },
       "difficulties": [

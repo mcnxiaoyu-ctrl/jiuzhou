@@ -22,6 +22,9 @@ import test from 'node:test';
 import {
   buildGeneratedPartnerTextModelRequest,
 } from '../shared/partnerGeneratedPreview.js';
+import {
+  resolveOpenAICompatibleResponseFormat,
+} from '../shared/techniqueTextModelShared.js';
 
 test('buildGeneratedPartnerTextModelRequest: 应把三魂归契素材参考信息注入伙伴本体 prompt', () => {
   const request = buildGeneratedPartnerTextModelRequest({
@@ -84,4 +87,24 @@ test('buildGeneratedPartnerTextModelRequest: 应把三魂归契素材参考信�
       attributeElement: 'shui',
     },
   ]);
+});
+
+test('resolveOpenAICompatibleResponseFormat: Gemini 兼容请求必须剥离不支持的 exclusive 边界字段', () => {
+  const request = buildGeneratedPartnerTextModelRequest({
+    quality: '天',
+    seed: 20260515,
+  });
+
+  const originalSchemaSnapshot = JSON.stringify(request.responseFormat);
+  assert.match(originalSchemaSnapshot, /exclusiveMinimum/u);
+
+  const responseFormat = resolveOpenAICompatibleResponseFormat({
+    provider: 'openai',
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    modelName: 'gemini-2.5-flash',
+  }, request.responseFormat);
+
+  assert.equal(responseFormat?.type, 'json_schema');
+  assert.doesNotMatch(JSON.stringify(responseFormat), /exclusiveMinimum|exclusiveMaximum/u);
+  assert.equal(JSON.stringify(request.responseFormat), originalSchemaSnapshot);
 });

@@ -3,7 +3,7 @@
     {
       "id": "dlg-main-9-001",
       "name": "第九章对白1",
-      "enabled": true,
+      "enabled": false,
       "nodes": [
         {
           "id": "start",
@@ -22,7 +22,7 @@
     {
       "id": "dlg-main-9-002",
       "name": "第九章对白2",
-      "enabled": true,
+      "enabled": false,
       "nodes": [
         {
           "id": "start",
@@ -41,7 +41,7 @@
     {
       "id": "dlg-main-9-003",
       "name": "第九章对白3",
-      "enabled": true,
+      "enabled": false,
       "nodes": [
         {
           "id": "start",
@@ -60,7 +60,7 @@
     {
       "id": "dlg-main-9-004",
       "name": "第九章对白4",
-      "enabled": true,
+      "enabled": false,
       "nodes": [
         {
           "id": "start",
@@ -79,7 +79,7 @@
     {
       "id": "dlg-main-9-005",
       "name": "第九章对白5",
-      "enabled": true,
+      "enabled": false,
       "nodes": [
         {
           "id": "start",
@@ -98,7 +98,7 @@
     {
       "id": "dlg-main-9-006",
       "name": "第九章对白6",
-      "enabled": true,
+      "enabled": false,
       "nodes": [
         {
           "id": "start",
@@ -117,7 +117,7 @@
     {
       "id": "dlg-main-9-007",
       "name": "第九章对白7",
-      "enabled": true,
+      "enabled": false,
       "nodes": [
         {
           "id": "start",
@@ -136,7 +136,7 @@
     {
       "id": "dlg-main-9-008",
       "name": "第九章对白8",
-      "enabled": true,
+      "enabled": false,
       "nodes": [
         {
           "id": "start",

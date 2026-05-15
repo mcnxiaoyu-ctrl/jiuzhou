@@ -20,6 +20,7 @@
  * 5) 结构化输出 schema 一旦开始使用，必须由共享层统一承接，避免每个业务 service 自己拼 `response_format` 导致字段名继续漂移。
  */
 import { createHash, randomInt } from 'crypto';
+import { isGeminiOpenAICompatibleModel } from './openAICompatibleModelDetection.js';
 
 
 type TechniqueModelJsonPrimitive = string | number | boolean | null;
@@ -102,16 +103,16 @@ export type TechniqueTextModelJsonSchema =
 
 export type TechniqueTextModelResponseFormat =
   | {
-      type: 'json_schema';
-      json_schema: {
-        name: string;
-        schema: TechniqueTextModelJsonSchemaObject;
-        strict: true;
-      };
-    }
-  | {
-      type: 'json_object';
+    type: 'json_schema';
+    json_schema: {
+      name: string;
+      schema: TechniqueTextModelJsonSchemaObject;
+      strict: true;
     };
+  }
+  | {
+    type: 'json_object';
+  };
 
 export type TechniqueTextModelRequestPayload = {
   model: string;
@@ -132,13 +133,13 @@ export type TechniqueTextModelRequestPayload = {
 
 export type TechniqueModelJsonParseResult =
   | {
-      success: true;
-      data: TechniqueModelJsonObject;
-    }
+    success: true;
+    data: TechniqueModelJsonObject;
+  }
   | {
-      success: false;
-      reason: 'empty_content' | 'invalid_json_object';
-    };
+    success: false;
+    reason: 'empty_content' | 'invalid_json_object';
+  };
 
 export type TechniqueTextModelJsonParseOptions = {
   preferredTopLevelKeys?: string[];
@@ -328,12 +329,80 @@ const isDeepSeekTextModel = (config: OpenAICompatibleTextModelProtocolConfig): b
   return baseURL.includes('deepseek') || modelName.startsWith('deepseek-');
 };
 
+const sanitizeTechniqueTextModelJsonSchemaCompositeKeywordsForGemini = (
+  schema: TechniqueTextModelJsonSchemaBase,
+): TechniqueTextModelJsonSchemaBase => ({
+  ...(schema.allOf ? { allOf: schema.allOf.map(sanitizeTechniqueTextModelJsonSchemaForGemini) } : {}),
+  ...(schema.anyOf ? { anyOf: schema.anyOf.map(sanitizeTechniqueTextModelJsonSchemaForGemini) } : {}),
+  ...(schema.oneOf ? { oneOf: schema.oneOf.map(sanitizeTechniqueTextModelJsonSchemaForGemini) } : {}),
+  ...(schema.if ? { if: sanitizeTechniqueTextModelJsonSchemaForGemini(schema.if) } : {}),
+  ...(schema.then ? { then: sanitizeTechniqueTextModelJsonSchemaForGemini(schema.then) } : {}),
+  ...(schema.else ? { else: sanitizeTechniqueTextModelJsonSchemaForGemini(schema.else) } : {}),
+});
+
+const sanitizeTechniqueTextModelJsonSchemaPropertiesForGemini = (
+  properties: TechniqueTextModelJsonSchemaProperties,
+): TechniqueTextModelJsonSchemaProperties => Object.fromEntries(
+  Object.entries(properties).map(([key, value]) => [
+    key,
+    sanitizeTechniqueTextModelJsonSchemaForGemini(value),
+  ]),
+) as TechniqueTextModelJsonSchemaProperties;
+
+// Gemini 的 OpenAI 兼容层会把 response_format 转为 generation_config.response_schema，
+// 该 schema 子集不接受 exclusiveMinimum/exclusiveMaximum。集中在协议出口剥离，
+// 业务上的“必须大于 0”等强约束仍由 prompt 与服务端校验兜住，避免各业务 schema 重复兼容分支。
+const sanitizeTechniqueTextModelJsonSchemaForGemini = (
+  schema: TechniqueTextModelJsonSchema,
+): TechniqueTextModelJsonSchema => {
+  const compositeKeywords = sanitizeTechniqueTextModelJsonSchemaCompositeKeywordsForGemini(schema);
+  if (schema.type === 'object') {
+    return {
+      ...schema,
+      ...compositeKeywords,
+      properties: sanitizeTechniqueTextModelJsonSchemaPropertiesForGemini(schema.properties),
+    };
+  }
+  if (schema.type === 'array') {
+    return {
+      ...schema,
+      ...compositeKeywords,
+      items: sanitizeTechniqueTextModelJsonSchemaForGemini(schema.items),
+    };
+  }
+  if (schema.type === 'number' || schema.type === 'integer') {
+    const { exclusiveMaximum: _exclusiveMaximum, exclusiveMinimum: _exclusiveMinimum, ...numberSchema } = schema;
+    return {
+      ...numberSchema,
+      ...compositeKeywords,
+    };
+  }
+  return {
+    ...schema,
+    ...compositeKeywords,
+  };
+};
+
+const sanitizeTechniqueTextModelResponseFormatForGemini = (
+  responseFormat: TechniqueTextModelResponseFormat,
+): TechniqueTextModelResponseFormat => {
+  if (responseFormat.type !== 'json_schema') return responseFormat;
+  return {
+    ...responseFormat,
+    json_schema: {
+      ...responseFormat.json_schema,
+      schema: sanitizeTechniqueTextModelJsonSchemaForGemini(responseFormat.json_schema.schema) as TechniqueTextModelJsonSchemaObject,
+    },
+  };
+};
+
 export const resolveOpenAICompatibleResponseFormat = (
   config: OpenAICompatibleTextModelProtocolConfig,
   responseFormat?: TechniqueTextModelResponseFormat,
 ): TechniqueTextModelResponseFormat | undefined => {
   if (!responseFormat) return undefined;
   if (responseFormat.type !== 'json_schema') return responseFormat;
+  if (isGeminiOpenAICompatibleModel(config)) return sanitizeTechniqueTextModelResponseFormatForGemini(responseFormat);
   if (!isDeepSeekTextModel(config)) return responseFormat;
   return { type: 'json_object' };
 };

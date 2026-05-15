@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 
 type Requirement = {
   type?: string;
+  id?: string;
   min?: number;
   minCount?: number;
   minLayer?: number;
@@ -12,6 +13,7 @@ type Requirement = {
   chapterId?: string;
   itemDefId?: string;
   qty?: number;
+  reason?: string;
 };
 
 type Cost = {
@@ -47,7 +49,7 @@ const loadSeed = (): RealmBreakthroughSeed => {
   return JSON.parse(readFileSync(seedPath, 'utf-8')) as RealmBreakthroughSeed;
 };
 
-test('证道->历劫突破配置应满足历劫期前置/消耗/奖励口径，并要求先完成第九章主线', () => {
+test('证道->历劫突破应暂时保持版本锁，同时保留历劫期前置/消耗/奖励配置', () => {
   const seed = loadSeed();
   const entry = (seed.breakthroughs ?? []).find(
     (row) => row.from === '炼虚合道·证道期' && row.to === '炼虚合道·历劫期',
@@ -55,7 +57,9 @@ test('证道->历劫突破配置应满足历劫期前置/消耗/奖励口径，�
   assert.ok(entry, '缺少 证道期->历劫期 突破条目');
 
   const requirements = entry.requirements ?? [];
-  assert.equal(requirements.some((row) => row.type === 'version_locked'), false, '历劫期突破不应再保留版本锁');
+  const versionLockedReq = requirements.find((row) => row.type === 'version_locked');
+  assert.equal(versionLockedReq?.id, 'version-lock-lijie', '历劫期调整完成前应暂时保留版本锁');
+  assert.equal(versionLockedReq?.reason, '炼虚合道·历劫期内容调整中，暂未开放');
 
   const expReq = requirements.find((row) => row.type === 'exp_min');
   assert.equal(expReq?.min, 7_600_000);

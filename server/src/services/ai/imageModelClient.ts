@@ -27,6 +27,7 @@ import {
   buildDashScopeImageGenerationPayload,
   readDashScopeImageGenerationResult,
 } from '../shared/dashScopeImageGenerationShared.js';
+import { isGeminiOpenAICompatibleModel } from '../shared/openAICompatibleModelDetection.js';
 
 export type GeneratedImageAsset = {
   b64: string;
@@ -54,6 +55,13 @@ type OpenAIImageSize =
   | '1792x1024';
 
 type OpenAIImageResponseFormat = 'b64_json' | 'url';
+
+export type OpenAIImageGenerationPayload = {
+  model: string;
+  prompt: string;
+  size: OpenAIImageSize;
+  response_format?: OpenAIImageResponseFormat;
+};
 
 const asString = (raw: unknown): string => (typeof raw === 'string' ? raw.trim() : '');
 const DATA_URL_BASE64_PREFIX_REGEXP = /^data:[^;,]+;base64,/i;
@@ -104,6 +112,47 @@ const toOpenAIImageResponseFormat = (responseFormat: string): OpenAIImageRespons
     return responseFormat;
   }
   throw new Error(`AI_TECHNIQUE_IMAGE_RESPONSE_FORMAT 配置无效：${responseFormat}`);
+};
+
+const isOfficialOpenAIImageEndpoint = (baseURL: string): boolean => {
+  return baseURL.toLowerCase().includes('api.openai.com');
+};
+
+const shouldIncludeOpenAIImageResponseFormat = (params: {
+  baseURL: string;
+  modelName: string;
+}): boolean => {
+  if (isGeminiOpenAICompatibleModel(params)) {
+    return false;
+  }
+  // 第三方 OpenAI 兼容网关可能把图片模型别名转发到 Gemini 等上游，
+  // 即使本地 modelName 不含 gemini，也会拒绝 OpenAI 图片接口的 response_format。
+  // 仅官方 OpenAI endpoint 继续携带该字段；其他兼容网关使用默认返回结构，由后续统一处理 b64 或 url。
+  return isOfficialOpenAIImageEndpoint(params.baseURL);
+};
+
+export const buildOpenAIImageGenerationPayload = (params: {
+  baseURL: string;
+  modelName: string;
+  prompt: string;
+  size: string;
+  responseFormat: string;
+}): OpenAIImageGenerationPayload => {
+  const payload: OpenAIImageGenerationPayload = {
+    model: params.modelName,
+    prompt: params.prompt,
+    size: toOpenAIImageSize(params.size),
+  };
+  if (!shouldIncludeOpenAIImageResponseFormat({
+    baseURL: params.baseURL,
+    modelName: params.modelName,
+  })) {
+    return payload;
+  }
+  return {
+    ...payload,
+    response_format: toOpenAIImageResponseFormat(params.responseFormat),
+  };
 };
 
 const fetchJsonWithTimeout = async (
@@ -186,12 +235,13 @@ export const generateConfiguredImageAsset = async (
     maxRetries: OPENAI_IMAGE_GENERATION_MAX_RETRIES,
     timeout: config.timeoutMs,
   });
-  const response = await client.images.generate({
-    model: config.modelName,
+  const response = await client.images.generate(buildOpenAIImageGenerationPayload({
+    baseURL: config.baseURL,
+    modelName: config.modelName,
     prompt,
-    size: toOpenAIImageSize(config.size),
-    response_format: toOpenAIImageResponseFormat(config.responseFormat),
-  });
+    size: config.size,
+    responseFormat: config.responseFormat,
+  }));
   const image = Array.isArray(response.data) ? response.data[0] : undefined;
 
   return {

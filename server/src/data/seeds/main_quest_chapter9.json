@@ -27,7 +27,7 @@
         "dungeon-lianxu-wanlei-jiegong"
       ],
       "sort_weight": 930,
-      "enabled": true
+      "enabled": false
     }
   ],
   "sections": [
@@ -64,7 +64,7 @@
         "spirit_stones": 300
       },
       "sort_weight": 930,
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "main-9-002",
@@ -105,7 +105,7 @@
         ]
       },
       "sort_weight": 931,
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "main-9-003",
@@ -146,7 +146,7 @@
         ]
       },
       "sort_weight": 932,
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "main-9-004",
@@ -179,7 +179,7 @@
         ]
       },
       "sort_weight": 933,
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "main-9-005",
@@ -220,7 +220,7 @@
         ]
       },
       "sort_weight": 934,
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "main-9-006",
@@ -253,7 +253,7 @@
         ]
       },
       "sort_weight": 935,
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "main-9-007",
@@ -294,7 +294,7 @@
         ]
       },
       "sort_weight": 936,
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "main-9-008",
@@ -335,7 +335,7 @@
         ]
       },
       "sort_weight": 937,
-      "enabled": true
+      "enabled": false
     }
   ]
 }

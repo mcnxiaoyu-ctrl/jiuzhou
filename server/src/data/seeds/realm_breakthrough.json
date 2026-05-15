@@ -738,6 +738,12 @@
       "to": "炼虚合道·历劫期",
       "requirements": [
         {
+          "id": "version-lock-lijie",
+          "type": "version_locked",
+          "title": "境界开放进度",
+          "reason": "炼虚合道·历劫期内容调整中，暂未开放"
+        },
+        {
           "id": "exp",
           "type": "exp_min",
           "min": 7600000,

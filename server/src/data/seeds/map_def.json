@@ -3679,7 +3679,7 @@
       "revive_map_id": "map-jiuxiao-jietai",
       "revive_room_id": "room-jietai-yinlei-platform",
       "sort_weight": 930,
-      "enabled": true,
+      "enabled": false,
       "rooms": [
         {
           "id": "room-jietai-yinlei-platform",
