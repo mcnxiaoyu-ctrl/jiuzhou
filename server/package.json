@@ -37,6 +37,7 @@
     "@alicloud/tea-typescript": "^1.8.0",
     "@alicloud/tea-util": "^1.4.11",
     "@anthropic-ai/sdk": "^0.78.0",
+    "amqplib": "^0.10.8",
     "bcryptjs": "^3.0.3",
     "boardgame.io": "^0.50.2",
     "cors": "^2.8.6",
@@ -59,6 +60,7 @@
     "tencentcloud-sdk-nodejs-captcha": "^4.1.191"
   },
   "devDependencies": {
+    "@types/amqplib": "^0.10.7",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

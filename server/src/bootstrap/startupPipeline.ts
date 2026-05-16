@@ -25,6 +25,10 @@ import {
   stopCleanupWorker,
 } from "../workers/cleanupWorker.js";
 import {
+  startMarketListingAutoCancelWorker,
+  stopMarketListingAutoCancelWorker,
+} from "../workers/marketListingAutoCancelWorker.js";
+import {
   initializeWorkerPool,
   shutdownWorkerPool,
 } from "../workers/workerPool.js";
@@ -94,6 +98,7 @@ import {
   initializeEventLoopMonitor,
   stopEventLoopMonitor,
 } from "../services/eventLoopMonitorService.js";
+import { closeRabbitMqConnection } from "../services/shared/rabbitMqConnection.js";
 import {
   resolveJiuzhouRuntimeRole,
   shouldRecoverHttpBattleState,
@@ -130,7 +135,27 @@ const runStartupStep = async <T>(
 };
 
 /**
- * 服务启动流水线（连接检查 -> 动态配置预热 -> 数据准备 -> 启动恢复 -> 监听端口）
+ * 服务启动流水线
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：按运行角色串联数据库/Redis 检查、静态配置预热、后台服务启动、状态恢复、HTTP 监听和优雅关闭。
+ * 2. 做什么：集中管理 worker 角色专属后台能力，包括 cleanup worker、在线战斗延迟结算和坊市自动下架 RabbitMQ 消费者。
+ * 3. 不做什么：不实现具体业务逻辑，不直接消费 RabbitMQ 消息，也不在这里拼装 SQL 或请求参数。
+ *
+ * 输入 / 输出：
+ * - 输入：HTTP server、host、port，以及 `JIUZHOU_RUNTIME_ROLE` 等运行环境变量。
+ * - 输出：启动时完成必要初始化；关闭时按顺序停止后台任务、刷写缓冲区并关闭外部连接。
+ *
+ * 数据流 / 状态流：
+ * runtimeRole -> guard helper -> 启动对应服务 -> registerGracefulShutdown -> stop worker/service -> close RabbitMQ/Redis/PostgreSQL。
+ *
+ * 复用设计说明：
+ * - 启动/关闭顺序是进程级共享规则，集中在这里避免 API 角色、worker 角色和未来后台服务各自散写生命周期。
+ * - 具体能力通过启动/停止函数接入，startupPipeline 只负责编排，减少和业务 service 的直接耦合。
+ *
+ * 关键边界条件与坑点：
+ * 1. 只有 worker/all 角色能启动独立后台消费者，API 角色不能消费 RabbitMQ 自动下架任务。
+ * 2. 关闭时必须先停消费者再关 RabbitMQ 连接，并且 RabbitMQ 要在 Redis/数据库连接池之前关闭。
  */
 export const startServerWithPipeline = async (
   options: StartServerOptions,
@@ -232,6 +257,9 @@ export const startServerWithPipeline = async (
     await runStartupStep("清理 Worker 启动", async () => {
       await startCleanupWorker();
     });
+    await runStartupStep("坊市自动下架 RabbitMQ Worker 启动", async () => {
+      await startMarketListingAutoCancelWorker();
+    });
   }
 
   if (shouldRecoverHttpBattleState(runtimeRole) && redisConnected) {
@@ -302,6 +330,9 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
       stopCleanupWorker();
       console.log("✓ 清理 Worker 已停止");
 
+      await stopMarketListingAutoCancelWorker();
+      console.log("✓ 坊市自动下架 RabbitMQ Worker 已停止");
+
       stopBattleService();
       console.log("✓ 战斗服务已停止");
 
@@ -356,6 +387,9 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
       console.log("✓ 角色软进度 Delta 聚合器已停止");
 
       // 6. 关闭外部连接
+      await closeRabbitMqConnection();
+      console.log("✓ RabbitMQ 连接已关闭");
+
       await closeRedis();
       console.log("✓ Redis 连接已关闭");
 

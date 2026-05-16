@@ -199,6 +199,7 @@ test('startupPipeline 应保留关键启动副作用的角色 guard', () => {
   assertGuardNearStartupEffect(source, 'if (shouldStartScheduledBackgroundServices(runtimeRole))', 'initGameTimeService');
   assertGuardNearStartupEffect(source, 'if (shouldStartScheduledBackgroundServices(runtimeRole))', 'initArenaWeeklySettlementService');
   assertGuardNearStartupEffect(source, 'if (shouldStartScheduledBackgroundServices(runtimeRole))', 'startCleanupWorker');
+  assertGuardNearStartupEffect(source, 'if (shouldStartScheduledBackgroundServices(runtimeRole))', 'startMarketListingAutoCancelWorker');
   assertGuardNearStartupEffect(source, 'if (shouldRecoverHttpBattleState(runtimeRole) && redisConnected)', 'recoverBattlesFromRedis');
   assertGuardNearStartupEffect(source, 'if (shouldRecoverHttpBattleState(runtimeRole) && redisConnected)', 'recoverBattleSessionsFromProjection');
   assertGuardNearStartupEffect(source, 'if (shouldRecoverIdleSessions(runtimeRole))', 'recoverActiveIdleSessions');

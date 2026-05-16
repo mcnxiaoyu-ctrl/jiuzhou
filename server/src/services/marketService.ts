@@ -54,6 +54,7 @@ import {
   MARKET_LISTING_AUTO_CANCEL_AFTER_HOURS,
   MARKET_LISTING_DAILY_CREATE_LIMIT,
 } from "./shared/marketListingRules.js";
+import { publishMarketListingAutoCancelMessage } from "./shared/marketListingAutoCancelQueue.js";
 
 export type MarketSort = "timeDesc" | "priceAsc" | "priceDesc" | "qtyDesc";
 
@@ -983,7 +984,10 @@ class MarketService {
         },
       ]);
     }
-    const listingResult = await query(
+    const listingResult = await query<{
+      id: number | string;
+      listed_at: Date | string;
+    }>(
       `
         INSERT INTO market_listing (
           seller_user_id, seller_character_id,
@@ -996,7 +1000,7 @@ class MarketService {
           $5, $6, $7, $8,
           'active'
         )
-        RETURNING id
+        RETURNING id, listed_at
       `,
       [
         params.userId,
@@ -1009,11 +1013,17 @@ class MarketService {
         listingFeeSilver.toString(),
       ],
     );
+    const listingRow = listingResult.rows[0];
+    const listingId = Number(listingRow.id);
+    await publishMarketListingAutoCancelMessage({
+      listingId,
+      listedAt: listingRow.listed_at,
+    });
     await invalidateMarketListingsCache();
     return {
       success: true,
       message: `上架成功，已收取${listingFeeSilver.toString()}银两手续费（未卖出下架将退还）`,
-      data: { listingId: Number(listingResult.rows[0].id) },
+      data: { listingId },
     };
   }
 

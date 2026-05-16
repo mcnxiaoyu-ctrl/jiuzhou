@@ -9,6 +9,7 @@ x-server-environment-base: &server-environment-base
   DB_PASSWORD: "${DB_PASSWORD:-postgres}"
   DATABASE_URL: "postgresql://postgres:${DB_PASSWORD:-postgres}@postgres:5432/jiuzhou"
   REDIS_URL: "redis://redis:6379"
+  RABBITMQ_URL: "amqp://${RABBITMQ_USER:-jiuzhou}:${RABBITMQ_PASSWORD:-change-me-rabbitmq}@rabbitmq:5672"
   JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
   JWT_EXPIRES_IN: 7d
   PORT: "6011"
@@ -178,6 +179,28 @@ services:
       update_config:
         order: stop-first
 
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER:-jiuzhou}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:-change-me-rabbitmq}"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - jiuzhou_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      update_config:
+        order: stop-first
+      placement:
+        constraints:
+          - node.role == manager
+
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
     environment:
@@ -238,6 +261,9 @@ volumes:
   redis_data:
     external: true
     name: jiuzhou_redis_data
+  rabbitmq_data:
+    external: true
+    name: jiuzhou_rabbitmq_data
   uploads:
     external: true
     name: jiuzhou_uploads
