@@ -24,6 +24,7 @@ import type { BattleSkill, BattleState, BattleUnit } from "../../../battle/types
 import {
   clearBattleLogStream,
   consumeBattleLogDelta,
+  discardBattleLogDelta,
 } from "../../../battle/logStream.js";
 import { runWithDatabaseAccessAllowed } from "../../../config/database.js";
 import { canUseSkill, isFeared, isStunned } from "../../../battle/modules/control.js";
@@ -67,6 +68,63 @@ type PlayerTurnTimeoutState = {
 const playerTurnTimeoutStateByBattleId = new Map<string, PlayerTurnTimeoutState>();
 
 // ------ 推送优化 ------
+
+const hasOnlineBattleUpdateRecipient = (
+  userIds: readonly number[],
+  gameServer: ReturnType<typeof getGameServer>,
+): boolean => {
+  for (const userId of userIds) {
+    if (!Number.isFinite(userId)) continue;
+    if (gameServer.isUserOnline(userId)) return true;
+  }
+  return false;
+};
+
+const isSkippableRealtimeUpdateKind = (kind: string): boolean =>
+  kind !== "battle_finished" &&
+  kind !== "battle_abandoned" &&
+  kind === "battle_state";
+
+type BattleRedisSaveDecision = {
+  shouldPersist: boolean;
+  queued: boolean;
+};
+
+const queueBattleRedisSaveIfNeeded = (
+  battleId: string,
+  engine: BattleEngine | undefined,
+  participants: number[],
+  kind: string,
+): BattleRedisSaveDecision => {
+  const shouldPersist = engine !== undefined && shouldPersistBattleToRedis(battleId);
+  if (!shouldPersist || !engine) {
+    return {
+      shouldPersist: false,
+      queued: false,
+    };
+  }
+
+  const now = Date.now();
+  const lastSavedAt = battleLastRedisSavedAt.get(battleId) ?? 0;
+  const shouldSave =
+    kind === "battle_started" ||
+    kind === "battle_finished" ||
+    kind === "battle_abandoned" ||
+    now - lastSavedAt >= BATTLE_REDIS_SAVE_INTERVAL_MS;
+  if (!shouldSave) {
+    return {
+      shouldPersist: true,
+      queued: false,
+    };
+  }
+
+  battleLastRedisSavedAt.set(battleId, now);
+  saveBattleToRedis(battleId, engine, participants);
+  return {
+    shouldPersist: true,
+    queued: true,
+  };
+};
 
 function patchBattleUpdatePayload(battleId: string, payload: Record<string, unknown>): Record<string, unknown> {
   if (!payload || typeof payload !== "object") return payload;
@@ -135,6 +193,37 @@ export function emitBattleUpdate(battleId: string, payload: Record<string, unkno
       return;
     }
     const gameServer = getGameServer();
+    const engine = activeBattles.get(battleId);
+    if (
+      isSkippableRealtimeUpdateKind(kind) &&
+      !hasOnlineBattleUpdateRecipient(participants, gameServer)
+    ) {
+      const discardedLogCount = discardBattleLogDelta(battleId);
+      const redisSave = queueBattleRedisSaveIfNeeded(
+        battleId,
+        engine,
+        participants,
+        kind,
+      );
+      if (redisSave.queued) {
+        slowLogger.mark("queueBattleRedisSave", {
+          shouldSave: true,
+        });
+      }
+      if (discardedLogCount > 0) {
+        slowLogger.mark("discardBattleLogDelta", {
+          discardedLogCount,
+        });
+      }
+      slowLogger.flush({
+        participantCount: participants.length,
+        battleLogDiscarded: discardedLogCount,
+        redisPersistEligible: redisSave.shouldPersist,
+        redisSaveQueued: redisSave.queued,
+        outcome: "no_online_recipient",
+      });
+      return;
+    }
     const patched = patchBattleUpdatePayload(battleId, payload);
     slowLogger.mark("patchBattleUpdatePayload", {
       participantCount: participants.length,
@@ -151,27 +240,21 @@ export function emitBattleUpdate(battleId: string, payload: Record<string, unkno
       gameServer.emitToUser(userId, "battle:update", payloadWithSession);
     }
     slowLogger.mark("emitToParticipants");
-    const engine = activeBattles.get(battleId);
-    const shouldPersist = engine !== undefined && shouldPersistBattleToRedis(battleId);
-    if (shouldPersist && engine) {
-      const now = Date.now();
-      const lastSavedAt = battleLastRedisSavedAt.get(battleId) ?? 0;
-      const shouldSave =
-        kind === "battle_started" ||
-        kind === "battle_finished" ||
-        kind === "battle_abandoned" ||
-        now - lastSavedAt >= BATTLE_REDIS_SAVE_INTERVAL_MS;
-      if (shouldSave) {
-        battleLastRedisSavedAt.set(battleId, now);
-        saveBattleToRedis(battleId, engine, participants);
-        slowLogger.mark("queueBattleRedisSave", {
-          shouldSave: true,
-        });
-      }
+    const redisSave = queueBattleRedisSaveIfNeeded(
+      battleId,
+      engine,
+      participants,
+      kind,
+    );
+    if (redisSave.queued) {
+      slowLogger.mark("queueBattleRedisSave", {
+        shouldSave: true,
+      });
     }
     slowLogger.flush({
       participantCount: participants.length,
-      persisted: shouldPersist,
+      redisPersistEligible: redisSave.shouldPersist,
+      redisSaveQueued: redisSave.queued,
       outcome: "emitted",
     });
   } catch (error) {

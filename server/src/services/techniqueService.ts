@@ -1,8 +1,14 @@
 import { query } from '../config/database.js';
-import { getItemDefinitionsByIds, getSkillDefinitions, getTechniqueDefinitions, getTechniqueLayerDefinitions } from './staticConfigLoader.js';
+import { getItemDefinitionsByIds } from './staticConfigLoader.js';
 import { resolveSkillTriggerType } from '../shared/skillTriggerType.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
-import { isCharacterVisibleTechniqueDefinition } from './shared/techniqueUsageScope.js';
+import {
+  getEnabledTechniqueDefinitionById,
+  getEnabledTechniqueLayersByTechniqueId,
+  getEnabledTechniqueSkillsByTechniqueId,
+  getVisibleTechniqueDefinitionById,
+  getVisibleTechniqueDefinitionsSorted,
+} from './technique/definitionReadModel.js';
 
 export type TechniqueDefRow = {
   id: string;
@@ -155,7 +161,7 @@ export const applyTechniqueLayerVisibility = (
   }));
 };
 
-type TechniqueDefEntry = ReturnType<typeof getTechniqueDefinitions>[number];
+type TechniqueDefEntry = ReturnType<typeof getVisibleTechniqueDefinitionsSorted>[number];
 
 /**
  * 将静态功法定义映射为路由层返回结构。
@@ -186,29 +192,21 @@ const mapTechniqueDefRow = (entry: TechniqueDefEntry): TechniqueDefRow => {
 };
 
 export const getEnabledTechniqueDefs = async (): Promise<TechniqueDefRow[]> => {
-  const rows = getTechniqueDefinitions()
-    .filter((entry) => entry.enabled !== false)
-    .filter((entry) => isCharacterVisibleTechniqueDefinition(entry))
-    .map((entry) => mapTechniqueDefRow(entry))
-    .sort((left, right) => right.sort_weight - left.sort_weight || right.quality_rank - left.quality_rank || left.id.localeCompare(right.id));
-  return rows;
+  return getVisibleTechniqueDefinitionsSorted().map(mapTechniqueDefRow);
 };
 
 export const getTechniqueDefById = async (techniqueId: string): Promise<TechniqueDefRow | null> => {
   const id = String(techniqueId || '').trim();
   if (!id) return null;
-  const entry = getTechniqueDefinitions().find((row) => row.id === id && row.enabled !== false && isCharacterVisibleTechniqueDefinition(row));
+  const entry = getVisibleTechniqueDefinitionById(id);
   if (!entry) return null;
   return mapTechniqueDefRow(entry);
 };
 
 export const getTechniqueLayersByTechniqueId = async (techniqueId: string): Promise<TechniqueLayerRow[]> => {
-  const techniqueDef = getTechniqueDefinitions().find((entry) => (
-    entry.id === techniqueId &&
-    entry.enabled !== false &&
-    isCharacterVisibleTechniqueDefinition(entry)
-  )) ?? null;
-  const qualityMultiplier = resolveTechniqueCostMultiplierByQuality(techniqueDef?.quality);
+  const techniqueDef = getVisibleTechniqueDefinitionById(techniqueId);
+  if (!techniqueDef) return [];
+  const qualityMultiplier = resolveTechniqueCostMultiplierByQuality(techniqueDef.quality);
   return buildTechniqueLayerRows(techniqueId, qualityMultiplier);
 };
 
@@ -216,55 +214,56 @@ const buildTechniqueLayerRows = async (
   techniqueId: string,
   qualityMultiplier: number,
 ): Promise<TechniqueLayerRow[]> => {
-  const rows = getTechniqueLayerDefinitions()
-    .filter((entry) => entry.enabled !== false)
-    .filter((entry) => entry.technique_id === techniqueId)
-    .map((entry) => ({
-      technique_id: entry.technique_id,
-      layer: Number(entry.layer),
-      cost_spirit_stones: scaleTechniqueBaseCostByQuality(Number(entry.cost_spirit_stones ?? 0), qualityMultiplier),
-      cost_exp: scaleTechniqueBaseCostByQuality(Number(entry.cost_exp ?? 0), qualityMultiplier),
-      cost_materials: Array.isArray(entry.cost_materials) ? entry.cost_materials : [],
-      passives: Array.isArray(entry.passives) ? entry.passives : [],
-      unlock_skill_ids: Array.isArray(entry.unlock_skill_ids) ? entry.unlock_skill_ids : [],
-      upgrade_skill_ids: Array.isArray(entry.upgrade_skill_ids) ? entry.upgrade_skill_ids : [],
-      required_realm: typeof entry.required_realm === 'string' ? entry.required_realm : null,
-      required_quest_id: typeof entry.required_quest_id === 'string' ? entry.required_quest_id : null,
-      layer_desc: typeof entry.layer_desc === 'string' ? entry.layer_desc : null,
-    } satisfies TechniqueLayerRow))
-    .sort((left, right) => left.layer - right.layer);
   const itemIds: string[] = [];
-  for (const r of rows) {
-    for (const m of coerceCostMaterials(r.cost_materials)) {
-      itemIds.push(m.itemId);
+  const layerEntries: Array<{
+    row: TechniqueLayerRow;
+    costMaterials: Array<{ itemId: string; qty: number }>;
+  }> = [];
+
+  for (const entry of getEnabledTechniqueLayersByTechniqueId(techniqueId)) {
+    const costMaterials = coerceCostMaterials(entry.cost_materials);
+    for (const material of costMaterials) {
+      itemIds.push(material.itemId);
     }
-  }
-  const metaMap = await getItemMetaMap(itemIds);
-  return rows.map((r) => {
-    const materials = coerceCostMaterials(r.cost_materials).map((m) => {
-      const meta = metaMap.get(m.itemId) ?? null;
-      return { itemId: m.itemId, qty: m.qty, itemName: meta?.name, itemIcon: meta?.icon };
+    layerEntries.push({
+      row: {
+        technique_id: entry.technique_id,
+        layer: Number(entry.layer),
+        cost_spirit_stones: scaleTechniqueBaseCostByQuality(Number(entry.cost_spirit_stones ?? 0), qualityMultiplier),
+        cost_exp: scaleTechniqueBaseCostByQuality(Number(entry.cost_exp ?? 0), qualityMultiplier),
+        cost_materials: costMaterials,
+        passives: Array.isArray(entry.passives) ? entry.passives : [],
+        unlock_skill_ids: Array.isArray(entry.unlock_skill_ids) ? entry.unlock_skill_ids : [],
+        upgrade_skill_ids: Array.isArray(entry.upgrade_skill_ids) ? entry.upgrade_skill_ids : [],
+        required_realm: typeof entry.required_realm === 'string' ? entry.required_realm : null,
+        required_quest_id: typeof entry.required_quest_id === 'string' ? entry.required_quest_id : null,
+        layer_desc: typeof entry.layer_desc === 'string' ? entry.layer_desc : null,
+      },
+      costMaterials,
     });
-    return { ...r, cost_materials: materials };
+  }
+
+  const metaMap = await getItemMetaMap(itemIds);
+  return layerEntries.map((entry) => {
+    const materials = entry.costMaterials.map((material) => {
+      const meta = metaMap.get(material.itemId) ?? null;
+      return { itemId: material.itemId, qty: material.qty, itemName: meta?.name, itemIcon: meta?.icon };
+    });
+    return { ...entry.row, cost_materials: materials };
   });
 };
 
 export const getTechniqueLayersByTechniqueIdForPartner = async (
   techniqueId: string,
 ): Promise<TechniqueLayerRow[]> => {
-  const techniqueDef = getTechniqueDefinitions().find((entry) => (
-    entry.id === techniqueId &&
-    entry.enabled !== false
-  )) ?? null;
+  const techniqueDef = getEnabledTechniqueDefinitionById(techniqueId);
   if (!techniqueDef) return [];
   const qualityMultiplier = resolveTechniqueCostMultiplierByQuality(techniqueDef.quality);
   return buildTechniqueLayerRows(techniqueId, qualityMultiplier);
 };
 
 export const getSkillsByTechniqueId = async (techniqueId: string): Promise<SkillDefRow[]> => {
-  return getSkillDefinitions()
-    .filter((entry) => entry.enabled !== false)
-    .filter((entry) => entry.source_type === 'technique' && entry.source_id === techniqueId)
+  return getEnabledTechniqueSkillsByTechniqueId(techniqueId)
     .map((entry) => ({
       id: entry.id,
       code: entry.code ?? null,
@@ -296,8 +295,7 @@ export const getSkillsByTechniqueId = async (techniqueId: string): Promise<Skill
       sort_weight: Number(entry.sort_weight ?? 0),
       version: Number(entry.version ?? 1),
       enabled: true,
-    } satisfies SkillDefRow))
-    .sort((left, right) => right.sort_weight - left.sort_weight || left.id.localeCompare(right.id));
+    } satisfies SkillDefRow));
 };
 
 export const getTechniqueDetailById = async (
@@ -324,10 +322,7 @@ export const getTechniqueDetailById = async (
 export const getTechniqueDetailByIdForPartner = async (
   techniqueId: string,
 ): Promise<TechniqueDetailRow | null> => {
-  const techniqueEntry = getTechniqueDefinitions().find((entry) => (
-    entry.id === techniqueId &&
-    entry.enabled !== false
-  )) ?? null;
+  const techniqueEntry = getEnabledTechniqueDefinitionById(techniqueId);
   if (!techniqueEntry) return null;
 
   const [layers, skills] = await Promise.all([

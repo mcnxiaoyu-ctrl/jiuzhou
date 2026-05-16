@@ -25,7 +25,6 @@ import { loadCharacterRealmSnapshot } from './shared/characterRealm.js';
 import { getRealmRankZeroBased } from './shared/realmRules.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { shouldValidateTechniqueLearnRealm } from './shared/techniqueLearnRule.js';
-import { isCharacterVisibleTechniqueDefinition } from './shared/techniqueUsageScope.js';
 import { resolveTechniqueBookLearning } from './shared/techniqueBookRules.js';
 import { resolveItemUseResourceDelta, rollItemUseAmount } from './shared/itemUseValueRules.js';
 import {
@@ -33,8 +32,9 @@ import {
   getCharacterComputedByCharacterId,
   type CharacterComputedRow,
 } from './characterComputedService.js';
-import { getItemDefinitionById, getItemDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
-import { getGemLevel, isGemItemDefinition } from './shared/gemItemSemantics.js';
+import { getItemDefinitionById } from './staticConfigLoader.js';
+import { getRandomGemItemDefinitionIds } from './itemUse/staticUseIndex.js';
+import { getVisibleTechniqueDefinitionById } from './technique/definitionReadModel.js';
 import { unbindEquipmentBindingByInstanceId } from './inventory/equipmentUnbind.js';
 import type { PartnerLearnTechniqueResultDto } from './partnerService.js';
 import { partnerService } from './partnerService.js';
@@ -707,14 +707,15 @@ class ItemService {
 
     try {
     const realmSnapshot = await loadCharacterRealmSnapshot(characterId);
+    slowLogger.mark('loadRealmSnapshot');
     if (!realmSnapshot) {
       return { success: false, message: '角色不存在' };
     }
     const computedBefore = await getCharacterComputedByCharacterId(characterId);
+    slowLogger.mark('loadComputedBefore');
     if (!computedBefore) {
       return { success: false, message: '角色数据异常' };
     }
-    slowLogger.mark('loadUseContext');
 
     await lockCharacterInventoryMutex(characterId);
     slowLogger.mark('lockInventoryMutex');
@@ -939,18 +940,11 @@ class ItemService {
           const gemsPerUse = toPositiveInt(params?.gems_per_use, 1);
           const rollCount = qty * gemsPerUse;
 
-          const subCategorySet = new Set(subCategories);
-          const gemIds = getItemDefinitions()
-            .filter((entry) => {
-              if (entry.enabled === false) return false;
-              if (!isGemItemDefinition(entry)) return false;
-              const subCategory = String(entry.sub_category || '');
-              if (!subCategorySet.has(subCategory)) return false;
-              const gemLevel = getGemLevel(entry);
-              return gemLevel !== null && gemLevel >= minLevel && gemLevel <= maxLevel;
-            })
-            .map((entry) => String(entry.id || '').trim())
-            .filter((id): id is string => id.length > 0);
+          const gemIds = getRandomGemItemDefinitionIds({
+            subCategories,
+            minLevel,
+            maxLevel,
+          });
 
           if (gemIds.length === 0) {
             return { success: false, message: '宝石袋配置异常：没有可掉落宝石' };
@@ -1019,11 +1013,7 @@ class ItemService {
           continue;
         }
 
-        const techniqueDef = getTechniqueDefinitions().find((entry) => (
-          entry.id === techniqueId &&
-          entry.enabled !== false &&
-          isCharacterVisibleTechniqueDefinition(entry)
-        )) ?? null;
+        const techniqueDef = getVisibleTechniqueDefinitionById(techniqueId);
         if (!techniqueDef) {
           return { success: false, message: '目标功法不存在或未开放' };
         }
@@ -1090,12 +1080,7 @@ class ItemService {
           continue;
         }
 
-        const techniqueDef =
-          getTechniqueDefinitions().find((entry) => (
-            entry.id === generatedTechniqueId &&
-            entry.enabled !== false &&
-            isCharacterVisibleTechniqueDefinition(entry)
-          )) ?? null;
+        const techniqueDef = getVisibleTechniqueDefinitionById(generatedTechniqueId);
         if (!techniqueDef) {
           return { success: false, message: '目标生成功法不存在或未发布' };
         }

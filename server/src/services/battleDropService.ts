@@ -21,7 +21,7 @@ import {
 import { buildBattleDropGrantUnits, type BattleDropGrantInput } from './battleDropGrantUnit.js';
 import { normalizeAutoDisassembleSetting } from './autoDisassembleRules.js';
 import type { MonsterData } from '../battle/battleFactory.js';
-import { getItemDefinitionById, getMonsterDefinitions } from './staticConfigLoader.js';
+import { getItemDefinitionById } from './staticConfigLoader.js';
 import { resolveDropPoolById } from './dropPoolResolver.js';
 import {
   getAdjustedChance,
@@ -55,6 +55,7 @@ import type {
   RewardItemEntry,
 } from './idle/types.js';
 import { createSlowOperationLogger } from '../utils/slowOperationLogger.js';
+import { getEnabledBattleMonsterDefinitionMap } from './battle/shared/staticDefinitionIndex.js';
 
 // ============================================
 // 类型定义
@@ -195,6 +196,14 @@ export interface BattleRewardSettlementPlan {
   drops: PlannedBattleRewardDrop[];
   perPlayerRewards: PlannedBattlePlayerReward[];
 }
+
+const resolveBattleDropInventoryTargetIds = (
+  plan: BattleRewardSettlementPlan,
+): number[] => {
+  return normalizeCharacterRewardTargetIds(
+    plan.drops.map((drop) => Number(drop.receiverCharacterId)),
+  );
+};
 
 // 参与者信息
 export interface BattleParticipant {
@@ -460,7 +469,7 @@ class BattleDropService {
    *
    * 作用：
    * - 统一承接 quickDistributeRewards 的怪物配置读取；
-   * - 使用实例级缓存避免每场战斗都全量扫描 monster_def；
+   * - 复用战斗静态定义索引，避免缓存 miss 时全量扫描 monster_def；
    * - 严格保留 monsterIds 中的重复项，确保多只同种怪会累计多份奖励。
    *
    * 边界条件：
@@ -475,9 +484,7 @@ class BattleDropService {
       if (!normalizedMonsterId) continue;
 
       if (!this.rewardMonsterDataCache.has(normalizedMonsterId)) {
-        const definition = getMonsterDefinitions().find(
-          (entry) => entry.enabled !== false && entry.id === normalizedMonsterId,
-        );
+        const definition = getEnabledBattleMonsterDefinitionMap().get(normalizedMonsterId);
         const rewardMonsterData = definition
           ? ({
               id: definition.id,
@@ -1176,22 +1183,25 @@ class BattleDropService {
     let totalExp = 0;
     let totalSilver = 0;
     const perPlayerRewards: PlannedBattlePlayerReward[] = [];
+    const perPlayerRewardByCharacterId = new Map<number, PlannedBattlePlayerReward>();
 
     for (const participant of participants) {
       const expGain = Math.max(0, Math.floor(baseExpAcc.get(participant.characterId) ?? 0));
       const silverGain = Math.max(0, Math.floor(baseSilverAcc.get(participant.characterId) ?? 0));
-      perPlayerRewards.push({
+      const playerReward: PlannedBattlePlayerReward = {
         characterId: participant.characterId,
         userId: participant.userId,
         exp: expGain,
         silver: silverGain,
         drops: [],
-      });
+      };
+      perPlayerRewards.push(playerReward);
+      perPlayerRewardByCharacterId.set(participant.characterId, playerReward);
       totalExp += expGain;
       totalSilver += silverGain;
     }
     for (const drop of mergedDropsByReceiver.values()) {
-      const playerReward = perPlayerRewards.find((reward) => reward.characterId === drop.receiverCharacterId);
+      const playerReward = perPlayerRewardByCharacterId.get(drop.receiverCharacterId);
       if (!playerReward) continue;
       playerReward.drops.push({ ...drop });
     }
@@ -1296,10 +1306,8 @@ class BattleDropService {
 
     const collectEventMapByCharacter = new Map<number, Map<string, number>>();
     const pendingCharacterRewardDeltas = new Map<number, CharacterRewardDelta>();
-    const participantCharacterIds = normalizeCharacterRewardTargetIds(
-      plan.perPlayerRewards.map((reward) => Number(reward.characterId)),
-    );
-    const requiresInventoryMutation = plan.drops.length > 0;
+    const inventoryTargetCharacterIds = resolveBattleDropInventoryTargetIds(plan);
+    const requiresInventoryMutation = inventoryTargetCharacterIds.length > 0;
     const slowLogger = createSlowOperationLogger({
       label: 'battleDropService.settleBattleRewardPlan',
       thresholdMs: BATTLE_REWARD_SETTLEMENT_SLOW_THRESHOLD_MS,
@@ -1314,8 +1322,11 @@ class BattleDropService {
     let success = false;
 
     try {
-      if (requiresInventoryMutation && participantCharacterIds.length > 0) {
-        await lockCharacterRewardInventoryTargets(participantCharacterIds);
+      if (requiresInventoryMutation) {
+        await lockCharacterRewardInventoryTargets(inventoryTargetCharacterIds);
+        slowLogger.mark('lockRewardInventoryTargets', {
+          inventoryTargetCount: inventoryTargetCharacterIds.length,
+        });
       }
 
       for (const reward of plan.perPlayerRewards) {
@@ -1329,14 +1340,14 @@ class BattleDropService {
       });
 
       const autoDisassembleSettings = new Map<number, AutoDisassembleSetting>();
-      if (requiresInventoryMutation && participantCharacterIds.length > 0) {
+      if (requiresInventoryMutation) {
         const settingResult = await query(
           `
             SELECT id, auto_disassemble_enabled, auto_disassemble_rules
             FROM characters
             WHERE id = ANY($1)
           `,
-          [participantCharacterIds],
+          [inventoryTargetCharacterIds],
         );
         for (const row of settingResult.rows as Array<{
           id: number;

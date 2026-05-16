@@ -281,24 +281,29 @@ const persistBattleSnapshotToRedis = async (
     slowLogger.mark("serializeParticipants", {
       participantCount: snapshot.participants.length,
     });
-    const tasks: Promise<unknown>[] = [
-      redis.setex(
-        `${REDIS_BATTLE_KEY_PREFIX}${battleId}`,
-        REDIS_BATTLE_TTL_SECONDS,
-        dynamicStateJson,
-      ),
-      redis.setex(
-        `${REDIS_BATTLE_PARTICIPANTS_PREFIX}${battleId}`,
-        REDIS_BATTLE_TTL_SECONDS,
-        participantsJson,
-      ),
-      redis.setex(
-        `${REDIS_BATTLE_STATIC_PREFIX}${battleId}`,
-        REDIS_BATTLE_TTL_SECONDS,
-        staticStateJson,
-      ),
-    ];
-    await Promise.all(tasks);
+    const pipeline = redis.pipeline();
+    pipeline.setex(
+      `${REDIS_BATTLE_KEY_PREFIX}${battleId}`,
+      REDIS_BATTLE_TTL_SECONDS,
+      dynamicStateJson,
+    );
+    pipeline.setex(
+      `${REDIS_BATTLE_PARTICIPANTS_PREFIX}${battleId}`,
+      REDIS_BATTLE_TTL_SECONDS,
+      participantsJson,
+    );
+    pipeline.setex(
+      `${REDIS_BATTLE_STATIC_PREFIX}${battleId}`,
+      REDIS_BATTLE_TTL_SECONDS,
+      staticStateJson,
+    );
+    const results = await pipeline.exec();
+    if (!results || results.length !== 3) {
+      throw new Error(`保存战斗快照到 Redis 失败: ${battleId}`);
+    }
+    for (const [error] of results) {
+      if (error) throw error;
+    }
     slowLogger.mark("persistRedis");
     slowLogger.flush({
       dynamicStateBytes: Buffer.byteLength(dynamicStateJson, "utf8"),
