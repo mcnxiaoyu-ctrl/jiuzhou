@@ -83,22 +83,28 @@ test('buildPartnerRecruitTextModelRequest: 传入自定义底模时应优先使�
   );
 });
 
-test('buildPartnerRecruitTextModelRequest: 应约束各品质伙伴气血成长上限', () => {
+test('buildPartnerRecruitTextModelRequest: 应明确约束气血上限属性的每级成长值', () => {
   const request = buildPartnerRecruitTextModelRequest({
     quality: '天',
     seed: 20260515,
   });
   const parsedUserMessage = JSON.parse(request.userMessage) as {
-    maxQixueGrowthByQuality?: Record<string, number>;
-    currentMaxQixueGrowth?: number;
+    maxQixueLevelAttrGainLimitByQuality?: Record<string, number>;
+    currentMaxQixueLevelAttrGainLimit?: number;
     constraints?: string[];
   };
 
-  assert.deepEqual(parsedUserMessage.maxQixueGrowthByQuality, PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY);
-  assert.equal(parsedUserMessage.currentMaxQixueGrowth, 500);
+  assert.deepEqual(parsedUserMessage.maxQixueLevelAttrGainLimitByQuality, PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY);
+  assert.equal(parsedUserMessage.currentMaxQixueLevelAttrGainLimit, 500);
   assert.equal(
     parsedUserMessage.constraints?.includes(
-      'partner.levelAttrGains.max_qixue 必须按当前 quality=天 小于等于 currentMaxQixueGrowth=500；各品质气血成长上限固定为：黄级200、玄级300、地级400、天级500',
+      '只限制 partner.levelAttrGains.max_qixue 这个“气血上限属性的每级成长值”，当前 quality=天 时不得超过 currentMaxQixueLevelAttrGainLimit=500；各品质数值只表示最大可取值：黄级最多200、玄级最多300、地级最多400、天级最多500，允许生成低于上限的正常成长值',
+    ),
+    true,
+  );
+  assert.equal(
+    parsedUserMessage.constraints?.includes(
+      '这里的“气血上限”只是属性名 max_qixue，不是伙伴最终气血值、基础气血值或面板气血上限；禁止把上述 200/300/400/500 当成 partner.baseAttrs.max_qixue 的上限，也禁止因此压低 baseAttrs.max_qixue',
     ),
     true,
   );

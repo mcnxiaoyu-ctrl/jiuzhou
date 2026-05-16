@@ -164,9 +164,9 @@ const PARTNER_RECRUIT_PRIMARY_ATTACK_GROWTH_GUIDE_BY_QUALITY: Record<
 
 export const PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY: Record<PartnerRecruitQuality, number> = {
   黄: 200,
-  玄: 250,
-  地: 300,
-  天: 350,
+  玄: 300,
+  地: 400,
+  天: 500,
 };
 
 const normalizePartnerRecruitRandomSeed = (seed: number): number => {
@@ -975,8 +975,8 @@ export const buildPartnerRecruitPromptInput = (
     referencePartnerExample,
     fusionReferencePartners,
     passiveValueGuideByKey,
-    maxQixueGrowthByQuality: PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY,
-    currentMaxQixueGrowth: maxQixueGrowth,
+    maxQixueLevelAttrGainLimitByQuality: PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY,
+    currentMaxQixueLevelAttrGainLimit: maxQixueGrowth,
     promptNoiseHash,
     primaryAttackGrowthTarget,
     constraints: [
@@ -1001,7 +1001,8 @@ export const buildPartnerRecruitPromptInput = (
       'partner.baseAttrs 与 partner.levelAttrGains 必须完整包含 requiredAttrKeys 中的全部字段，禁止缺项',
       '每个天生功法 passiveValue 必须 > 0，且不得超过 passiveValueGuideByKey[passiveKey].maxTotal；百分比继续使用小数表示，例如 0.18 表示 18%',
       'partner.baseAttrs 中 integerAttrKeys 的属性必须使用非负整数；partner.levelAttrGains 的全部属性都使用非负数字，允许按参考模板写小数成长',
-      `partner.levelAttrGains.max_qixue 必须按当前 quality=${quality} 小于等于 currentMaxQixueGrowth=${maxQixueGrowth}；各品质气血成长上限固定为：黄级200、玄级300、地级400、天级500`,
+      `只限制 partner.levelAttrGains.max_qixue 这个“气血上限属性的每级成长值”，当前 quality=${quality} 时不得超过 currentMaxQixueLevelAttrGainLimit=${maxQixueGrowth}；各品质数值只表示最大可取值：黄级最多200、玄级最多300、地级最多400、天级最多500，允许生成低于上限的正常成长值`,
+      '这里的“气血上限”只是属性名 max_qixue，不是伙伴最终气血值、基础气血值或面板气血上限；禁止把上述 200/300/400/500 当成 partner.baseAttrs.max_qixue 的上限，也禁止因此压低 baseAttrs.max_qixue',
       'percentAttrKeys 中的属性必须使用非负数字，小数表示百分比，例如 0.18 表示 18%',
       '品质高低顺序固定为 黄 < 玄 < 地 < 天；referencePartnerExample 中青木小偶的 quality=黄，表示它是最低品质参考模板，最终强度与风格仍必须以当前 quality 字段为准',
       ...buildPartnerRecruitQualityStrengthConstraints(
