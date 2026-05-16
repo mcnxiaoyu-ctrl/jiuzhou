@@ -31,6 +31,9 @@ import {
   MAIL_CHARACTER_ACTIVE_SCOPE_INDEX_NAME,
   MAIL_CHARACTER_EXPIRE_CLEANUP_INDEX_NAME,
   MARKET_LISTING_ITEM_INSTANCE_ID_INDEX_NAME,
+  MARKET_LISTING_SELLER_ACTIVE_COUNT_INDEX_NAME,
+  MARKET_LISTING_SELLER_LISTED_AT_INDEX_NAME,
+  MARKET_LISTING_ACTIVE_EXPIRE_SCAN_INDEX_NAME,
   CHARACTER_TASK_PROGRESS_ACTIVE_LOOKUP_INDEX_NAME,
 } from '../shared/performanceIndexes.js';
 
@@ -126,6 +129,45 @@ test('ensurePerformanceIndexes 应保证热点性能索引存在', async () => {
   );
   const marketListingIndexDef = marketListingIndexResult.rows[0]?.indexdef ?? '';
   assert.match(marketListingIndexDef, /item_instance_id IS NOT NULL/i);
+
+  const marketSellerActiveIndexResult = await query<{ indexdef: string }>(
+    `
+      SELECT indexdef
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname = $1
+    `,
+    [MARKET_LISTING_SELLER_ACTIVE_COUNT_INDEX_NAME],
+  );
+  const marketSellerActiveIndexDef = marketSellerActiveIndexResult.rows[0]?.indexdef ?? '';
+  assert.match(marketSellerActiveIndexDef, /seller_character_id/i);
+  assert.match(marketSellerActiveIndexDef, /status = 'active'/i);
+
+  const marketSellerListedAtIndexResult = await query<{ indexdef: string }>(
+    `
+      SELECT indexdef
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname = $1
+    `,
+    [MARKET_LISTING_SELLER_LISTED_AT_INDEX_NAME],
+  );
+  const marketSellerListedAtIndexDef = marketSellerListedAtIndexResult.rows[0]?.indexdef ?? '';
+  assert.match(marketSellerListedAtIndexDef, /seller_character_id/i);
+  assert.match(marketSellerListedAtIndexDef, /listed_at DESC/i);
+
+  const marketExpireScanIndexResult = await query<{ indexdef: string }>(
+    `
+      SELECT indexdef
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname = $1
+    `,
+    [MARKET_LISTING_ACTIVE_EXPIRE_SCAN_INDEX_NAME],
+  );
+  const marketExpireScanIndexDef = marketExpireScanIndexResult.rows[0]?.indexdef ?? '';
+  assert.match(marketExpireScanIndexDef, /listed_at/i);
+  assert.match(marketExpireScanIndexDef, /status = 'active'/i);
 
   const taskProgressIndexResult = await query<{ indexdef: string }>(
     `

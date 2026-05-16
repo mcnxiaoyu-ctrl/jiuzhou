@@ -47,6 +47,13 @@ import {
   reserveItemInstanceIds,
   type CharacterItemInstanceSnapshot,
 } from "./shared/characterItemInstanceMutationService.js";
+import { buildShanghaiDayKey } from "./shared/shanghaiNaturalDay.js";
+import {
+  isMarketListingExpired,
+  MARKET_LISTING_ACTIVE_LIMIT,
+  MARKET_LISTING_AUTO_CANCEL_AFTER_HOURS,
+  MARKET_LISTING_DAILY_CREATE_LIMIT,
+} from "./shared/marketListingRules.js";
 
 export type MarketSort = "timeDesc" | "priceAsc" | "priceDesc" | "qtyDesc";
 
@@ -135,6 +142,42 @@ type MarketListingsCacheData = {
 const MARKET_LISTINGS_CACHE_REDIS_TTL_SEC = 8;
 const MARKET_LISTINGS_CACHE_MEMORY_TTL_MS = 2_000;
 const MARKET_PUBLIC_LISTINGS_PAGE_SIZE_MAX = 40;
+const MARKET_LISTING_VISIBLE_ACTIVE_SQL =
+  `ml.listed_at > NOW() - (${MARKET_LISTING_AUTO_CANCEL_AFTER_HOURS}::int * INTERVAL '1 hour')`;
+
+type MarketListingRuleUsageRow = {
+  active_listing_count: number | string;
+  daily_listing_count: number | string;
+};
+
+type MarketListingCancelReason = "manual" | "expired";
+
+type MarketListingCancelRow = {
+  id: number | string;
+  seller_user_id: number | string;
+  seller_character_id: number | string;
+  item_instance_id: number | string;
+  qty: number | string;
+  original_qty: number | string;
+  status: string;
+  listed_at: Date | string;
+  listing_fee_silver: string | number | bigint;
+};
+
+type MarketListingCancelResult =
+  | {
+    success: true;
+    message: string;
+    sellerUserId: number;
+  }
+  | {
+    success: false;
+    message: string;
+  };
+
+type MarketListingQuotaResult =
+  | { success: true }
+  | { success: false; message: string };
 
 const clampInt = (n: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, n));
@@ -148,6 +191,10 @@ const parseNonNegativeInt = (v: unknown): number | null => {
 const parseMaybeString = (v: unknown): string =>
   (typeof v === "string" ? v : "").trim();
 
+const toMarketListingDate = (value: Date | string): Date => {
+  return value instanceof Date ? value : new Date(value);
+};
+
 const marketListingsCacheVersion = createCacheVersionManager("market:listings");
 
 const invalidateMarketListingsCacheNow = async (): Promise<void> => {
@@ -159,6 +206,64 @@ const invalidateMarketListingsCache = async (): Promise<void> => {
   await afterTransactionCommit(async () => {
     await invalidateMarketListingsCacheNow();
   });
+};
+
+const loadMarketListingRuleUsage = async (
+  characterId: number,
+  now: Date,
+): Promise<{ activeListingCount: number; dailyListingCount: number }> => {
+  const dayKey = buildShanghaiDayKey(now);
+  const result = await query<MarketListingRuleUsageRow>(
+    `
+      WITH shanghai_day AS (
+        SELECT
+          ($2::date::timestamp AT TIME ZONE 'Asia/Shanghai') AS start_at,
+          (($2::date + 1)::timestamp AT TIME ZONE 'Asia/Shanghai') AS end_at
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE ml.status = 'active')::int AS active_listing_count,
+        COUNT(*) FILTER (
+          WHERE ml.listed_at >= shanghai_day.start_at
+            AND ml.listed_at < shanghai_day.end_at
+        )::int AS daily_listing_count
+      FROM market_listing ml
+      CROSS JOIN shanghai_day
+      WHERE ml.seller_character_id = $1
+        AND (
+          ml.status = 'active'
+          OR (
+            ml.listed_at >= shanghai_day.start_at
+            AND ml.listed_at < shanghai_day.end_at
+          )
+        )
+    `,
+    [characterId, dayKey],
+  );
+  const row = result.rows[0];
+  return {
+    activeListingCount: Number(row?.active_listing_count ?? 0),
+    dailyListingCount: Number(row?.daily_listing_count ?? 0),
+  };
+};
+
+const validateMarketListingCreateQuota = async (
+  characterId: number,
+  now: Date,
+): Promise<MarketListingQuotaResult> => {
+  const usage = await loadMarketListingRuleUsage(characterId, now);
+  if (usage.dailyListingCount >= MARKET_LISTING_DAILY_CREATE_LIMIT) {
+    return {
+      success: false,
+      message: `今日上架次数已达${MARKET_LISTING_DAILY_CREATE_LIMIT}次，请明日再试`,
+    };
+  }
+  if (usage.activeListingCount >= MARKET_LISTING_ACTIVE_LIMIT) {
+    return {
+      success: false,
+      message: `同时上架物品已达${MARKET_LISTING_ACTIVE_LIMIT}个，请下架或等待售出后再操作`,
+    };
+  }
+  return { success: true };
 };
 
 /**
@@ -450,7 +555,7 @@ const loadMarketListingsCacheData = async (
     return { listings: [], total: 0 };
   }
 
-  const where: string[] = [`ml.status = 'active'`];
+  const where: string[] = [`ml.status = 'active'`, MARKET_LISTING_VISIBLE_ACTIVE_SQL];
   const values: Array<string | number | string[]> = [];
 
   values.push(allItemDefIds);
@@ -662,7 +767,10 @@ class MarketService {
     if (!row) return { success: false, message: "上架记录不存在" };
 
     const sellerCharacterId = Number(row.seller_character_id);
-    const canViewListing = String(row.status) === "active" || sellerCharacterId === params.characterId;
+    const listingIsVisibleActive =
+      String(row.status) === "active"
+      && !isMarketListingExpired(toMarketListingDate(row.listed_at as Date | string), new Date());
+    const canViewListing = listingIsVisibleActive || sellerCharacterId === params.characterId;
     if (!canViewListing) return { success: false, message: "当前挂单不可查看" };
 
     const affixPoolCache = new Map<
@@ -772,6 +880,10 @@ class MarketService {
       calculateMarketListingFeeSilver(totalPriceSpiritStones);
 
     await lockCharacterInventoryMutex(params.characterId);
+    const quotaResult = await validateMarketListingCreateQuota(params.characterId, new Date());
+    if (!quotaResult.success) {
+      return { success: false, message: quotaResult.message };
+    }
 
     const row = await loadProjectedCharacterItemInstanceById(params.characterId, itemInstanceId);
     if (!row) {
@@ -905,33 +1017,32 @@ class MarketService {
     };
   }
 
-  @Transactional
-  async cancelMarketListing(params: {
+  private async cancelActiveMarketListing(params: {
     userId: number;
     characterId: number;
     listingId: number;
-  }): Promise<{ success: boolean; message: string }> {
-    const listingId = parsePositiveInt(params.listingId);
-    if (listingId === null)
-      return { success: false, message: "listingId参数错误" };
-
+    reason: MarketListingCancelReason;
+    now: Date;
+  }): Promise<MarketListingCancelResult> {
     await lockCharacterInventoryMutex(params.characterId);
 
-    const listingResult = await query(
+    const listingResult = await query<MarketListingCancelRow>(
       `
         SELECT
           id,
+          seller_user_id,
           seller_character_id,
           item_instance_id,
           qty,
           original_qty,
           status,
+          listed_at,
           listing_fee_silver
         FROM market_listing
         WHERE id = $1
         FOR UPDATE
       `,
-      [listingId],
+      [params.listingId],
     );
 
     if (listingResult.rows.length === 0) {
@@ -939,11 +1050,20 @@ class MarketService {
     }
 
     const listing = listingResult.rows[0];
+    if (Number(listing.seller_user_id) !== params.userId) {
+      return { success: false, message: "上架记录归属异常" };
+    }
     if (Number(listing.seller_character_id) !== params.characterId) {
       return { success: false, message: "无权限操作该上架记录" };
     }
     if (String(listing.status) !== "active") {
       return { success: false, message: "该上架记录不可下架" };
+    }
+    if (
+      params.reason === "expired"
+      && !isMarketListingExpired(toMarketListingDate(listing.listed_at), params.now)
+    ) {
+      return { success: false, message: "该上架记录未到自动下架时间" };
     }
     const listingFeeSilver = BigInt(listing.listing_fee_silver ?? 0);
     const originalQty = Number(listing.original_qty);
@@ -991,7 +1111,7 @@ class MarketService {
         SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW()
         WHERE id = $1
       `,
-      [listingId],
+      [params.listingId],
     );
 
     if (refundFeeSilver > 0n) {
@@ -1003,21 +1123,24 @@ class MarketService {
       }
     }
 
+    const isExpiredCancel = params.reason === "expired";
     const mailResult = await mailService.sendMail({
       recipientUserId: params.userId,
       recipientCharacterId: params.characterId,
       senderType: "system",
       senderName: "坊市",
       mailType: "trade",
-      title: "坊市下架返还通知",
-      content: "你下架的坊市物品已通过邮件返还，请及时领取附件。",
+      title: isExpiredCancel ? "坊市超时下架返还通知" : "坊市下架返还通知",
+      content: isExpiredCancel
+        ? `你上架的坊市物品超过${MARKET_LISTING_AUTO_CANCEL_AFTER_HOURS}小时未售出，已自动下架并通过邮件返还，请及时领取附件。`
+        : "你下架的坊市物品已通过邮件返还，请及时领取附件。",
       attachInstanceIds: [itemInstanceId],
       expireDays: 30,
       source: "market",
-      sourceRefId: String(listingId),
+      sourceRefId: String(params.listingId),
       metadata: {
-        listingId,
-        action: "cancel",
+        listingId: params.listingId,
+        action: isExpiredCancel ? "auto-expire" : "cancel",
         attachmentPreviewItems: [
           {
             itemDefId,
@@ -1034,8 +1157,77 @@ class MarketService {
     await invalidateMarketListingsCache();
     return {
       success: true,
-      message: `下架成功，物品已通过邮件返还，并退还${refundFeeSilver.toString()}银两手续费`,
+      message: isExpiredCancel
+        ? `自动下架成功，物品已通过邮件返还，并退还${refundFeeSilver.toString()}银两手续费`
+        : `下架成功，物品已通过邮件返还，并退还${refundFeeSilver.toString()}银两手续费`,
+      sellerUserId: params.userId,
     };
+  }
+
+  @Transactional
+  async cancelMarketListing(params: {
+    userId: number;
+    characterId: number;
+    listingId: number;
+  }): Promise<{ success: boolean; message: string }> {
+    const listingId = parsePositiveInt(params.listingId);
+    if (listingId === null)
+      return { success: false, message: "listingId参数错误" };
+
+    const result = await this.cancelActiveMarketListing({
+      userId: params.userId,
+      characterId: params.characterId,
+      listingId,
+      reason: "manual",
+      now: new Date(),
+    });
+    return { success: result.success, message: result.message };
+  }
+
+  @Transactional
+  async cancelExpiredMarketListing(params: {
+    listingId: number;
+    now: Date;
+  }): Promise<MarketListingCancelResult> {
+    const listingId = parsePositiveInt(params.listingId);
+    if (listingId === null) {
+      return { success: false, message: "listingId参数错误" };
+    }
+
+    const metaResult = await query<{
+      seller_user_id: number | string;
+      seller_character_id: number | string;
+    }>(
+      `
+        SELECT seller_user_id, seller_character_id
+        FROM market_listing
+        WHERE id = $1
+      `,
+      [listingId],
+    );
+    if (metaResult.rows.length === 0) {
+      return { success: false, message: "上架记录不存在" };
+    }
+
+    const meta = metaResult.rows[0];
+    const sellerUserId = Number(meta.seller_user_id);
+    const sellerCharacterId = Number(meta.seller_character_id);
+    if (
+      !Number.isInteger(sellerUserId)
+      || sellerUserId <= 0
+      || !Number.isInteger(sellerCharacterId)
+      || sellerCharacterId <= 0
+    ) {
+      return { success: false, message: "上架数据异常" };
+    }
+
+    return this.cancelActiveMarketListing({
+      userId: sellerUserId,
+      characterId: sellerCharacterId,
+      listingId,
+      reason: "expired",
+      now: params.now,
+    });
   }
 
   @Transactional
@@ -1095,6 +1287,7 @@ class MarketService {
           ml.item_def_id,
           ml.qty,
           ml.unit_price_spirit_stones,
+          ml.listed_at,
           ml.status
         FROM market_listing ml
         WHERE ml.id = $1
@@ -1110,6 +1303,9 @@ class MarketService {
     const listing = listingResult.rows[0];
     if (String(listing.status) !== "active") {
       return { success: false, message: "该物品已被购买或下架" };
+    }
+    if (isMarketListingExpired(toMarketListingDate(listing.listed_at as Date | string), new Date())) {
+      return { success: false, message: "该物品已超时下架，请刷新后重试" };
     }
     const sellerCharacterId = Number(listing.seller_character_id);
     const sellerUserId = Number(listing.seller_user_id);

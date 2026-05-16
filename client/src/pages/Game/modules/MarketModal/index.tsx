@@ -270,7 +270,7 @@ const ListSheet: React.FC<ListSheetProps> = ({
             <span className="market-list-sheet-label">手续费（银两）</span>
             <span className="market-list-sheet-value">{listingFeeText}</span>
           </div>
-          <div className="market-list-sheet-fee-tip">未卖出下架会退还手续费</div>
+          <div className="market-list-sheet-fee-tip">未卖出下架会退还手续费，72小时未售出将自动下架</div>
           <div className="market-list-sheet-actions">
             <button
               className="market-list-sheet-btn is-primary"
@@ -2458,7 +2458,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                         <div className="market-list-k">手续费（银两）</div>
                         <div className="market-list-v">{listingFeeText}</div>
                       </div>
-                      <div className="market-list-fee-tip">未卖出下架会退还手续费</div>
+                      <div className="market-list-fee-tip">未卖出下架会退还手续费，72小时未售出将自动下架</div>
                       <div className="market-list-actions">
                         <Button type="primary" disabled={!canList} onClick={doList}>
                           确认上架

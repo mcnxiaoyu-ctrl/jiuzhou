@@ -34,6 +34,9 @@ export const MAIL_EXPIRED_HISTORY_CLEANUP_INDEX_NAME = 'idx_mail_expired_history
 export const ITEM_INSTANCE_STACKABLE_LOOKUP_INDEX_NAME = 'idx_item_instance_stackable_lookup';
 export const CHARACTER_TASK_PROGRESS_ACTIVE_LOOKUP_INDEX_NAME = 'idx_character_task_progress_active_lookup';
 export const MARKET_LISTING_ITEM_INSTANCE_ID_INDEX_NAME = 'idx_market_listing_item_instance_id';
+export const MARKET_LISTING_SELLER_ACTIVE_COUNT_INDEX_NAME = 'idx_market_listing_seller_active_count';
+export const MARKET_LISTING_SELLER_LISTED_AT_INDEX_NAME = 'idx_market_listing_seller_listed_at';
+export const MARKET_LISTING_ACTIVE_EXPIRE_SCAN_INDEX_NAME = 'idx_market_listing_active_expire_scan';
 export const GENERATED_TECHNIQUE_PUBLISHED_ID_INDEX_NAME = 'idx_generated_technique_def_published_id';
 export const GENERATED_SKILL_ENABLED_SORT_SOURCE_INDEX_NAME = 'idx_generated_skill_def_enabled_sort_source';
 export const GENERATED_TECHNIQUE_LAYER_ENABLED_ORDER_INDEX_NAME = 'idx_generated_technique_layer_enabled_order';
@@ -268,6 +271,43 @@ const PERFORMANCE_INDEX_DEFINITIONS: PerformanceIndexDefinition[] = [
     matchFragments: [
       'item_instance_id',
       'item_instance_id IS NOT NULL',
+    ],
+  },
+  {
+    name: MARKET_LISTING_SELLER_ACTIVE_COUNT_INDEX_NAME,
+    createSql: `
+      CREATE INDEX IF NOT EXISTS ${MARKET_LISTING_SELLER_ACTIVE_COUNT_INDEX_NAME}
+      ON market_listing (seller_character_id, id)
+      WHERE status = 'active'
+    `,
+    matchFragments: [
+      'seller_character_id',
+      'id',
+      "status = 'active'",
+    ],
+  },
+  {
+    name: MARKET_LISTING_SELLER_LISTED_AT_INDEX_NAME,
+    createSql: `
+      CREATE INDEX IF NOT EXISTS ${MARKET_LISTING_SELLER_LISTED_AT_INDEX_NAME}
+      ON market_listing (seller_character_id, listed_at DESC)
+    `,
+    matchFragments: [
+      'seller_character_id',
+      'listed_at DESC',
+    ],
+  },
+  {
+    name: MARKET_LISTING_ACTIVE_EXPIRE_SCAN_INDEX_NAME,
+    createSql: `
+      CREATE INDEX IF NOT EXISTS ${MARKET_LISTING_ACTIVE_EXPIRE_SCAN_INDEX_NAME}
+      ON market_listing (listed_at ASC, id ASC)
+      WHERE status = 'active'
+    `,
+    matchFragments: [
+      'listed_at',
+      'id',
+      "status = 'active'",
     ],
   },
   {

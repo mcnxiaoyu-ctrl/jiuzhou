@@ -5,12 +5,13 @@ import {
 import { dungeonExpiredInstanceCleanupService } from '../services/dungeonExpiredInstanceCleanupService.js';
 import { idleBattleBatchCleanupService } from '../services/idle/idleBattleBatchCleanupService.js';
 import { mailHistoryCleanupService } from '../services/mailHistoryCleanupService.js';
+import { marketListingAutoCancelService } from '../services/marketListingAutoCancelService.js';
 
 /**
  * 清理 Worker（单进程内的统一清理调度器）
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：统一承载“清理类”定时任务的调度（战斗过期状态、过期秘境实例、挂机会话历史、邮件热表历史）。
+ * 1. 做什么：统一承载“清理类”定时任务的调度（战斗过期状态、过期秘境实例、挂机会话历史、邮件热表历史、坊市超时下架）。
  * 2. 做什么：统一负责任务首轮执行、周期执行、并发互斥和停机清理。
  * 3. 不做什么：不实现具体业务清理 SQL/算法，具体清理由各 service 提供。
  *
@@ -47,8 +48,9 @@ class CleanupWorker {
 
   private buildJobs(): CleanupJob[] {
     const dungeonExpiredInstanceCleanupSchedule = dungeonExpiredInstanceCleanupService.getScheduleConfig();
-      const idleHistorySchedule = idleBattleBatchCleanupService.getScheduleConfig();
+    const idleHistorySchedule = idleBattleBatchCleanupService.getScheduleConfig();
     const mailHistoryCleanupSchedule = mailHistoryCleanupService.getScheduleConfig();
+    const marketListingAutoCancelSchedule = marketListingAutoCancelService.getScheduleConfig();
 
     return [
       {
@@ -85,6 +87,15 @@ class CleanupWorker {
         intervalMs: mailHistoryCleanupSchedule.intervalMs,
         run: async () => {
           await mailHistoryCleanupService.runCleanupOnce();
+        },
+      },
+      {
+        id: 'market-listing-auto-cancel',
+        label: '物品坊市超时自动下架',
+        enabled: marketListingAutoCancelSchedule.enabled,
+        intervalMs: marketListingAutoCancelSchedule.intervalMs,
+        run: async () => {
+          await marketListingAutoCancelService.runCleanupOnce();
         },
       },
     ];
@@ -127,6 +138,8 @@ class CleanupWorker {
         console.log(`[CleanupWorker] ${runtime.job.label}：${dungeonExpiredInstanceCleanupService.getConfigSummaryText()}`);
       } else if (runtime.job.id === 'mail-history-cleanup') {
         console.log(`[CleanupWorker] ${runtime.job.label}：${mailHistoryCleanupService.getConfigSummaryText()}`);
+      } else if (runtime.job.id === 'market-listing-auto-cancel') {
+        console.log(`[CleanupWorker] ${runtime.job.label}：${marketListingAutoCancelService.getConfigSummaryText()}`);
       } else {
         console.log(
           `[CleanupWorker] ${runtime.job.label}：间隔 ${Math.floor(runtime.job.intervalMs / 1000)} 秒`,
