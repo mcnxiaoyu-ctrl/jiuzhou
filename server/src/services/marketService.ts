@@ -336,10 +336,10 @@ const toListingDto = (
  *
  * 复用设计说明：
  * - 公开列表和缓存共用本入口，避免列表瘦身规则散落在路由或前端。
- * - 完整 Tooltip/预览继续复用 `toListingDto` 和详情接口，summary 不混入条件分支。
+ * - 完整 Tooltip/预览继续复用 `toListingDto` 和详情接口，summary 仅为生成功法书读取必要标量。
  *
  * 关键边界条件与坑点：
- * 1. 生成功法书在 summary 中只展示模板名，真实生成名称与技能信息留给详情接口。
+ * 1. 生成功法书只允许读取 `generatedTechniqueId/generatedTechniqueName` 两个 metadata 标量，不能把完整 metadata 带回列表。
  * 2. 装备基础属性只计算本体基础值，词条和宝石详情留给详情接口懒加载。
  */
 const toListingSummaryDto = (
@@ -349,6 +349,13 @@ const toListingSummaryDto = (
   if (!itemDefId) return null;
   const itemDef = getItemDefinitionById(itemDefId);
   if (!itemDef) return null;
+  const generatedTechniqueBookDisplay = resolveGeneratedTechniqueBookDisplay(
+    itemDefId,
+    {
+      generatedTechniqueId: row.generated_technique_id,
+      generatedTechniqueName: row.generated_technique_name,
+    },
+  );
   const category = resolveMarketItemCategory(itemDef);
   const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
   const resolvedQualityRank =
@@ -374,16 +381,17 @@ const toListingSummaryDto = (
     id: Number(row.id),
     itemInstanceId: Number(row.item_instance_id),
     itemDefId,
-    name: String(itemDef.name ?? ""),
+    name: generatedTechniqueBookDisplay?.name ?? String(itemDef.name ?? ""),
     icon:
       itemDef.icon === null || itemDef.icon === undefined
         ? null
         : String(itemDef.icon),
     quality:
       row.instance_quality === null || row.instance_quality === undefined
-        ? itemDef.quality === null || itemDef.quality === undefined
+        ? generatedTechniqueBookDisplay?.quality ??
+          (itemDef.quality === null || itemDef.quality === undefined
             ? null
-            : String(itemDef.quality)
+            : String(itemDef.quality))
         : String(row.instance_quality),
     category: category || null,
     subCategory:
@@ -398,7 +406,7 @@ const toListingSummaryDto = (
     strengthenLevel: Math.max(0, Math.floor(Number(row.strengthen_level) || 0)),
     refineLevel: Math.max(0, Math.floor(Number(row.refine_level) || 0)),
     identified: Boolean(row.identified),
-    generatedTechniqueId: null,
+    generatedTechniqueId: generatedTechniqueBookDisplay?.generatedTechniqueId ?? null,
     qty: Number(row.qty),
     unitPriceSpiritStones: Number(row.unit_price_spirit_stones),
     sellerCharacterId: Number(row.seller_character_id),
@@ -531,6 +539,16 @@ const loadMarketListingsCacheData = async (
       ii.strengthen_level,
       ii.refine_level,
       ii.identified,
+      CASE
+        WHEN ml.item_def_id = 'book-generated-technique'
+        THEN ii.metadata ->> 'generatedTechniqueId'
+        ELSE NULL
+      END AS generated_technique_id,
+      CASE
+        WHEN ml.item_def_id = 'book-generated-technique'
+        THEN ii.metadata ->> 'generatedTechniqueName'
+        ELSE NULL
+      END AS generated_technique_name,
       c.nickname AS seller_name
     FROM market_listing ml
     JOIN item_instance ii ON ii.id = ml.item_instance_id

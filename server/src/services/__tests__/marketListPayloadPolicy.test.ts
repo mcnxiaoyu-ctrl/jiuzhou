@@ -62,8 +62,28 @@ test('公开物品列表返回 summary 且完整详情按需读取', () => {
   );
   assert.doesNotMatch(
     publicListSqlMatch[0]!,
-    /ii\.socketed_gems|ii\.affixes|ii\.metadata/u,
-    '公开物品列表不应读取宝石、词条或 metadata 详情字段',
+    /ii\.socketed_gems|ii\.affixes|^\s*ii\.metadata\s*,/mu,
+    '公开物品列表不应读取宝石、词条或完整 metadata 详情字段',
+  );
+  assert.match(
+    publicListSqlMatch[0]!,
+    /ii\.metadata ->> 'generatedTechniqueId'/u,
+    '公开物品列表必须读取生成功法书 ID 标量，避免名称退化为模板名',
+  );
+  assert.match(
+    publicListSqlMatch[0]!,
+    /ii\.metadata ->> 'generatedTechniqueName'/u,
+    '公开物品列表必须读取生成功法书名称标量，避免名称退化为模板名',
+  );
+  assert.match(
+    marketServiceSource,
+    /const generatedTechniqueBookDisplay = resolveGeneratedTechniqueBookDisplay\(/u,
+    '公开物品列表 summary 应复用生成功法书展示入口',
+  );
+  assert.match(
+    marketServiceSource,
+    /name: generatedTechniqueBookDisplay\?\.name \?\? String\(itemDef\.name \?\? ""\)/u,
+    '公开物品列表 summary 应优先生成功法书真实名称',
   );
   assert.match(
     marketServiceSource,
