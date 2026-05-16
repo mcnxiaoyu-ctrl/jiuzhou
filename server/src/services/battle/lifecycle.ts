@@ -50,11 +50,29 @@ import {
 
 const FINISHED_BATTLE_TTL_MS = 2 * 60 * 1000;
 export const BATTLE_EXPIRED_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+const REDIS_BATTLE_SCAN_COUNT = 500;
+
+const scanRedisKeysByPrefix = async (prefix: string): Promise<string[]> => {
+  const matchedKeys: string[] = [];
+  let cursor = "0";
+  do {
+    const [nextCursor, keys] = await redis.scan(
+      cursor,
+      "MATCH",
+      `${prefix}*`,
+      "COUNT",
+      String(REDIS_BATTLE_SCAN_COUNT),
+    );
+    cursor = nextCursor;
+    matchedKeys.push(...keys);
+  } while (cursor !== "0");
+  return matchedKeys;
+};
 
 export async function recoverBattlesFromRedis(): Promise<number> {
   let recoveredCount = 0;
   try {
-    const keys = await redis.keys(`${REDIS_BATTLE_KEY_PREFIX}*`);
+    const keys = await scanRedisKeysByPrefix(REDIS_BATTLE_KEY_PREFIX);
     const battleStateKeys = keys.filter((key) => {
       if (key.startsWith(REDIS_BATTLE_STATIC_PREFIX)) return false;
       const battleId = key.replace(REDIS_BATTLE_KEY_PREFIX, "");

@@ -622,7 +622,7 @@ router.post('/reroll-affixes', prepareInventoryConcreteState, asyncHandler(async
       parsedLockIndexes
     );
 
-    if (result.success) {
+    if (result.success && result.data?.affectsCharacter === true) {
       await safePushCharacterUpdate(userId);
     }
 
@@ -676,7 +676,7 @@ router.post('/socket', prepareInventoryConcreteState, asyncHandler(async (req, r
       slot: parsedSlot,
     });
 
-    if (result.success) {
+    if (result.success && result.data?.affectsCharacter === true) {
       await safePushCharacterUpdate(userId);
     }
 

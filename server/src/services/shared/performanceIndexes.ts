@@ -37,6 +37,9 @@ export const MARKET_LISTING_ITEM_INSTANCE_ID_INDEX_NAME = 'idx_market_listing_it
 export const GENERATED_TECHNIQUE_PUBLISHED_ID_INDEX_NAME = 'idx_generated_technique_def_published_id';
 export const GENERATED_SKILL_ENABLED_SORT_SOURCE_INDEX_NAME = 'idx_generated_skill_def_enabled_sort_source';
 export const GENERATED_TECHNIQUE_LAYER_ENABLED_ORDER_INDEX_NAME = 'idx_generated_technique_layer_enabled_order';
+export const GENERATED_TECHNIQUE_PUBLISHED_UPDATED_INDEX_NAME = 'idx_generated_technique_def_published_updated';
+export const GENERATED_SKILL_ENABLED_UPDATED_INDEX_NAME = 'idx_generated_skill_def_enabled_updated';
+export const GENERATED_TECHNIQUE_LAYER_ENABLED_UPDATED_INDEX_NAME = 'idx_generated_technique_layer_enabled_updated';
 
 const ITEM_INSTANCE_STACKABLE_LOOKUP_BIND_TYPE_SQL = buildNormalizedItemBindTypeSql('bind_type');
 const ITEM_INSTANCE_STACKABLE_LOOKUP_PREDICATE_SQL = buildPlainStackingSqlPredicate({
@@ -309,6 +312,50 @@ const PERFORMANCE_INDEX_DEFINITIONS: PerformanceIndexDefinition[] = [
       'generated_technique_layer',
       'technique_id',
       'layer',
+      'enabled = true',
+    ],
+  },
+  {
+    name: GENERATED_TECHNIQUE_PUBLISHED_UPDATED_INDEX_NAME,
+    createSql: `
+      CREATE INDEX IF NOT EXISTS ${GENERATED_TECHNIQUE_PUBLISHED_UPDATED_INDEX_NAME}
+      ON generated_technique_def (updated_at DESC, id)
+      WHERE is_published = true
+        AND enabled = true
+    `,
+    matchFragments: [
+      'generated_technique_def',
+      'updated_at DESC',
+      'id',
+      'is_published = true',
+      'enabled = true',
+    ],
+  },
+  {
+    name: GENERATED_SKILL_ENABLED_UPDATED_INDEX_NAME,
+    createSql: `
+      CREATE INDEX IF NOT EXISTS ${GENERATED_SKILL_ENABLED_UPDATED_INDEX_NAME}
+      ON generated_skill_def (updated_at DESC, source_id)
+      WHERE enabled = true
+    `,
+    matchFragments: [
+      'generated_skill_def',
+      'updated_at DESC',
+      'source_id',
+      'enabled = true',
+    ],
+  },
+  {
+    name: GENERATED_TECHNIQUE_LAYER_ENABLED_UPDATED_INDEX_NAME,
+    createSql: `
+      CREATE INDEX IF NOT EXISTS ${GENERATED_TECHNIQUE_LAYER_ENABLED_UPDATED_INDEX_NAME}
+      ON generated_technique_layer (updated_at DESC, technique_id)
+      WHERE enabled = true
+    `,
+    matchFragments: [
+      'generated_technique_layer',
+      'updated_at DESC',
+      'technique_id',
       'enabled = true',
     ],
   },

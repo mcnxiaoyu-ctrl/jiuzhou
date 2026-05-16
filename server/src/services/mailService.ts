@@ -46,7 +46,6 @@ import {
   buildMailCounterClaimDelta,
   buildMailCounterDeleteDelta,
   buildMailCounterInsertDelta,
-  buildMailCounterReadDelta,
   buildMailCounterStateFromRow,
   loadMailCounterSnapshot,
   type MailCounterDeltaInput,
@@ -194,7 +193,10 @@ type ClaimMailRow = {
   expire_at: Date | string | null;
 };
 
-type ReadMailTransitionRow = MailCounterStateRow & {
+type ReadMailTransitionRow = {
+  recipient_user_id: number | string;
+  recipient_character_id: number | string | null;
+  read_at: Date | string | null;
   marked_read: boolean;
 };
 
@@ -2148,13 +2150,7 @@ class MailService {
           id,
           recipient_user_id,
           recipient_character_id,
-          read_at,
-          claimed_at,
-          attach_silver,
-          attach_spirit_stones,
-          attach_items,
-          attach_rewards,
-          attach_instance_ids
+          read_at
         FROM mail
         WHERE id = $1
           AND ${this.buildRecipientScopeSql(2, 3)}
@@ -2165,20 +2161,18 @@ class MailService {
         UPDATE mail
         SET read_at = NOW(),
             updated_at = NOW()
-        WHERE id = (SELECT id FROM target_mail LIMIT 1)
-          AND read_at IS NULL
+        WHERE id = (
+          SELECT id
+          FROM target_mail
+          WHERE read_at IS NULL
+          LIMIT 1
+        )
         RETURNING id
       )
       SELECT
         target_mail.recipient_user_id,
         target_mail.recipient_character_id,
         target_mail.read_at,
-        target_mail.claimed_at,
-        target_mail.attach_silver,
-        target_mail.attach_spirit_stones,
-        target_mail.attach_items,
-        target_mail.attach_rewards,
-        target_mail.attach_instance_ids,
         EXISTS(SELECT 1 FROM marked_mail) AS marked_read
       FROM target_mail
     `, [mailId, characterId, userId]);
@@ -2187,9 +2181,15 @@ class MailService {
       return { success: false, message: '邮件不存在' };
     }
 
-    const readState = buildMailCounterStateFromRow(result.rows[0]);
+    const row = result.rows[0];
     await this.applyMailCounterDeltaInputs([
-      result.rows[0]?.marked_read === true && readState ? buildMailCounterReadDelta(readState) : null,
+      row.marked_read === true
+        ? {
+            recipientUserId: Number(row.recipient_user_id),
+            recipientCharacterId: row.recipient_character_id === null ? null : Number(row.recipient_character_id),
+            unreadCountDelta: -1,
+          }
+        : null,
     ]);
     await this.invalidateUnreadCounterAndNotifyRecipient(userId, characterId);
     return { success: true, message: '已读' };

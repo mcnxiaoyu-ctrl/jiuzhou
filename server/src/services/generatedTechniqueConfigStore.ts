@@ -77,11 +77,30 @@ export type GeneratedTechniqueLayerLite = {
   enabled?: boolean;
 };
 
+type GeneratedTechniqueSnapshotSignature = {
+  publishedTechniqueCount: number;
+  enabledSkillCount: number;
+  enabledLayerCount: number;
+  techniqueMaxUpdatedAt: string;
+  skillMaxUpdatedAt: string;
+  layerMaxUpdatedAt: string;
+};
+
+type GeneratedTechniqueSnapshotSignatureRow = {
+  published_technique_count: number | string | null;
+  enabled_skill_count: number | string | null;
+  enabled_layer_count: number | string | null;
+  technique_max_updated_at: Date | string | null;
+  skill_max_updated_at: Date | string | null;
+  layer_max_updated_at: Date | string | null;
+};
+
 let generatedTechniqueDefsCache: GeneratedTechniqueDefLite[] = [];
 let generatedSkillDefsCache: GeneratedSkillDefLite[] = [];
 let generatedTechniqueLayerCache: GeneratedTechniqueLayerLite[] = [];
 let generatedTechniqueByIdCache = new Map<string, GeneratedTechniqueDefLite>();
 let reloadGeneratedTechniqueConfigStorePromise: Promise<void> | null = null;
+let lastGeneratedTechniqueSnapshotSignature: GeneratedTechniqueSnapshotSignature | null = null;
 
 const asString = (raw: unknown): string => (typeof raw === 'string' ? raw.trim() : '');
 
@@ -113,6 +132,79 @@ const asJsonArray = <T>(raw: unknown): T[] => {
 const isUndefinedTableError = (error: unknown): boolean => {
   if (!error || typeof error !== 'object') return false;
   return 'code' in error && (error as { code?: unknown }).code === '42P01';
+};
+
+const LOAD_GENERATED_TECHNIQUE_SNAPSHOT_SIGNATURE_SQL = `
+  SELECT
+    (
+      SELECT COUNT(*)::bigint
+      FROM generated_technique_def
+      WHERE is_published = true AND enabled = true
+    ) AS published_technique_count,
+    (
+      SELECT COUNT(*)::bigint
+      FROM generated_skill_def
+      WHERE enabled = true
+    ) AS enabled_skill_count,
+    (
+      SELECT COUNT(*)::bigint
+      FROM generated_technique_layer
+      WHERE enabled = true
+    ) AS enabled_layer_count,
+    (
+      SELECT MAX(updated_at)
+      FROM generated_technique_def
+      WHERE is_published = true AND enabled = true
+    ) AS technique_max_updated_at,
+    (
+      SELECT MAX(updated_at)
+      FROM generated_skill_def
+      WHERE enabled = true
+    ) AS skill_max_updated_at,
+    (
+      SELECT MAX(updated_at)
+      FROM generated_technique_layer
+      WHERE enabled = true
+    ) AS layer_max_updated_at
+`;
+
+const normalizeSignatureDate = (value: Date | string | null): string => {
+  if (value === null) return '';
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? String(ms) : '';
+};
+
+const normalizeSignatureCount = (value: number | string | null): number => {
+  const normalized = Math.floor(Number(value) || 0);
+  return normalized > 0 ? normalized : 0;
+};
+
+const loadGeneratedTechniqueSnapshotSignature = async (): Promise<GeneratedTechniqueSnapshotSignature> => {
+  const result = await query<GeneratedTechniqueSnapshotSignatureRow>(
+    LOAD_GENERATED_TECHNIQUE_SNAPSHOT_SIGNATURE_SQL,
+  );
+  const row = result.rows[0];
+  return {
+    publishedTechniqueCount: normalizeSignatureCount(row?.published_technique_count ?? null),
+    enabledSkillCount: normalizeSignatureCount(row?.enabled_skill_count ?? null),
+    enabledLayerCount: normalizeSignatureCount(row?.enabled_layer_count ?? null),
+    techniqueMaxUpdatedAt: normalizeSignatureDate(row?.technique_max_updated_at ?? null),
+    skillMaxUpdatedAt: normalizeSignatureDate(row?.skill_max_updated_at ?? null),
+    layerMaxUpdatedAt: normalizeSignatureDate(row?.layer_max_updated_at ?? null),
+  };
+};
+
+const isGeneratedTechniqueSnapshotSignatureEqual = (
+  left: GeneratedTechniqueSnapshotSignature | null,
+  right: GeneratedTechniqueSnapshotSignature,
+): boolean => {
+  return left !== null
+    && left.publishedTechniqueCount === right.publishedTechniqueCount
+    && left.enabledSkillCount === right.enabledSkillCount
+    && left.enabledLayerCount === right.enabledLayerCount
+    && left.techniqueMaxUpdatedAt === right.techniqueMaxUpdatedAt
+    && left.skillMaxUpdatedAt === right.skillMaxUpdatedAt
+    && left.layerMaxUpdatedAt === right.layerMaxUpdatedAt;
 };
 
 /**
@@ -219,6 +311,11 @@ const LOAD_PUBLISHED_GENERATED_LAYERS_SQL = `
  */
 const reloadGeneratedTechniqueConfigStoreInternal = async (): Promise<void> => {
   try {
+    const nextSignature = await loadGeneratedTechniqueSnapshotSignature();
+    if (isGeneratedTechniqueSnapshotSignatureEqual(lastGeneratedTechniqueSnapshotSignature, nextSignature)) {
+      return;
+    }
+
     const [defRes, skillRes, layerRes] = await Promise.all([
       query(
         `
@@ -360,12 +457,14 @@ const reloadGeneratedTechniqueConfigStoreInternal = async (): Promise<void> => {
     });
 
     generatedTechniqueByIdCache = new Map(generatedTechniqueDefsCache.map((row) => [row.id, row] as const));
+    lastGeneratedTechniqueSnapshotSignature = nextSignature;
   } catch (error) {
     if (isUndefinedTableError(error)) {
       generatedTechniqueDefsCache = [];
       generatedSkillDefsCache = [];
       generatedTechniqueLayerCache = [];
       generatedTechniqueByIdCache = new Map();
+      lastGeneratedTechniqueSnapshotSignature = null;
       return;
     }
     throw error;

@@ -1102,6 +1102,7 @@ export const rerollEquipmentAffixes = async (
       spiritStones: number;
       rerollScroll: { itemDefId: string; qty: number };
     };
+    affectsCharacter: boolean;
     character?: unknown;
   };
 }> => {
@@ -1232,10 +1233,15 @@ export const rerollEquipmentAffixes = async (
     if (!applyDiffRes.success) {
       return { success: false, message: applyDiffRes.message };
     }
-    await refreshCharacterBattleStateAfterEquipmentChange(characterId);
-    const character = await getCharacterComputedByCharacterId(characterId, {
-      bypassStaticCache: true,
-    });
+    const affectsCharacter = item.location === "equipped";
+    if (affectsCharacter) {
+      await refreshCharacterBattleStateAfterEquipmentChange(characterId);
+    }
+    const character = affectsCharacter
+      ? await getCharacterComputedByCharacterId(characterId, {
+          bypassStaticCache: true,
+        })
+      : null;
     return {
       success: true,
       message: "洗炼成功",
@@ -1250,7 +1256,8 @@ export const rerollEquipmentAffixes = async (
             qty: costPlan.rerollScrollQty,
           },
         },
-        character: character ?? null,
+        affectsCharacter,
+        character,
       },
     };
   } catch (error) {

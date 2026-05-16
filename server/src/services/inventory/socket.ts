@@ -308,6 +308,7 @@ export const socketEquipment = async (
     };
     replacedGem?: SocketedGemEntry;
     costs?: { silver: number };
+    affectsCharacter: boolean;
     character?: unknown;
   };
 }> => {
@@ -433,10 +434,15 @@ export const socketEquipment = async (
   if (!applyDiffRes.success) {
     return { success: false, message: applyDiffRes.message };
   }
-  await refreshCharacterBattleStateAfterEquipmentChange(characterId);
-  const character = await getCharacterComputedByCharacterId(characterId, {
-    bypassStaticCache: true,
-  });
+  const affectsCharacter = equip.location === "equipped";
+  if (affectsCharacter) {
+    await refreshCharacterBattleStateAfterEquipmentChange(characterId);
+  }
+  const character = affectsCharacter
+    ? await getCharacterComputedByCharacterId(characterId, {
+        bypassStaticCache: true,
+      })
+    : null;
   return {
     success: true,
     message: replacedGem ? "替换镶嵌成功" : "镶嵌成功",
@@ -452,7 +458,8 @@ export const socketEquipment = async (
       },
       replacedGem: replacedGem ?? undefined,
       costs: { silver: silverCost },
-      character: character ?? null,
+      affectsCharacter,
+      character,
     },
   };
 };

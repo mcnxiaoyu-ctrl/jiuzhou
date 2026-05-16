@@ -6,6 +6,7 @@ import { getGameServer } from '../game/gameServer.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { recordGatherResourceEvent } from './taskService.js';
 import { enqueueCharacterItemGrant } from './shared/characterItemGrantDeltaService.js';
+import { acquireCharacterMutationThrottle } from './shared/characterMutationThrottle.js';
 import {
   getItemDefinitionsByIds,
   getMainQuestSectionById,
@@ -880,6 +881,8 @@ const getRoomResourceConfig = (
   return { collectLimit, respawnSec };
 };
 
+const ROOM_RESOURCE_GATHER_THROTTLE_WINDOW_MS = 750;
+
 const gatherRoomResourceImpl = async (params: {
   mapId: string;
   roomId: string;
@@ -908,6 +911,15 @@ const gatherRoomResourceImpl = async (params: {
   if (!cfg) return { success: false, message: '资源不存在' };
 
   const actionSec = 5;
+
+  const gatherThrottleAllowed = await acquireCharacterMutationThrottle({
+    characterId,
+    scope: 'map-resource-gather',
+    windowMs: ROOM_RESOURCE_GATHER_THROTTLE_WINDOW_MS,
+  });
+  if (!gatherThrottleAllowed) {
+    return { success: false, message: '采集操作过于频繁，请稍后再试' };
+  }
 
   await lockCharacterInventoryMutex(characterId);
 

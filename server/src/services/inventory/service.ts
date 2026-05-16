@@ -394,6 +394,7 @@ class InventoryService {
         spiritStones: number;
         rerollScroll: { itemDefId: string; qty: number };
       };
+      affectsCharacter: boolean;
       character?: unknown;
     };
   }> {
@@ -422,6 +423,7 @@ class InventoryService {
       };
       replacedGem?: SocketedGemEntry;
       costs?: { silver: number };
+      affectsCharacter: boolean;
       character?: unknown;
     };
   }> {
