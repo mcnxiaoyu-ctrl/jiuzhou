@@ -292,9 +292,42 @@
   color: var(--text-secondary);
 }
 
+.rank-stock-market-table {
+  .ant-table-thead > tr > th,
+  .ant-table-tbody > tr > td {
+    overflow: hidden;
+    white-space: nowrap;
+    word-break: keep-all;
+  }
+
+  .ant-table,
+  .ant-table-container,
+  .ant-table-content,
+  .ant-table-body {
+    overflow: visible !important;
+  }
+
+  .rank-player-name-button,
+  .rank-player-copy {
+    width: 100%;
+    overflow: hidden;
+  }
+}
+
+.rank-stock-market-nowrap {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  font-variant-numeric: tabular-nums;
+}
+
 .rank-stock-market-value {
   font-weight: var(--font-weight-section);
-  white-space: nowrap;
 }
 
 .rank-stock-market-value--up {

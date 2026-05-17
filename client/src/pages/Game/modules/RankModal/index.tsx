@@ -68,11 +68,42 @@ interface RankModalProps {
 }
 
 const formatPartnerRankLevelText = (row: Pick<PartnerRankRowDto, 'level'>): string => `Lv.${row.level}`;
-const formatStockMarketRankCurrency = (value: number): string => `${value.toLocaleString()} 灵石`;
+const formatStockMarketRankFullCurrency = (value: number): string => `${value.toLocaleString()} 灵石`;
+const formatStockMarketRankFullQuantity = (value: number): string => `${value.toLocaleString()} 股`;
+const STOCK_MARKET_RANK_TABLE_COLUMN_WIDTH = {
+  rank: '6%',
+  player: '28%',
+  marketValue: '15%',
+  pnl: '14%',
+  holdingQty: '9%',
+} as const;
+
+const formatStockMarketRankCompactDecimal = (value: number): string => {
+  const roundedValue = value >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
+  return roundedValue.toLocaleString('zh-CN', {
+    maximumFractionDigits: Number.isInteger(roundedValue) ? 0 : 1,
+    minimumFractionDigits: 0,
+  });
+};
+
+const formatStockMarketRankCompactNumber = (value: number): string => {
+  const absValue = Math.abs(value);
+  if (absValue >= 100_000_000) return `${formatStockMarketRankCompactDecimal(absValue / 100_000_000)}亿`;
+  if (absValue >= 10_000) return `${formatStockMarketRankCompactDecimal(absValue / 10_000)}万`;
+  return absValue.toLocaleString();
+};
+
+const formatStockMarketRankCurrency = (value: number): string => `${formatStockMarketRankCompactNumber(value)}灵石`;
+const formatStockMarketRankQuantity = (value: number): string => `${formatStockMarketRankCompactNumber(value)}股`;
 
 const formatStockMarketRankSignedCurrency = (value: number): string => {
   if (value === 0) return formatStockMarketRankCurrency(0);
   return `${value > 0 ? '+' : '-'}${formatStockMarketRankCurrency(Math.abs(value))}`;
+};
+
+const formatStockMarketRankSignedFullCurrency = (value: number): string => {
+  if (value === 0) return formatStockMarketRankFullCurrency(0);
+  return `${value > 0 ? '+' : '-'}${formatStockMarketRankFullCurrency(Math.abs(value))}`;
 };
 
 const resolveStockMarketRankToneClassName = (value: number): string => {
@@ -80,6 +111,18 @@ const resolveStockMarketRankToneClassName = (value: number): string => {
   if (value < 0) return 'rank-stock-market-value--down';
   return 'rank-stock-market-value--flat';
 };
+
+const renderStockMarketRankPlainText = (text: string, title: string = text): ReactNode => (
+  <span className="rank-stock-market-nowrap" title={title}>{text}</span>
+);
+
+const renderStockMarketRankCurrency = (value: number): ReactNode => (
+  renderStockMarketRankPlainText(formatStockMarketRankCurrency(value), formatStockMarketRankFullCurrency(value))
+);
+
+const renderStockMarketRankQuantity = (value: number): ReactNode => (
+  renderStockMarketRankPlainText(formatStockMarketRankQuantity(value), formatStockMarketRankFullQuantity(value))
+);
 
 const renderCurrencyBadge = (icon: string, alt: string, value?: number): ReactNode => (
   <span className="rank-money">
@@ -223,7 +266,10 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose, onSelectPlayer }) 
   };
 
   const renderStockMarketRankValue = (value: number, signed: boolean = false) => (
-    <span className={`rank-stock-market-value ${resolveStockMarketRankToneClassName(value)}`}>
+    <span
+      className={`rank-stock-market-nowrap rank-stock-market-value ${resolveStockMarketRankToneClassName(value)}`}
+      title={signed ? formatStockMarketRankSignedFullCurrency(value) : formatStockMarketRankFullCurrency(value)}
+    >
       {signed ? formatStockMarketRankSignedCurrency(value) : formatStockMarketRankCurrency(value)}
     </span>
   );
@@ -650,7 +696,7 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose, onSelectPlayer }) 
                       <span className="rank-mobile-meta-item">
                         <span className="rank-mobile-meta-k">市值</span>
                         <span className="rank-mobile-meta-v">
-                          {formatStockMarketRankCurrency(row.totalMarketValueSpiritStones)}
+                          {renderStockMarketRankCurrency(row.totalMarketValueSpiritStones)}
                         </span>
                       </span>
                       <span className="rank-mobile-meta-item">
@@ -673,7 +719,7 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose, onSelectPlayer }) 
                       </span>
                       <span className="rank-mobile-meta-item">
                         <span className="rank-mobile-meta-k">持股</span>
-                        <span className="rank-mobile-meta-v">{row.totalHoldingQty.toLocaleString()} 股</span>
+                        <span className="rank-mobile-meta-v">{renderStockMarketRankQuantity(row.totalHoldingQty)}</span>
                       </span>
                     </div>
                   </div>
@@ -683,51 +729,60 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose, onSelectPlayer }) 
           </div>
         ) : (
           <Table
+            className="rank-stock-market-table"
             size="small"
             rowKey={(row) => String(row.characterId)}
             pagination={false}
             loading={loading}
+            tableLayout="fixed"
             columns={[
-              { title: '名次', dataIndex: 'rank', key: 'rank', width: 80, render: (value: number) => `#${value}` },
+              {
+                title: '名次',
+                dataIndex: 'rank',
+                key: 'rank',
+                width: STOCK_MARKET_RANK_TABLE_COLUMN_WIDTH.rank,
+                render: (value: number) => renderStockMarketRankPlainText(`#${value}`),
+              },
               {
                 title: '玩家',
                 key: 'name',
-                width: 250,
+                width: STOCK_MARKET_RANK_TABLE_COLUMN_WIDTH.player,
                 render: (_value: number, row: StockMarketRankRowDto) => renderCharacterIdentity(row),
               },
               {
                 title: '持仓市值',
                 dataIndex: 'totalMarketValueSpiritStones',
                 key: 'totalMarketValueSpiritStones',
-                width: 150,
-                render: (value: number) => formatStockMarketRankCurrency(value),
+                width: STOCK_MARKET_RANK_TABLE_COLUMN_WIDTH.marketValue,
+                render: (value: number) => renderStockMarketRankCurrency(value),
               },
               {
                 title: '总收益',
                 dataIndex: 'totalPnlSpiritStones',
                 key: 'totalPnlSpiritStones',
-                width: 140,
+                width: STOCK_MARKET_RANK_TABLE_COLUMN_WIDTH.pnl,
                 render: (value: number) => renderStockMarketRankValue(value, true),
               },
               {
                 title: '浮盈亏',
                 dataIndex: 'unrealizedPnlSpiritStones',
                 key: 'unrealizedPnlSpiritStones',
-                width: 140,
+                width: STOCK_MARKET_RANK_TABLE_COLUMN_WIDTH.pnl,
                 render: (value: number) => renderStockMarketRankValue(value, true),
               },
               {
                 title: '已实现',
                 dataIndex: 'realizedPnlSpiritStones',
                 key: 'realizedPnlSpiritStones',
-                width: 140,
+                width: STOCK_MARKET_RANK_TABLE_COLUMN_WIDTH.pnl,
                 render: (value: number) => renderStockMarketRankValue(value, true),
               },
               {
                 title: '持股',
                 dataIndex: 'totalHoldingQty',
                 key: 'totalHoldingQty',
-                render: (value: number) => `${value.toLocaleString()} 股`,
+                width: STOCK_MARKET_RANK_TABLE_COLUMN_WIDTH.holdingQty,
+                render: (value: number) => renderStockMarketRankQuantity(value),
               },
             ]}
             dataSource={stockMarketRanks}
