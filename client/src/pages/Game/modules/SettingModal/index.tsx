@@ -1,11 +1,10 @@
-import { App, Button, Form, Input, Menu, Modal, Select, Space, Switch, Typography } from 'antd';
+import { App, Button, Input, Menu, Modal, Select, Space, Switch, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import {
   commitBattleAvatarVisibilitySelection,
   getStoredBattleAvatarVisibility,
 } from '../../../../constants/battleDisplay';
 import {
-  changePassword,
   getCharacterInfo,
   getUnifiedApiErrorMessage,
   notifyUnifiedApiError,
@@ -18,13 +17,6 @@ import {
 } from '../../../../services/api';
 import { commitThemeModeSelection, getStoredThemeMode, type ThemeMode } from '../../../../constants/theme';
 import {
-  ACCOUNT_PASSWORD_MIN_LENGTH,
-  ACCOUNT_PASSWORD_MIN_LENGTH_MESSAGE,
-  ACCOUNT_PASSWORD_SAME_AS_CURRENT_MESSAGE,
-  createConfirmPasswordValidator,
-  createDistinctPasswordValidator,
-} from '../../../shared/accountPasswordFormRules';
-import {
   AUTO_DISASSEMBLE_CATEGORY_OPTIONS,
   buildAutoDisassembleSubCategoryOptionsByCategories,
   normalizeAutoDisassembleCategoryList,
@@ -32,6 +24,7 @@ import {
 } from '../../shared/autoDisassembleFilters';
 import { loadGameItemTaxonomy, useGameItemTaxonomy } from '../../shared/useGameItemTaxonomy';
 import { useIsMobile } from '../../shared/responsive';
+import PhoneBindingPanel from './PhoneBindingPanel';
 import './index.scss';
 
 type SettingKey = 'base' | 'security' | 'disassemble' | 'cdk';
@@ -58,12 +51,6 @@ interface AutoDisassembleRuleDraftContent {
   includeNameKeywordsText: string;
   excludeNameKeywordsText: string;
   maxQualityRank: number;
-}
-
-interface ChangePasswordFormValues {
-  currentPassword: string;
-  newPassword: string;
-  confirmPassword: string;
 }
 
 const createDefaultAutoDisassembleRuleDraftContent = (): AutoDisassembleRuleDraftContent => {
@@ -233,7 +220,6 @@ const normalizeRuleSubCategoriesBySelectedCategories = (
 
 const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   const { message } = App.useApp();
-  const [changePasswordForm] = Form.useForm<ChangePasswordFormValues>();
   useGameItemTaxonomy(open);
   const [activeKey, setActiveKey] = useState<SettingKey>('base');
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => getStoredThemeMode());
@@ -247,7 +233,6 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   const [, setAutoDisassembleRuleIdSeed] = useState(2);
   const [autoDisassembleSaving, setAutoDisassembleSaving] = useState(false);
   const [autoDisassembleLoading, setAutoDisassembleLoading] = useState(false);
-  const [changePasswordSaving, setChangePasswordSaving] = useState(false);
   const [cdk, setCdk] = useState('');
   const [cdkRedeeming, setCdkRedeeming] = useState(false);
   const isMobile = useIsMobile();
@@ -314,12 +299,6 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   };
 
   useEffect(() => {
-    if (!open) {
-      changePasswordForm.resetFields();
-    }
-  }, [changePasswordForm, open]);
-
-  useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setAutoDisassembleLoading(true);
@@ -347,23 +326,6 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
       cancelled = true;
     };
   }, [open]);
-
-  const handleChangePassword = async (values: ChangePasswordFormValues) => {
-    setChangePasswordSaving(true);
-    try {
-      const response = await changePassword(
-        values.currentPassword,
-        values.newPassword,
-        SILENT_API_REQUEST_CONFIG,
-      );
-      message.success(response.message || '密码修改成功');
-      changePasswordForm.resetFields();
-    } catch (error) {
-      notifyUnifiedApiError(message, error, '修改密码失败');
-    } finally {
-      setChangePasswordSaving(false);
-    }
-  };
 
   const buildAutoDisassembleRulesPayload = (overrides?: {
     rules?: AutoDisassembleRuleDraft[];
@@ -510,78 +472,7 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
               <Typography.Title level={5} style={{ margin: 0 }}>
                 账号安全
               </Typography.Title>
-              <Typography.Text type="secondary" className="setting-rule-tip">
-                修改完成后，新密码会立即生效。当前登录态不受影响，但后续重新登录需要使用新密码。
-              </Typography.Text>
-
-              <div className="setting-rule-card">
-                <Form
-                  form={changePasswordForm}
-                  layout="vertical"
-                  onFinish={(values) => {
-                    void handleChangePassword(values);
-                  }}
-                  disabled={changePasswordSaving}
-                  className="setting-password-form"
-                >
-                  <Form.Item
-                    label="当前密码"
-                    name="currentPassword"
-                    rules={[{ required: true, message: '请输入当前密码' }]}
-                  >
-                    <Input.Password placeholder="请输入当前密码" />
-                  </Form.Item>
-
-                  <Form.Item
-                    label="新密码"
-                    name="newPassword"
-                    dependencies={['currentPassword']}
-                    rules={[
-                      { required: true, message: '请输入新密码' },
-                      { min: ACCOUNT_PASSWORD_MIN_LENGTH, message: ACCOUNT_PASSWORD_MIN_LENGTH_MESSAGE },
-                      ({ getFieldValue }) => ({
-                        validator: createDistinctPasswordValidator(
-                          getFieldValue,
-                          'currentPassword',
-                          ACCOUNT_PASSWORD_SAME_AS_CURRENT_MESSAGE,
-                        ),
-                      }),
-                    ]}
-                  >
-                    <Input.Password placeholder={`请输入至少 ${ACCOUNT_PASSWORD_MIN_LENGTH} 位新密码`} />
-                  </Form.Item>
-
-                  <Form.Item
-                    label="确认新密码"
-                    name="confirmPassword"
-                    dependencies={['newPassword']}
-                    rules={[
-                      { required: true, message: '请确认新密码' },
-                      ({ getFieldValue }) => ({
-                        validator: createConfirmPasswordValidator(
-                          getFieldValue,
-                          'newPassword',
-                          '两次输入的新密码不一致',
-                        ),
-                      }),
-                    ]}
-                  >
-                    <Input.Password placeholder="请再次输入新密码" />
-                  </Form.Item>
-
-                  <div className="setting-password-actions">
-                    <Button
-                      onClick={() => changePasswordForm.resetFields()}
-                      disabled={changePasswordSaving}
-                    >
-                      重置
-                    </Button>
-                    <Button type="primary" htmlType="submit" loading={changePasswordSaving}>
-                      确认修改
-                    </Button>
-                  </div>
-                </Form>
-              </div>
+              <PhoneBindingPanel enabled={open && activeKey === 'security'} />
             </Space>
           ) : null}
 

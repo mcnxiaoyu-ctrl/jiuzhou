@@ -21,22 +21,15 @@
  * 1. local 图片验证码是一次性资源，发码尝试结束后必须清空输入并刷新，避免重复提交已消费的 captchaId。
  * 2. 腾讯天御取消不是业务错误，不应触发接口请求；只有 SDK 异常才在页面内提示。
  */
-import { useEffect, useMemo, useState } from 'react';
-import { App } from 'antd';
+import { useCallback } from 'react';
 
 import {
-  getCaptcha,
   sendAuthPhoneCode,
   type AuthPhoneCodePurpose,
-  type CaptchaChallenge,
   type UnifiedCaptchaPayload,
 } from '../../../services/api';
-import { useCaptchaChallenge } from '../../shared/useCaptchaChallenge';
-import { useCaptchaConfig } from '../../shared/useCaptchaConfig';
-import {
-  TENCENT_CAPTCHA_CANCELLED_MESSAGE,
-  useTencentCaptcha,
-} from '../../shared/useTencentCaptcha';
+import { useCaptchaSmsCodeSender } from '../../shared/useCaptchaSmsCodeSender';
+import type { UseCaptchaSmsCodeSenderResult } from '../../shared/useCaptchaSmsCodeSender';
 
 interface UseAuthPhoneCodeOptions {
   purpose: AuthPhoneCodePurpose;
@@ -44,147 +37,28 @@ interface UseAuthPhoneCodeOptions {
   enabled: boolean;
 }
 
-interface UseAuthPhoneCodeResult {
-  captchaCode: string;
-  setCaptchaCode: (value: string) => void;
-  captcha: CaptchaChallenge | null;
-  captchaLoading: boolean;
-  showLocalCaptchaField: boolean;
-  sendingCode: boolean;
-  countdown: number;
-  sendDisabled: boolean;
-  sendButtonLabel: string;
-  refreshCaptcha: () => Promise<void>;
-  sendCode: () => Promise<void>;
-}
-
 export const useAuthPhoneCode = ({
   purpose,
   phoneNumber,
   enabled,
-}: UseAuthPhoneCodeOptions): UseAuthPhoneCodeResult => {
-  const { message } = App.useApp();
-  const { config, isTencent, loading: configLoading } = useCaptchaConfig(enabled);
-  const [captchaCode, setCaptchaCode] = useState('');
-  const [sendingCode, setSendingCode] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-
-  const { captcha, loading: captchaLoading, refreshCaptcha } = useCaptchaChallenge({
-    enabled: enabled && !isTencent && !configLoading,
-    refreshNonce: enabled ? 1 : 0,
-    loadCaptcha: getCaptcha,
-    fallbackMessage: '图片验证码加载失败',
-    onLoadError: (errorMessage) => {
-      message.error(errorMessage);
-    },
-  });
-
-  const { triggerCaptcha } = useTencentCaptcha(config.tencentAppId ?? 0);
-
-  useEffect(() => {
-    if (!enabled) {
-      setCaptchaCode('');
-      setSendingCode(false);
-      setCountdown(0);
-    }
-  }, [enabled]);
-
-  useEffect(() => {
-    if (countdown <= 0) return undefined;
-    const timer = window.setTimeout(() => {
-      setCountdown((current) => (current > 0 ? current - 1 : 0));
-    }, 1000);
-    return () => window.clearTimeout(timer);
-  }, [countdown]);
-
+}: UseAuthPhoneCodeOptions): UseCaptchaSmsCodeSenderResult => {
   const normalizedPhoneNumber = phoneNumber.trim();
-  const showLocalCaptchaField = enabled && !configLoading && !isTencent;
 
-  const sendDisabled = useMemo(() => {
-    if (sendingCode || countdown > 0 || !normalizedPhoneNumber) {
-      return true;
-    }
-    if (isTencent) {
-      return false;
-    }
-    return captchaLoading || !captcha || captchaCode.trim().length !== 4;
-  }, [
-    captcha,
-    captchaCode,
-    captchaLoading,
-    countdown,
-    isTencent,
-    normalizedPhoneNumber,
-    sendingCode,
-  ]);
-
-  const doSendCode = async (captchaPayload: UnifiedCaptchaPayload): Promise<void> => {
-    setSendingCode(true);
-    try {
-      const response = await sendAuthPhoneCode({
+  const sendCodeRequest = useCallback(
+    (captchaPayload: UnifiedCaptchaPayload) => {
+      return sendAuthPhoneCode({
         phoneNumber: normalizedPhoneNumber,
         purpose,
         ...captchaPayload,
       });
-      const cooldownSeconds = response.data?.cooldownSeconds;
-      if (typeof cooldownSeconds !== 'number') {
-        throw new Error('发送验证码响应缺少冷却时间');
-      }
-      setCountdown(cooldownSeconds);
-      message.success('验证码已发送');
-    } finally {
-      if (!isTencent) {
-        setCaptchaCode('');
-        await refreshCaptcha();
-      }
-      setSendingCode(false);
-    }
-  };
+    },
+    [normalizedPhoneNumber, purpose],
+  );
 
-  const sendCode = async (): Promise<void> => {
-    if (!normalizedPhoneNumber) {
-      message.warning('请输入手机号');
-      return;
-    }
-
-    if (isTencent) {
-      const ticket = await triggerCaptcha().catch((error: Error) => {
-        if (error.message !== TENCENT_CAPTCHA_CANCELLED_MESSAGE) {
-          message.error(error.message || '验证码校验失败');
-        }
-        return null;
-      });
-      if (!ticket) {
-        return;
-      }
-      await doSendCode({ ticket: ticket.ticket, randstr: ticket.randstr });
-      return;
-    }
-
-    if (!captcha) {
-      message.warning('图片验证码加载中，请稍后重试');
-      return;
-    }
-
-    if (captchaCode.trim().length !== 4) {
-      message.warning('请输入图片验证码');
-      return;
-    }
-
-    await doSendCode({ captchaId: captcha.captchaId, captchaCode });
-  };
-
-  return {
-    captchaCode,
-    setCaptchaCode,
-    captcha,
-    captchaLoading,
-    showLocalCaptchaField,
-    sendingCode,
-    countdown,
-    sendDisabled,
-    sendButtonLabel: countdown > 0 ? `${countdown}s` : '发送验证码',
-    refreshCaptcha,
-    sendCode,
-  };
+  return useCaptchaSmsCodeSender({
+    enabled,
+    canSend: normalizedPhoneNumber.length > 0,
+    missingTargetMessage: '请输入手机号',
+    sendCodeRequest,
+  });
 };

@@ -6,6 +6,7 @@ export * from './api/welfare';
 export * from './api/task-achievement';
 export * from './api/profile';
 export * from './api/accountSecurity';
+export * from './api/accountPhoneBinding';
 export * from './api/world';
 export * from './api/inventory';
 export * from './api/market-mail';
