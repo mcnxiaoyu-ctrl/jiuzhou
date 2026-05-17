@@ -156,7 +156,7 @@
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(260px, 0.86fr) minmax(0, 1.42fr);
-  grid-template-rows: 132px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     "news portfolio"
     "list detail";
@@ -175,7 +175,7 @@
 
 .stock-market-news {
   grid-area: news;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .stock-market-portfolio {
@@ -270,7 +270,8 @@
 .stock-market-news-content {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
+  padding-bottom: 4px;
 }
 
 .stock-market-news-title {
@@ -278,6 +279,7 @@
   line-height: 1.35;
   font-weight: var(--font-weight-title);
   color: var(--text-color);
+  overflow-wrap: anywhere;
 }
 
 .stock-market-news-summary,
@@ -289,16 +291,16 @@
 }
 
 .stock-market-news .stock-market-news-summary {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  display: block;
+  overflow: visible;
+  overflow-wrap: anywhere;
 }
 
 .stock-market-impact-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px 4px;
+  padding-bottom: 1px;
 }
 
 .stock-market-impact.ant-tag,
@@ -344,7 +346,10 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .stock-market-stock-row {
@@ -390,6 +395,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 13px;
+    line-height: 1.2;
   }
 
   span {
@@ -397,6 +403,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 11px;
+    line-height: 1.2;
     color: var(--text-tertiary);
   }
 }
@@ -407,12 +414,14 @@
 
   strong {
     font-size: 13px;
+    line-height: 1.2;
     color: var(--text-color);
   }
 
   em {
     font-style: normal;
     font-size: 12px;
+    line-height: 1.2;
   }
 }
 
@@ -833,6 +842,7 @@
   }
 
   .stock-market-list {
+    flex: 0 0 auto;
     min-height: 0;
     max-height: none;
     overflow: visible;
@@ -841,7 +851,7 @@
 
   .stock-market-list-panel {
     flex: 0 0 auto;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .stock-market-detail--inline {
