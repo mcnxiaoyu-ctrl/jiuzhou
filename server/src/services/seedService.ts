@@ -27,6 +27,7 @@ import {
   getMonthCardDefinitions,
   getNpcDefinitions,
   getStaticPartnerDefinitions,
+  getStockDefinitions,
   getSkillDefinitions,
   getTaskDefinitions,
   getTalkTreeDefinitions,
@@ -86,6 +87,7 @@ export const loadAllSeeds = async (): Promise<void> => {
   console.log(`  称号定义: ${countEnabled(getTitleDefinitions())} 条（静态JSON，跳过入库）`);
   console.log(`  成就点奖励: ${countEnabled(getAchievementPointsRewardDefinitions())} 条（静态JSON，跳过入库）`);
   console.log(`  月卡定义: ${countEnabled(getMonthCardDefinitions())} 条（静态JSON，跳过入库）`);
+  console.log(`  股市股票定义: ${countEnabled(getStockDefinitions())} 条（静态JSON，跳过入库）`);
 
   const { rewardCount: battlePassRewardCount, taskCount: battlePassTaskCount } = getBattlePassCounts();
   console.log(`  战令奖励: ${battlePassRewardCount} 条（静态JSON，跳过入库）`);

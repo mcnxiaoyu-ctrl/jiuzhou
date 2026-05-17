@@ -22,6 +22,10 @@ x-server-environment-base: &server-environment-base
   COS_AVATAR_PREFIX: "${COS_AVATAR_PREFIX:-avatars/}"
   COS_GENERATED_IMAGE_PREFIX: "${COS_GENERATED_IMAGE_PREFIX:-generated/}"
   COS_DOMAIN: "${COS_DOMAIN}"
+  AI_STOCK_MARKET_MODEL_PROVIDER: "${AI_STOCK_MARKET_MODEL_PROVIDER:-openai}"
+  AI_STOCK_MARKET_MODEL_URL: "${AI_STOCK_MARKET_MODEL_URL:-}"
+  AI_STOCK_MARKET_MODEL_KEY: "${AI_STOCK_MARKET_MODEL_KEY:-}"
+  AI_STOCK_MARKET_MODEL_NAME: "${AI_STOCK_MARKET_MODEL_NAME:-}"
 
 x-server-common: &server-common
   image: ccr.ccs.tencentyun.com/tcb-100001011660-qtgo/jiuzhou-server:latest

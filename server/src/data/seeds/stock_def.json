@@ -1,0 +1,114 @@
+{
+  "stocks": [
+    {
+      "id": "stock-qingyun-danfang",
+      "code": "QYDF",
+      "name": "青云丹坊",
+      "short_name": "青云丹",
+      "sector": "丹药",
+      "description": "专营筑基丹、回气散与高阶药引，行情受丹方突破和药材收成影响。",
+      "initial_price_spirit_stones": 128,
+      "sort_weight": 10,
+      "enabled": true
+    },
+    {
+      "id": "stock-xuantie-mining",
+      "code": "XTKY",
+      "name": "玄铁矿业",
+      "short_name": "玄铁矿",
+      "sector": "矿材",
+      "description": "掌控北岭玄铁矿脉，价格随矿脉产量、宗门炼器需求和运输风险波动。",
+      "initial_price_spirit_stones": 96,
+      "sort_weight": 20,
+      "enabled": true
+    },
+    {
+      "id": "stock-lingzhou-shipyard",
+      "code": "LZCW",
+      "name": "灵舟船坞",
+      "short_name": "灵舟坞",
+      "sector": "交通",
+      "description": "制造跨州灵舟与护航阵盘，受商路开放、妖潮和宗门订单影响。",
+      "initial_price_spirit_stones": 186,
+      "sort_weight": 30,
+      "enabled": true
+    },
+    {
+      "id": "stock-tiangong-armory",
+      "code": "TGQG",
+      "name": "天工器阁",
+      "short_name": "天工阁",
+      "sector": "炼器",
+      "description": "炼制法器、护甲与机关傀儡，行情与炼器大会、稀有矿材价格高度相关。",
+      "initial_price_spirit_stones": 212,
+      "sort_weight": 40,
+      "enabled": true
+    },
+    {
+      "id": "stock-wanjuan-academy",
+      "code": "WJSY",
+      "name": "万卷书院",
+      "short_name": "万卷院",
+      "sector": "功法",
+      "description": "经营功法拓印、古籍修复与讲经会，受秘卷出土和门派交流影响。",
+      "initial_price_spirit_stones": 158,
+      "sort_weight": 50,
+      "enabled": true
+    },
+    {
+      "id": "stock-yunmeng-herb",
+      "code": "YMYQ",
+      "name": "云梦药圃",
+      "short_name": "云梦圃",
+      "sector": "灵植",
+      "description": "培育灵草、灵果和药田阵法，行情随节气、虫害与炼丹需求变化。",
+      "initial_price_spirit_stones": 88,
+      "sort_weight": 60,
+      "enabled": true
+    },
+    {
+      "id": "stock-xinghe-auction",
+      "code": "XHPM",
+      "name": "星河拍卖",
+      "short_name": "星河拍",
+      "sector": "拍卖",
+      "description": "承办跨州珍宝拍卖与鉴宝会，消息面受压轴拍品和大修士委托影响。",
+      "initial_price_spirit_stones": 260,
+      "sort_weight": 70,
+      "enabled": true
+    },
+    {
+      "id": "stock-chixiao-sword",
+      "code": "CXJZ",
+      "name": "赤霄剑宗",
+      "short_name": "赤霄剑",
+      "sector": "宗门",
+      "description": "以剑诀、剑胚和护宗委托闻名，行情受论剑成绩与边境战事带动。",
+      "initial_price_spirit_stones": 230,
+      "sort_weight": 80,
+      "enabled": true
+    },
+    {
+      "id": "stock-qiankun-array",
+      "code": "QKZT",
+      "name": "乾坤阵台",
+      "short_name": "乾坤阵",
+      "sector": "阵法",
+      "description": "铺设传送阵、防御阵和洞府聚灵阵，受城池扩建与阵材供应影响。",
+      "initial_price_spirit_stones": 175,
+      "sort_weight": 90,
+      "enabled": true
+    },
+    {
+      "id": "stock-beizhou-treasure",
+      "code": "BZBL",
+      "name": "北州宝楼",
+      "short_name": "北州楼",
+      "sector": "商贸",
+      "description": "覆盖北州珍宝、符箓和灵兽材料贸易，行情随商队安全与市场人气变化。",
+      "initial_price_spirit_stones": 142,
+      "sort_weight": 100,
+      "enabled": true
+    }
+  ]
+}

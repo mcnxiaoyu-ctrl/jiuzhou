@@ -23,3 +23,4 @@ export * from './api/requestConfig';
 export * from './api/captchaConfig';
 export * from './api/redeemCode';
 export * from './api/wander';
+export * from './api/stockMarket';

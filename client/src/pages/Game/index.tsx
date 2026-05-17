@@ -27,6 +27,7 @@ import {
 import TaskModal from './modules/TaskModal';
 import SectModal from './modules/SectModal';
 import MarketModal from './modules/MarketModal';
+import StockMarketModal from './modules/StockMarketModal';
 import MonthCardModal from './modules/MonthCardModal';
 import { buildMonthCardIndicator } from './modules/MonthCardModal/monthCardDisplay';
 import BattlePassModal from './modules/BattlePassModal';
@@ -752,6 +753,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [wanderModalOpen, setWanderModalOpen] = useState(false);
   const [sectModalOpen, setSectModalOpen] = useState(false);
   const [marketModalOpen, setMarketModalOpen] = useState(false);
+  const [stockMarketModalOpen, setStockMarketModalOpen] = useState(false);
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [monthCardModalOpen, setMonthCardModalOpen] = useState(false);
   const [battlePassModalOpen, setBattlePassModalOpen] = useState(false);
@@ -2513,6 +2515,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     }
     if (key === 'sect') setSectModalOpen(true);
     if (key === 'market') setMarketModalOpen(true);
+    if (key === 'stock-market') setStockMarketModalOpen(true);
     if (key === 'team') setTeamModalOpen(true);
     if (key === 'monthcard') setMonthCardModalOpen(true);
     if (key === 'battlepass') setBattlePassModalOpen(true);
@@ -3530,6 +3533,9 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       )}
       {marketModalOpen && (
         <MarketModal open={marketModalOpen} onClose={() => setMarketModalOpen(false)} playerName={playerName} />
+      )}
+      {stockMarketModalOpen && (
+        <StockMarketModal open={stockMarketModalOpen} onClose={() => setStockMarketModalOpen(false)} />
       )}
       <TeamModal
         open={teamModalOpen}

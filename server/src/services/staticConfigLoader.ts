@@ -135,6 +135,20 @@ export type MonthCardDef = {
 
 type MonthCardFile = { month_cards: MonthCardDef[] };
 
+export type StockDefConfig = {
+  id: string;
+  code: string;
+  name: string;
+  short_name?: string;
+  sector: string;
+  description?: string;
+  initial_price_spirit_stones: number;
+  enabled?: boolean;
+  sort_weight?: number;
+};
+
+type StockDefFile = { stocks: StockDefConfig[] };
+
 export type AchievementRewardEntry =
   | { type: 'item'; item_def_id: string; qty?: number }
   | { type: 'silver' | 'spirit_stones' | 'exp'; amount: number }
@@ -792,6 +806,7 @@ type PartnerGrowthFile = {
 
 let battlePassCache: BattlePassStaticConfig | null | undefined;
 let monthCardCache: MonthCardDef[] | null | undefined;
+let stockDefCache: StockDefConfig[] | null | undefined;
 let itemDefCache: ItemDefConfig[] | null | undefined;
 let itemDefByIdCache: Map<string, ItemDefConfig> | null | undefined;
 let itemRecipeCache: ItemRecipeConfig[] | null | undefined;
@@ -1241,6 +1256,13 @@ export const getMonthCardDefinitions = (): MonthCardDef[] => {
   const file = readJsonFile<MonthCardFile>('month_card.json');
   monthCardCache = Array.isArray(file?.month_cards) ? file.month_cards : [];
   return monthCardCache;
+};
+
+export const getStockDefinitions = (): StockDefConfig[] => {
+  if (stockDefCache !== undefined) return stockDefCache ?? [];
+  const file = readJsonFile<StockDefFile>('stock_def.json');
+  stockDefCache = Array.isArray(file?.stocks) ? file.stocks : [];
+  return stockDefCache;
 };
 
 export const getItemDefinitions = (): ItemDefConfig[] => {

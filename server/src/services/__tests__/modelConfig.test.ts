@@ -164,6 +164,34 @@ test('readTextModelConfig: 功法、伙伴与云游文本模型配置应完全�
   }
 });
 
+test('readTextModelConfig: 股市文本模型配置应独立读取', () => {
+  const originalEnv = {
+    AI_STOCK_MARKET_MODEL_PROVIDER: process.env.AI_STOCK_MARKET_MODEL_PROVIDER,
+    AI_STOCK_MARKET_MODEL_URL: process.env.AI_STOCK_MARKET_MODEL_URL,
+    AI_STOCK_MARKET_MODEL_KEY: process.env.AI_STOCK_MARKET_MODEL_KEY,
+    AI_STOCK_MARKET_MODEL_NAME: process.env.AI_STOCK_MARKET_MODEL_NAME,
+  };
+
+  process.env.AI_STOCK_MARKET_MODEL_PROVIDER = 'openai';
+  process.env.AI_STOCK_MARKET_MODEL_URL = 'https://stock.example.com/v1/chat/completions';
+  process.env.AI_STOCK_MARKET_MODEL_KEY = 'stock-key';
+  process.env.AI_STOCK_MARKET_MODEL_NAME = 'stock-model';
+
+  try {
+    assert.deepEqual(readTextModelConfig('stockMarket'), {
+      provider: 'openai',
+      apiKey: 'stock-key',
+      baseURL: 'https://stock.example.com/v1',
+      modelName: 'stock-model',
+    });
+  } finally {
+    restoreEnvValue('AI_STOCK_MARKET_MODEL_PROVIDER', originalEnv.AI_STOCK_MARKET_MODEL_PROVIDER);
+    restoreEnvValue('AI_STOCK_MARKET_MODEL_URL', originalEnv.AI_STOCK_MARKET_MODEL_URL);
+    restoreEnvValue('AI_STOCK_MARKET_MODEL_KEY', originalEnv.AI_STOCK_MARKET_MODEL_KEY);
+    restoreEnvValue('AI_STOCK_MARKET_MODEL_NAME', originalEnv.AI_STOCK_MARKET_MODEL_NAME);
+  }
+});
+
 test('resolveTextModelName: 应支持逗号分隔模型并按随机值稳定选择', () => {
   assert.equal(resolveTextModelName('', 'fallback-model', 0.3), 'fallback-model');
   assert.equal(resolveTextModelName('gpt-4o-mini', 'fallback-model', 0.3), 'gpt-4o-mini');

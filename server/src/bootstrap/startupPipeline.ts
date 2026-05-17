@@ -79,6 +79,10 @@ import {
   stopRankSnapshotNightlyRefreshScheduler,
 } from "../services/rankSnapshotNightlyRefreshScheduler.js";
 import {
+  initializeStockMarketHourlyScheduler,
+  stopStockMarketHourlyScheduler,
+} from "../services/stockMarket/stockMarketScheduler.js";
+import {
   initializeCharacterSettlementResourceDeltaService,
   shutdownCharacterSettlementResourceDeltaService,
 } from "../services/shared/characterSettlementResourceDeltaService.js";
@@ -249,6 +253,8 @@ export const startServerWithPipeline = async (
     console.log("✓ 爱发电私信重试调度器已就绪\n");
     await runStartupStep("角色排行榜快照夜间刷新调度器初始化", initializeRankSnapshotNightlyRefreshScheduler);
     console.log("✓ 角色排行榜快照夜间刷新调度器已就绪\n");
+    await runStartupStep("股市每小时行情调度器初始化", initializeStockMarketHourlyScheduler);
+    console.log("✓ 股市每小时行情调度器已就绪\n");
 
     await runStartupStep("游戏时间服务初始化", initGameTimeService);
     await runStartupStep("竞技场周结算服务初始化", async () => {
@@ -363,6 +369,9 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
 
       stopRankSnapshotNightlyRefreshScheduler();
       console.log("✓ 角色排行榜快照夜间刷新调度器已关闭");
+
+      stopStockMarketHourlyScheduler();
+      console.log("✓ 股市每小时行情调度器已关闭");
 
       await shutdownWorkerPool();
       console.log("✓ Worker 池已关闭");

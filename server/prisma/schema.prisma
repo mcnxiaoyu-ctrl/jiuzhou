@@ -613,6 +613,8 @@ model characters {
   market_listing_market_listing_seller_character_idTocharacters                     market_listing[]                @relation("market_listing_seller_character_idTocharacters")
   market_trade_record_market_trade_record_buyer_character_idTocharacters            market_trade_record[]           @relation("market_trade_record_buyer_character_idTocharacters")
   market_trade_record_market_trade_record_seller_character_idTocharacters           market_trade_record[]           @relation("market_trade_record_seller_character_idTocharacters")
+  character_stock_holding                                                           character_stock_holding[]
+  stock_market_trade_record                                                         stock_market_trade_record[]
   month_card_claim_record                                                           month_card_claim_record[]
   month_card_ownership                                                              month_card_ownership[]
   research_points_ledger                                                            research_points_ledger[]
@@ -1122,6 +1124,82 @@ model market_trade_record {
   @@index([buyer_character_id, created_at(sort: Desc)], map: "idx_market_trade_record_buyer_time")
   @@index([item_def_id], map: "idx_market_trade_record_item_def_id")
   @@index([seller_character_id, created_at(sort: Desc)], map: "idx_market_trade_record_seller_time")
+}
+
+model stock_market_quote {
+  stock_id                    String   @id @db.VarChar(96)
+  current_price_spirit_stones BigInt
+  last_change_bps             Int      @default(0)
+  last_tick_id                BigInt?
+  created_at                  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([updated_at(sort: Desc)], map: "idx_stock_market_quote_updated_at")
+}
+
+model stock_market_tick {
+  id                         BigInt                       @id @default(autoincrement())
+  tick_hour                  DateTime                     @unique @db.Timestamptz(6)
+  status                     String                       @db.VarChar(16)
+  headline                   String?                      @db.VarChar(80)
+  summary                    String?
+  model_name                 String?                      @db.VarChar(128)
+  prompt_snapshot            String?
+  error_message              String?
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  finished_at                DateTime?                    @db.Timestamptz(6)
+  stock_market_price_history stock_market_price_history[]
+
+  @@index([status, tick_hour(sort: Desc)], map: "idx_stock_market_tick_status_hour")
+  @@index([tick_hour(sort: Desc)], map: "idx_stock_market_tick_hour")
+}
+
+model stock_market_price_history {
+  id                   BigInt            @id @default(autoincrement())
+  stock_id             String            @db.VarChar(96)
+  tick_id              BigInt
+  price_spirit_stones  BigInt
+  change_bps           Int
+  direction            String            @db.VarChar(16)
+  reason               String?           @db.VarChar(120)
+  created_at           DateTime          @default(now()) @db.Timestamptz(6)
+  stock_market_tick    stock_market_tick @relation(fields: [tick_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([stock_id, tick_id], map: "uq_stock_market_price_history_stock_tick")
+  @@index([stock_id, created_at(sort: Desc), id(sort: Desc)], map: "idx_stock_market_price_history_stock_time")
+  @@index([tick_id], map: "idx_stock_market_price_history_tick")
+}
+
+model character_stock_holding {
+  character_id              Int
+  stock_id                  String     @db.VarChar(96)
+  quantity                  Int
+  total_cost_spirit_stones  BigInt
+  created_at                DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime   @default(now()) @db.Timestamptz(6)
+  characters                characters @relation(fields: [character_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([character_id, stock_id])
+  @@index([character_id, updated_at(sort: Desc)], map: "idx_character_stock_holding_character_time")
+  @@index([stock_id], map: "idx_character_stock_holding_stock")
+}
+
+model stock_market_trade_record {
+  id                           BigInt     @id @default(autoincrement())
+  character_id                 Int
+  stock_id                     String     @db.VarChar(96)
+  side                         String     @db.VarChar(8)
+  quantity                     Int
+  unit_price_spirit_stones     BigInt
+  gross_amount_spirit_stones   BigInt
+  fee_spirit_stones            BigInt
+  net_amount_spirit_stones     BigInt
+  realized_pnl_spirit_stones   BigInt?
+  created_at                   DateTime   @default(now()) @db.Timestamptz(6)
+  characters                   characters @relation(fields: [character_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([character_id, created_at(sort: Desc), id(sort: Desc)], map: "idx_stock_market_trade_record_character_time")
+  @@index([stock_id, created_at(sort: Desc)], map: "idx_stock_market_trade_record_stock_time")
 }
 
 model market_partner_listing {

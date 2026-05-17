@@ -17,6 +17,7 @@ import techniqueRoutes from '../routes/techniqueRoutes.js';
 import characterTechniqueRoutes from '../routes/characterTechniqueRoutes.js';
 import teamRoutes from '../routes/teamRoutes.js';
 import marketRoutes from '../routes/marketRoutes.js';
+import stockMarketRoutes from '../routes/stockMarketRoutes.js';
 import dungeonRoutes from '../routes/dungeonRoutes.js';
 import monthCardRoutes from '../routes/monthCardRoutes.js';
 import sectRoutes from '../routes/sectRoutes.js';
@@ -60,6 +61,7 @@ export const registerRoutes = (app: Express): void => {
   app.use('/api/character', characterTechniqueRoutes);
   app.use('/api/team', teamRoutes);
   app.use('/api/market', marketRoutes);
+  app.use('/api/stock-market', stockMarketRoutes);
   app.use('/api/dungeon', dungeonRoutes);
   app.use('/api/monthcard', monthCardRoutes);
   app.use('/api/battlepass', battlePassRoutes);

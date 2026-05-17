@@ -20,6 +20,7 @@ import {
   UsergroupAddOutlined,
   ApartmentOutlined,
   ReadOutlined,
+  LineChartOutlined,
 } from '@ant-design/icons';
 import { useMemo, useState } from 'react';
 import { useIsMobile } from '../../shared/responsive';
@@ -72,6 +73,7 @@ const FunctionMenu: React.FC<FunctionMenuProps> = ({ onAction, indicators, itemS
       { key: 'task', icon: <ProfileOutlined />, label: '任务' },
       { key: 'sect', icon: <TeamOutlined />, label: '宗门' },
       { key: 'market', icon: <ShopOutlined />, label: '坊市' },
+      { key: 'stock-market', icon: <LineChartOutlined />, label: '股市' },
       { key: 'team', icon: <TeamOutlined />, label: '组队' },
       { key: 'monthcard', icon: <CreditCardOutlined />, label: '月卡' },
       // { key: 'battlepass', icon: <SafetyCertificateOutlined />, label: '战令' },
