@@ -79,6 +79,7 @@ export interface StockMarketTradeRulesDto {
 export interface StockMarketOverviewDto {
   stocks: StockMarketStockDto[];
   latestNews: StockMarketNewsDto | null;
+  newsRecords: StockMarketNewsDto[];
   portfolio: StockMarketPortfolioDto;
   tradeRules: StockMarketTradeRulesDto;
   nextRefreshAt: number;

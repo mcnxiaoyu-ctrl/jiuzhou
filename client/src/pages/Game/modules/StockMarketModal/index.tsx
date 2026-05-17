@@ -36,8 +36,10 @@ import {
 } from 'antd';
 import {
   FallOutlined,
+  LeftOutlined,
   LineChartOutlined,
   ReloadOutlined,
+  RightOutlined,
   ShoppingCartOutlined,
 } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -93,6 +95,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
   const [tradePageSize, setTradePageSize] = useState(STOCK_MARKET_DEFAULT_TRADE_PAGE_SIZE);
   const [tradesLoading, setTradesLoading] = useState(false);
   const [actionKey, setActionKey] = useState<StockMarketActionKey>('');
+  const [newsIndex, setNewsIndex] = useState(0);
 
   const refreshOverview = useCallback(async (mode: StockMarketRefreshMode = 'initial') => {
     if (mode === 'initial') {
@@ -159,6 +162,24 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
   }, [overview, quantity, selectedStock]);
   const historyModel = useMemo(() => buildStockMarketHistoryViewModel(historyPoints), [historyPoints]);
   const tradeRecordViews = useMemo(() => buildStockMarketTradeRecordViews(tradeRecords), [tradeRecords]);
+  const newsRecords = overview?.newsRecords ?? [];
+  const activeNews = newsRecords[newsIndex] ?? null;
+
+  useEffect(() => {
+    setNewsIndex(0);
+  }, [overview?.latestNews?.tickId]);
+
+  useEffect(() => {
+    setNewsIndex((current) => Math.min(current, Math.max(0, newsRecords.length - 1)));
+  }, [newsRecords.length]);
+
+  const handleShowNewerNews = useCallback(() => {
+    setNewsIndex((current) => Math.max(0, current - 1));
+  }, []);
+
+  const handleShowOlderNews = useCallback(() => {
+    setNewsIndex((current) => Math.min(Math.max(0, newsRecords.length - 1), current + 1));
+  }, [newsRecords.length]);
 
   useEffect(() => {
     if (!open || !selectedStockId) {
@@ -418,6 +439,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
           setMobileDetailOpen(false);
           setActiveTab('market');
           setActionKey('');
+          setNewsIndex(0);
           return;
         }
         void refreshOverview();
@@ -462,16 +484,45 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                   <div className="stock-market-grid">
                     <section className="stock-market-panel stock-market-news">
                       <div className="stock-market-section-head">
-                        <span>本时辰新闻</span>
-                        <Tag color="processing">下次 {overviewModel.nextRefreshText}</Tag>
+                        <span>股市新闻</span>
+                        <div className="stock-market-news-tools">
+                          {newsRecords.length > 0 ? (
+                            <>
+                              <span className="stock-market-news-counter">
+                                {newsIndex + 1}/{newsRecords.length}
+                              </span>
+                              <Tooltip title="查看更新的新闻">
+                                <Button
+                                  className="stock-market-news-nav"
+                                  size="small"
+                                  icon={<LeftOutlined />}
+                                  aria-label="查看更新的股市新闻"
+                                  disabled={newsIndex <= 0}
+                                  onClick={handleShowNewerNews}
+                                />
+                              </Tooltip>
+                              <Tooltip title="查看更早的新闻">
+                                <Button
+                                  className="stock-market-news-nav"
+                                  size="small"
+                                  icon={<RightOutlined />}
+                                  aria-label="查看更早的股市新闻"
+                                  disabled={newsIndex >= newsRecords.length - 1}
+                                  onClick={handleShowOlderNews}
+                                />
+                              </Tooltip>
+                            </>
+                          ) : null}
+                          <Tag color="processing">下次 {overviewModel.nextRefreshText}</Tag>
+                        </div>
                       </div>
-                      {overview.latestNews ? (
+                      {activeNews ? (
                         <div className="stock-market-news-content">
-                          <div className="stock-market-news-title">{overview.latestNews.headline}</div>
-                          <div className="stock-market-news-summary">{overview.latestNews.summary}</div>
-                          {overview.latestNews.impacts.length > 0 ? (
+                          <div className="stock-market-news-title">{activeNews.headline}</div>
+                          <div className="stock-market-news-summary">{activeNews.summary}</div>
+                          {activeNews.impacts.length > 0 ? (
                             <div className="stock-market-impact-list">
-                              {overview.latestNews.impacts.map((impact) => {
+                              {activeNews.impacts.map((impact) => {
                                 const tone = resolveStockMarketTone(impact.changeBps);
                                 return (
                                   <Tag key={impact.stockId} className={`stock-market-impact ${getToneClassName(tone)}`}>

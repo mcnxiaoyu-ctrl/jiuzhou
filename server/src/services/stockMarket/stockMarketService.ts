@@ -152,6 +152,7 @@ export type StockMarketPortfolioDto = {
 export type StockMarketOverviewDto = {
   stocks: StockMarketStockDto[];
   latestNews: StockMarketNewsDto | null;
+  newsRecords: StockMarketNewsDto[];
   portfolio: StockMarketPortfolioDto;
   tradeRules: ReturnType<typeof buildStockMarketTradeRulesDto>;
   nextRefreshAt: number;
@@ -299,26 +300,26 @@ class StockMarketService {
       ),
       query<StockMarketNewsRow>(
         `
-          WITH latest_tick AS (
+          WITH recent_ticks AS (
             SELECT id, tick_hour, headline, summary, created_at
             FROM stock_market_tick
             WHERE status = 'generated'
             ORDER BY tick_hour DESC
-            LIMIT 1
+            LIMIT 10
           )
           SELECT
-            lt.id,
-            lt.tick_hour,
-            lt.headline,
-            lt.summary,
-            lt.created_at,
+            rt.id,
+            rt.tick_hour,
+            rt.headline,
+            rt.summary,
+            rt.created_at,
             h.stock_id,
             h.change_bps,
             h.direction,
             h.reason
-          FROM latest_tick lt
-          LEFT JOIN stock_market_price_history h ON h.tick_id = lt.id
-          ORDER BY h.id ASC
+          FROM recent_ticks rt
+          LEFT JOIN stock_market_price_history h ON h.tick_id = rt.id
+          ORDER BY rt.tick_hour DESC, h.id ASC
         `,
       ),
     ]);
@@ -352,12 +353,15 @@ class StockMarketService {
       });
     }
 
+    const newsRecords = this.buildNewsDtos(newsResult.rows, definitionMap);
+
     return {
       stocks: stockBuildInputs.map((input) => this.buildStockDto({
         ...input,
         totalMarketValue,
       })),
-      latestNews: this.buildNewsDto(newsResult.rows, definitionMap),
+      latestNews: newsRecords[0] ?? null,
+      newsRecords,
       portfolio: {
         totalHoldingQty,
         totalCostSpiritStones: toDtoNumber(totalCost),
@@ -695,6 +699,31 @@ class StockMarketService {
       impacts,
       createdAt: toTimestamp(row.created_at),
     };
+  }
+
+  private buildNewsDtos(
+    rows: readonly StockMarketNewsRow[],
+    definitionMap: ReadonlyMap<string, StockMarketDefinition>,
+  ): StockMarketNewsDto[] {
+    const rowsByTickId = new Map<string, StockMarketNewsRow[]>();
+    for (const row of rows) {
+      const tickId = String(row.id);
+      const group = rowsByTickId.get(tickId);
+      if (group) {
+        group.push(row);
+      } else {
+        rowsByTickId.set(tickId, [row]);
+      }
+    }
+
+    const records: StockMarketNewsDto[] = [];
+    for (const group of rowsByTickId.values()) {
+      const record = this.buildNewsDto(group, definitionMap);
+      if (record) {
+        records.push(record);
+      }
+    }
+    return records;
   }
 
   private buildHistoryPointDto(row: StockMarketHistoryRow): StockMarketHistoryPointDto {

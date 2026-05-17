@@ -71,6 +71,7 @@ const buildOverview = (): StockMarketOverviewDto => ({
     },
   ],
   latestNews: null,
+  newsRecords: [],
   portfolio: {
     totalHoldingQty: 2,
     totalCostSpiritStones: 180,

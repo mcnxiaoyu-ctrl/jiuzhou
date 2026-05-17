@@ -100,38 +100,38 @@
 .stock-market-body {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   touch-action: pan-y;
   padding: 8px 10px 10px;
   background: var(--panel-bg-soft);
 
   .ant-tabs {
-    min-height: 100%;
+    height: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
-  .ant-tabs-content-holder,
-  .ant-tabs-content {
-    flex: 0 0 auto;
+  .ant-tabs-content-holder {
+    flex: 1 1 0;
     min-height: 0;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .ant-tabs-content,
   .ant-tabs-tabpane {
-    height: auto;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .ant-tabs-tabpane {
-    min-height: 0;
-    overflow: visible;
+    flex-direction: column;
   }
 
   .ant-tabs-tabpane:not(.ant-tabs-tabpane-hidden) {
-    display: block;
+    display: flex;
   }
 
   .ant-tabs-tabpane-hidden {
@@ -152,15 +152,16 @@
 }
 
 .stock-market-grid {
-  height: auto;
+  height: 100%;
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(260px, 0.86fr) minmax(0, 1.42fr);
+  grid-template-rows: 132px minmax(0, 1fr);
   grid-template-areas:
     "news portfolio"
     "list detail";
   gap: 8px;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .stock-market-panel {
@@ -174,9 +175,7 @@
 
 .stock-market-news {
   grid-area: news;
-  max-height: 132px;
-  overflow: auto;
-  scrollbar-gutter: stable;
+  overflow: hidden;
 }
 
 .stock-market-portfolio {
@@ -195,10 +194,9 @@
   grid-area: detail;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
   min-height: 0;
-  overflow: auto;
-  scrollbar-gutter: stable;
+  overflow: hidden;
 }
 
 .stock-market-detail-drawer {
@@ -241,6 +239,34 @@
   }
 }
 
+.stock-market-news-tools {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 0 auto;
+
+  .ant-tag {
+    margin-inline-end: 0;
+  }
+}
+
+.stock-market-news-counter {
+  min-width: 34px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 22px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-market-news-nav.ant-btn-sm {
+  width: 24px;
+  min-width: 24px;
+  padding-inline: 0;
+}
+
 .stock-market-news-content {
   display: flex;
   flex-direction: column;
@@ -260,6 +286,13 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
+}
+
+.stock-market-news .stock-market-news-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .stock-market-impact-list {
@@ -305,24 +338,23 @@
 }
 
 .stock-market-list {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-height: 0;
-  max-height: min(420px, calc(100dvh - 360px));
+  max-height: none;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  overflow: auto;
-  scrollbar-gutter: stable;
+  gap: 4px;
+  overflow: hidden;
 }
 
 .stock-market-stock-row {
   width: 100%;
-  min-height: 50px;
+  min-height: 42px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 9px;
+  padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid var(--border-color-soft);
   background: var(--panel-bg-soft);
@@ -426,8 +458,8 @@
     "preview preview"
     "limits limits";
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 7px;
+  padding: 7px 8px;
   border-radius: 8px;
   border: 1px solid var(--border-color-soft);
   background: var(--panel-bg-soft);
@@ -516,7 +548,7 @@
 }
 
 .stock-market-chart {
-  height: 98px;
+  height: 76px;
   display: flex;
   align-items: flex-end;
   gap: 3px;
