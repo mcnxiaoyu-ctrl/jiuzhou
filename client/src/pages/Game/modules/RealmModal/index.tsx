@@ -18,8 +18,10 @@ import { REALM_ORDER, getRealmRankFromAlias, normalizeRealmWithAlias } from '../
 import InsightPanel from './InsightPanel';
 import {
   calcInsightProgressPct,
+  formatInsightPctText,
+  simulateInsightInjectAllExp,
   simulateInsightInjectByExp,
-  type InsightGrowthStageConfig,
+  type InsightInjectBaseSnapshot,
 } from './insightShared';
 import './index.scss';
 
@@ -85,15 +87,27 @@ const INSIGHT_HOLD_STEP_ACCEL_BASE_PER_SEC = 120;
 const INSIGHT_HOLD_STEP_ACCEL_GROWTH_PER_SEC2 = 800;
 const INSIGHT_HOLD_MAX_STEP_EXP = 120_000;
 
-interface InsightHoldBaseSnapshot {
-  currentLevel: number;
-  currentProgressExp: number;
-  characterExp: number;
-  growth: InsightGrowthStageConfig;
-}
+/**
+ * 从服务端悟道总览中收敛出前端注入模拟快照。
+ *
+ * 说明：
+ * 1) 长按注入与一键全部共用同一份快照结构，避免成长配置字段在多个入口重复拼装；
+ * 2) 这里只做字段收敛，不做模拟计算，模拟仍集中在 `insightShared`；
+ * 3) 快照以用户打开操作时的总览为准，确认后由后端基于真实经验再次结算。
+ */
+const buildInsightInjectBaseSnapshot = (overview: InsightOverviewDto): InsightInjectBaseSnapshot => ({
+  currentLevel: overview.currentLevel,
+  currentProgressExp: overview.currentProgressExp,
+  characterExp: overview.characterExp,
+  growth: {
+    costStageLevels: overview.costStageLevels,
+    costStageBaseExp: overview.costStageBaseExp,
+    bonusPctPerLevel: overview.bonusPctPerLevel,
+  },
+});
 
 const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
 
   const [overview, setOverview] = useState<RealmOverviewDto | null>(null);
   const [breakthroughLoading, setBreakthroughLoading] = useState(false);
@@ -111,7 +125,7 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
   const [mobileSection, setMobileSection] = useState<MobileSectionKey>('requirements');
   const insightOverviewRef = useRef<InsightOverviewDto | null>(null);
   const insightHoldingRef = useRef(false);
-  const insightHoldBaseRef = useRef<InsightHoldBaseSnapshot | null>(null);
+  const insightHoldBaseRef = useRef<InsightInjectBaseSnapshot | null>(null);
   const insightHoldIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const insightHoldStartTimestampRef = useRef<number | null>(null);
   const insightHoldLastTimestampRef = useRef<number | null>(null);
@@ -312,6 +326,10 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
     );
   }, [insightLoading, insightOverview]);
 
+  const insightAllInjectDisabled = useMemo(() => {
+    return insightInjectDisabled || insightInjecting || insightHolding;
+  }, [insightHolding, insightInjectDisabled, insightInjecting]);
+
   const displayExp = overview ? Number(overview.exp ?? 0) : Number(character?.exp ?? 0);
   const displaySpiritStones = overview ? Number(overview.spiritStones ?? 0) : Number(character?.spiritStones ?? 0);
 
@@ -491,16 +509,7 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
     if (!currentOverview || !currentOverview.unlocked) return;
 
     resetInsightHoldPreview();
-    insightHoldBaseRef.current = {
-      currentLevel: currentOverview.currentLevel,
-      currentProgressExp: currentOverview.currentProgressExp,
-      characterExp: currentOverview.characterExp,
-      growth: {
-        costStageLevels: currentOverview.costStageLevels,
-        costStageBaseExp: currentOverview.costStageBaseExp,
-        bonusPctPerLevel: currentOverview.bonusPctPerLevel,
-      },
-    };
+    insightHoldBaseRef.current = buildInsightInjectBaseSnapshot(currentOverview);
     setInsightHoldAfterProgressExp(currentOverview.currentProgressExp);
     setInsightHoldNextLevelCostExp(currentOverview.nextLevelCostExp);
     insightHoldStartTimestampRef.current = null;
@@ -523,6 +532,69 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
       resetInsightHoldPreview();
     });
   }, [cancelInsightHoldInject, handleInjectInsight, resetInsightHoldPreview]);
+
+  /**
+   * 一键注入全部可用经验。
+   *
+   * 说明：
+   * 1) 只在点击时用共享纯函数模拟一次，避免渲染期按大额经验反复循环；
+   * 2) 确认弹窗展示本次消耗、预计等级和进度，确认后复用统一注入提交入口；
+   * 3) 不绕过后端结算，服务端仍会按真实角色经验与悟道进度做最终写入。
+   */
+  const handleInjectAllInsightExp = useCallback(() => {
+    if (insightAllInjectDisabled) return;
+    const currentOverview = insightOverviewRef.current;
+    if (!currentOverview || !currentOverview.unlocked) return;
+
+    const snapshot = buildInsightInjectBaseSnapshot(currentOverview);
+    const preview = simulateInsightInjectAllExp(snapshot);
+    if (preview.appliedExp <= 0) {
+      message.info('当前没有可注入经验');
+      return;
+    }
+
+    cancelInsightHoldInject();
+    resetInsightHoldPreview();
+    modal.confirm({
+      title: '确认注入全部经验？',
+      content: (
+        <div className="realm-insight-confirm">
+          <div>
+            本次将消耗全部可注入经验：
+            <span className="realm-insight-confirm-strong">{preview.appliedExp.toLocaleString()}</span>
+          </div>
+          <div>
+            预计悟道等级：
+            <span className="realm-insight-confirm-strong">
+              {snapshot.currentLevel.toLocaleString()} → {preview.afterLevel.toLocaleString()}
+            </span>
+            ，提升 {preview.gainedLevels.toLocaleString()} 级
+          </div>
+          <div>
+            预计总加成增加：
+            <span className="realm-insight-confirm-strong">{formatInsightPctText(preview.gainedBonusPct)}</span>
+          </div>
+          <div className="realm-insight-confirm-muted">
+            注入后当前级进度：{preview.afterProgressExp.toLocaleString()} / {preview.nextLevelCostExp.toLocaleString()}
+          </div>
+          <div className="realm-insight-confirm-muted">确认后会立即消耗角色经验并写入悟道进度。</div>
+        </div>
+      ),
+      okText: '确认注入',
+      cancelText: '取消',
+      centered: true,
+      onOk: () => handleInjectInsight(preview.appliedExp).then(() => {
+        resetInsightHoldPreview();
+      }),
+    });
+  }, [
+    cancelInsightHoldInject,
+    handleInjectInsight,
+    insightAllInjectDisabled,
+    message,
+    modal,
+    resetInsightHoldPreview,
+  ]);
 
   /**
    * 指针按下入口（统一鼠标/触控）：
@@ -780,6 +852,13 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
           ) : (
             <div className="realm-pane-footer">
               <Button
+                className="realm-insight-all-btn"
+                disabled={insightAllInjectDisabled}
+                onClick={handleInjectAllInsightExp}
+              >
+                注入全部经验
+              </Button>
+              <Button
                 type="primary"
                 className={`realm-insight-hold-btn ${insightHolding ? 'is-holding' : ''}`.trim()}
                 loading={insightInjecting && !insightHolding}
@@ -870,6 +949,13 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
         <div className="realm-mobile-footer">{renderActionButtons()}</div>
       ) : (
         <div className="realm-mobile-footer">
+          <Button
+            className="realm-insight-all-btn"
+            disabled={insightAllInjectDisabled}
+            onClick={handleInjectAllInsightExp}
+          >
+            注入全部经验
+          </Button>
           <Button
             type="primary"
             className={`realm-insight-hold-btn ${insightHolding ? 'is-holding' : ''}`.trim()}

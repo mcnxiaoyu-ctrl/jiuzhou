@@ -3,6 +3,7 @@ import {
   buildInsightBonusPctByLevel,
   calcInsightCostByLevel,
   calcInsightProgressPct,
+  simulateInsightInjectAllExp,
   simulateInsightInjectByExp,
   type InsightGrowthStageConfig,
 } from '../insightShared';
@@ -75,5 +76,19 @@ describe('insightShared', () => {
     expect(preview.afterLevel).toBe(3);
     expect(preview.afterProgressExp).toBe(0);
     expect(preview.gainedBonusPct).toBe(0.0015);
+  });
+
+  it('simulateInsightInjectAllExp: 应使用快照中的全部角色经验作为注入预算', () => {
+    const preview = simulateInsightInjectAllExp({
+      currentLevel: 0,
+      currentProgressExp: 0,
+      characterExp: 1_200_000,
+      growth: mockGrowth,
+    });
+
+    expect(preview.appliedExp).toBe(1_200_000);
+    expect(preview.gainedLevels).toBe(2);
+    expect(preview.afterLevel).toBe(2);
+    expect(preview.afterProgressExp).toBe(200_000);
   });
 });

@@ -12,6 +12,7 @@
  *
  * 数据流/状态流：
  * RealmModal 长按状态 -> simulateInsightInjectByExp -> InsightPanel 展示预览；
+ * RealmModal 一键全部 -> simulateInsightInjectAllExp -> 确认弹窗展示预览；
  * 松开后把 `appliedExp` 提交后端，后端按同规则真实结算。
  *
  * 关键边界条件与坑点：
@@ -33,6 +34,13 @@ export interface InsightInjectByExpPreview {
   nextLevelCostExp: number;
   gainedBonusPct: number;
   afterBonusPct: number;
+}
+
+export interface InsightInjectBaseSnapshot {
+  currentLevel: number;
+  currentProgressExp: number;
+  characterExp: number;
+  growth: InsightGrowthStageConfig;
 }
 
 const toSafeInteger = (value: number): number => {
@@ -129,6 +137,25 @@ export const simulateInsightInjectByExp = (params: {
     gainedBonusPct: afterBonusPct - beforeBonusPct,
     afterBonusPct,
   };
+};
+
+/**
+ * 按“全部可用经验”模拟一次悟道注入。
+ *
+ * 说明：
+ * 1) 与长按注入共用 `InsightInjectBaseSnapshot`，确保两种入口的等级、进度和加成预览口径一致；
+ * 2) 仅在用户打开确认框时计算，避免在渲染期按大额经验做循环模拟；
+ * 3) 返回的 `appliedExp` 是确认后提交后端的唯一预算值。
+ */
+export const simulateInsightInjectAllExp = (
+  snapshot: InsightInjectBaseSnapshot,
+): InsightInjectByExpPreview => {
+  return simulateInsightInjectByExp({
+    currentLevel: snapshot.currentLevel,
+    currentProgressExp: snapshot.currentProgressExp,
+    injectExp: snapshot.characterExp,
+    growth: snapshot.growth,
+  });
 };
 
 /**

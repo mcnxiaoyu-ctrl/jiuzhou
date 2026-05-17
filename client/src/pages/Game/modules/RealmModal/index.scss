@@ -630,6 +630,10 @@
 }
 
 
+.realm-insight-all-btn {
+  min-width: 150px;
+}
+
 .realm-insight-hold-btn {
   min-width: 180px;
   touch-action: none;
@@ -656,6 +660,26 @@
   margin-top: 6px;
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.realm-insight-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-color);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.realm-insight-confirm-strong {
+  margin-inline: 4px;
+  color: var(--primary-color);
+  font-weight: 800;
+}
+
+.realm-insight-confirm-muted {
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 @media screen and (max-width: 768px) {
@@ -874,6 +898,11 @@
     flex: 1;
     min-width: 0;
     padding-inline: 8px;
+  }
+
+  .realm-insight-all-btn,
+  .realm-insight-hold-btn {
+    min-width: 0;
   }
 
   .realm-insight-overview-grid,
