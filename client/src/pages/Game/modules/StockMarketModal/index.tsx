@@ -228,6 +228,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
       centered
       width={1040}
       className="stock-market-modal"
+      wrapClassName="stock-market-modal-wrap"
       destroyOnHidden
       afterOpenChange={(visible) => {
         if (!visible) {
@@ -247,11 +248,13 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
     >
       <div className="stock-market-shell">
         <div className="stock-market-header">
-          <div>
+          <div className="stock-market-header-main">
             <div className="stock-market-title">股市</div>
             <div className="stock-market-subtitle">系统即时做市，新闻每小时刷新，成交按当前价结算</div>
           </div>
           <Button
+            className="stock-market-refresh-button"
+            size="small"
             icon={<ReloadOutlined />}
             onClick={() => void refreshOverview()}
             loading={loading}
@@ -404,6 +407,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                               <div className="stock-market-trade-input">
                                 <span>数量</span>
                                 <InputNumber<number>
+                                  size="small"
                                   min={1}
                                   max={maxOrderQty}
                                   precision={0}
@@ -412,10 +416,22 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                                 />
                               </div>
                               <div className="stock-market-trade-preview">
-                                <span>成交额 {tradePreview.grossAmountText}</span>
-                                <span>手续费 {tradePreview.feeAmountText}</span>
-                                <span>买入扣款 {tradePreview.buyCostText}</span>
-                                <span>卖出到账 {tradePreview.sellReceiveText}</span>
+                                <span className="stock-market-trade-preview-item">
+                                  <span>成交额</span>
+                                  <strong>{tradePreview.grossAmountText}</strong>
+                                </span>
+                                <span className="stock-market-trade-preview-item">
+                                  <span>手续费</span>
+                                  <strong>{tradePreview.feeAmountText}</strong>
+                                </span>
+                                <span className="stock-market-trade-preview-item">
+                                  <span>买入扣款</span>
+                                  <strong>{tradePreview.buyCostText}</strong>
+                                </span>
+                                <span className="stock-market-trade-preview-item">
+                                  <span>卖出到账</span>
+                                  <strong>{tradePreview.sellReceiveText}</strong>
+                                </span>
                               </div>
                               {orderValueExceeded ? (
                                 <div className="stock-market-warning">
@@ -425,6 +441,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                               <div className="stock-market-trade-actions">
                                 <Button
                                   type="primary"
+                                  size="small"
                                   icon={<ShoppingCartOutlined />}
                                   disabled={!canSubmit}
                                   loading={actionKey === 'buy'}
@@ -433,6 +450,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                                   买入
                                 </Button>
                                 <Button
+                                  size="small"
                                   icon={<FallOutlined />}
                                   disabled={!canSell}
                                   loading={actionKey === 'sell'}
