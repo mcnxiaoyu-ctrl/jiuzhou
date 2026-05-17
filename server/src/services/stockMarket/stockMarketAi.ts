@@ -7,17 +7,17 @@
  *
  * 输入 / 输出：
  * - 输入：当前启用股票、当前价格快照、生成 tick 时间。
- * - 输出：校验后的新闻标题、摘要、模型快照与最多 3 条股票影响。
+ * - 输出：校验后的新闻标题、摘要、模型快照与包含具体涨跌的股票影响。
  *
  * 数据流 / 状态流：
- * 股票静态定义 + 当前价格 -> prompt -> `callConfiguredTextModel` -> JSON 解析 -> 影响去重与白名单校验 -> 调度服务消费。
+ * 股票静态定义 + 当前价格 -> prompt -> `callConfiguredTextModel` -> JSON 解析 -> 影响去重、白名单和涨跌数值校验 -> 调度服务消费。
  *
  * 复用设计说明：
- * - AI 只给“新闻语义”，服务端规则模块统一决定涨跌幅，避免模型直接控制数值造成经济风险。
+ * - AI 决定具体涨跌百分比，服务端规则模块统一做两位小数与 ±8% 边界校验，避免规则散落。
  * - prompt、schema 和校验集中在这里，后续更换模型或扩展股票数量时不会影响交易服务。
  *
  * 关键边界条件与坑点：
- * 1. 模型返回未知股票 ID、重复股票 ID 或超过 3 个影响都视为失败，不允许部分落价。
+ * 1. 模型返回未知股票 ID、重复股票 ID 或越界涨跌都视为失败，不允许部分落价。
  * 2. 模型未配置或返回非 JSON 对象时只记录失败 tick，不使用本地模板兜底改价。
  */
 import { AI_GENERATION_TIMEOUT_MS } from '../shared/aiGenerationTimeout.js';
@@ -31,10 +31,7 @@ import {
   type TechniqueTextModelJsonSchemaObject,
 } from '../shared/techniqueTextModelShared.js';
 import type { StockMarketDefinition } from './stockMarketDefinitions.js';
-import type {
-  StockMarketImpactDirection,
-  StockMarketImpactLevel,
-} from './stockMarketRules.js';
+import { normalizeStockMarketAiChangeBps } from './stockMarketRules.js';
 
 export type StockMarketAiQuoteInput = {
   stockId: string;
@@ -43,8 +40,7 @@ export type StockMarketAiQuoteInput = {
 
 export type StockMarketValidatedImpact = {
   stockId: string;
-  direction: StockMarketImpactDirection;
-  impactLevel: StockMarketImpactLevel;
+  changeBps: number;
   reason: string;
 };
 
@@ -66,7 +62,6 @@ export type StockMarketAiNewsDraftResult =
     reason: string;
   };
 
-const STOCK_MARKET_AI_MAX_IMPACTS = 3;
 const STOCK_MARKET_AI_TEMPERATURE = 0.8;
 
 const STOCK_MARKET_NEWS_RESPONSE_SCHEMA: TechniqueTextModelJsonSchemaObject = {
@@ -87,22 +82,18 @@ const STOCK_MARKET_NEWS_RESPONSE_SCHEMA: TechniqueTextModelJsonSchemaObject = {
     impacts: {
       type: 'array',
       minItems: 1,
-      maxItems: STOCK_MARKET_AI_MAX_IMPACTS,
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['stockId', 'direction', 'impactLevel', 'reason'],
+        required: ['stockId', 'changePercent', 'reason'],
         properties: {
           stockId: {
             type: 'string',
           },
-          direction: {
-            type: 'string',
-            enum: ['bullish', 'bearish'],
-          },
-          impactLevel: {
-            type: 'string',
-            enum: ['minor', 'normal', 'major'],
+          changePercent: {
+            type: 'number',
+            minimum: -8,
+            maximum: 8,
           },
           reason: {
             type: 'string',
@@ -120,14 +111,6 @@ const STOCK_MARKET_RESPONSE_FORMAT = buildTechniqueTextModelJsonSchemaResponseFo
   schema: STOCK_MARKET_NEWS_RESPONSE_SCHEMA,
 });
 
-const isImpactDirection = (value: string): value is StockMarketImpactDirection => {
-  return value === 'bullish' || value === 'bearish';
-};
-
-const isImpactLevel = (value: string): value is StockMarketImpactLevel => {
-  return value === 'minor' || value === 'normal' || value === 'major';
-};
-
 const readTrimmedText = (
   source: TechniqueModelJsonObject,
   key: string,
@@ -140,23 +123,26 @@ const readTrimmedText = (
   return normalized;
 };
 
+const readChangeBps = (source: TechniqueModelJsonObject): number | null => {
+  const value = source.changePercent;
+  if (typeof value !== 'number') return null;
+  return normalizeStockMarketAiChangeBps(value);
+};
+
 const readImpactEntry = (
   source: TechniqueModelJsonObject,
   enabledStockIdSet: ReadonlySet<string>,
 ): StockMarketValidatedImpact | null => {
   const stockId = readTrimmedText(source, 'stockId', 96);
-  const directionRaw = readTrimmedText(source, 'direction', 16);
-  const impactLevelRaw = readTrimmedText(source, 'impactLevel', 16);
+  const changeBps = readChangeBps(source);
   const reason = readTrimmedText(source, 'reason', 80);
   if (!stockId || !enabledStockIdSet.has(stockId)) return null;
-  if (!directionRaw || !isImpactDirection(directionRaw)) return null;
-  if (!impactLevelRaw || !isImpactLevel(impactLevelRaw)) return null;
+  if (changeBps === null) return null;
   if (!reason) return null;
 
   return {
     stockId,
-    direction: directionRaw,
-    impactLevel: impactLevelRaw,
+    changeBps,
     reason,
   };
 };
@@ -171,7 +157,7 @@ export const validateStockMarketAiNewsPayload = (
   if (!headline || !summary) {
     return { success: false, reason: 'AI 新闻标题或摘要无效' };
   }
-  if (!Array.isArray(rawImpacts) || rawImpacts.length <= 0 || rawImpacts.length > STOCK_MARKET_AI_MAX_IMPACTS) {
+  if (!Array.isArray(rawImpacts) || rawImpacts.length <= 0) {
     return { success: false, reason: 'AI 新闻影响列表无效' };
   }
 
@@ -205,9 +191,9 @@ const buildStockMarketSystemMessage = (): string => {
   return [
     '你是九州修仙录世界中的坊间财经新闻撰稿人。',
     '每次只生成一条中文股市新闻，新闻必须贴合修仙商业、宗门、丹药、炼器、阵法、拍卖等题材。',
-    '你只判断新闻对股票的语义影响，不输出价格、涨跌幅、投资建议或现实金融内容。',
+    '你需要判断新闻对股票的具体涨跌百分比，不输出价格、投资建议或现实金融内容。',
     '必须只输出合法 JSON 对象，JSON 字段必须严格符合 response_format schema。',
-    'impacts 最多 3 条，stockId 必须来自用户提供的股票列表，禁止虚构股票。',
+    'impacts 可包含所有受新闻明确影响的股票，stockId 必须来自用户提供的股票列表，禁止虚构股票，changePercent 必须在 -8 到 8 之间且最多两位小数。',
   ].join('\n');
 };
 
@@ -235,9 +221,9 @@ const buildStockMarketUserMessage = (params: {
       '必须只输出合法 JSON 对象，不要输出 Markdown、解释文字或代码块',
       'headline 使用 4 到 40 个中文字符',
       'summary 使用 12 到 160 个中文字符',
-      'direction 只能是 bullish 或 bearish；没有明确涨跌影响的股票不要放入 impacts',
-      'impactLevel 只能是 minor、normal、major',
-      'reason 只解释新闻如何影响该股票，不包含数值',
+      'changePercent 表示本次涨跌百分比，正数上涨、负数下跌，范围 -8 到 8，最多两位小数，不能为 0',
+      '没有明确涨跌影响的股票不要放入 impacts',
+      'reason 只解释新闻如何影响该股票，不重复填写涨跌数值',
     ],
   });
 };

@@ -10,7 +10,7 @@
  * - 输出：股市概览 DTO、历史价格、交易记录和买卖结果。
  *
  * 数据流 / 状态流：
- * 静态股票 -> 初始 quote -> AI 新闻 -> 规则映射涨跌 -> quote/history；
+ * 静态股票 -> 初始 quote -> AI 新闻具体涨跌 -> quote/history；
  * 角色请求 -> 交易校验 -> 货币 Delta -> holding/trade record -> route 推送角色刷新。
  *
  * 复用设计说明：
@@ -46,7 +46,6 @@ import {
   calculateReleasedStockHoldingCost,
   calculateStockMarketGrossAmount,
   calculateStockMarketTradeFee,
-  resolveStockMarketChangeBps,
 } from './stockMarketRules.js';
 import {
   floorStockMarketTickHour,
@@ -874,7 +873,7 @@ class StockMarketService {
         const quote = quoteByStockId.get(impact.stockId);
         if (!quote) continue;
         const currentPrice = toBigIntValue(quote.current_price_spirit_stones);
-        const changeBps = resolveStockMarketChangeBps(impact.direction, impact.impactLevel);
+        const changeBps = impact.changeBps;
         const nextPrice = applyStockMarketPriceChange(currentPrice, changeBps);
         const direction = buildStockMarketDirection(changeBps);
         await query(

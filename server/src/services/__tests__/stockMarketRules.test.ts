@@ -2,7 +2,7 @@
  * 股市规则纯函数回归测试
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：锁定稳健档涨跌、手续费、持仓成本释放和初始 10 支股票配置。
+ * 1. 做什么：锁定 AI 涨跌数值边界、手续费、持仓成本释放和初始 10 支股票配置。
  * 2. 不做什么：不访问数据库、不调用 AI、不覆盖 HTTP 路由。
  *
  * 输入 / 输出：
@@ -29,7 +29,7 @@ import {
   calculateStockMarketMaxSellQuantity,
   calculateReleasedStockHoldingCost,
   calculateStockMarketTradeFee,
-  resolveStockMarketChangeBps,
+  normalizeStockMarketAiChangeBps,
 } from '../stockMarket/stockMarketRules.js';
 
 test('股市初始配置应包含 10 支启用股票且 ID 唯一', () => {
@@ -41,15 +41,20 @@ test('股市初始配置应包含 10 支启用股票且 ID 唯一', () => {
   assert.ok(definitions.every((definition) => definition.initial_price_spirit_stones > 0));
 });
 
-test('resolveStockMarketChangeBps: 稳健档涨跌应限制在服务端规则范围内', () => {
-  assert.equal(resolveStockMarketChangeBps('bullish', 'major'), 800);
-  assert.equal(resolveStockMarketChangeBps('bearish', 'major'), -600);
+test('normalizeStockMarketAiChangeBps: AI 涨跌应限制为两位小数且不超过正负 8%', () => {
+  assert.equal(normalizeStockMarketAiChangeBps(8), 800);
+  assert.equal(normalizeStockMarketAiChangeBps(-8), -800);
+  assert.equal(normalizeStockMarketAiChangeBps(1.23), 123);
+  assert.equal(normalizeStockMarketAiChangeBps(0), null);
+  assert.equal(normalizeStockMarketAiChangeBps(1.234), null);
+  assert.equal(normalizeStockMarketAiChangeBps(8.01), null);
+  assert.equal(normalizeStockMarketAiChangeBps(-8.01), null);
 });
 
 test('applyStockMarketPriceChange: 应按基点调整价格且不低于 1 灵石', () => {
   assert.equal(applyStockMarketPriceChange(100n, 800), 108n);
-  assert.equal(applyStockMarketPriceChange(100n, -600), 94n);
-  assert.equal(applyStockMarketPriceChange(1n, -600), 1n);
+  assert.equal(applyStockMarketPriceChange(100n, -800), 92n);
+  assert.equal(applyStockMarketPriceChange(1n, -800), 1n);
 });
 
 test('calculateStockMarketTradeFee: 买卖手续费应按 1% 向上取整', () => {
