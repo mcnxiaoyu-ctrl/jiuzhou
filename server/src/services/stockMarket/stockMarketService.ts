@@ -38,13 +38,11 @@ import {
 } from './stockMarketAi.js';
 import {
   STOCK_MARKET_HISTORY_LIMIT,
-  STOCK_MARKET_MAX_ORDER_QTY,
-  STOCK_MARKET_MAX_ORDER_VALUE_SPIRIT_STONES,
-  STOCK_MARKET_MAX_SINGLE_STOCK_VALUE_SPIRIT_STONES,
-  STOCK_MARKET_MAX_TOTAL_VALUE_SPIRIT_STONES,
   STOCK_MARKET_TRADE_RECORD_PAGE_SIZE,
   applyStockMarketPriceChange,
   buildStockMarketTradeRulesDto,
+  calculateStockMarketMaxBuyQuantity,
+  calculateStockMarketMaxSellQuantity,
   calculateReleasedStockHoldingCost,
   calculateStockMarketGrossAmount,
   calculateStockMarketTradeFee,
@@ -125,6 +123,8 @@ export type StockMarketStockDto = {
   holdingCostSpiritStones: number;
   holdingMarketValueSpiritStones: number;
   unrealizedPnlSpiritStones: number;
+  maxBuyQty: number;
+  maxSellQty: number;
 };
 
 export type StockMarketNewsDto = {
@@ -181,6 +181,16 @@ export type StockMarketTradeRecordDto = {
   createdAt: number;
 };
 
+type StockMarketStockBuildInput = {
+  definition: StockMarketDefinition;
+  price: bigint;
+  lastChangeBps: number;
+  updatedAt: Date | string;
+  quantity: number;
+  holdingCost: bigint;
+  marketValue: bigint;
+};
+
 const toBigIntValue = (value: string | number | bigint | null | undefined): bigint => {
   if (typeof value === 'bigint') return value;
   if (typeof value === 'number') return BigInt(Math.trunc(value));
@@ -207,7 +217,7 @@ const toDtoNumber = (value: bigint): number => {
 
 const normalizeTradeQuantity = (quantity: number): number | null => {
   if (!Number.isInteger(quantity) || quantity <= 0) return null;
-  if (quantity > STOCK_MARKET_MAX_ORDER_QTY) return null;
+  if (!Number.isSafeInteger(quantity)) return null;
   return quantity;
 };
 
@@ -316,7 +326,7 @@ class StockMarketService {
     const quoteByStockId = new Map(quoteResult.rows.map((row) => [row.stock_id, row] as const));
     const holdingByStockId = new Map(holdingResult.rows.map((row) => [row.stock_id, row] as const));
     const definitionMap = new Map(definitions.map((definition) => [definition.id, definition] as const));
-    const stocks: StockMarketStockDto[] = [];
+    const stockBuildInputs: StockMarketStockBuildInput[] = [];
     let totalHoldingQty = 0;
     let totalCost = 0n;
     let totalMarketValue = 0n;
@@ -331,7 +341,7 @@ class StockMarketService {
       totalHoldingQty += quantity;
       totalCost += holdingCost;
       totalMarketValue += marketValue;
-      stocks.push(this.buildStockDto({
+      stockBuildInputs.push({
         definition,
         price,
         lastChangeBps: toIntValue(quote?.last_change_bps ?? 0),
@@ -339,11 +349,14 @@ class StockMarketService {
         quantity,
         holdingCost,
         marketValue,
-      }));
+      });
     }
 
     return {
-      stocks,
+      stocks: stockBuildInputs.map((input) => this.buildStockDto({
+        ...input,
+        totalMarketValue,
+      })),
       latestNews: this.buildNewsDto(newsResult.rows, definitionMap),
       portfolio: {
         totalHoldingQty,
@@ -447,22 +460,18 @@ class StockMarketService {
 
     const holding = await this.loadHoldingForUpdate(params.characterId, definition.id);
     const price = toBigIntValue(quote.current_price_spirit_stones);
-    const grossAmount = calculateStockMarketGrossAmount(price, quantity);
-    if (grossAmount > STOCK_MARKET_MAX_ORDER_VALUE_SPIRIT_STONES) {
-      return { success: false, message: '单笔交易金额超过限制' };
-    }
-
     const currentQuantity = toIntValue(holding?.quantity ?? 0);
-    const nextSingleValue = price * BigInt(currentQuantity + quantity);
-    if (nextSingleValue > STOCK_MARKET_MAX_SINGLE_STOCK_VALUE_SPIRIT_STONES) {
-      return { success: false, message: '单支股票持仓超过限制' };
-    }
-
     const totalHoldingValue = await this.loadCurrentTotalHoldingValue(params.characterId);
-    if (totalHoldingValue + grossAmount > STOCK_MARKET_MAX_TOTAL_VALUE_SPIRIT_STONES) {
-      return { success: false, message: '股市总持仓超过限制' };
+    const maxBuyQuantity = calculateStockMarketMaxBuyQuantity({
+      unitPriceSpiritStones: price,
+      currentSingleStockValueSpiritStones: price * BigInt(currentQuantity),
+      currentTotalValueSpiritStones: totalHoldingValue,
+    });
+    if (quantity > maxBuyQuantity) {
+      return { success: false, message: '购买数量超过当前可买上限' };
     }
 
+    const grossAmount = calculateStockMarketGrossAmount(price, quantity);
     const fee = calculateStockMarketTradeFee(grossAmount);
     const consumeResult = await consumeCharacterCurrenciesExact(params.characterId, {
       spiritStones: grossAmount + fee,
@@ -517,7 +526,8 @@ class StockMarketService {
     const holding = await this.loadHoldingForUpdate(params.characterId, definition.id);
     if (!holding) return { success: false, message: '未持有该股票' };
     const holdingQuantity = toIntValue(holding.quantity);
-    if (holdingQuantity < quantity) return { success: false, message: '持仓数量不足' };
+    const maxSellQuantity = calculateStockMarketMaxSellQuantity(holdingQuantity);
+    if (quantity > maxSellQuantity) return { success: false, message: '持仓数量不足' };
 
     const price = toBigIntValue(quote.current_price_spirit_stones);
     const grossAmount = calculateStockMarketGrossAmount(price, quantity);
@@ -635,6 +645,7 @@ class StockMarketService {
     quantity: number;
     holdingCost: bigint;
     marketValue: bigint;
+    totalMarketValue: bigint;
   }): StockMarketStockDto {
     return {
       stockId: params.definition.id,
@@ -650,6 +661,12 @@ class StockMarketService {
       holdingCostSpiritStones: toDtoNumber(params.holdingCost),
       holdingMarketValueSpiritStones: toDtoNumber(params.marketValue),
       unrealizedPnlSpiritStones: toDtoNumber(params.marketValue - params.holdingCost),
+      maxBuyQty: calculateStockMarketMaxBuyQuantity({
+        unitPriceSpiritStones: params.price,
+        currentSingleStockValueSpiritStones: params.marketValue,
+        currentTotalValueSpiritStones: params.totalMarketValue,
+      }),
+      maxSellQty: calculateStockMarketMaxSellQuantity(params.quantity),
     };
   }
 

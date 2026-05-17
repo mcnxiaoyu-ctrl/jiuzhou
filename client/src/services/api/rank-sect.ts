@@ -49,6 +49,7 @@ export type ArenaRankRowDto = {
 };
 
 export type PartnerRankMetricDto = 'level' | 'power';
+export type StockMarketRankMetricDto = 'value' | 'profit';
 
 export type PartnerRankRowDto = {
   rank: number;
@@ -63,6 +64,22 @@ export type PartnerRankRowDto = {
   role: string;
   level: number;
   power: number;
+};
+
+export type StockMarketRankRowDto = {
+  rank: number;
+  characterId: number;
+  name: string;
+  title: string;
+  avatar: string | null;
+  monthCardActive: boolean;
+  realm: string;
+  totalHoldingQty: number;
+  totalMarketValueSpiritStones: number;
+  totalCostSpiritStones: number;
+  unrealizedPnlSpiritStones: number;
+  realizedPnlSpiritStones: number;
+  totalPnlSpiritStones: number;
 };
 
 export interface RankOverviewResponse {
@@ -104,6 +121,13 @@ export const getPartnerRanks = (
   limit: number = 50,
 ): Promise<{ success: boolean; message: string; data?: PartnerRankRowDto[] }> => {
   return api.get('/rank/partner', { params: { metric, limit } });
+};
+
+export const getStockMarketRanks = (
+  metric: StockMarketRankMetricDto,
+  limit: number = 50,
+): Promise<{ success: boolean; message: string; data?: StockMarketRankRowDto[] }> => {
+  return api.get('/rank/stock-market', { params: { metric, limit } });
 };
 
 export type SectPositionDto = 'leader' | 'vice_leader' | 'elder' | 'elite' | 'disciple';

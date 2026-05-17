@@ -41,6 +41,8 @@ export interface StockMarketStockView {
   holdingCostText: string;
   unrealizedPnlText: string;
   unrealizedPnlTone: StockMarketTone;
+  maxBuyQtyText: string;
+  maxSellQtyText: string;
 }
 
 export interface StockMarketPortfolioView {
@@ -64,10 +66,15 @@ export interface StockMarketTradePreview {
   feeAmount: number;
   buyCost: number;
   sellReceive: number;
+  maxBuyQty: number;
+  maxSellQty: number;
+  maxTradeQty: number;
   grossAmountText: string;
   feeAmountText: string;
   buyCostText: string;
   sellReceiveText: string;
+  maxBuyQtyText: string;
+  maxSellQtyText: string;
 }
 
 export interface StockMarketHistoryPointView {
@@ -165,6 +172,8 @@ const buildStockView = (
     holdingCostText: formatStockMarketCurrency(stock.holdingCostSpiritStones),
     unrealizedPnlText: formatStockMarketSignedCurrency(stock.unrealizedPnlSpiritStones),
     unrealizedPnlTone: resolveStockMarketTone(stock.unrealizedPnlSpiritStones),
+    maxBuyQtyText: formatStockMarketQuantity(stock.maxBuyQty),
+    maxSellQtyText: formatStockMarketQuantity(stock.maxSellQty),
   };
 };
 
@@ -219,6 +228,8 @@ export const buildStockMarketTradePreview = (
     : 0;
   const buyCost = grossAmount + feeAmount;
   const sellReceive = Math.max(0, grossAmount - feeAmount);
+  const maxBuyQty = Math.max(0, toFiniteInteger(stock.maxBuyQty));
+  const maxSellQty = Math.max(0, toFiniteInteger(stock.maxSellQty));
 
   return {
     quantity: normalizedQuantity,
@@ -226,10 +237,15 @@ export const buildStockMarketTradePreview = (
     feeAmount,
     buyCost,
     sellReceive,
+    maxBuyQty,
+    maxSellQty,
+    maxTradeQty: Math.max(1, maxBuyQty, maxSellQty),
     grossAmountText: formatStockMarketCurrency(grossAmount),
     feeAmountText: formatStockMarketCurrency(feeAmount),
     buyCostText: formatStockMarketCurrency(buyCost),
     sellReceiveText: formatStockMarketCurrency(sellReceive),
+    maxBuyQtyText: formatStockMarketQuantity(maxBuyQty),
+    maxSellQtyText: formatStockMarketQuantity(maxSellQty),
   };
 };
 

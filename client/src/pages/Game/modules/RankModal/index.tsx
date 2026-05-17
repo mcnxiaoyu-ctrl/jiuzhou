@@ -2,8 +2,8 @@
  * 排行榜弹窗。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：统一承载角色榜单与伙伴榜单展示，复用同一左侧分类入口，避免功能菜单再拆第二个排行弹窗。
- * 2. 做什么：把伙伴榜的“等级 / 战力”维度切换收在榜单头部，保证桌面端与移动端都能在同一入口快速切换。
+ * 1. 做什么：统一承载角色榜单、伙伴榜单与股市榜单展示，复用同一左侧分类入口，避免功能菜单再拆第二个排行弹窗。
+ * 2. 做什么：把伙伴榜、股市榜的维度切换收在榜单头部，保证桌面端与移动端都能在同一入口快速切换。
  * 3. 不做什么：不处理接口缓存、不决定后端排序逻辑，也不负责菜单按钮状态。
  *
  * 输入/输出：
@@ -14,13 +14,13 @@
  * Game -> RankModal -> rankShared 拉取当前榜单数据 -> 本组件按 tab / metric 渲染表格或移动卡片。
  *
  * 复用设计说明：
- * 1. 原有四类角色榜继续复用既有 Table / 卡片结构，新增伙伴榜只补独有的头像、品质和元素展示，避免整份弹窗重写。
- * 2. 伙伴身份块、等级文案和头部维度切换都收在本文件局部纯函数里，移动端与桌面端共享同一展示规则。
- * 3. 伙伴榜和角色榜仍共用同一左侧分类导航，用户只记一个“排行”入口，不产生风格割裂的新菜单路径。
+ * 1. 原有四类角色榜继续复用既有 Table / 卡片结构，新增多维榜只补各自差异字段，避免整份弹窗重写。
+ * 2. 伙伴身份块、股市收益文案和头部维度切换都收在本文件局部纯函数里，移动端与桌面端共享同一展示规则。
+ * 3. 多维榜和角色榜仍共用同一左侧分类导航，用户只记一个“排行”入口，不产生风格割裂的新菜单路径。
  *
  * 关键边界条件与坑点：
  * 1. 伙伴榜等级维度只展示真实等级，不能把生效等级拼进文案，否则会和榜单排序口径不一致。
- * 2. 移动端头部空间很紧，伙伴维度切换必须压在榜单头部而不是左侧导航里，否则会出现横向滚动和点击目标过密。
+ * 2. 移动端头部空间很紧，多维切换必须压在榜单头部而不是左侧导航里，否则会出现横向滚动和点击目标过密。
  */
 import { Button, Modal, Segmented, Table, Tag } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -30,6 +30,7 @@ import type {
   PartnerRankRowDto,
   RealmRankRowDto,
   SectRankRowDto,
+  StockMarketRankRowDto,
   WealthRankRowDto,
 } from '../../../../services/api';
 import { resolveAvatarUrl } from '../../../../services/api';
@@ -49,9 +50,13 @@ import {
   RANK_TAB_KEYS,
   RANK_TAB_META,
   RANK_TAB_META_MAP,
+  STOCK_MARKET_RANK_METRIC_KEYS,
+  STOCK_MARKET_RANK_METRIC_META,
+  STOCK_MARKET_RANK_METRIC_META_MAP,
   useRankRows,
   type PartnerRankMetric,
   type RankTab,
+  type StockMarketRankMetric,
 } from './rankShared';
 import { RankViewportPartnerAvatar, RankViewportPlayerAvatar } from './ViewportAvatar';
 import './index.scss';
@@ -63,6 +68,18 @@ interface RankModalProps {
 }
 
 const formatPartnerRankLevelText = (row: Pick<PartnerRankRowDto, 'level'>): string => `Lv.${row.level}`;
+const formatStockMarketRankCurrency = (value: number): string => `${value.toLocaleString()} 灵石`;
+
+const formatStockMarketRankSignedCurrency = (value: number): string => {
+  if (value === 0) return formatStockMarketRankCurrency(0);
+  return `${value > 0 ? '+' : '-'}${formatStockMarketRankCurrency(Math.abs(value))}`;
+};
+
+const resolveStockMarketRankToneClassName = (value: number): string => {
+  if (value > 0) return 'rank-stock-market-value--up';
+  if (value < 0) return 'rank-stock-market-value--down';
+  return 'rank-stock-market-value--flat';
+};
 
 const renderCurrencyBadge = (icon: string, alt: string, value?: number): ReactNode => (
   <span className="rank-money">
@@ -71,11 +88,12 @@ const renderCurrencyBadge = (icon: string, alt: string, value?: number): ReactNo
   </span>
 );
 
-type CharacterRankRow = RealmRankRowDto | WealthRankRowDto | ArenaRankRowDto;
+type CharacterRankRow = RealmRankRowDto | WealthRankRowDto | ArenaRankRowDto | StockMarketRankRowDto;
 
 const RankModal: React.FC<RankModalProps> = ({ open, onClose, onSelectPlayer }) => {
   const [tab, setTab] = useState<RankTab>('realm');
   const [partnerMetric, setPartnerMetric] = useState<PartnerRankMetric>('level');
+  const [stockMarketMetric, setStockMarketMetric] = useState<StockMarketRankMetric>('value');
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
   const isMobile = useIsMobile();
   const {
@@ -86,17 +104,22 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose, onSelectPlayer }) 
   const {
     rankRowsByTab,
     partnerRankRowsByMetric,
+    stockMarketRankRowsByMetric,
     loadingByTab,
     partnerLoadingByMetric,
-  } = useRankRows(open, tab, partnerMetric);
+    stockMarketLoadingByMetric,
+  } = useRankRows(open, tab, partnerMetric, stockMarketMetric);
 
   const realmRanks: RealmRankRowDto[] = rankRowsByTab.realm;
   const sectRanks: SectRankRowDto[] = rankRowsByTab.sect;
   const wealthRanks: WealthRankRowDto[] = rankRowsByTab.wealth;
   const arenaRanks: ArenaRankRowDto[] = rankRowsByTab.arena;
   const partnerRanks: PartnerRankRowDto[] = partnerRankRowsByMetric[partnerMetric];
+  const stockMarketRanks: StockMarketRankRowDto[] = stockMarketRankRowsByMetric[stockMarketMetric];
   const loading = tab === 'partner'
     ? partnerLoadingByMetric[partnerMetric]
+    : tab === 'stockMarket'
+    ? stockMarketLoadingByMetric[stockMarketMetric]
     : loadingByTab[tab];
 
   const leftItems = useMemo(
@@ -111,6 +134,11 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose, onSelectPlayer }) 
 
   const partnerMetricOptions = useMemo(
     () => PARTNER_RANK_METRIC_META.map((item) => ({ value: item.key, label: item.label })),
+    [],
+  );
+
+  const stockMarketMetricOptions = useMemo(
+    () => STOCK_MARKET_RANK_METRIC_META.map((item) => ({ value: item.key, label: item.label })),
     [],
   );
 
@@ -193,6 +221,12 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose, onSelectPlayer }) 
       </div>
     );
   };
+
+  const renderStockMarketRankValue = (value: number, signed: boolean = false) => (
+    <span className={`rank-stock-market-value ${resolveStockMarketRankToneClassName(value)}`}>
+      {signed ? formatStockMarketRankSignedCurrency(value) : formatStockMarketRankCurrency(value)}
+    </span>
+  );
 
   const renderCharacterIdentity = (row: CharacterRankRow, options?: { mobile?: boolean }) => {
     const avatarUrl = resolveAvatarUrl(row.avatar ?? undefined);
@@ -583,11 +617,132 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose, onSelectPlayer }) 
     </div>
   );
 
+  const renderStockMarketRank = () => (
+    <div className="rank-pane">
+      {renderPaneTop(
+        RANK_TAB_META_MAP.stockMarket.label,
+        STOCK_MARKET_RANK_METRIC_META_MAP[stockMarketMetric].subtitle,
+        <Segmented
+          className="rank-partner-segmented"
+          value={stockMarketMetric}
+          options={stockMarketMetricOptions}
+          onChange={(value) => {
+            if (typeof value !== 'string') return;
+            if (!STOCK_MARKET_RANK_METRIC_KEYS.includes(value as StockMarketRankMetric)) return;
+            setStockMarketMetric(value as StockMarketRankMetric);
+          }}
+        />,
+      )}
+      {renderPaneBody(isMobile ? (
+          <div className="rank-mobile-list">
+            {loading ? <div className="rank-empty">加载中...</div> : null}
+            {!loading
+              ? stockMarketRanks.map((row) => (
+                  <div key={row.characterId} className="rank-mobile-card">
+                    <div className="rank-mobile-card-head">
+                      <div className="rank-mobile-rank">#{row.rank}</div>
+                      <div className="rank-mobile-player-head">
+                        {renderCharacterIdentity(row, { mobile: true })}
+                        <Tag color="green">{row.realm}</Tag>
+                      </div>
+                    </div>
+                    <div className="rank-mobile-meta rank-mobile-meta--stock-market">
+                      <span className="rank-mobile-meta-item">
+                        <span className="rank-mobile-meta-k">市值</span>
+                        <span className="rank-mobile-meta-v">
+                          {formatStockMarketRankCurrency(row.totalMarketValueSpiritStones)}
+                        </span>
+                      </span>
+                      <span className="rank-mobile-meta-item">
+                        <span className="rank-mobile-meta-k">总收益</span>
+                        <span className="rank-mobile-meta-v">
+                          {renderStockMarketRankValue(row.totalPnlSpiritStones, true)}
+                        </span>
+                      </span>
+                      <span className="rank-mobile-meta-item">
+                        <span className="rank-mobile-meta-k">浮盈亏</span>
+                        <span className="rank-mobile-meta-v">
+                          {renderStockMarketRankValue(row.unrealizedPnlSpiritStones, true)}
+                        </span>
+                      </span>
+                      <span className="rank-mobile-meta-item">
+                        <span className="rank-mobile-meta-k">已实现</span>
+                        <span className="rank-mobile-meta-v">
+                          {renderStockMarketRankValue(row.realizedPnlSpiritStones, true)}
+                        </span>
+                      </span>
+                      <span className="rank-mobile-meta-item">
+                        <span className="rank-mobile-meta-k">持股</span>
+                        <span className="rank-mobile-meta-v">{row.totalHoldingQty.toLocaleString()} 股</span>
+                      </span>
+                    </div>
+                  </div>
+                ))
+              : null}
+            {!loading && stockMarketRanks.length === 0 ? <div className="rank-empty">暂无股市排行</div> : null}
+          </div>
+        ) : (
+          <Table
+            size="small"
+            rowKey={(row) => String(row.characterId)}
+            pagination={false}
+            loading={loading}
+            columns={[
+              { title: '名次', dataIndex: 'rank', key: 'rank', width: 80, render: (value: number) => `#${value}` },
+              {
+                title: '玩家',
+                key: 'name',
+                width: 250,
+                render: (_value: number, row: StockMarketRankRowDto) => renderCharacterIdentity(row),
+              },
+              {
+                title: '持仓市值',
+                dataIndex: 'totalMarketValueSpiritStones',
+                key: 'totalMarketValueSpiritStones',
+                width: 150,
+                render: (value: number) => formatStockMarketRankCurrency(value),
+              },
+              {
+                title: '总收益',
+                dataIndex: 'totalPnlSpiritStones',
+                key: 'totalPnlSpiritStones',
+                width: 140,
+                render: (value: number) => renderStockMarketRankValue(value, true),
+              },
+              {
+                title: '浮盈亏',
+                dataIndex: 'unrealizedPnlSpiritStones',
+                key: 'unrealizedPnlSpiritStones',
+                width: 140,
+                render: (value: number) => renderStockMarketRankValue(value, true),
+              },
+              {
+                title: '已实现',
+                dataIndex: 'realizedPnlSpiritStones',
+                key: 'realizedPnlSpiritStones',
+                width: 140,
+                render: (value: number) => renderStockMarketRankValue(value, true),
+              },
+              {
+                title: '持股',
+                dataIndex: 'totalHoldingQty',
+                key: 'totalHoldingQty',
+                render: (value: number) => `${value.toLocaleString()} 股`,
+              },
+            ]}
+            dataSource={stockMarketRanks}
+          />
+        )
+      )}
+    </div>
+  );
+
   const panelContent = () => {
     if (tab === 'realm') return renderRealmRank();
     if (tab === 'sect') return renderSectRank();
     if (tab === 'wealth') return renderWealthRank();
     if (tab === 'arena') return renderArenaRank();
+    if (tab === 'stockMarket') return renderStockMarketRank();
     return renderPartnerRank();
   };
 
@@ -607,6 +762,7 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose, onSelectPlayer }) 
           if (!visible) return;
           setTab('realm');
           setPartnerMetric('level');
+          setStockMarketMetric('value');
         }}
       >
         <div className="rank-shell">

@@ -49,6 +49,8 @@ const buildOverview = (): StockMarketOverviewDto => ({
       holdingCostSpiritStones: 180,
       holdingMarketValueSpiritStones: 202,
       unrealizedPnlSpiritStones: 22,
+      maxBuyQty: 100,
+      maxSellQty: 2,
     },
     {
       stockId: 'stock-xuantie-mining',
@@ -64,6 +66,8 @@ const buildOverview = (): StockMarketOverviewDto => ({
       holdingCostSpiritStones: 0,
       holdingMarketValueSpiritStones: 0,
       unrealizedPnlSpiritStones: 0,
+      maxBuyQty: 200,
+      maxSellQty: 0,
     },
   ],
   latestNews: null,
@@ -75,7 +79,6 @@ const buildOverview = (): StockMarketOverviewDto => ({
   },
   tradeRules: {
     feeBps: 100,
-    maxOrderQty: 1000,
     maxOrderValueSpiritStones: 2_000_000,
     maxSingleStockValueSpiritStones: 5_000_000,
     maxTotalValueSpiritStones: 20_000_000,
@@ -103,6 +106,9 @@ describe('stockMarketView', () => {
     expect(preview.feeAmount).toBe(2);
     expect(preview.buyCost).toBe(103);
     expect(preview.sellReceive).toBe(99);
+    expect(preview.maxBuyQty).toBe(100);
+    expect(preview.maxSellQty).toBe(2);
+    expect(preview.maxTradeQty).toBe(100);
   });
 
   it('历史走势应输出最新价与涨跌色调', () => {

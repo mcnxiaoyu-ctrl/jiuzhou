@@ -21,13 +21,12 @@
  * 1. 手续费使用向上取整，防止小额拆单绕过 1% 成本。
  * 2. 释放持仓成本必须按卖出数量比例计算，避免分批卖出时盈亏被重复计算。
  */
-export type StockMarketImpactDirection = 'bullish' | 'bearish' | 'neutral';
+export type StockMarketImpactDirection = 'bullish' | 'bearish';
 export type StockMarketImpactLevel = 'minor' | 'normal' | 'major';
 
 export const STOCK_MARKET_TICK_INTERVAL_MS = 60 * 60 * 1000;
 export const STOCK_MARKET_TRADE_FEE_BPS = 100;
 export const STOCK_MARKET_MIN_PRICE_SPIRIT_STONES = 1n;
-export const STOCK_MARKET_MAX_ORDER_QTY = 1_000;
 export const STOCK_MARKET_MAX_ORDER_VALUE_SPIRIT_STONES = 2_000_000n;
 export const STOCK_MARKET_MAX_SINGLE_STOCK_VALUE_SPIRIT_STONES = 5_000_000n;
 export const STOCK_MARKET_MAX_TOTAL_VALUE_SPIRIT_STONES = 20_000_000n;
@@ -47,11 +46,6 @@ const STOCK_MARKET_CHANGE_BPS: Record<
     minor: -150,
     normal: -400,
     major: -600,
-  },
-  neutral: {
-    minor: 0,
-    normal: 0,
-    major: 0,
   },
 };
 
@@ -101,6 +95,43 @@ export const calculateStockMarketGrossAmount = (
   return unitPriceSpiritStones * BigInt(Math.max(0, Math.floor(quantity)));
 };
 
+const toSafeQuantity = (value: bigint): number => {
+  const normalized = Number(value);
+  if (!Number.isSafeInteger(normalized)) {
+    throw new Error('股市可交易数量超过前端安全整数范围');
+  }
+  return Math.max(0, Math.trunc(normalized));
+};
+
+export const calculateStockMarketMaxBuyQuantity = (params: {
+  unitPriceSpiritStones: bigint;
+  currentSingleStockValueSpiritStones: bigint;
+  currentTotalValueSpiritStones: bigint;
+}): number => {
+  const unitPrice = params.unitPriceSpiritStones > 0n
+    ? params.unitPriceSpiritStones
+    : STOCK_MARKET_MIN_PRICE_SPIRIT_STONES;
+  const singleStockRemainingValue = STOCK_MARKET_MAX_SINGLE_STOCK_VALUE_SPIRIT_STONES
+    - params.currentSingleStockValueSpiritStones;
+  const totalRemainingValue = STOCK_MARKET_MAX_TOTAL_VALUE_SPIRIT_STONES
+    - params.currentTotalValueSpiritStones;
+  const availableValue = [
+    STOCK_MARKET_MAX_ORDER_VALUE_SPIRIT_STONES,
+    singleStockRemainingValue,
+    totalRemainingValue,
+  ].reduce((min, value) => (value < min ? value : min));
+  if (availableValue <= 0n) return 0;
+  return toSafeQuantity(availableValue / unitPrice);
+};
+
+export const calculateStockMarketMaxSellQuantity = (
+  holdingQuantity: number,
+): number => {
+  return Number.isSafeInteger(holdingQuantity) && holdingQuantity > 0
+    ? Math.trunc(holdingQuantity)
+    : 0;
+};
+
 export const calculateReleasedStockHoldingCost = (
   totalCostSpiritStones: bigint,
   holdingQuantity: number,
@@ -113,7 +144,6 @@ export const calculateReleasedStockHoldingCost = (
 
 export const buildStockMarketTradeRulesDto = () => ({
   feeBps: STOCK_MARKET_TRADE_FEE_BPS,
-  maxOrderQty: STOCK_MARKET_MAX_ORDER_QTY,
   maxOrderValueSpiritStones: Number(STOCK_MARKET_MAX_ORDER_VALUE_SPIRIT_STONES),
   maxSingleStockValueSpiritStones: Number(STOCK_MARKET_MAX_SINGLE_STOCK_VALUE_SPIRIT_STONES),
   maxTotalValueSpiritStones: Number(STOCK_MARKET_MAX_TOTAL_VALUE_SPIRIT_STONES),

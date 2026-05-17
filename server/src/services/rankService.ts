@@ -16,6 +16,15 @@ const normalizePartnerRankMetric = (
   return null;
 };
 
+const normalizeStockMarketRankMetric = (
+  metric: string | null | undefined,
+): StockMarketRankMetric | null => {
+  const normalized = typeof metric === 'string' ? metric.trim().toLowerCase() : '';
+  if (normalized === 'value') return 'value';
+  if (normalized === 'profit') return 'profit';
+  return null;
+};
+
 const RANK_CACHE_REDIS_TTL_SEC = 30;
 const RANK_CACHE_MEMORY_TTL_MS = 5_000;
 
@@ -67,6 +76,7 @@ export type ArenaRankRow = {
 };
 
 export type PartnerRankMetric = 'level' | 'power';
+export type StockMarketRankMetric = 'value' | 'profit';
 
 export type PartnerRankRow = {
   rank: number;
@@ -81,6 +91,22 @@ export type PartnerRankRow = {
   role: string;
   level: number;
   power: number;
+};
+
+export type StockMarketRankRow = {
+  rank: number;
+  characterId: number;
+  name: string;
+  title: string;
+  avatar: string | null;
+  monthCardActive: boolean;
+  realm: string;
+  totalHoldingQty: number;
+  totalMarketValueSpiritStones: number;
+  totalCostSpiritStones: number;
+  unrealizedPnlSpiritStones: number;
+  realizedPnlSpiritStones: number;
+  totalPnlSpiritStones: number;
 };
 
 type RealmRankQueryRow = {
@@ -139,6 +165,21 @@ type PartnerRankQueryRow = {
   role: string;
   level: number | string;
   power: number | string;
+};
+
+type StockMarketRankQueryRow = {
+  rank: number | string;
+  character_id: number | string;
+  name: string;
+  title: string | null;
+  avatar: string | null;
+  realm: string;
+  totalHoldingQty: number | string;
+  totalMarketValueSpiritStones: number | string;
+  totalCostSpiritStones: number | string;
+  unrealizedPnlSpiritStones: number | string;
+  realizedPnlSpiritStones: number | string;
+  totalPnlSpiritStones: number | string;
 };
 
 const loadRealmRanks = async (limit: number): Promise<RealmRankRow[]> => {
@@ -314,6 +355,16 @@ const PARTNER_RANK_ORDER_SQL: Record<PartnerRankMetric, string> = {
   power: 'prs.power DESC, prs.level DESC, prs.partner_id ASC',
 };
 
+const STOCK_MARKET_RANK_ORDER_SQL: Record<StockMarketRankMetric, string> = {
+  value: '"totalMarketValueSpiritStones" DESC, "totalPnlSpiritStones" DESC, character_id ASC',
+  profit: '"totalPnlSpiritStones" DESC, "totalMarketValueSpiritStones" DESC, character_id ASC',
+};
+
+const STOCK_MARKET_RANK_FILTER_SQL: Record<StockMarketRankMetric, string> = {
+  value: 'COALESCE(h.total_market_value_spirit_stones, 0)::bigint > 0',
+  profit: '(COALESCE(h.total_market_value_spirit_stones, 0)::bigint > 0 OR r.character_id IS NOT NULL)',
+};
+
 const loadPartnerRanks = async (
   metric: PartnerRankMetric,
   limit: number,
@@ -362,6 +413,100 @@ const loadPartnerRanks = async (
   }));
 };
 
+const loadStockMarketRanks = async (
+  metric: StockMarketRankMetric,
+  limit: number,
+): Promise<StockMarketRankRow[]> => {
+  const orderSql = STOCK_MARKET_RANK_ORDER_SQL[metric];
+  const filterSql = STOCK_MARKET_RANK_FILTER_SQL[metric];
+  const res = await query(
+    `
+      WITH holding_totals AS (
+        SELECT
+          csh.character_id,
+          SUM(csh.quantity)::bigint AS total_holding_qty,
+          SUM(csh.quantity::bigint * smq.current_price_spirit_stones)::bigint AS total_market_value_spirit_stones,
+          SUM(csh.total_cost_spirit_stones)::bigint AS total_cost_spirit_stones
+        FROM character_stock_holding csh
+        JOIN stock_market_quote smq ON smq.stock_id = csh.stock_id
+        GROUP BY csh.character_id
+      ),
+      realized_totals AS (
+        SELECT
+          character_id,
+          SUM(COALESCE(realized_pnl_spirit_stones, 0))::bigint AS realized_pnl_spirit_stones
+        FROM stock_market_trade_record
+        GROUP BY character_id
+      ),
+      rank_input AS (
+        SELECT
+          c.id AS character_id,
+          COALESCE(NULLIF(c.nickname, ''), CONCAT('修士', c.id::text)) AS name,
+          c.title,
+          c.avatar,
+          c.realm,
+          COALESCE(h.total_holding_qty, 0)::bigint AS "totalHoldingQty",
+          COALESCE(h.total_market_value_spirit_stones, 0)::bigint AS "totalMarketValueSpiritStones",
+          COALESCE(h.total_cost_spirit_stones, 0)::bigint AS "totalCostSpiritStones",
+          (
+            COALESCE(h.total_market_value_spirit_stones, 0)::bigint
+            - COALESCE(h.total_cost_spirit_stones, 0)::bigint
+          )::bigint AS "unrealizedPnlSpiritStones",
+          COALESCE(r.realized_pnl_spirit_stones, 0)::bigint AS "realizedPnlSpiritStones",
+          (
+            COALESCE(h.total_market_value_spirit_stones, 0)::bigint
+            - COALESCE(h.total_cost_spirit_stones, 0)::bigint
+            + COALESCE(r.realized_pnl_spirit_stones, 0)::bigint
+          )::bigint AS "totalPnlSpiritStones"
+        FROM characters c
+        LEFT JOIN holding_totals h ON h.character_id = c.id
+        LEFT JOIN realized_totals r ON r.character_id = c.id
+        WHERE c.nickname IS NOT NULL
+          AND c.nickname <> ''
+          AND ${filterSql}
+      )
+      SELECT
+        ROW_NUMBER() OVER (ORDER BY ${orderSql})::int AS rank,
+        character_id,
+        name,
+        title,
+        avatar,
+        realm,
+        "totalHoldingQty",
+        "totalMarketValueSpiritStones",
+        "totalCostSpiritStones",
+        "unrealizedPnlSpiritStones",
+        "realizedPnlSpiritStones",
+        "totalPnlSpiritStones"
+      FROM rank_input
+      ORDER BY rank
+      LIMIT $1
+    `,
+    [limit],
+  );
+
+  const rows = res.rows as StockMarketRankQueryRow[];
+  const monthCardActiveMap = await getMonthCardActiveMapByCharacterIds(
+    rows.map((row) => Number(row.character_id)),
+  );
+
+  return rows.map((row) => ({
+    rank: Number(row.rank),
+    characterId: Number(row.character_id),
+    name: String(row.name),
+    title: typeof row.title === 'string' ? row.title : '',
+    avatar: typeof row.avatar === 'string' && row.avatar.trim().length > 0 ? row.avatar : null,
+    monthCardActive: monthCardActiveMap.get(Number(row.character_id)) ?? false,
+    realm: String(row.realm),
+    totalHoldingQty: Number(row.totalHoldingQty),
+    totalMarketValueSpiritStones: Number(row.totalMarketValueSpiritStones),
+    totalCostSpiritStones: Number(row.totalCostSpiritStones),
+    unrealizedPnlSpiritStones: Number(row.unrealizedPnlSpiritStones),
+    realizedPnlSpiritStones: Number(row.realizedPnlSpiritStones),
+    totalPnlSpiritStones: Number(row.totalPnlSpiritStones),
+  }));
+};
+
 const realmRankCache = createCacheLayer<number, RealmRankRow[]>({
   keyPrefix: 'rank:realm:',
   redisTtlSec: RANK_CACHE_REDIS_TTL_SEC,
@@ -402,6 +547,20 @@ const createPartnerRankCache = (
 const partnerRankCaches: Record<PartnerRankMetric, ReturnType<typeof createPartnerRankCache>> = {
   level: createPartnerRankCache('level'),
   power: createPartnerRankCache('power'),
+};
+
+const createStockMarketRankCache = (
+  metric: StockMarketRankMetric,
+) => createCacheLayer<number, StockMarketRankRow[]>({
+  keyPrefix: `rank:stock-market:${metric}:`,
+  redisTtlSec: RANK_CACHE_REDIS_TTL_SEC,
+  memoryTtlMs: RANK_CACHE_MEMORY_TTL_MS,
+  loader: (limit) => loadStockMarketRanks(metric, limit),
+});
+
+const stockMarketRankCaches: Record<StockMarketRankMetric, ReturnType<typeof createStockMarketRankCache>> = {
+  value: createStockMarketRankCache('value'),
+  profit: createStockMarketRankCache('profit'),
 };
 
 export const getRealmRanks = async (
@@ -447,6 +606,20 @@ export const getPartnerRanks = async (
 
   const l = clampLimit(limit, 50);
   const data = (await partnerRankCaches[metric].get(l)) ?? [];
+  return { success: true, message: 'ok', data };
+};
+
+export const getStockMarketRanks = async (
+  metricRaw: string | null | undefined,
+  limit?: number,
+): Promise<{ success: boolean; message: string; data?: StockMarketRankRow[] }> => {
+  const metric = normalizeStockMarketRankMetric(metricRaw);
+  if (!metric) {
+    return { success: false, message: '股市排行维度不合法' };
+  }
+
+  const l = clampLimit(limit, 50);
+  const data = (await stockMarketRankCaches[metric].get(l)) ?? [];
   return { success: true, message: 'ok', data };
 };
 

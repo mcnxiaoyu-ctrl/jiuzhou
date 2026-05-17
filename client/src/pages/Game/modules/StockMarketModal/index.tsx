@@ -58,7 +58,6 @@ import {
   buildStockMarketTradePreview,
   buildStockMarketTradeRecordViews,
   formatStockMarketBps,
-  formatStockMarketCurrency,
   resolveStockMarketTone,
   type StockMarketTone,
 } from './stockMarketView';
@@ -206,6 +205,14 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
     setQuantity(value === null ? 1 : Math.max(1, Math.trunc(value)));
   }, []);
 
+  useEffect(() => {
+    if (!tradePreview) return;
+    setQuantity((current) => {
+      const normalized = Math.max(1, Math.trunc(current));
+      return normalized > tradePreview.maxTradeQty ? tradePreview.maxTradeQty : normalized;
+    });
+  }, [tradePreview]);
+
   const handleSelectStock = useCallback((stockId: string) => {
     setSelectedStockId(stockId);
     if (isMobile) {
@@ -230,12 +237,13 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
     }
   }, [activeTab, message, refreshOverview, refreshTrades, selectedStock, tradePage, tradePreview]);
 
-  const maxOrderQty = overview?.tradeRules.maxOrderQty ?? 1;
-  const orderValueExceeded = Boolean(
-    overview && tradePreview && tradePreview.grossAmount > overview.tradeRules.maxOrderValueSpiritStones,
+  const maxTradeQty = tradePreview?.maxTradeQty ?? 1;
+  const canBuy = Boolean(
+    selectedStock && tradePreview && tradePreview.quantity > 0 && tradePreview.quantity <= tradePreview.maxBuyQty,
   );
-  const canSubmit = Boolean(selectedStock && tradePreview && tradePreview.quantity > 0 && !orderValueExceeded);
-  const canSell = Boolean(canSubmit && selectedStock && tradePreview && selectedStock.holdingQty >= tradePreview.quantity);
+  const canSell = Boolean(
+    selectedStock && tradePreview && tradePreview.quantity > 0 && tradePreview.quantity <= tradePreview.maxSellQty,
+  );
 
   const stockDetailContent = useMemo(() => {
     if (!overview || !selectedStockView || !selectedStock || !tradePreview) {
@@ -287,7 +295,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
             <InputNumber<number>
               size="small"
               min={1}
-              max={maxOrderQty}
+              max={maxTradeQty}
               precision={0}
               value={quantity}
               onChange={handleQuantityChange}
@@ -311,17 +319,16 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
               <strong>{tradePreview.sellReceiveText}</strong>
             </span>
           </div>
-          {orderValueExceeded ? (
-            <div className="stock-market-warning">
-              单笔成交额不可超过 {formatStockMarketCurrency(overview.tradeRules.maxOrderValueSpiritStones)}
-            </div>
-          ) : null}
+          <div className="stock-market-trade-limits">
+            <span>可买 {tradePreview.maxBuyQtyText}</span>
+            <span>可卖 {tradePreview.maxSellQtyText}</span>
+          </div>
           <div className="stock-market-trade-actions">
             <Button
               type="primary"
               size="small"
               icon={<ShoppingCartOutlined />}
-              disabled={!canSubmit}
+              disabled={!canBuy}
               loading={actionKey === 'buy'}
               onClick={() => void handleTrade('buy')}
             >
@@ -374,14 +381,13 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
     );
   }, [
     actionKey,
+    canBuy,
     canSell,
-    canSubmit,
     handleQuantityChange,
     handleTrade,
     historyLoading,
     historyModel,
-    maxOrderQty,
-    orderValueExceeded,
+    maxTradeQty,
     overview,
     quantity,
     selectedStock,

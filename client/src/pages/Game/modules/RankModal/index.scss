@@ -292,6 +292,23 @@
   color: var(--text-secondary);
 }
 
+.rank-stock-market-value {
+  font-weight: var(--font-weight-section);
+  white-space: nowrap;
+}
+
+.rank-stock-market-value--up {
+  color: var(--danger-color);
+}
+
+.rank-stock-market-value--down {
+  color: var(--success-color);
+}
+
+.rank-stock-market-value--flat {
+  color: var(--text-secondary);
+}
+
 .rank-mobile-list {
   display: flex;
   flex-direction: column;
@@ -349,6 +366,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px 10px;
+}
+
+.rank-mobile-meta--stock-market {
+  gap: 7px 12px;
 }
 
 .rank-mobile-meta-item {

@@ -25,6 +25,8 @@ import test from 'node:test';
 import { getEnabledStockDefinitions } from '../stockMarket/stockMarketDefinitions.js';
 import {
   applyStockMarketPriceChange,
+  calculateStockMarketMaxBuyQuantity,
+  calculateStockMarketMaxSellQuantity,
   calculateReleasedStockHoldingCost,
   calculateStockMarketTradeFee,
   resolveStockMarketChangeBps,
@@ -42,7 +44,6 @@ test('股市初始配置应包含 10 支启用股票且 ID 唯一', () => {
 test('resolveStockMarketChangeBps: 稳健档涨跌应限制在服务端规则范围内', () => {
   assert.equal(resolveStockMarketChangeBps('bullish', 'major'), 800);
   assert.equal(resolveStockMarketChangeBps('bearish', 'major'), -600);
-  assert.equal(resolveStockMarketChangeBps('neutral', 'normal'), 0);
 });
 
 test('applyStockMarketPriceChange: 应按基点调整价格且不低于 1 灵石', () => {
@@ -55,6 +56,29 @@ test('calculateStockMarketTradeFee: 买卖手续费应按 1% 向上取整', () =
   assert.equal(calculateStockMarketTradeFee(10_000n), 100n);
   assert.equal(calculateStockMarketTradeFee(101n), 2n);
   assert.equal(calculateStockMarketTradeFee(1n), 1n);
+});
+
+test('calculateStockMarketMaxBuyQuantity: 买入数量应按剩余持仓价值与单笔金额共同收敛', () => {
+  assert.equal(calculateStockMarketMaxBuyQuantity({
+    unitPriceSpiritStones: 100n,
+    currentSingleStockValueSpiritStones: 4_999_800n,
+    currentTotalValueSpiritStones: 10_000_000n,
+  }), 2);
+  assert.equal(calculateStockMarketMaxBuyQuantity({
+    unitPriceSpiritStones: 100n,
+    currentSingleStockValueSpiritStones: 1_000_000n,
+    currentTotalValueSpiritStones: 19_999_950n,
+  }), 0);
+  assert.equal(calculateStockMarketMaxBuyQuantity({
+    unitPriceSpiritStones: 100n,
+    currentSingleStockValueSpiritStones: 1_000_000n,
+    currentTotalValueSpiritStones: 1_000_000n,
+  }), 20_000);
+});
+
+test('calculateStockMarketMaxSellQuantity: 卖出数量应直接取当前持仓数量', () => {
+  assert.equal(calculateStockMarketMaxSellQuantity(2500), 2500);
+  assert.equal(calculateStockMarketMaxSellQuantity(0), 0);
 });
 
 test('calculateReleasedStockHoldingCost: 分批卖出应按数量比例释放成本', () => {

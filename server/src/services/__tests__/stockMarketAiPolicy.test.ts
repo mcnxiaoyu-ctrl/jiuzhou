@@ -18,7 +18,7 @@
  *
  * 关键边界条件与坑点：
  * 1. 只要出现未知或重复 stockId，整条新闻必须失败，不能部分落价。
- * 2. neutral 影响允许通过，但最终涨跌幅由规则模块映射为 0。
+ * 2. 没有明确涨跌的股票不能进入 impacts，否则会在前端形成无意义的 0% 行情影响。
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -39,9 +39,9 @@ test('validateStockMarketAiNewsPayload: 合法 AI 新闻应输出可执行影响
       },
       {
         stockId: 'stock-b',
-        direction: 'neutral',
+        direction: 'bearish',
         impactLevel: 'minor',
-        reason: '消息与矿材需求关联较弱',
+        reason: '丹药走强挤压矿材题材热度',
       },
     ],
   }, enabledStockIds);
@@ -50,7 +50,25 @@ test('validateStockMarketAiNewsPayload: 合法 AI 新闻应输出可执行影响
   if (result.success) {
     assert.equal(result.draft.impacts.length, 2);
     assert.equal(result.draft.impacts[0]?.direction, 'bullish');
+    assert.equal(result.draft.impacts[1]?.direction, 'bearish');
   }
+});
+
+test('validateStockMarketAiNewsPayload: neutral 影响不应进入可见行情', () => {
+  const result = validateStockMarketAiNewsPayload({
+    headline: '矿脉消息传开',
+    summary: '北境矿脉消息只影响矿材与炼器，没有明确关联的股票不应输出。',
+    impacts: [
+      {
+        stockId: 'stock-c',
+        direction: 'neutral',
+        impactLevel: 'minor',
+        reason: '消息与该股票关联较弱',
+      },
+    ],
+  }, enabledStockIds);
+
+  assert.equal(result.success, false);
 });
 
 test('validateStockMarketAiNewsPayload: 未知股票或重复股票应整条失败', () => {

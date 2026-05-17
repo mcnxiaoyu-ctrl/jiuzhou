@@ -424,7 +424,7 @@
   grid-template-areas:
     "input actions"
     "preview preview"
-    "warning warning";
+    "limits limits";
   align-items: center;
   gap: 8px;
   padding: 8px;
@@ -486,10 +486,14 @@
   }
 }
 
-.stock-market-warning {
-  grid-area: warning;
-  color: var(--danger-color);
+.stock-market-trade-limits {
+  grid-area: limits;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .stock-market-trade-actions {
@@ -833,7 +837,7 @@
     grid-template-areas:
       "input actions"
       "preview preview"
-      "warning warning";
+      "limits limits";
     gap: 6px;
     padding: 7px;
   }
