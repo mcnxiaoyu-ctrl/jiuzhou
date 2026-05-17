@@ -99,7 +99,7 @@ export const BattleTeamPanel: React.FC<BattleTeamPanelProps> = memo(({
           style={{
             '--battle-team-columns': String(layout.formation.renderColumns),
             '--battle-team-rows': String(layout.formation.rows),
-            // '--battle-card-scale': String(layout.layout.cardScale),
+            '--battle-card-scale': String(layout.layout.cardScale),
           } as CSSProperties}
         >
           {layout.formation.renderCells.map((unit, index) => (

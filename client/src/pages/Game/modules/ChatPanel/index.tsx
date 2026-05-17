@@ -228,6 +228,19 @@ const pushWithLimit = <T,>(list: T[], item: T, limit: number): T[] => {
   return [...list.slice(list.length - limit + 1), item];
 };
 
+const pushManyWithLimit = <T,>(list: T[], items: readonly T[], limit: number): T[] => {
+  if (limit <= 0) return [];
+  if (items.length === 0) return list;
+  const normalizedItems = items.length > limit
+    ? items.slice(items.length - limit)
+    : items;
+  const keepCount = Math.max(0, limit - normalizedItems.length);
+  return [
+    ...list.slice(Math.max(0, list.length - keepCount)),
+    ...normalizedItems,
+  ];
+};
+
 const replaceMessageById = (
   list: Message[],
   messageId: string,
@@ -305,6 +318,38 @@ const appendMessage = (buckets: MessageBuckets, message: Message): MessageBucket
 
 const appendMessages = (buckets: MessageBuckets, messages: Message[]): MessageBuckets => {
   return messages.reduce((acc, message) => appendMessage(acc, message), buckets);
+};
+
+const appendBattleMessages = (buckets: MessageBuckets, messages: readonly Message[]): MessageBuckets => {
+  if (messages.length === 0) return buckets;
+
+  const existingBattleIds = new Set(buckets.battle.map((message) => message.id));
+  const existingAllIds = new Set(buckets.all.map((message) => message.id));
+  const nextBattleMessages: Message[] = [];
+  const nextAllMessages: Message[] = [];
+
+  for (const message of messages) {
+    if (message.channel !== 'battle') continue;
+    if (existingBattleIds.has(message.id)) continue;
+    existingBattleIds.add(message.id);
+    nextBattleMessages.push(message);
+
+    const normalizedBattleMessage = message as Message & { channel: 'battle' };
+    if (!shouldIncludeInAllChannel(normalizedBattleMessage)) continue;
+    if (existingAllIds.has(message.id)) continue;
+    existingAllIds.add(message.id);
+    nextAllMessages.push(message);
+  }
+
+  if (nextBattleMessages.length === 0) return buckets;
+
+  return {
+    ...buckets,
+    battle: pushManyWithLimit(buckets.battle, nextBattleMessages, MAX_MESSAGES_PER_CHANNEL),
+    all: nextAllMessages.length > 0
+      ? pushManyWithLimit(buckets.all, nextAllMessages, MAX_MESSAGES_ALL)
+      : buckets.all,
+  };
 };
 
 const removePrivateTargetMessages = (buckets: MessageBuckets, targetId: string): MessageBuckets => {
@@ -692,7 +737,7 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
       channel: 'battle',
       timestamp: now + idx,
     }));
-    setMessageBuckets((prev) => appendMessages(prev, next));
+    setMessageBuckets((prev) => appendBattleMessages(prev, next));
   }, []);
 
   useImperativeHandle(ref, () => ({ openPrivateChat, appendBattleLines }), [appendBattleLines, openPrivateChat]);

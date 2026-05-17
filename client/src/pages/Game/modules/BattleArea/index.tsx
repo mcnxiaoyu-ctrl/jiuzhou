@@ -41,6 +41,7 @@ import {
 import { buildBattleActionKey } from './battleActionKey';
 import { isNewerBattleState } from './battleStateFreshness';
 import { applyBattleLogQixuePatch } from './battleLogStatePatch';
+import { collectBattleFloatEventsFromLogs, type BattleFloatEvent } from './battleFloatEvents';
 import { BattleTeamPanel } from './BattleTeamPanel';
 import type { BattleFloatText, BattleUnit } from './types';
 export type { BattleUnit } from './types';
@@ -132,6 +133,9 @@ const createFloatId = () => {
   return `float-${Date.now()}-${floatIdSeed}`;
 };
 const FLOAT_DX_PATTERN = [-10, -5, 0, 5, 10] as const;
+const BATTLE_FLOAT_VISIBLE_MS = 800;
+const BATTLE_FLOAT_PRUNE_INTERVAL_MS = 250;
+const MAX_ACTIVE_BATTLE_FLOATS = 48;
 
 const pickAlive = (units: BattleUnit[]) => units.filter((u) => (Number(u.hp) || 0) > 0);
 
@@ -244,7 +248,7 @@ const BattleAreaComponent: React.FC<BattleAreaProps> = ({
   const [nexting, setNexting] = useState(false);
   const [waitingForCooldown, setWaitingForCooldown] = useState(false);
   const floatDxIndexRef = useRef(0);
-  const floatTimerSetRef = useRef<Set<number>>(new Set());
+  const floatPruneTimerRef = useRef<number | null>(null);
   const nextingRef = useRef(false);
   const lastHandledCooldownKeyRef = useRef('');
   const battleIdRef = useRef<string | null>(null);
@@ -289,9 +293,34 @@ const BattleAreaComponent: React.FC<BattleAreaProps> = ({
   }, [onAppendBattleLines]);
 
   const clearFloatTimers = useCallback(() => {
-    floatTimerSetRef.current.forEach((t) => window.clearTimeout(t));
-    floatTimerSetRef.current.clear();
+    if (floatPruneTimerRef.current == null) return;
+    window.clearInterval(floatPruneTimerRef.current);
+    floatPruneTimerRef.current = null;
   }, []);
+
+  const ensureFloatPruneTimer = useCallback(() => {
+    if (floatPruneTimerRef.current != null) return;
+
+    floatPruneTimerRef.current = window.setInterval(() => {
+      const now = Date.now();
+      let hasRemainingFloats = false;
+      setFloats((prev) => {
+        if (prev.length === 0) return prev;
+        const next = prev.filter((floatText) => {
+          const alive = now - floatText.createdAt < BATTLE_FLOAT_VISIBLE_MS;
+          if (alive) {
+            hasRemainingFloats = true;
+          }
+          return alive;
+        });
+        return next.length === prev.length ? prev : next;
+      });
+
+      if (!hasRemainingFloats) {
+        clearFloatTimers();
+      }
+    }, BATTLE_FLOAT_PRUNE_INTERVAL_MS);
+  }, [clearFloatTimers]);
 
   const clearPendingCooldownAction = useCallback(() => {
     pendingCooldownActionRef.current = null;
@@ -560,18 +589,46 @@ const BattleAreaComponent: React.FC<BattleAreaProps> = ({
     return 'draw';
   }, []);
 
-  const addFloat = useCallback((unitId: string, value: number) => {
-    const id = createFloatId();
-    const dx = FLOAT_DX_PATTERN[floatDxIndexRef.current] ?? 0;
-    floatDxIndexRef.current = (floatDxIndexRef.current + 1) % FLOAT_DX_PATTERN.length;
-    const createdAt = Date.now();
-    setFloats((prev) => [...prev, { id, unitId, value, dx, createdAt }]);
-    const t = window.setTimeout(() => {
-      floatTimerSetRef.current.delete(t);
-      setFloats((prev) => prev.filter((f) => f.id !== id));
-    }, 800);
-    floatTimerSetRef.current.add(t);
-  }, []);
+  const appendFloatEvents = useCallback(
+    (events: readonly BattleFloatEvent[]) => {
+      if (events.length === 0) return;
+
+      const createdAt = Date.now();
+      const visibleEvents = events.length > MAX_ACTIVE_BATTLE_FLOATS
+        ? events.slice(events.length - MAX_ACTIVE_BATTLE_FLOATS)
+        : events;
+      const nextFloats: BattleFloatText[] = [];
+
+      for (const event of visibleEvents) {
+        const unitId = event.unitId.trim();
+        const value = Math.floor(event.value);
+        if (!unitId || value === 0) continue;
+        const dx = FLOAT_DX_PATTERN[floatDxIndexRef.current] ?? 0;
+        floatDxIndexRef.current = (floatDxIndexRef.current + 1) % FLOAT_DX_PATTERN.length;
+        nextFloats.push({
+          id: createFloatId(),
+          unitId,
+          value,
+          dx,
+          createdAt,
+        });
+      }
+
+      if (nextFloats.length === 0) return;
+
+      setFloats((prev) => {
+        const aliveFloats = prev.filter((floatText) => (
+          createdAt - floatText.createdAt < BATTLE_FLOAT_VISIBLE_MS
+        ));
+        const merged = aliveFloats.concat(nextFloats);
+        return merged.length > MAX_ACTIVE_BATTLE_FLOATS
+          ? merged.slice(merged.length - MAX_ACTIVE_BATTLE_FLOATS)
+          : merged;
+      });
+      ensureFloatPruneTimer();
+    },
+    [ensureFloatPruneTimer],
+  );
 
   useEffect(() => {
     return () => {
@@ -581,25 +638,11 @@ const BattleAreaComponent: React.FC<BattleAreaProps> = ({
   }, [clearFloatTimers, clearPendingCooldownAction]);
 
   const applyLogsToFloats = useCallback(
-    (prevIndex: number, nextLogs: BattleLogEntryDto[]) => {
-      if (!Array.isArray(nextLogs) || nextLogs.length === 0) return;
-      const slice = nextLogs.slice(Math.max(0, prevIndex));
-      for (const log of slice) {
-        if (log.type === 'action') {
-          for (const t of log.targets ?? []) {
-            for (const hit of t.hits) {
-              if (hit.damage > 0) addFloat(t.targetId, -Math.floor(hit.damage));
-            }
-            if (t.heal && t.heal > 0) addFloat(t.targetId, Math.floor(t.heal));
-          }
-        } else if (log.type === 'dot') {
-          if (log.damage > 0) addFloat(log.unitId, -Math.floor(log.damage));
-        } else if (log.type === 'hot') {
-          if (log.heal > 0) addFloat(log.unitId, Math.floor(log.heal));
-        }
-      }
+    (newLogs: BattleLogEntryDto[]) => {
+      if (newLogs.length === 0) return;
+      appendFloatEvents(collectBattleFloatEventsFromLogs(newLogs));
     },
-    [addFloat],
+    [appendFloatEvents],
   );
 
   /**
@@ -638,7 +681,7 @@ const BattleAreaComponent: React.FC<BattleAreaProps> = ({
       battleIdRef.current = resolvedBattleId;
       battleStateRef.current = patchedNextState;
       battleLogsRef.current = nextLogs;
-      applyLogsToFloats(prevIndex, nextLogs);
+      applyLogsToFloats(newLogs);
       lastLogIndexRef.current = nextLogs.length;
       ensureBattleStartAnnounced(patchedNextState);
       const prevChatIndex = lastChatLogIndexRef.current;
@@ -1339,7 +1382,7 @@ const BattleAreaComponent: React.FC<BattleAreaProps> = ({
 
   const floatsByUnit = useMemo(() => {
     const now = Date.now();
-    const valid = floats.filter((f) => now - f.createdAt < 1200);
+    const valid = floats.filter((f) => now - f.createdAt < BATTLE_FLOAT_VISIBLE_MS);
     const map: Record<string, BattleFloatText[]> = {};
     valid.forEach((f) => {
       (map[f.unitId] ||= []).push(f);
