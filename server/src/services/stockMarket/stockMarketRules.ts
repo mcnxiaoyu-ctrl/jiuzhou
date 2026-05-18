@@ -24,7 +24,8 @@
  * 4. 释放持仓成本必须按卖出数量比例计算，避免分批卖出时盈亏被重复计算。
  * 5. 历史表当前只存 tick 收盘价，OHLC 的影线是后端统一生成的展示区间，不代表真实逐笔成交高低。
  */
-export const STOCK_MARKET_TICK_INTERVAL_MS = 60 * 60 * 1000;
+export const STOCK_MARKET_TICK_INTERVAL_MINUTES = 30;
+export const STOCK_MARKET_TICK_INTERVAL_MS = STOCK_MARKET_TICK_INTERVAL_MINUTES * 60 * 1000;
 export const STOCK_MARKET_FEE_RATE_DENOMINATOR = 100_000;
 export const STOCK_MARKET_COMMISSION_RATE = 30;
 export const STOCK_MARKET_STAMP_DUTY_RATE = 50;

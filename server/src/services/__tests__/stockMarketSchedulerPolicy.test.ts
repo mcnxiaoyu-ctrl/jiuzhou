@@ -2,7 +2,7 @@
  * 股市后台调度策略静态测试
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：锁定股市每小时调度只能接入 scheduled background services，并通过 tick_hour 幂等。
+ * 1. 做什么：锁定股市 30 分钟调度只能接入 scheduled background services，并通过 tick_hour 幂等。
  * 2. 不做什么：不启动真实定时器、不连接数据库、不调用 AI。
  *
  * 输入 / 输出：
@@ -36,9 +36,11 @@ test('股市调度器应接入 scheduled background services 且不进入 cleanu
   const startupSource = readSource('../../bootstrap/startupPipeline.ts');
   const cleanupWorkerSource = readSource('../../workers/cleanupWorker.ts');
   const schedulerSource = readSource('../stockMarket/stockMarketScheduler.ts');
+  const rulesSource = readSource('../stockMarket/stockMarketRules.ts');
 
-  assert.match(startupSource, /if \(shouldStartScheduledBackgroundServices\(runtimeRole\)\)[\s\S]*initializeStockMarketHourlyScheduler/u);
-  assert.match(startupSource, /stopStockMarketHourlyScheduler/u);
+  assert.match(startupSource, /if \(shouldStartScheduledBackgroundServices\(runtimeRole\)\)[\s\S]*initializeStockMarketScheduler/u);
+  assert.match(startupSource, /stopStockMarketScheduler/u);
+  assert.match(rulesSource, /STOCK_MARKET_TICK_INTERVAL_MINUTES\s*=\s*30/u);
   assert.match(schedulerSource, /setTimeout/u);
   assert.doesNotMatch(schedulerSource, /setInterval/u);
   assert.doesNotMatch(cleanupWorkerSource, /stockMarket/u);

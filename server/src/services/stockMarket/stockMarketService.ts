@@ -2,7 +2,7 @@
  * 股市交易与行情服务。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：初始化静态股票报价、生成小时行情、查询概览/历史/交易记录，并处理系统即时买卖。
+ * 1. 做什么：初始化静态股票报价、生成周期行情、查询概览/历史/交易记录，并处理系统即时买卖。
  * 2. 不做什么：不实现玩家挂单撮合、不把股票伪装成坊市物品、不在路由层重复业务规则。
  *
  * 输入 / 输出：
@@ -51,7 +51,7 @@ import {
   stockMarketPriceUnitsToSpiritStones,
 } from './stockMarketRules.js';
 import {
-  floorStockMarketTickHour,
+  floorStockMarketTickTime,
   getNextStockMarketRefreshAt,
 } from './stockMarketTime.js';
 
@@ -602,12 +602,12 @@ class StockMarketService {
     return { success: true, message: '卖出成功' };
   }
 
-  async runHourlyTick(now: Date = new Date()): Promise<{
+  async runScheduledTick(now: Date = new Date()): Promise<{
     status: 'generated' | 'failed' | 'skipped';
     message: string;
   }> {
     await this.ensureInitialQuotes();
-    const tickHour = floorStockMarketTickHour(now);
+    const tickHour = floorStockMarketTickTime(now);
     const insertResult = await query<StockMarketTickInsertRow>(
       `
         INSERT INTO stock_market_tick (tick_hour, status, created_at)
@@ -619,7 +619,7 @@ class StockMarketService {
     );
     const insertedTick = insertResult.rows[0];
     if (!insertedTick) {
-      return { status: 'skipped', message: '当前小时股市 tick 已存在' };
+      return { status: 'skipped', message: '当前周期股市 tick 已存在' };
     }
 
     const tickId = toBigIntValue(insertedTick.id);
