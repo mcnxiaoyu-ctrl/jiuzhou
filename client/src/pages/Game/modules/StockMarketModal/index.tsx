@@ -534,7 +534,12 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                           <strong>{overviewModel.portfolio.totalCostText}</strong>
                         </div>
                         <div>
-                          <span>浮盈亏</span>
+                          <span className="stock-market-stat-label stock-market-stat-label--split">
+                            <span>浮盈亏</span>
+                            <em className={getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
+                              {overviewModel.portfolio.totalUnrealizedPnlPercentText}
+                            </em>
+                          </span>
                           <strong className={getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
                             {overviewModel.portfolio.totalUnrealizedPnlText}
                           </strong>
@@ -568,8 +573,11 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                               <strong>{item.priceText}</strong>
                               <em className={getStockMarketToneClassName(item.changeTone)}>{item.changeText}</em>
                               {item.hasHolding ? (
-                                <span className={getStockMarketToneClassName(item.unrealizedPnlTone)}>
-                                  {item.unrealizedPnlText}
+                                <span
+                                  className={`stock-market-stock-pnl ${getStockMarketToneClassName(item.unrealizedPnlTone)}`}
+                                >
+                                  <span>{item.unrealizedPnlText}</span>
+                                  <em>{item.unrealizedPnlPercentText}</em>
                                 </span>
                               ) : null}
                             </span>

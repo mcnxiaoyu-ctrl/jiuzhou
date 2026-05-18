@@ -43,6 +43,7 @@ export interface StockMarketStockView {
   changeText: string;
   holdingSummaryText: string;
   unrealizedPnlText: string;
+  unrealizedPnlPercentText: string;
   unrealizedPnlTone: StockMarketTone;
   maxBuyQtyText: string;
   maxSellQtyText: string;
@@ -53,6 +54,7 @@ export interface StockMarketPortfolioView {
   totalCostText: string;
   totalMarketValueText: string;
   totalUnrealizedPnlText: string;
+  totalUnrealizedPnlPercentText: string;
   totalUnrealizedPnlTone: StockMarketTone;
 }
 
@@ -213,6 +215,13 @@ export const formatStockMarketBps = (bps: number): string => {
   return `${prefix}${(normalized / 100).toFixed(2)}%`;
 };
 
+const formatStockMarketPnlPercent = (pnl: number, cost: number): string => {
+  const normalizedCost = toFiniteInteger(cost);
+  if (normalizedCost <= 0) return '--';
+  const pnlBps = Math.round((toFiniteInteger(pnl) / normalizedCost) * 10_000);
+  return formatStockMarketBps(pnlBps);
+};
+
 export const formatStockMarketSignedCurrency = (value: number): string => {
   const normalized = toFiniteInteger(value);
   if (normalized === 0) return formatStockMarketCurrency(0);
@@ -294,6 +303,9 @@ const buildStockView = (
   const hasHolding = stock.holdingQty > 0;
   const holdingQtyText = formatStockMarketQuantity(stock.holdingQty);
   const holdingValueText = formatStockMarketCurrency(stock.holdingMarketValueSpiritStones);
+  const unrealizedPnlPercentText = hasHolding
+    ? formatStockMarketPnlPercent(stock.unrealizedPnlSpiritStones, stock.holdingCostSpiritStones)
+    : '--';
 
   return {
     stock,
@@ -304,6 +316,7 @@ const buildStockView = (
     changeText: formatStockMarketBps(stock.lastChangeBps),
     holdingSummaryText: hasHolding ? `持有 ${holdingQtyText} · 市值 ${holdingValueText}` : '未持有',
     unrealizedPnlText: formatStockMarketSignedCurrency(stock.unrealizedPnlSpiritStones),
+    unrealizedPnlPercentText,
     unrealizedPnlTone: resolveStockMarketTone(stock.unrealizedPnlSpiritStones),
     maxBuyQtyText: formatStockMarketQuantity(stock.maxBuyQty),
     maxSellQtyText: formatStockMarketQuantity(stock.maxSellQty),
@@ -343,6 +356,10 @@ export const buildStockMarketOverviewViewModel = (
       totalCostText: formatStockMarketCurrency(overview.portfolio.totalCostSpiritStones),
       totalMarketValueText: formatStockMarketCurrency(overview.portfolio.totalMarketValueSpiritStones),
       totalUnrealizedPnlText: formatStockMarketSignedCurrency(overview.portfolio.totalUnrealizedPnlSpiritStones),
+      totalUnrealizedPnlPercentText: formatStockMarketPnlPercent(
+        overview.portfolio.totalUnrealizedPnlSpiritStones,
+        overview.portfolio.totalCostSpiritStones,
+      ),
       totalUnrealizedPnlTone: resolveStockMarketTone(overview.portfolio.totalUnrealizedPnlSpiritStones),
     },
     nextRefreshText: formatStockMarketTime(overview.nextRefreshAt),

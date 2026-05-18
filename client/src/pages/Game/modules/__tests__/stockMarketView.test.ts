@@ -101,9 +101,11 @@ describe('stockMarketView', () => {
     expect(model.stocks[0].hasHolding).toBe(true);
     expect(model.stocks[0].priceText).toBe('101.25 灵石');
     expect(model.stocks[0].holdingSummaryText).toBe('持有 2 股 · 市值 203 灵石');
+    expect(model.stocks[0].unrealizedPnlPercentText).toBe('+12.78%');
     expect(model.stocks[1].changeTone).toBe('down');
     expect(model.stocks[1].holdingSummaryText).toBe('未持有');
     expect(model.portfolio.totalUnrealizedPnlTone).toBe('up');
+    expect(model.portfolio.totalUnrealizedPnlPercentText).toBe('+12.78%');
     expect(model.portfolio.totalHoldingQtyText).toBe('2 股');
   });
 

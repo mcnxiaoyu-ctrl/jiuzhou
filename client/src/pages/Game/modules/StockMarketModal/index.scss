@@ -344,6 +344,31 @@
   }
 }
 
+.stock-market-stat-label--split {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+
+  >span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  >em {
+    flex: 0 0 auto;
+    font-style: normal;
+    font-size: 11px;
+    font-weight: var(--font-weight-title);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+}
+
 .stock-market-list {
   flex: 1 1 0;
   min-height: 0;
@@ -441,6 +466,25 @@
     font-size: 11px;
     line-height: 1.2;
     white-space: nowrap;
+  }
+}
+
+.stock-market-stock-pnl {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+
+  >span,
+  >em {
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  >em {
+    font-style: normal;
   }
 }
 
