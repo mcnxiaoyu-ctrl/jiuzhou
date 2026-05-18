@@ -2,7 +2,7 @@
  * 股市视图派生测试。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：锁定概览 DTO 到股票列表、持仓汇总、交易预览和记录行的纯函数转换。
+ * 1. 做什么：锁定概览 DTO 到股票列表、持仓汇总、交易预览、K 线和记录行的纯函数转换。
  * 2. 不做什么：不挂载 React，不请求后端，也不校验样式细节。
  *
  * 输入 / 输出：
@@ -10,7 +10,7 @@
  * - 输出：`stockMarketView` 生成的轻量展示模型。
  *
  * 数据流 / 状态流：
- * API DTO -> `stockMarketView` 纯函数 -> 断言列表选中、手续费、涨跌色调和交易记录文案。
+ * API DTO -> `stockMarketView` 纯函数 -> 断言列表选中、手续费、K 线开收价、涨跌色调和交易记录文案。
  *
  * 复用设计说明：
  * - 派生规则集中在纯函数模块，测试只命中这个入口，避免 JSX 中出现重复格式化逻辑后难以发现。
@@ -112,7 +112,7 @@ describe('stockMarketView', () => {
     expect(preview.maxTradeQty).toBe(100);
   });
 
-  it('历史走势应输出最新价与涨跌色调', () => {
+  it('历史走势应输出标准K线与最新涨跌', () => {
     const points: StockMarketHistoryPointDto[] = [
       {
         stockId: 'stock-qingyun-danfang',
@@ -134,10 +134,13 @@ describe('stockMarketView', () => {
 
     const model = buildStockMarketHistoryViewModel(points);
 
-    expect(model.latestPriceText).toBe('101 灵石');
-    expect(model.latestChangeText).toBe('+1.50%');
-    expect(model.latestTone).toBe('up');
-    expect(model.points[0].tone).toBe('down');
+    expect(model.candlesticks[0].tone).toBe('down');
+    expect(model.candlesticks[1].openPriceText).toBe('96 灵石');
+    expect(model.candlesticks[1].closePriceText).toBe('101 灵石');
+    expect(model.candlesticks[1].highPriceText).toBe('101 灵石');
+    expect(model.candlesticks[1].lowPriceText).toBe('96 灵石');
+    expect(model.candlestickLookup.get(model.candlesticks[1].key)).toBe(model.candlesticks[1]);
+    expect(model.candlesticks[1].hitWidth).toBeGreaterThan(0);
   });
 
   it('交易记录应集中格式化买卖方向与盈亏', () => {

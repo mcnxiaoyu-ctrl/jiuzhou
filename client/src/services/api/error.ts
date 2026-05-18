@@ -4,7 +4,7 @@ import axios from 'axios';
  * 统一接口错误模块。
  * 作用：
  * 1) 把 HTTP 异常、网络异常、业务失败（success=false）统一为同一错误结构。
- * 2) 提供通用错误文案提取与提示函数，避免页面重复写 error.message 解析逻辑。
+ * 2) 提供通用错误文案提取、提示函数与登录态错误分流，避免页面重复写 error.message / status 判断。
  * 不做什么：
  * 1) 不自动触发 UI 提示，提示时机由业务层显式控制。
  * 2) 不处理 WebSocket 错误流，仅处理 HTTP 请求相关错误。
@@ -14,11 +14,12 @@ import axios from 'axios';
  * - 输出：UnifiedApiError / string 文案，并可按需触发 notifier.error。
  *
  * 数据流/状态流：
- * axios/core 拦截器或业务 catch -> toUnifiedApiError -> get/notify 工具 -> UI message.error
+ * axios/core 拦截器或业务 catch -> toUnifiedApiError -> get/notify/classify 工具 -> UI message.error / 登录态处理
  *
  * 关键边界条件与坑点：
  * 1) AxiosError 可能没有 response（断网/超时），此时必须识别为 network，不能误判为 http。
  * 2) 业务错误可能是 HTTP 200 且 success=false，必须保留 code/status 以便后续做精细分流。
+ * 3) 登录态只允许 401 或明确被踢标记清理，本模块集中该规则，避免 502/断网在页面层被误判为登出。
  */
 
 export type UnifiedApiErrorKind = 'business' | 'http' | 'network' | 'unknown';
@@ -45,6 +46,11 @@ export interface ApiErrorToastDetail {
 }
 
 const DEFAULT_FALLBACK_MESSAGE = '网络错误';
+const AUTH_INVALID_HTTP_STATUS = 401;
+const TEMPORARY_UNAVAILABLE_MIN_STATUS = 500;
+const TEMPORARY_UNAVAILABLE_MAX_STATUS = 599;
+const REQUEST_TIMEOUT_HTTP_STATUS = 408;
+const TOO_MANY_REQUESTS_HTTP_STATUS = 429;
 
 const toNonEmptyString = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
@@ -71,6 +77,12 @@ const toNullableStatus = (value: unknown): number | null => {
 const getRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object') return null;
   return value as Record<string, unknown>;
+};
+
+const getAxiosResponseDataRecord = (error: UnifiedApiError): Record<string, unknown> | null => {
+  const rawRecord = getRecord(error.raw);
+  const responseRecord = getRecord(rawRecord?.response);
+  return getRecord(responseRecord?.data);
 };
 
 const getFallbackMessage = (fallback?: string): string => {
@@ -186,6 +198,31 @@ export const notifyUnifiedApiError = (
 
 export const shouldAutoErrorToast = (config?: { meta?: { autoErrorToast?: boolean } } | null): boolean => {
   return config?.meta?.autoErrorToast !== false;
+};
+
+export const isSessionKickedApiError = (error: UnifiedApiError): boolean => {
+  return getAxiosResponseDataRecord(error)?.kicked === true;
+};
+
+export const isAuthExpiredApiError = (error: UnifiedApiError): boolean => {
+  return error.httpStatus === AUTH_INVALID_HTTP_STATUS || isSessionKickedApiError(error);
+};
+
+export const isTemporaryUnavailableApiError = (error: UnifiedApiError): boolean => {
+  if (error.kind === 'network') {
+    return true;
+  }
+
+  const status = error.httpStatus;
+  if (status === null) {
+    return false;
+  }
+
+  return (
+    status === REQUEST_TIMEOUT_HTTP_STATUS ||
+    status === TOO_MANY_REQUESTS_HTTP_STATUS ||
+    (status >= TEMPORARY_UNAVAILABLE_MIN_STATUS && status <= TEMPORARY_UNAVAILABLE_MAX_STATUS)
+  );
 };
 
 export const emitApiErrorToast = (detail: ApiErrorToastDetail): void => {

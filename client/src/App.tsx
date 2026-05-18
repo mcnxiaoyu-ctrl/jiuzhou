@@ -1,8 +1,16 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { ConfigProvider, App as AntdApp, Modal, Spin, theme as antdTheme } from 'antd';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { ConfigProvider, App as AntdApp, Button, Modal, Spin, theme as antdTheme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import Auth from './pages/Auth';
-import { getAuthBootstrap, API_ERROR_TOAST_EVENT, type ApiErrorToastDetail } from './services/api';
+import {
+  getAuthBootstrap,
+  API_ERROR_TOAST_EVENT,
+  isAuthExpiredApiError,
+  isSessionKickedApiError,
+  isTemporaryUnavailableApiError,
+  toUnifiedApiError,
+  type ApiErrorToastDetail,
+} from './services/api';
 import { gameSocket } from './services/gameSocket';
 import { THEME_EVENT_NAME, applyThemeModeToDocument, type ThemeMode } from './constants/theme';
 import AppUpdateNotifier from './components/AppUpdateNotifier';
@@ -14,12 +22,27 @@ const Game = lazy(() => import('./pages/Game'));
 
 const TOKEN_STORAGE_KEY = 'token';
 const USER_STORAGE_KEY = 'user';
+const AUTH_BOOTSTRAP_RETRY_DELAY_MS = 5_000;
+const AUTH_RECOVERY_UNAVAILABLE_MESSAGE = '服务器正在更新或暂时不可用，正在保留登录状态并自动重试。';
 const centeredViewportStyle = {
   display: 'flex',
   justifyContent: 'center',
   alignItems: 'center',
   minHeight: '100dvh',
   height: '100%',
+} as const;
+const authRecoveryViewportStyle = {
+  ...centeredViewportStyle,
+  flexDirection: 'column',
+  gap: 12,
+  padding: 24,
+  textAlign: 'center',
+  background: 'var(--app-bg)',
+  color: 'var(--text-color)',
+} as const;
+const authRecoveryMessageStyle = {
+  maxWidth: 360,
+  lineHeight: 1.6,
 } as const;
 const modalThemeCompat: Record<string, number> = { contentPadding: 8 };
 
@@ -53,18 +76,49 @@ function App({ initialThemeMode }: AppProps) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [themeMode, setThemeMode] = useState<ThemeMode>(initialThemeMode);
+  const [authRecoveryMessage, setAuthRecoveryMessage] = useState<string | null>(null);
+  const [authRecoveryRetryKey, setAuthRecoveryRetryKey] = useState(0);
+
+  const retryAuthRecovery = useCallback(() => {
+    setIsLoading(true);
+    setAuthRecoveryMessage(null);
+    setAuthRecoveryRetryKey((current) => current + 1);
+  }, []);
+
+  const antdThemeConfig = useMemo(() => ({
+    algorithm: themeMode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+    token: {
+      colorPrimary: 'var(--primary-color)',
+    },
+    components: {
+      Modal: {
+        contentBg: 'var(--panel-bg)',
+        ...modalThemeCompat,
+      },
+    },
+  }), [themeMode]);
 
   // 持久登录检查
   useEffect(() => {
+    let retryTimerId: number | null = null;
+
+    const scheduleAuthRecoveryRetry = () => {
+      retryTimerId = window.setTimeout(() => {
+        retryAuthRecovery();
+      }, AUTH_BOOTSTRAP_RETRY_DELAY_MS);
+    };
+
     const checkAuth = async () => {
       const token = localStorage.getItem(TOKEN_STORAGE_KEY);
       if (!token) {
+        setAuthRecoveryMessage(null);
         setIsLoading(false);
         return;
       }
 
       try {
         const result = await getAuthBootstrap();
+        setAuthRecoveryMessage(null);
         if (result.success) {
           if (result.data?.hasCharacter) {
             setIsLoggedIn(true);
@@ -79,15 +133,40 @@ function App({ initialThemeMode }: AppProps) {
             });
           }
         }
-      } catch {
-        clearAuthStorage();
+      } catch (error) {
+        const normalizedError = toUnifiedApiError(error, '登录状态检查失败');
+        if (isAuthExpiredApiError(normalizedError)) {
+          clearAuthStorage();
+          if (isSessionKickedApiError(normalizedError)) {
+            Modal.warning({
+              title: '登录已失效',
+              content: normalizedError.message || '您的账号已在其他设备登录',
+            });
+          }
+          return;
+        }
+
+        if (isTemporaryUnavailableApiError(normalizedError)) {
+          setAuthRecoveryMessage(AUTH_RECOVERY_UNAVAILABLE_MESSAGE);
+          scheduleAuthRecoveryRetry();
+          return;
+        }
+
+        setAuthRecoveryMessage(AUTH_RECOVERY_UNAVAILABLE_MESSAGE);
+        scheduleAuthRecoveryRetry();
       } finally {
         setIsLoading(false);
       }
     };
 
     checkAuth();
-  }, []);
+
+    return () => {
+      if (retryTimerId !== null) {
+        window.clearTimeout(retryTimerId);
+      }
+    };
+  }, [authRecoveryRetryKey, retryAuthRecovery]);
 
   useEffect(() => {
     applyThemeModeToDocument(themeMode);
@@ -129,7 +208,7 @@ function App({ initialThemeMode }: AppProps) {
 
   if (isLoading) {
     return (
-      <ConfigProvider locale={zhCN}>
+      <ConfigProvider locale={zhCN} theme={antdThemeConfig}>
         <div
           style={{
             ...centeredViewportStyle,
@@ -143,21 +222,24 @@ function App({ initialThemeMode }: AppProps) {
     );
   }
 
+  if (authRecoveryMessage) {
+    return (
+      <ConfigProvider locale={zhCN} theme={antdThemeConfig}>
+        <div style={authRecoveryViewportStyle}>
+          <Spin size="large" />
+          <div style={authRecoveryMessageStyle}>{authRecoveryMessage}</div>
+          <Button type="primary" onClick={retryAuthRecovery}>
+            立即重试
+          </Button>
+        </div>
+      </ConfigProvider>
+    );
+  }
+
   return (
     <ConfigProvider
       locale={zhCN}
-      theme={{
-        algorithm: themeMode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-        token: {
-          colorPrimary: 'var(--primary-color)',
-        },
-        components: {
-          Modal: {
-            contentBg: 'var(--panel-bg)',
-            ...modalThemeCompat,
-          },
-        },
-      }}
+      theme={antdThemeConfig}
     >
       <AntdApp>
         <ApiErrorToastBridge />

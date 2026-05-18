@@ -37,7 +37,6 @@ import {
 import {
   FallOutlined,
   LeftOutlined,
-  LineChartOutlined,
   ReloadOutlined,
   RightOutlined,
   ShoppingCartOutlined,
@@ -60,9 +59,10 @@ import {
   buildStockMarketTradePreview,
   buildStockMarketTradeRecordViews,
   formatStockMarketBps,
+  getStockMarketToneClassName,
   resolveStockMarketTone,
-  type StockMarketTone,
 } from './stockMarketView';
+import StockMarketCandlestickChart from './StockMarketCandlestickChart';
 import { useIsMobile } from '../../shared/responsive';
 import './index.scss';
 
@@ -75,8 +75,6 @@ type StockMarketRefreshMode = 'initial' | 'background';
 type StockMarketActionKey = '' | 'buy' | 'sell';
 
 const STOCK_MARKET_DEFAULT_TRADE_PAGE_SIZE = 20;
-
-const getToneClassName = (tone: StockMarketTone): string => `is-${tone}`;
 
 const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) => {
   const { message } = App.useApp();
@@ -283,7 +281,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
           </div>
           <div className="stock-market-selected-price">
             <strong>{selectedStockView.priceText}</strong>
-            <span className={getToneClassName(selectedStockView.changeTone)}>
+            <span className={getStockMarketToneClassName(selectedStockView.changeTone)}>
               {selectedStockView.changeText}
             </span>
           </div>
@@ -304,7 +302,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
           </div>
           <div>
             <span>浮盈亏</span>
-            <strong className={getToneClassName(selectedStockView.unrealizedPnlTone)}>
+            <strong className={getStockMarketToneClassName(selectedStockView.unrealizedPnlTone)}>
               {selectedStockView.unrealizedPnlText}
             </strong>
           </div>
@@ -367,37 +365,13 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
           </div>
         </div>
 
-        <div className="stock-market-history">
-          <div className="stock-market-section-head">
-            <span><LineChartOutlined /> 近期走势</span>
-            <span className={getToneClassName(historyModel.latestTone)}>
-              {historyModel.latestPriceText} {historyModel.latestChangeText}
-            </span>
-          </div>
-          {historyLoading ? (
-            <div className="stock-market-history-loading">
-              <Spin size="small" />
-            </div>
-          ) : null}
-          {!historyLoading && historyModel.points.length <= 0 ? (
-            <div className="stock-market-muted">暂无走势记录</div>
-          ) : null}
-          {!historyLoading && historyModel.points.length > 0 ? (
-            <div className="stock-market-chart">
-              {historyModel.points.map((point) => (
-                <Tooltip
-                  key={point.key}
-                  title={`${point.timeText} · ${point.priceText} · ${point.changeText}${point.reason ? ` · ${point.reason}` : ''}`}
-                >
-                  <span
-                    className={`stock-market-chart-bar ${getToneClassName(point.tone)}`}
-                    style={{ height: `${point.heightPercent}%` }}
-                  />
-                </Tooltip>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <StockMarketCandlestickChart
+          loading={historyLoading}
+          model={historyModel}
+          latestPriceText={selectedStockView.priceText}
+          latestChangeText={selectedStockView.changeText}
+          latestTone={selectedStockView.changeTone}
+        />
       </>
     );
   }, [
@@ -525,7 +499,10 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                               {activeNews.impacts.map((impact) => {
                                 const tone = resolveStockMarketTone(impact.changeBps);
                                 return (
-                                  <Tag key={impact.stockId} className={`stock-market-impact ${getToneClassName(tone)}`}>
+                                  <Tag
+                                    key={impact.stockId}
+                                    className={`stock-market-impact ${getStockMarketToneClassName(tone)}`}
+                                  >
                                     {impact.stockName} {formatStockMarketBps(impact.changeBps)}
                                   </Tag>
                                 );
@@ -557,7 +534,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                         </div>
                         <div>
                           <span>浮盈亏</span>
-                          <strong className={getToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
+                          <strong className={getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
                             {overviewModel.portfolio.totalUnrealizedPnlText}
                           </strong>
                         </div>
@@ -583,7 +560,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                             </span>
                             <span className="stock-market-stock-price">
                               <strong>{item.priceText}</strong>
-                              <em className={getToneClassName(item.changeTone)}>{item.changeText}</em>
+                              <em className={getStockMarketToneClassName(item.changeTone)}>{item.changeText}</em>
                             </span>
                           </button>
                         ))}
@@ -625,7 +602,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                         {tradeRecordViews.map((record) => (
                           <div key={record.id} className="stock-market-record-row">
                             <div className="stock-market-record-main">
-                              <Tag className={getToneClassName(record.sideTone)}>
+                              <Tag className={getStockMarketToneClassName(record.sideTone)}>
                                 {record.sideText}
                               </Tag>
                               <strong>{record.stockText}</strong>
@@ -635,7 +612,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                               <span>成交 {record.grossAmountText}</span>
                               <span>手续费 {record.feeText}</span>
                               <span>净额 {record.netAmountText}</span>
-                              <span className={getToneClassName(record.realizedPnlTone)}>盈亏 {record.realizedPnlText}</span>
+                              <span className={getStockMarketToneClassName(record.realizedPnlTone)}>盈亏 {record.realizedPnlText}</span>
                               <span>{record.timeText}</span>
                             </div>
                           </div>

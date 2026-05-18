@@ -78,12 +78,12 @@ type StockMarketNewsRow = {
 };
 
 type StockMarketHistoryRow = {
-  stock_id: string;
-  price_spirit_stones: string | number | bigint;
-  change_bps: string | number;
-  direction: string;
+  tick_hour: Date | string;
+  price_spirit_stones: string | number | bigint | null;
+  change_bps: string | number | null;
+  direction: string | null;
   reason: string | null;
-  created_at: Date | string;
+  baseline_price_spirit_stones: string | number | bigint;
 };
 
 type StockMarketTradeRow = {
@@ -383,23 +383,52 @@ class StockMarketService {
     await this.ensureInitialQuotes();
     const result = await query<StockMarketHistoryRow>(
       `
-        SELECT stock_id, price_spirit_stones, change_bps, direction, reason, created_at
-        FROM stock_market_price_history
-        WHERE stock_id = $1
-        ORDER BY created_at DESC, id DESC
-        LIMIT $2
+        WITH recent_ticks AS (
+          SELECT id, tick_hour
+          FROM stock_market_tick
+          WHERE status = 'generated'
+          ORDER BY tick_hour DESC
+          LIMIT $2
+        ),
+        ordered_ticks AS (
+          SELECT id, tick_hour
+          FROM recent_ticks
+          ORDER BY tick_hour ASC
+        ),
+        first_tick AS (
+          SELECT tick_hour
+          FROM ordered_ticks
+          ORDER BY tick_hour ASC
+          LIMIT 1
+        ),
+        baseline AS (
+          SELECT h.price_spirit_stones
+          FROM stock_market_price_history h
+          CROSS JOIN first_tick ft
+          WHERE h.stock_id = $1
+            AND h.created_at < ft.tick_hour
+          ORDER BY h.created_at DESC, h.id DESC
+          LIMIT 1
+        )
+        SELECT
+          ot.tick_hour,
+          h.price_spirit_stones,
+          h.change_bps,
+          h.direction,
+          h.reason,
+          COALESCE((SELECT price_spirit_stones FROM baseline), $3::bigint) AS baseline_price_spirit_stones
+        FROM ordered_ticks ot
+        LEFT JOIN stock_market_price_history h ON h.tick_id = ot.id AND h.stock_id = $1
+        ORDER BY ot.tick_hour ASC
       `,
-      [definition.id, STOCK_MARKET_HISTORY_LIMIT],
+      [definition.id, STOCK_MARKET_HISTORY_LIMIT, definition.initial_price_spirit_stones],
     );
 
     return {
       success: true,
       message: 'ok',
       data: {
-        points: result.rows
-          .slice()
-          .reverse()
-          .map((row) => this.buildHistoryPointDto(row)),
+        points: this.buildHistoryPointDtos(definition.id, result.rows),
       },
     };
   }
@@ -725,15 +754,31 @@ class StockMarketService {
     return records;
   }
 
-  private buildHistoryPointDto(row: StockMarketHistoryRow): StockMarketHistoryPointDto {
-    return {
-      stockId: row.stock_id,
-      priceSpiritStones: toDtoNumber(toBigIntValue(row.price_spirit_stones)),
-      changeBps: toIntValue(row.change_bps),
-      direction: row.direction,
-      reason: row.reason,
-      createdAt: toTimestamp(row.created_at),
-    };
+  private buildHistoryPointDtos(
+    stockId: string,
+    rows: readonly StockMarketHistoryRow[],
+  ): StockMarketHistoryPointDto[] {
+    const points: StockMarketHistoryPointDto[] = [];
+    let lastPrice = toBigIntValue(rows[0]?.baseline_price_spirit_stones);
+
+    for (const row of rows) {
+      const changed = row.price_spirit_stones !== null;
+      const price = changed ? toBigIntValue(row.price_spirit_stones) : lastPrice;
+      const changeBps = changed ? toIntValue(row.change_bps) : 0;
+
+      points.push({
+        stockId,
+        priceSpiritStones: toDtoNumber(price),
+        changeBps,
+        direction: changed ? row.direction ?? buildStockMarketDirection(changeBps) : 'flat',
+        reason: changed ? row.reason : null,
+        createdAt: toTimestamp(row.tick_hour),
+      });
+
+      lastPrice = price;
+    }
+
+    return points;
   }
 
   private buildTradeRecordDto(
