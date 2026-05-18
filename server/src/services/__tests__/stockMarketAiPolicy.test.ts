@@ -23,8 +23,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { validateStockMarketAiNewsPayload } from '../stockMarket/stockMarketAi.js';
+import {
+  buildStockMarketScenarioSelectionWeights,
+  selectStockMarketScenarioGuide,
+} from '../stockMarket/stockMarketScenarioSelector.js';
 
 const enabledStockIds = new Set(['stock-a', 'stock-b', 'stock-c', 'stock-d']);
+const enabledScenarioStockIds = new Set([
+  'stock-qingyun-danfang',
+  'stock-xuantie-mining',
+  'stock-lingzhou-shipyard',
+  'stock-tiangong-armory',
+  'stock-wanjuan-academy',
+  'stock-yunmeng-herb',
+  'stock-xinghe-auction',
+  'stock-chixiao-sword',
+  'stock-qiankun-array',
+  'stock-beizhou-treasure',
+]);
 
 test('validateStockMarketAiNewsPayload: 合法 AI 新闻应输出可执行影响', () => {
   const result = validateStockMarketAiNewsPayload({
@@ -167,4 +183,45 @@ test('validateStockMarketAiNewsPayload: 涨跌超过两位小数或超过上下�
 
   assert.equal(precisionResult.success, false);
   assert.equal(limitResult.success, false);
+});
+
+test('selectStockMarketScenarioGuide: 近期高频股票应降低对应场景权重但不固定轮换', () => {
+  const weights = buildStockMarketScenarioSelectionWeights({
+    seed: 1001,
+    enabledStockIdSet: enabledScenarioStockIds,
+    recentStockIds: [
+      'stock-qingyun-danfang',
+      'stock-yunmeng-herb',
+      'stock-xinghe-auction',
+      'stock-qingyun-danfang',
+      'stock-yunmeng-herb',
+      'stock-xinghe-auction',
+    ],
+  });
+  const alchemyWeight = weights.find((row) => row.scenarioId === 'alchemy-supply');
+  const sectWeight = weights.find((row) => row.scenarioId === 'sect-defense');
+
+  assert.ok(alchemyWeight);
+  assert.ok(sectWeight);
+  assert.ok(alchemyWeight.weight > 0);
+  assert.ok(sectWeight.weight > alchemyWeight.weight);
+});
+
+test('selectStockMarketScenarioGuide: 相同近期状态下不同 seed 仍允许选择不同场景', () => {
+  const recentStockIds = [
+    'stock-qingyun-danfang',
+    'stock-yunmeng-herb',
+    'stock-xinghe-auction',
+    'stock-beizhou-treasure',
+  ];
+  const selectedScenarioIds = new Set<string>();
+  for (let seed = 1; seed <= 24; seed += 1) {
+    selectedScenarioIds.add(selectStockMarketScenarioGuide({
+      seed,
+      enabledStockIdSet: enabledScenarioStockIds,
+      recentStockIds,
+    }).guide.id);
+  }
+
+  assert.ok(selectedScenarioIds.size > 1);
 });

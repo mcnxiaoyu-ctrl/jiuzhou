@@ -35,6 +35,10 @@ import {
   normalizeStockMarketAiChangeBps,
   stockMarketPriceUnitsToSpiritStones,
 } from './stockMarketRules.js';
+import {
+  selectStockMarketScenarioGuide,
+  type StockMarketScenarioSelectionWeight,
+} from './stockMarketScenarioSelector.js';
 
 export type StockMarketAiQuoteInput = {
   stockId: string;
@@ -118,76 +122,6 @@ const buildStockMarketResponseFormat = (definitions: readonly StockMarketDefinit
     name: 'stock_market_news',
     schema: buildStockMarketNewsResponseSchema(definitions.map((definition) => definition.id)),
   });
-};
-
-type StockMarketScenarioGuide = {
-  id: string;
-  title: string;
-  focusStockIds: readonly string[];
-  guide: string;
-};
-
-const STOCK_MARKET_SCENARIO_GUIDES: readonly StockMarketScenarioGuide[] = [
-  {
-    id: 'alchemy-supply',
-    title: '丹药与灵植供需轮动',
-    focusStockIds: ['stock-qingyun-danfang', 'stock-yunmeng-herb', 'stock-xinghe-auction'],
-    guide: '围绕丹药需求、药材收成、拍卖流转写作，至少一只受益、一只承压，不要重复写丹方突破大涨。',
-  },
-  {
-    id: 'mining-armory',
-    title: '矿材与炼器成本博弈',
-    focusStockIds: ['stock-xuantie-mining', 'stock-tiangong-armory', 'stock-beizhou-treasure'],
-    guide: '围绕矿脉产量、矿价、炼器订单和商贸囤货写作，矿材与炼器或商贸之间形成多空对冲。',
-  },
-  {
-    id: 'transport-array',
-    title: '交通与阵法替代竞争',
-    focusStockIds: ['stock-lingzhou-shipyard', 'stock-qiankun-array', 'stock-beizhou-treasure'],
-    guide: '围绕灵舟航线、传送阵、商路安全写作，可以让交通与阵法互相替代，但不要连续只利好乾坤阵台。',
-  },
-  {
-    id: 'academy-sect',
-    title: '功法与宗门声望变化',
-    focusStockIds: ['stock-wanjuan-academy', 'stock-chixiao-sword', 'stock-xinghe-auction'],
-    guide: '围绕秘卷、论剑、讲经会和宗门委托写作，让功法、宗门、拍卖之间有正负分化。',
-  },
-  {
-    id: 'auction-commerce',
-    title: '拍卖与商贸资金分流',
-    focusStockIds: ['stock-xinghe-auction', 'stock-beizhou-treasure', 'stock-wanjuan-academy'],
-    guide: '围绕压轴拍品、宝楼交易、人气分流写作，拍卖热度和商贸成交之间形成平衡。',
-  },
-  {
-    id: 'sect-defense',
-    title: '边境战事与防务委托',
-    focusStockIds: ['stock-chixiao-sword', 'stock-tiangong-armory', 'stock-qiankun-array', 'stock-lingzhou-shipyard'],
-    guide: '围绕边境战事、护宗委托、法器与阵法需求写作，至少包含一个受益方和一个成本或风险承压方。',
-  },
-  {
-    id: 'weather-harvest',
-    title: '节气收成与材料价格',
-    focusStockIds: ['stock-yunmeng-herb', 'stock-qingyun-danfang', 'stock-xuantie-mining', 'stock-tiangong-armory'],
-    guide: '围绕节气、虫害、灵草收成和材料价格写作，供应端与加工端涨跌互相抵消。',
-  },
-  {
-    id: 'market-rotation',
-    title: '市场风险偏好切换',
-    focusStockIds: [
-      'stock-qingyun-danfang',
-      'stock-wanjuan-academy',
-      'stock-xinghe-auction',
-      'stock-beizhou-treasure',
-    ],
-    guide: '围绕修士资金在消耗品、功法、拍卖和商贸之间切换写作，不要让同一行业连续独占利好。',
-  },
-];
-
-const selectStockMarketScenarioGuide = (seed: number): StockMarketScenarioGuide => {
-  const normalizedSeed = Number.isSafeInteger(seed) ? seed : 0;
-  const normalizedIndex = ((normalizedSeed % STOCK_MARKET_SCENARIO_GUIDES.length) + STOCK_MARKET_SCENARIO_GUIDES.length)
-    % STOCK_MARKET_SCENARIO_GUIDES.length;
-  return STOCK_MARKET_SCENARIO_GUIDES[normalizedIndex]!;
 };
 
 const readTrimmedText = (
@@ -288,6 +222,7 @@ const buildStockMarketUserMessage = (params: {
   attempt: number;
   previousFailureReason: string | null;
   scenarioSeed: number;
+  recentImpactStockIds: readonly string[];
 }): string => {
   const quoteByStockId = new Map(
     params.quotes.map((quote) => [
@@ -296,8 +231,14 @@ const buildStockMarketUserMessage = (params: {
     ] as const),
   );
   const stockIdSet = new Set(params.definitions.map((definition) => definition.id));
-  const scenarioGuide = selectStockMarketScenarioGuide(params.scenarioSeed);
+  const scenarioSelection = selectStockMarketScenarioGuide({
+    seed: params.scenarioSeed,
+    enabledStockIdSet: stockIdSet,
+    recentStockIds: params.recentImpactStockIds,
+  });
+  const scenarioGuide = scenarioSelection.guide;
   const focusStockIds = scenarioGuide.focusStockIds.filter((stockId) => stockIdSet.has(stockId));
+  const scenarioWeights: StockMarketScenarioSelectionWeight[] = scenarioSelection.weights;
   return JSON.stringify({
     tickHour: params.tickHour.toISOString(),
     promptNoiseHash: params.promptNoiseHash,
@@ -308,6 +249,10 @@ const buildStockMarketUserMessage = (params: {
       title: scenarioGuide.title,
       focusStockIds,
       guide: scenarioGuide.guide,
+    },
+    scenarioSelection: {
+      recentImpactStockIds: params.recentImpactStockIds.slice(0, 16),
+      weights: scenarioWeights,
     },
     stocks: params.definitions.map((definition) => ({
       stockId: definition.id,
@@ -326,6 +271,8 @@ const buildStockMarketUserMessage = (params: {
       '常规单股波动优先控制在 -3.00 到 3.00；超过 4.00 或低于 -4.00 只用于重大突发事件',
       '优先输出 2 到 4 个相互关联的受影响股票，形成一涨一跌或多空配对',
       '本轮新闻题材必须优先围绕 marketScenario，impacts 优先从 marketScenario.focusStockIds 中选择',
+      'recentImpactStockIds 表示近期已频繁波动的股票，用于降低重复题材；它不是禁用名单，确有强关联时可以少量复用',
+      '优先让近期较少出现的 focusStockIds 获得明确影响，避免同一批股票连续多轮占据 impacts',
       '不要连续使用丹方突破、筑基丹热销、青云丹坊大利好作为默认新闻题材',
       '同一个 stockId 只能出现一次，禁止用股票名称、code 或 shortName 代替 stockId',
       '输出前必须自检 impacts：stockId 全部来自 stocks，且没有任何重复 stockId',
@@ -340,6 +287,7 @@ export const generateStockMarketAiNewsDraft = async (params: {
   definitions: readonly StockMarketDefinition[];
   quotes: readonly StockMarketAiQuoteInput[];
   tickHour: Date;
+  recentImpactStockIds: readonly string[];
 }): Promise<StockMarketAiNewsDraftResult> => {
   let previousFailureReason: string | null = null;
   for (let attempt = 1; attempt <= STOCK_MARKET_AI_MAX_ATTEMPTS; attempt += 1) {
@@ -354,6 +302,7 @@ export const generateStockMarketAiNewsDraft = async (params: {
           ...params,
           attempt,
           previousFailureReason,
+          recentImpactStockIds: params.recentImpactStockIds,
           scenarioSeed: seed,
           promptNoiseHash: buildTextModelPromptNoiseHash(`stock-market-news:${attempt}`, seed),
         }),

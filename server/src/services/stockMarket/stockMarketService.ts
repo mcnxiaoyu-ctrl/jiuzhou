@@ -54,6 +54,7 @@ import {
   floorStockMarketTickTime,
   getNextStockMarketRefreshAt,
 } from './stockMarketTime.js';
+import { STOCK_MARKET_SCENARIO_RECENT_TICK_LIMIT } from './stockMarketScenarioSelector.js';
 
 type StockMarketQuoteRow = {
   stock_id: string;
@@ -109,6 +110,10 @@ type StockMarketTickInsertRow = {
 type StockMarketTickRow = {
   id: string | number | bigint;
   status: string;
+};
+
+type StockMarketRecentImpactRow = {
+  stock_id: string;
 };
 
 export type StockMarketStockDto = {
@@ -638,6 +643,7 @@ class StockMarketService {
         stockId: row.stock_id,
         currentPriceUnits: toBigIntValue(row.current_price_spirit_stones),
       })),
+      recentImpactStockIds: await this.loadRecentImpactStockIds(),
       tickHour,
     });
 
@@ -806,6 +812,26 @@ class StockMarketService {
       [characterId, stockId],
     );
     return result.rows[0] ?? null;
+  }
+
+  private async loadRecentImpactStockIds(): Promise<string[]> {
+    const result = await query<StockMarketRecentImpactRow>(
+      `
+        WITH recent_ticks AS (
+          SELECT id, tick_hour
+          FROM stock_market_tick
+          WHERE status = 'generated'
+          ORDER BY tick_hour DESC
+          LIMIT $1
+        )
+        SELECT h.stock_id
+        FROM recent_ticks rt
+        JOIN stock_market_price_history h ON h.tick_id = rt.id
+        ORDER BY rt.tick_hour DESC, h.id ASC
+      `,
+      [STOCK_MARKET_SCENARIO_RECENT_TICK_LIMIT],
+    );
+    return result.rows.map((row) => row.stock_id);
   }
 
   private async insertTradeRecord(params: {
