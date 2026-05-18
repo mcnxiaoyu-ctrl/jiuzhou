@@ -15,7 +15,7 @@
  * 复用设计说明：
  * - 请求 DTO 统一来自 `services/api/stockMarket`，展示派生统一来自 `stockMarketView`，弹窗只负责交互状态。
  * - 历史走势按选中股票延迟请求，避免概览首屏携带所有股票历史点。
- * - 买入/卖出共用同一个数量输入和交易预览，避免两套表单重复维护手续费展示。
+ * - 买入/卖出共用同一个数量输入和交易费用预览，避免两套表单重复维护佣金、印花税和过户费展示。
  *
  * 关键边界条件与坑点：
  * 1. 自动错误 toast 由 axios 拦截器负责，买卖 catch 不重复弹失败提示。
@@ -156,7 +156,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
   const selectedStockView = overviewModel?.selectedStock ?? null;
   const tradePreview = useMemo(() => {
     if (!selectedStock || !overview) return null;
-    return buildStockMarketTradePreview(selectedStock, quantity, overview.tradeRules.feeBps);
+    return buildStockMarketTradePreview(selectedStock, quantity, overview.tradeRules);
   }, [overview, quantity, selectedStock]);
   const historyModel = useMemo(() => buildStockMarketHistoryViewModel(historyPoints), [historyPoints]);
   const tradeRecordViews = useMemo(() => buildStockMarketTradeRecordViews(tradeRecords), [tradeRecords]);
@@ -299,8 +299,24 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
               <strong>{tradePreview.grossAmountText}</strong>
             </span>
             <span className="stock-market-trade-preview-item">
-              <span>手续费</span>
-              <strong>{tradePreview.feeAmountText}</strong>
+              <span>佣金</span>
+              <strong>{tradePreview.commissionAmountText}</strong>
+            </span>
+            <span className="stock-market-trade-preview-item">
+              <span>卖出印花税</span>
+              <strong>{tradePreview.stampDutyAmountText}</strong>
+            </span>
+            <span className="stock-market-trade-preview-item">
+              <span>过户费</span>
+              <strong>{tradePreview.transferFeeAmountText}</strong>
+            </span>
+            <span className="stock-market-trade-preview-item">
+              <span>买入费用</span>
+              <strong>{tradePreview.buyFeeAmountText}</strong>
+            </span>
+            <span className="stock-market-trade-preview-item">
+              <span>卖出费用</span>
+              <strong>{tradePreview.sellFeeAmountText}</strong>
             </span>
             <span className="stock-market-trade-preview-item">
               <span>买入扣款</span>
@@ -593,7 +609,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                             </div>
                             <div className="stock-market-record-meta">
                               <span>成交 {record.grossAmountText}</span>
-                              <span>手续费 {record.feeText}</span>
+                              <span>交易费用 {record.feeText}</span>
                               <span>净额 {record.netAmountText}</span>
                               <span className={getStockMarketToneClassName(record.realizedPnlTone)}>盈亏 {record.realizedPnlText}</span>
                               <span>{record.timeText}</span>

@@ -2,12 +2,12 @@
  * 股市规则纯函数回归测试
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：锁定 AI 涨跌数值边界、手续费、持仓成本释放和初始 10 支股票配置。
+ * 1. 做什么：锁定 AI 涨跌数值边界、A 股交易费用、持仓成本释放和初始 10 支股票配置。
  * 2. 不做什么：不访问数据库、不调用 AI、不覆盖 HTTP 路由。
  *
  * 输入 / 输出：
  * - 输入：固定价格、交易金额、持仓成本和静态股票定义。
- * - 输出：可预测的涨跌后价格、手续费和配置数量断言。
+ * - 输出：可预测的涨跌后价格、交易费用拆分和配置数量断言。
  *
  * 数据流 / 状态流：
  * 规则函数 -> 断言输出；静态 JSON -> 定义索引 -> 唯一性断言。
@@ -17,7 +17,7 @@
  * - 股票数量和 ID 唯一性在这里锁定，防止扩展静态配置时破坏 v1 初始 10 股。
  *
  * 关键边界条件与坑点：
- * 1. 小额交易手续费必须向上取整，否则玩家可以通过拆单规避交易成本。
+ * 1. 小额交易费用必须按分项向上取整，否则玩家可以通过拆单规避交易成本。
  * 2. 分批卖出成本释放必须保留剩余成本，否则盈亏会被重复计算。
  */
 import assert from 'node:assert/strict';
@@ -29,6 +29,7 @@ import {
   calculateStockMarketMaxSellQuantity,
   calculateReleasedStockHoldingCost,
   calculateStockMarketTradeFee,
+  calculateStockMarketTradeFeeBreakdown,
   normalizeStockMarketAiChangeBps,
 } from '../stockMarket/stockMarketRules.js';
 
@@ -57,10 +58,20 @@ test('applyStockMarketPriceChange: 应按基点调整价格且不低于 1 灵石
   assert.equal(applyStockMarketPriceChange(1n, -800), 1n);
 });
 
-test('calculateStockMarketTradeFee: 买卖手续费应按 1% 向上取整', () => {
-  assert.equal(calculateStockMarketTradeFee(10_000n), 100n);
-  assert.equal(calculateStockMarketTradeFee(101n), 2n);
-  assert.equal(calculateStockMarketTradeFee(1n), 1n);
+test('calculateStockMarketTradeFee: A 股费用应按买卖方向拆分并向上取整', () => {
+  assert.deepEqual(calculateStockMarketTradeFeeBreakdown(10_000n, 'buy'), {
+    commissionFeeSpiritStones: 3n,
+    stampDutySpiritStones: 0n,
+    transferFeeSpiritStones: 1n,
+    totalFeeSpiritStones: 4n,
+  });
+  assert.deepEqual(calculateStockMarketTradeFeeBreakdown(10_000n, 'sell'), {
+    commissionFeeSpiritStones: 3n,
+    stampDutySpiritStones: 5n,
+    transferFeeSpiritStones: 1n,
+    totalFeeSpiritStones: 9n,
+  });
+  assert.equal(calculateStockMarketTradeFee(101n, 'sell'), 3n);
 });
 
 test('calculateStockMarketMaxBuyQuantity: 买入数量应按剩余持仓价值与单笔金额共同收敛', () => {

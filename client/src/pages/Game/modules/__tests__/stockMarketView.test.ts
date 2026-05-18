@@ -10,15 +10,15 @@
  * - 输出：`stockMarketView` 生成的轻量展示模型。
  *
  * 数据流 / 状态流：
- * API DTO -> `stockMarketView` 纯函数 -> 断言列表选中、手续费、K 线开收价、涨跌色调和交易记录文案。
+ * API DTO -> `stockMarketView` 纯函数 -> 断言列表选中、交易费用、K 线开收价、涨跌色调和交易记录文案。
  *
  * 复用设计说明：
  * - 派生规则集中在纯函数模块，测试只命中这个入口，避免 JSX 中出现重复格式化逻辑后难以发现。
- * - 手续费预览、持仓汇总和涨跌色调是股市弹窗多个区域共用的规则，因此一起锁定。
+ * - 交易费用预览、持仓汇总和涨跌色调是股市弹窗多个区域共用的规则，因此一起锁定。
  *
  * 关键边界条件与坑点：
  * 1. 未传入有效选中股票时必须回落到第一支股票，保证打开弹窗后历史请求有稳定目标。
- * 2. 手续费需要按服务端口径向上取整，小额成交不能显示为 0 手续费。
+ * 2. 交易费用需要按服务端口径向上取整，小额成交不能显示为 0 费用。
  */
 import { describe, expect, it } from 'vitest';
 import type {
@@ -79,7 +79,10 @@ const buildOverview = (): StockMarketOverviewDto => ({
     totalUnrealizedPnlSpiritStones: 22,
   },
   tradeRules: {
-    feeBps: 100,
+    feeRateDenominator: 100_000,
+    commissionRate: 30,
+    stampDutyRate: 50,
+    transferFeeRate: 1,
     maxOrderValueSpiritStones: 2_000_000,
     maxSingleStockValueSpiritStones: 5_000_000,
     maxTotalValueSpiritStones: 20_000_000,
@@ -102,14 +105,18 @@ describe('stockMarketView', () => {
     expect(model.portfolio.totalHoldingQtyText).toBe('2 股');
   });
 
-  it('交易预览手续费应按 1% 向上取整', () => {
+  it('交易预览应按 A 股费用拆分佣金、印花税和过户费', () => {
     const stock = buildOverview().stocks[0];
-    const preview = buildStockMarketTradePreview(stock, 1, 100);
+    const preview = buildStockMarketTradePreview(stock, 1, buildOverview().tradeRules);
 
     expect(preview.grossAmount).toBe(101);
-    expect(preview.feeAmount).toBe(2);
+    expect(preview.commissionAmount).toBe(1);
+    expect(preview.stampDutyAmount).toBe(1);
+    expect(preview.transferFeeAmount).toBe(1);
+    expect(preview.buyFeeAmount).toBe(2);
+    expect(preview.sellFeeAmount).toBe(3);
     expect(preview.buyCost).toBe(103);
-    expect(preview.sellReceive).toBe(99);
+    expect(preview.sellReceive).toBe(98);
     expect(preview.maxBuyQty).toBe(100);
     expect(preview.maxSellQty).toBe(2);
     expect(preview.maxTradeQty).toBe(100);

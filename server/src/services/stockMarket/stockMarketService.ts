@@ -504,7 +504,7 @@ class StockMarketService {
     }
 
     const grossAmount = calculateStockMarketGrossAmount(price, quantity);
-    const fee = calculateStockMarketTradeFee(grossAmount);
+    const fee = calculateStockMarketTradeFee(grossAmount, 'buy');
     const consumeResult = await consumeCharacterCurrenciesExact(params.characterId, {
       spiritStones: grossAmount + fee,
     });
@@ -563,7 +563,7 @@ class StockMarketService {
 
     const price = toBigIntValue(quote.current_price_spirit_stones);
     const grossAmount = calculateStockMarketGrossAmount(price, quantity);
-    const fee = calculateStockMarketTradeFee(grossAmount);
+    const fee = calculateStockMarketTradeFee(grossAmount, 'sell');
     const netAmount = grossAmount > fee ? grossAmount - fee : 0n;
     const holdingCost = toBigIntValue(holding.total_cost_spirit_stones);
     const releasedCost = calculateReleasedStockHoldingCost(holdingCost, holdingQuantity, quantity);

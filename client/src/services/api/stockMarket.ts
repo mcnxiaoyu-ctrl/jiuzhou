@@ -3,7 +3,7 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：集中定义股市概览、走势、交易记录与买卖请求的 DTO 和 API 函数。
- * 2. 不做什么：不在前端重复计算手续费、持仓上限或服务端交易规则。
+ * 2. 不做什么：不在前端决定最终交易费用、持仓上限或服务端交易规则。
  *
  * 输入 / 输出：
  * - 输入：股票 ID、交易数量、分页参数与可选请求配置。
@@ -69,7 +69,10 @@ export interface StockMarketPortfolioDto {
 }
 
 export interface StockMarketTradeRulesDto {
-  feeBps: number;
+  feeRateDenominator: number;
+  commissionRate: number;
+  stampDutyRate: number;
+  transferFeeRate: number;
   maxOrderValueSpiritStones: number;
   maxSingleStockValueSpiritStones: number;
   maxTotalValueSpiritStones: number;

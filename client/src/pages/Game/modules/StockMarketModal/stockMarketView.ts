@@ -16,7 +16,7 @@
  * - 概览列表、持仓摘要、历史 K 线和交易记录共用同一组金额、涨跌、时间格式化入口，避免 JSX 中散落重复计算。
  * - K 线开高低收和坐标只在历史数据变化时一次性派生，渲染层不做价格区间扫描。
  * - 选中股票在概览派生的一次遍历中确定，避免列表渲染后再 `find` 一次。
- * - 手续费预览只用于前端展示，实际扣费仍以服务端规则为准，降低业务规则漂移风险。
+ * - 交易费用预览只消费服务端下发的费率 DTO，实际扣费仍以服务端规则为准，降低业务规则漂移风险。
  *
  * 关键边界条件与坑点：
  * 1. 服务端金额已经限制在前端安全整数内，本模块只做展示格式化，不做额外兼容兜底。
@@ -27,6 +27,7 @@ import type {
   StockMarketHistoryPointDto,
   StockMarketOverviewDto,
   StockMarketStockDto,
+  StockMarketTradeRulesDto,
   StockMarketTradeRecordDto,
 } from '../../../../services/api';
 
@@ -64,14 +65,22 @@ export interface StockMarketOverviewViewModel {
 export interface StockMarketTradePreview {
   quantity: number;
   grossAmount: number;
-  feeAmount: number;
+  commissionAmount: number;
+  stampDutyAmount: number;
+  transferFeeAmount: number;
+  buyFeeAmount: number;
+  sellFeeAmount: number;
   buyCost: number;
   sellReceive: number;
   maxBuyQty: number;
   maxSellQty: number;
   maxTradeQty: number;
   grossAmountText: string;
-  feeAmountText: string;
+  commissionAmountText: string;
+  stampDutyAmountText: string;
+  transferFeeAmountText: string;
+  buyFeeAmountText: string;
+  sellFeeAmountText: string;
   buyCostText: string;
   sellReceiveText: string;
   maxBuyQtyText: string;
@@ -229,6 +238,15 @@ const formatStockMarketAxisPrice = (value: number): string => {
   return integerFormatter.format(Math.round(value));
 };
 
+const calculateStockMarketFeeComponent = (
+  grossAmount: number,
+  rate: number,
+  feeRateDenominator: number,
+): number => {
+  if (grossAmount <= 0 || rate <= 0 || feeRateDenominator <= 0) return 0;
+  return Math.ceil((grossAmount * rate) / feeRateDenominator);
+};
+
 const deriveFirstStockMarketOpenPrice = (closePrice: number, changeBps: number): number => {
   const normalizedClosePrice = Math.max(1, toFiniteInteger(closePrice));
   if (changeBps === 0) return normalizedClosePrice;
@@ -370,29 +388,52 @@ export const buildStockMarketOverviewViewModel = (
 export const buildStockMarketTradePreview = (
   stock: StockMarketStockDto,
   quantity: number,
-  feeBps: number,
+  tradeRules: StockMarketTradeRulesDto,
 ): StockMarketTradePreview => {
   const normalizedQuantity = Math.max(0, toFiniteInteger(quantity));
   const grossAmount = stock.priceSpiritStones * normalizedQuantity;
-  const feeAmount = grossAmount > 0
-    ? Math.ceil((grossAmount * feeBps) / BPS_DENOMINATOR)
-    : 0;
-  const buyCost = grossAmount + feeAmount;
-  const sellReceive = Math.max(0, grossAmount - feeAmount);
+  const feeRateDenominator = toFiniteInteger(tradeRules.feeRateDenominator);
+  const commissionAmount = calculateStockMarketFeeComponent(
+    grossAmount,
+    toFiniteInteger(tradeRules.commissionRate),
+    feeRateDenominator,
+  );
+  const stampDutyAmount = calculateStockMarketFeeComponent(
+    grossAmount,
+    toFiniteInteger(tradeRules.stampDutyRate),
+    feeRateDenominator,
+  );
+  const transferFeeAmount = calculateStockMarketFeeComponent(
+    grossAmount,
+    toFiniteInteger(tradeRules.transferFeeRate),
+    feeRateDenominator,
+  );
+  const buyFeeAmount = commissionAmount + transferFeeAmount;
+  const sellFeeAmount = commissionAmount + stampDutyAmount + transferFeeAmount;
+  const buyCost = grossAmount + buyFeeAmount;
+  const sellReceive = Math.max(0, grossAmount - sellFeeAmount);
   const maxBuyQty = Math.max(0, toFiniteInteger(stock.maxBuyQty));
   const maxSellQty = Math.max(0, toFiniteInteger(stock.maxSellQty));
 
   return {
     quantity: normalizedQuantity,
     grossAmount,
-    feeAmount,
+    commissionAmount,
+    stampDutyAmount,
+    transferFeeAmount,
+    buyFeeAmount,
+    sellFeeAmount,
     buyCost,
     sellReceive,
     maxBuyQty,
     maxSellQty,
     maxTradeQty: Math.max(1, maxBuyQty, maxSellQty),
     grossAmountText: formatStockMarketCurrency(grossAmount),
-    feeAmountText: formatStockMarketCurrency(feeAmount),
+    commissionAmountText: formatStockMarketCurrency(commissionAmount),
+    stampDutyAmountText: formatStockMarketCurrency(stampDutyAmount),
+    transferFeeAmountText: formatStockMarketCurrency(transferFeeAmount),
+    buyFeeAmountText: formatStockMarketCurrency(buyFeeAmount),
+    sellFeeAmountText: formatStockMarketCurrency(sellFeeAmount),
     buyCostText: formatStockMarketCurrency(buyCost),
     sellReceiveText: formatStockMarketCurrency(sellReceive),
     maxBuyQtyText: formatStockMarketQuantity(maxBuyQty),
