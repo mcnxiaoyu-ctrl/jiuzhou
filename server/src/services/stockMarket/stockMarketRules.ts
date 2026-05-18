@@ -2,7 +2,7 @@
  * 股市数值与交易规则。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：集中维护 AI 涨跌数值边界、两位小数股价、A 股交易费用、交易数量和持仓价值限制。
+ * 1. 做什么：集中维护 AI 涨跌数值边界、两位小数股价、A 股交易费用和交易数量基础规则。
  * 2. 不做什么：不访问数据库、不读取 AI 返回、不决定玩家是否已持仓。
  *
  * 输入 / 输出：
@@ -14,7 +14,7 @@
  * 交易金额 + 买卖方向 -> `calculateStockMarketTradeFeeBreakdown` -> 买卖服务。
  *
  * 复用设计说明：
- * - 买入、卖出、概览展示、历史 K 线和测试都复用本模块，避免佣金、印花税、过户费、AI 涨跌边界和限额散落在路由或前端。
+ * - 买入、卖出、概览展示、历史 K 线和测试都复用本模块，避免佣金、印花税、过户费和 AI 涨跌边界散落在路由或前端。
  * - 涨跌上限是股市平衡的高频业务变化点，集中到这里后后续调参只改一处。
  *
  * 关键边界条件与坑点：
@@ -33,9 +33,6 @@ export const STOCK_MARKET_PRICE_SCALE = 100n;
 export const STOCK_MARKET_PRICE_SCALE_NUMBER = 100;
 export const STOCK_MARKET_MIN_PRICE_SPIRIT_STONES = 1n;
 export const STOCK_MARKET_MIN_PRICE_UNITS = STOCK_MARKET_MIN_PRICE_SPIRIT_STONES * STOCK_MARKET_PRICE_SCALE;
-export const STOCK_MARKET_MAX_ORDER_VALUE_SPIRIT_STONES = 2_000_000n;
-export const STOCK_MARKET_MAX_SINGLE_STOCK_VALUE_SPIRIT_STONES = 5_000_000n;
-export const STOCK_MARKET_MAX_TOTAL_VALUE_SPIRIT_STONES = 20_000_000n;
 export const STOCK_MARKET_HISTORY_LIMIT = 48;
 export const STOCK_MARKET_TRADE_RECORD_PAGE_SIZE = 20;
 
@@ -229,35 +226,6 @@ export const calculateStockMarketMarketValue = (
   );
 };
 
-const toSafeQuantity = (value: bigint): number => {
-  const normalized = Number(value);
-  if (!Number.isSafeInteger(normalized)) {
-    throw new Error('股市可交易数量超过前端安全整数范围');
-  }
-  return Math.max(0, Math.trunc(normalized));
-};
-
-export const calculateStockMarketMaxBuyQuantity = (params: {
-  unitPriceSpiritStones: bigint;
-  currentSingleStockValueSpiritStones: bigint;
-  currentTotalValueSpiritStones: bigint;
-}): number => {
-  const unitPrice = params.unitPriceSpiritStones >= STOCK_MARKET_MIN_PRICE_UNITS
-    ? params.unitPriceSpiritStones
-    : STOCK_MARKET_MIN_PRICE_UNITS;
-  const singleStockRemainingValue = STOCK_MARKET_MAX_SINGLE_STOCK_VALUE_SPIRIT_STONES
-    - params.currentSingleStockValueSpiritStones;
-  const totalRemainingValue = STOCK_MARKET_MAX_TOTAL_VALUE_SPIRIT_STONES
-    - params.currentTotalValueSpiritStones;
-  const availableValue = [
-    STOCK_MARKET_MAX_ORDER_VALUE_SPIRIT_STONES,
-    singleStockRemainingValue,
-    totalRemainingValue,
-  ].reduce((min, value) => (value < min ? value : min));
-  if (availableValue <= 0n) return 0;
-  return toSafeQuantity((availableValue * STOCK_MARKET_PRICE_SCALE) / unitPrice);
-};
-
 export const calculateStockMarketMaxSellQuantity = (
   holdingQuantity: number,
 ): number => {
@@ -281,8 +249,5 @@ export const buildStockMarketTradeRulesDto = () => ({
   commissionRate: STOCK_MARKET_COMMISSION_RATE,
   stampDutyRate: STOCK_MARKET_STAMP_DUTY_RATE,
   transferFeeRate: STOCK_MARKET_TRANSFER_FEE_RATE,
-  maxOrderValueSpiritStones: Number(STOCK_MARKET_MAX_ORDER_VALUE_SPIRIT_STONES),
-  maxSingleStockValueSpiritStones: Number(STOCK_MARKET_MAX_SINGLE_STOCK_VALUE_SPIRIT_STONES),
-  maxTotalValueSpiritStones: Number(STOCK_MARKET_MAX_TOTAL_VALUE_SPIRIT_STONES),
   minPriceSpiritStones: Number(STOCK_MARKET_MIN_PRICE_SPIRIT_STONES),
 });

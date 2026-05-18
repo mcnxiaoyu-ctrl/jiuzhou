@@ -15,10 +15,10 @@
  *
  * 复用设计说明：
  * - 报价、持仓、交易记录都在本服务单点聚合，前端只消费 DTO，避免列表页、持仓页和交易页各自拼 SQL。
- * - 买卖都复用 `stockMarketRules` 与现有精确货币入口，手续费、限额和灵石扣增不会散落。
+ * - 买卖都复用 `stockMarketRules` 与现有精确货币入口，手续费和灵石扣增不会散落。
  *
  * 关键边界条件与坑点：
- * 1. 买入必须先按角色货币锁串行化，再更新持仓，避免同角色并发买入突破总持仓上限。
+ * 1. 买入只校验数量合法性和灵石是否足够，持仓上限不在股市服务层限制。
  * 2. AI 失败只更新 tick 状态，不触碰 quote/history，保证价格只由有效新闻驱动。
  */
 import { withTransaction, query } from '../../config/database.js';
@@ -38,13 +38,11 @@ import {
 } from './stockMarketAi.js';
 import {
   STOCK_MARKET_HISTORY_LIMIT,
-  STOCK_MARKET_PRICE_SCALE,
   STOCK_MARKET_TRADE_RECORD_PAGE_SIZE,
   applyStockMarketPriceChange,
   buildStockMarketHistoryOhlc,
   buildStockMarketTradeRulesDto,
   calculateStockMarketMarketValue,
-  calculateStockMarketMaxBuyQuantity,
   calculateStockMarketMaxSellQuantity,
   calculateReleasedStockHoldingCost,
   calculateStockMarketGrossAmount,
@@ -127,7 +125,6 @@ export type StockMarketStockDto = {
   holdingCostSpiritStones: number;
   holdingMarketValueSpiritStones: number;
   unrealizedPnlSpiritStones: number;
-  maxBuyQty: number;
   maxSellQty: number;
 };
 
@@ -240,9 +237,6 @@ const buildStockMarketDirection = (changeBps: number): string => {
   return 'flat';
 };
 
-const STOCK_MARKET_PRICE_SCALE_SQL = STOCK_MARKET_PRICE_SCALE.toString();
-const STOCK_MARKET_PRICE_SCALE_OFFSET_SQL = (STOCK_MARKET_PRICE_SCALE - 1n).toString();
-
 class StockMarketService {
   async ensureInitialQuotes(): Promise<void> {
     const definitions = getEnabledStockDefinitions();
@@ -277,22 +271,6 @@ class StockMarketService {
       [stockIds],
     );
     return new Map(result.rows.map((row) => [row.stock_id, row] as const));
-  }
-
-  private async loadCurrentTotalHoldingValue(characterId: number): Promise<bigint> {
-    const result = await query<{ total_value: string | number | bigint | null }>(
-      `
-        SELECT COALESCE(
-          SUM((csh.quantity::bigint * smq.current_price_spirit_stones + ${STOCK_MARKET_PRICE_SCALE_OFFSET_SQL}) / ${STOCK_MARKET_PRICE_SCALE_SQL}),
-          0
-        )::bigint AS total_value
-        FROM character_stock_holding csh
-        JOIN stock_market_quote smq ON smq.stock_id = csh.stock_id
-        WHERE csh.character_id = $1
-      `,
-      [characterId],
-    );
-    return toBigIntValue(result.rows[0]?.total_value ?? 0);
   }
 
   async getOverview(characterId: number): Promise<StockMarketOverviewDto> {
@@ -376,10 +354,7 @@ class StockMarketService {
     const newsRecords = this.buildNewsDtos(newsResult.rows, definitionMap);
 
     return {
-      stocks: stockBuildInputs.map((input) => this.buildStockDto({
-        ...input,
-        totalMarketValue,
-      })),
+      stocks: stockBuildInputs.map((input) => this.buildStockDto(input)),
       latestNews: newsRecords[0] ?? null,
       newsRecords,
       portfolio: {
@@ -515,18 +490,7 @@ class StockMarketService {
     const quote = quoteByStockId.get(definition.id);
     if (!quote) return { success: false, message: '股票报价不存在' };
 
-    const holding = await this.loadHoldingForUpdate(params.characterId, definition.id);
     const price = toBigIntValue(quote.current_price_spirit_stones);
-    const currentQuantity = toIntValue(holding?.quantity ?? 0);
-    const totalHoldingValue = await this.loadCurrentTotalHoldingValue(params.characterId);
-    const maxBuyQuantity = calculateStockMarketMaxBuyQuantity({
-      unitPriceSpiritStones: price,
-      currentSingleStockValueSpiritStones: calculateStockMarketMarketValue(price, currentQuantity),
-      currentTotalValueSpiritStones: totalHoldingValue,
-    });
-    if (quantity > maxBuyQuantity) {
-      return { success: false, message: '购买数量超过当前可买上限' };
-    }
 
     const grossAmount = calculateStockMarketGrossAmount(price, quantity, 'buy');
     const fee = calculateStockMarketTradeFee(grossAmount, 'buy');
@@ -702,7 +666,6 @@ class StockMarketService {
     quantity: number;
     holdingCost: bigint;
     marketValue: bigint;
-    totalMarketValue: bigint;
   }): StockMarketStockDto {
     return {
       stockId: params.definition.id,
@@ -718,11 +681,6 @@ class StockMarketService {
       holdingCostSpiritStones: toDtoNumber(params.holdingCost),
       holdingMarketValueSpiritStones: toDtoNumber(params.marketValue),
       unrealizedPnlSpiritStones: toDtoNumber(params.marketValue - params.holdingCost),
-      maxBuyQty: calculateStockMarketMaxBuyQuantity({
-        unitPriceSpiritStones: params.price,
-        currentSingleStockValueSpiritStones: params.marketValue,
-        currentTotalValueSpiritStones: params.totalMarketValue,
-      }),
       maxSellQty: calculateStockMarketMaxSellQuantity(params.quantity),
     };
   }

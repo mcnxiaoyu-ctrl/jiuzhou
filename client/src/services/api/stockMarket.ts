@@ -40,7 +40,6 @@ export interface StockMarketStockDto {
   holdingCostSpiritStones: number;
   holdingMarketValueSpiritStones: number;
   unrealizedPnlSpiritStones: number;
-  maxBuyQty: number;
   maxSellQty: number;
 }
 
@@ -73,9 +72,6 @@ export interface StockMarketTradeRulesDto {
   commissionRate: number;
   stampDutyRate: number;
   transferFeeRate: number;
-  maxOrderValueSpiritStones: number;
-  maxSingleStockValueSpiritStones: number;
-  maxTotalValueSpiritStones: number;
   minPriceSpiritStones: number;
 }
 

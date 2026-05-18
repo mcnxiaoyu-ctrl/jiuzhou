@@ -3535,7 +3535,11 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         <MarketModal open={marketModalOpen} onClose={() => setMarketModalOpen(false)} playerName={playerName} />
       )}
       {stockMarketModalOpen && (
-        <StockMarketModal open={stockMarketModalOpen} onClose={() => setStockMarketModalOpen(false)} />
+        <StockMarketModal
+          open={stockMarketModalOpen}
+          onClose={() => setStockMarketModalOpen(false)}
+          spiritStones={spiritStones}
+        />
       )}
       <TeamModal
         open={teamModalOpen}

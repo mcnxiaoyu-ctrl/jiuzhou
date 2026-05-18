@@ -6,7 +6,7 @@
  * 2. 不做什么：不复用坊市物品/伙伴交易 UI，不在前端决定实际成交价与资金扣增。
  *
  * 输入 / 输出：
- * - 输入：`open`、`onClose`。
+ * - 输入：`open`、`onClose`、当前角色灵石余额。
  * - 输出：用户完成买卖后刷新股市概览，并通过后端推送同步角色灵石。
  *
  * 数据流 / 状态流：
@@ -69,6 +69,7 @@ import './index.scss';
 interface StockMarketModalProps {
   open: boolean;
   onClose: () => void;
+  spiritStones: number;
 }
 
 type StockMarketRefreshMode = 'initial' | 'background';
@@ -76,7 +77,7 @@ type StockMarketActionKey = '' | 'buy' | 'sell';
 
 const STOCK_MARKET_DEFAULT_TRADE_PAGE_SIZE = 20;
 
-const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) => {
+const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spiritStones }) => {
   const { message } = App.useApp();
   const isMobile = useIsMobile();
   const [overview, setOverview] = useState<StockMarketOverviewDto | null>(null);
@@ -156,8 +157,8 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
   const selectedStockView = overviewModel?.selectedStock ?? null;
   const tradePreview = useMemo(() => {
     if (!selectedStock || !overview) return null;
-    return buildStockMarketTradePreview(selectedStock, quantity, overview.tradeRules);
-  }, [overview, quantity, selectedStock]);
+    return buildStockMarketTradePreview(selectedStock, quantity, overview.tradeRules, spiritStones);
+  }, [overview, quantity, selectedStock, spiritStones]);
   const historyModel = useMemo(() => buildStockMarketHistoryViewModel(historyPoints), [historyPoints]);
   const tradeRecordViews = useMemo(() => buildStockMarketTradeRecordViews(tradeRecords), [tradeRecords]);
   const newsRecords = overview?.newsRecords ?? [];
@@ -258,7 +259,10 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
 
   const maxTradeQty = tradePreview?.maxTradeQty ?? 1;
   const canBuy = Boolean(
-    selectedStock && tradePreview && tradePreview.quantity > 0 && tradePreview.quantity <= tradePreview.maxBuyQty,
+    selectedStock
+    && tradePreview
+    && tradePreview.quantity > 0
+    && tradePreview.quantity <= tradePreview.maxAffordableBuyQty,
   );
   const canSell = Boolean(
     selectedStock && tradePreview && tradePreview.quantity > 0 && tradePreview.quantity <= tradePreview.maxSellQty,
@@ -340,7 +344,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
             </span>
           </div>
           <div className="stock-market-trade-limits">
-            <span>可买 {tradePreview.maxBuyQtyText}</span>
+            <span>可买 {tradePreview.maxAffordableBuyQtyText}</span>
             <span>可卖 {tradePreview.maxSellQtyText}</span>
           </div>
           <div className="stock-market-trade-actions">
@@ -557,30 +561,37 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                           <button
                             key={item.stock.stockId}
                             type="button"
-                            className={`stock-market-stock-row${item.selected ? ' is-selected' : ''}`}
+                            className={`stock-market-stock-row${item.selected ? ' is-selected' : ''}${item.hasHolding ? ' has-holding' : ''}`}
                             onClick={() => handleSelectStock(item.stock.stockId)}
                           >
                             <span className="stock-market-stock-main">
                               <strong>{item.stock.name}</strong>
                               <span>{item.stock.code} · {item.stock.sector}</span>
-                              <span
-                                className={`stock-market-stock-holding${item.hasHolding ? ' is-holding' : ''}`}
-                              >
-                                {item.holdingSummaryText}
-                              </span>
                             </span>
                             <span className="stock-market-stock-price">
                               <strong>{item.priceText}</strong>
                               <em className={getStockMarketToneClassName(item.changeTone)}>{item.changeText}</em>
-                              {item.hasHolding ? (
-                                <span
-                                  className={`stock-market-stock-pnl ${getStockMarketToneClassName(item.unrealizedPnlTone)}`}
-                                >
-                                  <span>{item.unrealizedPnlText}</span>
-                                  <em>{item.unrealizedPnlPercentText}</em>
-                                </span>
-                              ) : null}
                             </span>
+                            <span
+                              className={`stock-market-stock-holding${item.hasHolding ? ' is-holding' : ''}`}
+                            >
+                              {item.hasHolding ? (
+                                <>
+                                  <span>持有 {item.holdingQtyText}</span>
+                                  <span>市值 {item.holdingMarketValueText}</span>
+                                </>
+                              ) : (
+                                <span>{item.holdingSummaryText}</span>
+                              )}
+                            </span>
+                            {item.hasHolding ? (
+                              <span
+                                className={`stock-market-stock-pnl ${getStockMarketToneClassName(item.unrealizedPnlTone)}`}
+                              >
+                                <span>{item.unrealizedPnlText}</span>
+                                <em>{item.unrealizedPnlPercentText}</em>
+                              </span>
+                            ) : null}
                           </button>
                         ))}
                       </div>

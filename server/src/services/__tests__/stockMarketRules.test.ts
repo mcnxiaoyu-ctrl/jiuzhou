@@ -29,7 +29,6 @@ import {
   applyStockMarketPriceChange,
   buildStockMarketHistoryOhlc,
   calculateStockMarketGrossAmount,
-  calculateStockMarketMaxBuyQuantity,
   calculateStockMarketMaxSellQuantity,
   calculateReleasedStockHoldingCost,
   calculateStockMarketTradeFee,
@@ -102,24 +101,6 @@ test('calculateStockMarketTradeFee: A 股费用应按买卖方向拆分并向上
     totalFeeSpiritStones: 9n,
   });
   assert.equal(calculateStockMarketTradeFee(101n, 'sell'), 3n);
-});
-
-test('calculateStockMarketMaxBuyQuantity: 买入数量应按剩余持仓价值与单笔金额共同收敛', () => {
-  assert.equal(calculateStockMarketMaxBuyQuantity({
-    unitPriceSpiritStones: 10000n,
-    currentSingleStockValueSpiritStones: 4_999_800n,
-    currentTotalValueSpiritStones: 10_000_000n,
-  }), 2);
-  assert.equal(calculateStockMarketMaxBuyQuantity({
-    unitPriceSpiritStones: 10000n,
-    currentSingleStockValueSpiritStones: 1_000_000n,
-    currentTotalValueSpiritStones: 19_999_950n,
-  }), 0);
-  assert.equal(calculateStockMarketMaxBuyQuantity({
-    unitPriceSpiritStones: 10000n,
-    currentSingleStockValueSpiritStones: 1_000_000n,
-    currentTotalValueSpiritStones: 1_000_000n,
-  }), 20_000);
 });
 
 test('calculateStockMarketMaxSellQuantity: 卖出数量应直接取当前持仓数量', () => {

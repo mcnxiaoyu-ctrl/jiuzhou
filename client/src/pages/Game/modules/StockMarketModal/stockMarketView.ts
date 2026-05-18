@@ -6,23 +6,24 @@
  * 2. 不做什么：不发请求、不修改持仓状态、不重新实现服务端交易校验。
  *
  * 输入 / 输出：
- * - 输入：`StockMarketOverviewDto`、历史点、交易记录、当前选中股票和交易数量。
+ * - 输入：`StockMarketOverviewDto`、历史点、交易记录、当前选中股票、交易数量和当前灵石余额。
  * - 输出：弹窗 JSX 可直接读取的轻量字符串、色调标记、两位小数 K 线价格和预览数值。
  *
  * 数据流 / 状态流：
- * API DTO -> 本模块集中格式化、K 线派生与索引选中项 -> StockMarketModal 渲染；交易数量变化 -> 交易预览模型。
+ * API DTO + 当前灵石余额 -> 本模块集中格式化、K 线派生、可买数量估算与索引选中项 -> StockMarketModal 渲染；交易数量变化 -> 交易预览模型。
  *
  * 复用设计说明：
  * - 概览列表、持仓摘要、历史 K 线和交易记录共用同一组金额、涨跌、时间格式化入口，避免 JSX 中散落重复计算。
  * - K 线开高低收和坐标只在历史数据变化时一次性派生，渲染层不做价格区间扫描。
  * - 选中股票在概览派生的一次遍历中确定，避免列表渲染后再 `find` 一次。
- * - 交易费用预览只消费服务端下发的费率 DTO，实际扣费仍以服务端规则为准，降低业务规则漂移风险。
+ * - 交易费用预览和可买数量都消费服务端下发的费率 DTO，实际扣费仍以服务端规则为准，降低业务规则漂移风险。
  *
  * 关键边界条件与坑点：
  * 1. 服务端金额已经限制在前端安全整数内，本模块只做展示格式化，不做额外兼容兜底。
  * 2. 历史点可能为空，此时必须输出空 K 线模型，避免弹窗打开时渲染无意义坐标。
  * 3. 历史 K 线的 OHLC 由后端 DTO 统一下发，前端只做格式化和图表数据收敛，避免前后端影线规则漂移。
  * 4. 股价是两位小数，成交金额仍是整数灵石，两个格式化入口不能混用。
+ * 5. 可买数量按灵石余额和买入费用二分估算，不能按股数线性试算，否则高余额账号会产生无意义循环。
  */
 import type {
   StockMarketHistoryPointDto,
@@ -41,11 +42,12 @@ export interface StockMarketStockView {
   changeTone: StockMarketTone;
   priceText: string;
   changeText: string;
+  holdingQtyText: string;
+  holdingMarketValueText: string;
   holdingSummaryText: string;
   unrealizedPnlText: string;
   unrealizedPnlPercentText: string;
   unrealizedPnlTone: StockMarketTone;
-  maxBuyQtyText: string;
   maxSellQtyText: string;
 }
 
@@ -78,7 +80,7 @@ export interface StockMarketTradePreview {
   sellFeeAmount: number;
   buyCost: number;
   sellReceive: number;
-  maxBuyQty: number;
+  maxAffordableBuyQty: number;
   maxSellQty: number;
   maxTradeQty: number;
   grossAmountText: string;
@@ -92,7 +94,7 @@ export interface StockMarketTradePreview {
   sellFeeAmountText: string;
   buyCostText: string;
   sellReceiveText: string;
-  maxBuyQtyText: string;
+  maxAffordableBuyQtyText: string;
   maxSellQtyText: string;
 }
 
@@ -259,6 +261,63 @@ const floorStockMarketCurrencyAmount = (value: number): number => {
   return Math.max(0, Math.floor(value + STOCK_MARKET_FLOAT_EPSILON));
 };
 
+const calculateStockMarketBuyAmounts = (
+  unitPrice: number,
+  quantity: number,
+  tradeRules: StockMarketTradeRulesDto,
+): {
+  grossAmount: number;
+  commissionAmount: number;
+  transferFeeAmount: number;
+  buyFeeAmount: number;
+  buyCost: number;
+} => {
+  const rawGrossAmount = Math.max(0, toFiniteNumber(unitPrice) * Math.max(0, toFiniteInteger(quantity)));
+  const grossAmount = ceilStockMarketCurrencyAmount(rawGrossAmount);
+  const feeRateDenominator = toFiniteInteger(tradeRules.feeRateDenominator);
+  const commissionAmount = calculateStockMarketFeeComponent(
+    grossAmount,
+    toFiniteInteger(tradeRules.commissionRate),
+    feeRateDenominator,
+  );
+  const transferFeeAmount = calculateStockMarketFeeComponent(
+    grossAmount,
+    toFiniteInteger(tradeRules.transferFeeRate),
+    feeRateDenominator,
+  );
+  const buyFeeAmount = commissionAmount + transferFeeAmount;
+  return {
+    grossAmount,
+    commissionAmount,
+    transferFeeAmount,
+    buyFeeAmount,
+    buyCost: grossAmount + buyFeeAmount,
+  };
+};
+
+const calculateStockMarketAffordableBuyQuantity = (
+  stock: StockMarketStockDto,
+  availableSpiritStones: number,
+  tradeRules: StockMarketTradeRulesDto,
+): number => {
+  const availableAmount = Math.max(0, toFiniteInteger(availableSpiritStones));
+  const unitPrice = Math.max(1, toFiniteNumber(stock.priceSpiritStones));
+  if (availableAmount <= 0) return 0;
+
+  let low = 0;
+  let high = Math.floor(availableAmount / unitPrice);
+  while (low < high) {
+    const mid = low + Math.floor((high - low + 1) / 2);
+    const buyCost = calculateStockMarketBuyAmounts(stock.priceSpiritStones, mid, tradeRules).buyCost;
+    if (buyCost <= availableAmount) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return low;
+};
+
 const buildStockMarketMovingAverageViews = (
   drafts: readonly StockMarketCandlestickDraft[],
 ): StockMarketMovingAverageView[] => {
@@ -314,11 +373,12 @@ const buildStockView = (
     changeTone: resolveStockMarketTone(stock.lastChangeBps),
     priceText: formatStockMarketPrice(stock.priceSpiritStones),
     changeText: formatStockMarketBps(stock.lastChangeBps),
+    holdingQtyText,
+    holdingMarketValueText: holdingValueText,
     holdingSummaryText: hasHolding ? `持有 ${holdingQtyText} · 市值 ${holdingValueText}` : '未持有',
     unrealizedPnlText: formatStockMarketSignedCurrency(stock.unrealizedPnlSpiritStones),
     unrealizedPnlPercentText,
     unrealizedPnlTone: resolveStockMarketTone(stock.unrealizedPnlSpiritStones),
-    maxBuyQtyText: formatStockMarketQuantity(stock.maxBuyQty),
     maxSellQtyText: formatStockMarketQuantity(stock.maxSellQty),
   };
 };
@@ -370,17 +430,13 @@ export const buildStockMarketTradePreview = (
   stock: StockMarketStockDto,
   quantity: number,
   tradeRules: StockMarketTradeRulesDto,
+  availableSpiritStones: number,
 ): StockMarketTradePreview => {
   const normalizedQuantity = Math.max(0, toFiniteInteger(quantity));
-  const rawGrossAmount = Math.max(0, toFiniteNumber(stock.priceSpiritStones) * normalizedQuantity);
-  const grossAmount = ceilStockMarketCurrencyAmount(rawGrossAmount);
-  const sellGrossAmount = floorStockMarketCurrencyAmount(rawGrossAmount);
+  const buyAmounts = calculateStockMarketBuyAmounts(stock.priceSpiritStones, normalizedQuantity, tradeRules);
+  const rawSellGrossAmount = Math.max(0, toFiniteNumber(stock.priceSpiritStones) * normalizedQuantity);
+  const sellGrossAmount = floorStockMarketCurrencyAmount(rawSellGrossAmount);
   const feeRateDenominator = toFiniteInteger(tradeRules.feeRateDenominator);
-  const commissionAmount = calculateStockMarketFeeComponent(
-    grossAmount,
-    toFiniteInteger(tradeRules.commissionRate),
-    feeRateDenominator,
-  );
   const sellCommissionAmount = calculateStockMarketFeeComponent(
     sellGrossAmount,
     toFiniteInteger(tradeRules.commissionRate),
@@ -391,51 +447,44 @@ export const buildStockMarketTradePreview = (
     toFiniteInteger(tradeRules.stampDutyRate),
     feeRateDenominator,
   );
-  const transferFeeAmount = calculateStockMarketFeeComponent(
-    grossAmount,
-    toFiniteInteger(tradeRules.transferFeeRate),
-    feeRateDenominator,
-  );
   const sellTransferFeeAmount = calculateStockMarketFeeComponent(
     sellGrossAmount,
     toFiniteInteger(tradeRules.transferFeeRate),
     feeRateDenominator,
   );
-  const buyFeeAmount = commissionAmount + transferFeeAmount;
   const sellFeeAmount = sellCommissionAmount + stampDutyAmount + sellTransferFeeAmount;
-  const buyCost = grossAmount + buyFeeAmount;
   const sellReceive = Math.max(0, sellGrossAmount - sellFeeAmount);
-  const maxBuyQty = Math.max(0, toFiniteInteger(stock.maxBuyQty));
+  const maxAffordableBuyQty = calculateStockMarketAffordableBuyQuantity(stock, availableSpiritStones, tradeRules);
   const maxSellQty = Math.max(0, toFiniteInteger(stock.maxSellQty));
 
   return {
     quantity: normalizedQuantity,
-    grossAmount,
+    grossAmount: buyAmounts.grossAmount,
     sellGrossAmount,
-    commissionAmount,
+    commissionAmount: buyAmounts.commissionAmount,
     sellCommissionAmount,
     stampDutyAmount,
-    transferFeeAmount,
+    transferFeeAmount: buyAmounts.transferFeeAmount,
     sellTransferFeeAmount,
-    buyFeeAmount,
+    buyFeeAmount: buyAmounts.buyFeeAmount,
     sellFeeAmount,
-    buyCost,
+    buyCost: buyAmounts.buyCost,
     sellReceive,
-    maxBuyQty,
+    maxAffordableBuyQty,
     maxSellQty,
-    maxTradeQty: Math.max(1, maxBuyQty, maxSellQty),
-    grossAmountText: formatStockMarketCurrency(grossAmount),
+    maxTradeQty: Math.max(1, maxAffordableBuyQty, maxSellQty),
+    grossAmountText: formatStockMarketCurrency(buyAmounts.grossAmount),
     sellGrossAmountText: formatStockMarketCurrency(sellGrossAmount),
-    commissionAmountText: formatStockMarketCurrency(commissionAmount),
+    commissionAmountText: formatStockMarketCurrency(buyAmounts.commissionAmount),
     sellCommissionAmountText: formatStockMarketCurrency(sellCommissionAmount),
     stampDutyAmountText: formatStockMarketCurrency(stampDutyAmount),
-    transferFeeAmountText: formatStockMarketCurrency(transferFeeAmount),
+    transferFeeAmountText: formatStockMarketCurrency(buyAmounts.transferFeeAmount),
     sellTransferFeeAmountText: formatStockMarketCurrency(sellTransferFeeAmount),
-    buyFeeAmountText: formatStockMarketCurrency(buyFeeAmount),
+    buyFeeAmountText: formatStockMarketCurrency(buyAmounts.buyFeeAmount),
     sellFeeAmountText: formatStockMarketCurrency(sellFeeAmount),
-    buyCostText: formatStockMarketCurrency(buyCost),
+    buyCostText: formatStockMarketCurrency(buyAmounts.buyCost),
     sellReceiveText: formatStockMarketCurrency(sellReceive),
-    maxBuyQtyText: formatStockMarketQuantity(maxBuyQty),
+    maxAffordableBuyQtyText: formatStockMarketQuantity(maxAffordableBuyQty),
     maxSellQtyText: formatStockMarketQuantity(maxSellQty),
   };
 };

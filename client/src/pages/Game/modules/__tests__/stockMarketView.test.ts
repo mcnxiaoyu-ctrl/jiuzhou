@@ -50,7 +50,6 @@ const buildOverview = (): StockMarketOverviewDto => ({
       holdingCostSpiritStones: 180,
       holdingMarketValueSpiritStones: 203,
       unrealizedPnlSpiritStones: 23,
-      maxBuyQty: 100,
       maxSellQty: 2,
     },
     {
@@ -67,7 +66,6 @@ const buildOverview = (): StockMarketOverviewDto => ({
       holdingCostSpiritStones: 0,
       holdingMarketValueSpiritStones: 0,
       unrealizedPnlSpiritStones: 0,
-      maxBuyQty: 200,
       maxSellQty: 0,
     },
   ],
@@ -84,9 +82,6 @@ const buildOverview = (): StockMarketOverviewDto => ({
     commissionRate: 30,
     stampDutyRate: 50,
     transferFeeRate: 1,
-    maxOrderValueSpiritStones: 2_000_000,
-    maxSingleStockValueSpiritStones: 5_000_000,
-    maxTotalValueSpiritStones: 20_000_000,
     minPriceSpiritStones: 1,
   },
   nextRefreshAt: 1_785_003_600_000,
@@ -100,6 +95,8 @@ describe('stockMarketView', () => {
     expect(model.stocks[0].selected).toBe(true);
     expect(model.stocks[0].hasHolding).toBe(true);
     expect(model.stocks[0].priceText).toBe('101.25 灵石');
+    expect(model.stocks[0].holdingQtyText).toBe('2 股');
+    expect(model.stocks[0].holdingMarketValueText).toBe('203 灵石');
     expect(model.stocks[0].holdingSummaryText).toBe('持有 2 股 · 市值 203 灵石');
     expect(model.stocks[0].unrealizedPnlPercentText).toBe('+12.78%');
     expect(model.stocks[1].changeTone).toBe('down');
@@ -109,9 +106,27 @@ describe('stockMarketView', () => {
     expect(model.portfolio.totalHoldingQtyText).toBe('2 股');
   });
 
+  it('股票列表持仓摘要应保留完整大额市值与盈亏金额', () => {
+    const overview = buildOverview();
+    overview.stocks[0] = {
+      ...overview.stocks[0],
+      holdingQty: 31_250,
+      holdingCostSpiritStones: 4_000_000,
+      holdingMarketValueSpiritStones: 3_843_750,
+      unrealizedPnlSpiritStones: -156_250,
+    };
+    const model = buildStockMarketOverviewViewModel(overview, '');
+
+    expect(model.stocks[0].holdingQtyText).toBe('31,250 股');
+    expect(model.stocks[0].holdingMarketValueText).toBe('3,843,750 灵石');
+    expect(model.stocks[0].holdingSummaryText).toBe('持有 31,250 股 · 市值 3,843,750 灵石');
+    expect(model.stocks[0].unrealizedPnlText).toBe('-156,250 灵石');
+    expect(model.stocks[0].unrealizedPnlPercentText).toBe('-3.91%');
+  });
+
   it('交易预览应按 A 股费用拆分佣金、印花税和过户费', () => {
     const stock = buildOverview().stocks[0];
-    const preview = buildStockMarketTradePreview(stock, 1, buildOverview().tradeRules);
+    const preview = buildStockMarketTradePreview(stock, 1, buildOverview().tradeRules, 10_000);
 
     expect(preview.grossAmount).toBe(102);
     expect(preview.sellGrossAmount).toBe(101);
@@ -124,9 +139,10 @@ describe('stockMarketView', () => {
     expect(preview.sellFeeAmount).toBe(3);
     expect(preview.buyCost).toBe(104);
     expect(preview.sellReceive).toBe(98);
-    expect(preview.maxBuyQty).toBe(100);
+    expect(preview.maxAffordableBuyQty).toBe(98);
     expect(preview.maxSellQty).toBe(2);
-    expect(preview.maxTradeQty).toBe(100);
+    expect(preview.maxTradeQty).toBe(98);
+    expect(preview.maxAffordableBuyQtyText).toBe('98 股');
   });
 
   it('历史走势应输出标准K线与最新涨跌', () => {
