@@ -17,7 +17,7 @@
  * - `sort_weight` 属于高频调参点，排序规则收敛在这里后前后端展示无需各自排序。
  *
  * 关键边界条件与坑点：
- * 1. 启用股票必须具备正整数初始价，否则初始化报价会写入无效价格。
+ * 1. 启用股票必须具备最多两位小数的正数初始价，否则初始化报价会写入无效价格。
  * 2. ID 查询索引必须基于冻结后的列表构建，避免调用方误改数组后让索引和列表不一致。
  */
 import {
@@ -25,18 +25,23 @@ import {
   type StockDefConfig,
 } from '../staticConfigLoader.js';
 import { createStaticDefinitionIndexGetter } from '../shared/staticDefinitionIndex.js';
+import { STOCK_MARKET_PRICE_SCALE_NUMBER } from './stockMarketRules.js';
 
 export type StockMarketDefinition = StockDefConfig & {
   initial_price_spirit_stones: number;
 };
 
+const STOCK_MARKET_INITIAL_PRICE_EPSILON = 1e-9;
+
 const isEnabledStockDefinition = (definition: StockDefConfig): definition is StockMarketDefinition => {
+  const scaledInitialPrice = definition.initial_price_spirit_stones * STOCK_MARKET_PRICE_SCALE_NUMBER;
   return definition.enabled !== false
     && definition.id.trim().length > 0
     && definition.code.trim().length > 0
     && definition.name.trim().length > 0
-    && Number.isInteger(definition.initial_price_spirit_stones)
-    && definition.initial_price_spirit_stones > 0;
+    && Number.isFinite(definition.initial_price_spirit_stones)
+    && definition.initial_price_spirit_stones > 0
+    && Math.abs(scaledInitialPrice - Math.round(scaledInitialPrice)) <= STOCK_MARKET_INITIAL_PRICE_EPSILON;
 };
 
 let enabledStockDefinitionsSnapshot: readonly StockMarketDefinition[] | null = null;

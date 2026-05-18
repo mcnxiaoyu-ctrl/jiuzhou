@@ -2,12 +2,12 @@
  * 股市规则纯函数回归测试
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：锁定 AI 涨跌数值边界、A 股交易费用、持仓成本释放和初始 10 支股票配置。
+ * 1. 做什么：锁定 AI 涨跌数值边界、历史 OHLC、A 股交易费用、持仓成本释放和初始 10 支股票配置。
  * 2. 不做什么：不访问数据库、不调用 AI、不覆盖 HTTP 路由。
  *
  * 输入 / 输出：
  * - 输入：固定价格、交易金额、持仓成本和静态股票定义。
- * - 输出：可预测的涨跌后价格、交易费用拆分和配置数量断言。
+ * - 输出：可预测的涨跌后价格、历史开高低收、交易费用拆分和配置数量断言。
  *
  * 数据流 / 状态流：
  * 规则函数 -> 断言输出；静态 JSON -> 定义索引 -> 唯一性断言。
@@ -17,20 +17,26 @@
  * - 股票数量和 ID 唯一性在这里锁定，防止扩展静态配置时破坏 v1 初始 10 股。
  *
  * 关键边界条件与坑点：
- * 1. 小额交易费用必须按分项向上取整，否则玩家可以通过拆单规避交易成本。
- * 2. 分批卖出成本释放必须保留剩余成本，否则盈亏会被重复计算。
+ * 1. 历史 OHLC 必须给实体上下留影线，避免前端 K 线退化成无影线柱。
+ * 2. 小额交易费用必须按分项向上取整，否则玩家可以通过拆单规避交易成本。
+ * 3. 股价必须以分单位保留两位小数，小幅涨跌不能被整数灵石吞掉。
+ * 4. 分批卖出成本释放必须保留剩余成本，否则盈亏会被重复计算。
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getEnabledStockDefinitions } from '../stockMarket/stockMarketDefinitions.js';
 import {
   applyStockMarketPriceChange,
+  buildStockMarketHistoryOhlc,
+  calculateStockMarketGrossAmount,
   calculateStockMarketMaxBuyQuantity,
   calculateStockMarketMaxSellQuantity,
   calculateReleasedStockHoldingCost,
   calculateStockMarketTradeFee,
   calculateStockMarketTradeFeeBreakdown,
   normalizeStockMarketAiChangeBps,
+  stockMarketPriceToStorageUnits,
+  stockMarketPriceUnitsToSpiritStones,
 } from '../stockMarket/stockMarketRules.js';
 
 test('股市初始配置应包含 10 支启用股票且 ID 唯一', () => {
@@ -52,10 +58,34 @@ test('normalizeStockMarketAiChangeBps: AI 涨跌应限制为两位小数且不�
   assert.equal(normalizeStockMarketAiChangeBps(-8.01), null);
 });
 
-test('applyStockMarketPriceChange: 应按基点调整价格且不低于 1 灵石', () => {
-  assert.equal(applyStockMarketPriceChange(100n, 800), 108n);
-  assert.equal(applyStockMarketPriceChange(100n, -800), 92n);
-  assert.equal(applyStockMarketPriceChange(1n, -800), 1n);
+test('applyStockMarketPriceChange: 应按两位小数分单位调整价格且不低于 1 灵石', () => {
+  assert.equal(applyStockMarketPriceChange(stockMarketPriceToStorageUnits(100), 10), 10010n);
+  assert.equal(applyStockMarketPriceChange(stockMarketPriceToStorageUnits(100), 800), 10800n);
+  assert.equal(applyStockMarketPriceChange(stockMarketPriceToStorageUnits(100), -800), 9200n);
+  assert.equal(applyStockMarketPriceChange(1n, -800), 100n);
+  assert.equal(stockMarketPriceUnitsToSpiritStones(10010n), 100.1);
+});
+
+test('buildStockMarketHistoryOhlc: 历史 K 线应在实体上下生成影线', () => {
+  assert.deepEqual(buildStockMarketHistoryOhlc(17900n, 18300n), {
+    openPriceUnits: 17900n,
+    highPriceUnits: 18400n,
+    lowPriceUnits: 17800n,
+    closePriceUnits: 18300n,
+  });
+  assert.deepEqual(buildStockMarketHistoryOhlc(17900n, 17900n), {
+    openPriceUnits: 17900n,
+    highPriceUnits: 17954n,
+    lowPriceUnits: 17846n,
+    closePriceUnits: 17900n,
+  });
+});
+
+test('calculateStockMarketGrossAmount: 小数股价买入向上取整，卖出向下取整', () => {
+  assert.equal(calculateStockMarketGrossAmount(10001n, 1, 'buy'), 101n);
+  assert.equal(calculateStockMarketGrossAmount(10001n, 1, 'sell'), 100n);
+  assert.equal(calculateStockMarketGrossAmount(10001n, 2, 'buy'), 201n);
+  assert.equal(calculateStockMarketGrossAmount(10001n, 2, 'sell'), 200n);
 });
 
 test('calculateStockMarketTradeFee: A 股费用应按买卖方向拆分并向上取整', () => {
@@ -76,17 +106,17 @@ test('calculateStockMarketTradeFee: A 股费用应按买卖方向拆分并向上
 
 test('calculateStockMarketMaxBuyQuantity: 买入数量应按剩余持仓价值与单笔金额共同收敛', () => {
   assert.equal(calculateStockMarketMaxBuyQuantity({
-    unitPriceSpiritStones: 100n,
+    unitPriceSpiritStones: 10000n,
     currentSingleStockValueSpiritStones: 4_999_800n,
     currentTotalValueSpiritStones: 10_000_000n,
   }), 2);
   assert.equal(calculateStockMarketMaxBuyQuantity({
-    unitPriceSpiritStones: 100n,
+    unitPriceSpiritStones: 10000n,
     currentSingleStockValueSpiritStones: 1_000_000n,
     currentTotalValueSpiritStones: 19_999_950n,
   }), 0);
   assert.equal(calculateStockMarketMaxBuyQuantity({
-    unitPriceSpiritStones: 100n,
+    unitPriceSpiritStones: 10000n,
     currentSingleStockValueSpiritStones: 1_000_000n,
     currentTotalValueSpiritStones: 1_000_000n,
   }), 20_000);

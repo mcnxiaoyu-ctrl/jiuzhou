@@ -31,11 +31,14 @@ import {
   type TechniqueTextModelJsonSchemaObject,
 } from '../shared/techniqueTextModelShared.js';
 import type { StockMarketDefinition } from './stockMarketDefinitions.js';
-import { normalizeStockMarketAiChangeBps } from './stockMarketRules.js';
+import {
+  normalizeStockMarketAiChangeBps,
+  stockMarketPriceUnitsToSpiritStones,
+} from './stockMarketRules.js';
 
 export type StockMarketAiQuoteInput = {
   stockId: string;
-  currentPriceSpiritStones: bigint;
+  currentPriceUnits: bigint;
 };
 
 export type StockMarketValidatedImpact = {
@@ -287,7 +290,10 @@ const buildStockMarketUserMessage = (params: {
   scenarioSeed: number;
 }): string => {
   const quoteByStockId = new Map(
-    params.quotes.map((quote) => [quote.stockId, quote.currentPriceSpiritStones.toString()] as const),
+    params.quotes.map((quote) => [
+      quote.stockId,
+      stockMarketPriceUnitsToSpiritStones(quote.currentPriceUnits).toFixed(2),
+    ] as const),
   );
   const stockIdSet = new Set(params.definitions.map((definition) => definition.id));
   const scenarioGuide = selectStockMarketScenarioGuide(params.scenarioSeed);
@@ -308,7 +314,7 @@ const buildStockMarketUserMessage = (params: {
       code: definition.code,
       name: definition.name,
       sector: definition.sector,
-      currentPriceSpiritStones: quoteByStockId.get(definition.id) ?? String(definition.initial_price_spirit_stones),
+      currentPriceSpiritStones: quoteByStockId.get(definition.id) ?? definition.initial_price_spirit_stones.toFixed(2),
       description: definition.description ?? '',
     })),
     outputRules: [

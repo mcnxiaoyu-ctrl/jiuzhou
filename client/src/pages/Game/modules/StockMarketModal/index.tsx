@@ -295,20 +295,32 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
           </div>
           <div className="stock-market-trade-preview">
             <span className="stock-market-trade-preview-item">
-              <span>成交额</span>
+              <span>买入成交额</span>
               <strong>{tradePreview.grossAmountText}</strong>
             </span>
             <span className="stock-market-trade-preview-item">
-              <span>佣金</span>
+              <span>卖出成交额</span>
+              <strong>{tradePreview.sellGrossAmountText}</strong>
+            </span>
+            <span className="stock-market-trade-preview-item">
+              <span>买入佣金</span>
               <strong>{tradePreview.commissionAmountText}</strong>
+            </span>
+            <span className="stock-market-trade-preview-item">
+              <span>卖出佣金</span>
+              <strong>{tradePreview.sellCommissionAmountText}</strong>
             </span>
             <span className="stock-market-trade-preview-item">
               <span>卖出印花税</span>
               <strong>{tradePreview.stampDutyAmountText}</strong>
             </span>
             <span className="stock-market-trade-preview-item">
-              <span>过户费</span>
+              <span>买入过户费</span>
               <strong>{tradePreview.transferFeeAmountText}</strong>
+            </span>
+            <span className="stock-market-trade-preview-item">
+              <span>卖出过户费</span>
+              <strong>{tradePreview.sellTransferFeeAmountText}</strong>
             </span>
             <span className="stock-market-trade-preview-item">
               <span>买入费用</span>

@@ -8,7 +8,7 @@ import test from 'node:test';
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：锁定 `loadArenaRanks` 只使用子查询显式暴露的 `character_id` 作为最终并列排序键，避免再次引用不存在的 `id` 别名。
- * 2. 做什么：锁定财富榜与股市榜货币字段按 `bigint` 输出，避免数据库把玩家资产压成 `int4` 后在高资产账号上溢出。
+ * 2. 做什么：锁定财富榜与股市榜货币字段按 `bigint` 输出，且股市榜把两位小数价格先折回整数灵石市值。
  * 3. 不做什么：不连接数据库，不执行排行榜查询，也不验证缓存层与月卡状态拼装逻辑。
  *
  * 输入/输出：
@@ -65,8 +65,8 @@ test('loadStockMarketRanks: 股市金额聚合与排序口径应稳定', () => {
 
   assert.match(
     source,
-    /SUM\(csh\.quantity::bigint \* smq\.current_price_spirit_stones\)::bigint AS total_market_value_spirit_stones/,
-    '股市市值应按 bigint 聚合，避免持仓市值溢出',
+    /SUM\(\(csh\.quantity::bigint \* smq\.current_price_spirit_stones \+ \$\{STOCK_MARKET_PRICE_SCALE_OFFSET_SQL\}\) \/ \$\{STOCK_MARKET_PRICE_SCALE_SQL\}\)::bigint AS total_market_value_spirit_stones/,
+    '股市市值应按两位小数价格向上折算成整数灵石并用 bigint 聚合',
   );
   assert.match(
     source,

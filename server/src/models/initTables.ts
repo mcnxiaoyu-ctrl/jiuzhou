@@ -3,6 +3,7 @@ import { backfillPartnerRankSnapshots } from "../services/partnerRankSnapshotSer
 import { backfillMailCounterSnapshotsIfEmpty } from "../services/shared/mailCounterStore.js";
 import { backfillMarketListingOriginalQty } from "../services/marketListingDataBackfillService.js";
 import { loadAllSeeds } from "../services/seedService.js";
+import { backfillStockMarketPriceScale } from "../services/stockMarket/stockMarketPriceScaleBackfill.js";
 
 /**
  * 数据准备入口
@@ -22,6 +23,7 @@ import { loadAllSeeds } from "../services/seedService.js";
  * 关键边界条件与坑点：
  * 1. 数据库表结构必须先通过 Prisma schema 同步完成，否则这里不会再兜底建表。
  * 2. 排行榜相关回填必须保持幂等，因为现在启动期会直接执行，不再通过迁移历史表去重。
+ * 3. 股市价格精度回填只修单价列，不能改动持仓成本或交易金额列。
  */
 export const initTables = async (): Promise<void> => {
   console.log("\n========== 数据准备 ==========");
@@ -32,6 +34,7 @@ export const initTables = async (): Promise<void> => {
   await backfillPartnerRankSnapshots();
   await backfillMarketListingOriginalQty();
   await backfillMailCounterSnapshotsIfEmpty();
+  await backfillStockMarketPriceScale();
 
   console.log("========== 数据准备完成 ==========\n");
 };

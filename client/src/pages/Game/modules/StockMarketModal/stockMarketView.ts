@@ -7,7 +7,7 @@
  *
  * 输入 / 输出：
  * - 输入：`StockMarketOverviewDto`、历史点、交易记录、当前选中股票和交易数量。
- * - 输出：弹窗 JSX 可直接读取的轻量字符串、色调标记、K 线坐标和预览数值。
+ * - 输出：弹窗 JSX 可直接读取的轻量字符串、色调标记、两位小数 K 线价格和预览数值。
  *
  * 数据流 / 状态流：
  * API DTO -> 本模块集中格式化、K 线派生与索引选中项 -> StockMarketModal 渲染；交易数量变化 -> 交易预览模型。
@@ -21,7 +21,8 @@
  * 关键边界条件与坑点：
  * 1. 服务端金额已经限制在前端安全整数内，本模块只做展示格式化，不做额外兼容兜底。
  * 2. 历史点可能为空，此时必须输出空 K 线模型，避免弹窗打开时渲染无意义坐标。
- * 3. 后端当前只记录每个 tick 的收盘价，因此前端以相邻 tick 收盘价作为下一根 K 线开盘价，不伪造未记录的盘中波动。
+ * 3. 历史 K 线的 OHLC 由后端 DTO 统一下发，前端只做格式化和图表数据收敛，避免前后端影线规则漂移。
+ * 4. 股价是两位小数，成交金额仍是整数灵石，两个格式化入口不能混用。
  */
 import type {
   StockMarketHistoryPointDto,
@@ -65,9 +66,12 @@ export interface StockMarketOverviewViewModel {
 export interface StockMarketTradePreview {
   quantity: number;
   grossAmount: number;
+  sellGrossAmount: number;
   commissionAmount: number;
+  sellCommissionAmount: number;
   stampDutyAmount: number;
   transferFeeAmount: number;
+  sellTransferFeeAmount: number;
   buyFeeAmount: number;
   sellFeeAmount: number;
   buyCost: number;
@@ -76,9 +80,12 @@ export interface StockMarketTradePreview {
   maxSellQty: number;
   maxTradeQty: number;
   grossAmountText: string;
+  sellGrossAmountText: string;
   commissionAmountText: string;
+  sellCommissionAmountText: string;
   stampDutyAmountText: string;
   transferFeeAmountText: string;
+  sellTransferFeeAmountText: string;
   buyFeeAmountText: string;
   sellFeeAmountText: string;
   buyCostText: string;
@@ -89,6 +96,11 @@ export interface StockMarketTradePreview {
 
 export interface StockMarketCandlestickView {
   key: string;
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
   openPriceText: string;
   highPriceText: string;
   lowPriceText: string;
@@ -96,44 +108,24 @@ export interface StockMarketCandlestickView {
   changeText: string;
   tone: StockMarketTone;
   timeText: string;
-  reason: string | null;
-  tooltipText: string;
-  x: number;
-  bodyX: number;
-  bodyY: number;
-  bodyWidth: number;
-  bodyHeight: number;
-  wickTopY: number;
-  wickBottomY: number;
-  hitX: number;
-  hitY: number;
-  hitWidth: number;
-  hitHeight: number;
-  tooltipLeftPercent: number;
-  tooltipTopPercent: number;
-  tooltipPlacement: 'above' | 'below';
+  reasonText: string;
+}
+
+export interface StockMarketMovingAveragePointView {
+  time: number;
+  value: number;
 }
 
 export interface StockMarketMovingAverageView {
   key: 'ma5' | 'ma10' | 'ma30';
   labelText: string;
   valueText: string;
-  path: string;
-}
-
-export interface StockMarketPriceAxisView {
-  key: string;
-  y: number;
-  priceText: string;
+  data: StockMarketMovingAveragePointView[];
 }
 
 export interface StockMarketHistoryViewModel {
   candlesticks: StockMarketCandlestickView[];
-  candlestickLookup: Map<string, StockMarketCandlestickView>;
   movingAverages: StockMarketMovingAverageView[];
-  priceAxis: StockMarketPriceAxisView[];
-  chartViewBox: string;
-  chartPriceAxisX: number;
 }
 
 export interface StockMarketTradeRecordView {
@@ -157,20 +149,8 @@ type StockMarketCandlestickDraft = {
   highPrice: number;
   lowPrice: number;
   closePrice: number;
-  x: number;
-  bodyWidth: number;
+  time: number;
 };
-
-const BPS_DENOMINATOR = 10_000;
-const STOCK_MARKET_CHART_WIDTH = 720;
-const STOCK_MARKET_CHART_HEIGHT = 220;
-const STOCK_MARKET_CHART_PADDING_TOP = 28;
-const STOCK_MARKET_CHART_PADDING_RIGHT = 54;
-const STOCK_MARKET_CHART_PADDING_BOTTOM = 18;
-const STOCK_MARKET_CHART_PADDING_LEFT = 8;
-const STOCK_MARKET_CHART_BODY_MIN_HEIGHT = 2;
-const STOCK_MARKET_PRICE_AXIS_COUNT = 4;
-const STOCK_MARKET_TOOLTIP_BELOW_THRESHOLD_Y = 104;
 
 const STOCK_MARKET_MA_PERIODS: ReadonlyArray<{
   key: StockMarketMovingAverageView['key'];
@@ -186,6 +166,11 @@ const integerFormatter = new Intl.NumberFormat('zh-CN', {
   maximumFractionDigits: 0,
 });
 
+const priceFormatter = new Intl.NumberFormat('zh-CN', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 const dateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
   month: '2-digit',
   day: '2-digit',
@@ -198,8 +183,16 @@ const toFiniteInteger = (value: number): number => {
   return Number.isFinite(value) ? Math.trunc(value) : 0;
 };
 
+const toFiniteNumber = (value: number): number => {
+  return Number.isFinite(value) ? value : 0;
+};
+
 export const formatStockMarketCurrency = (value: number): string => {
   return `${integerFormatter.format(toFiniteInteger(value))} 灵石`;
+};
+
+export const formatStockMarketPrice = (value: number): string => {
+  return `${priceFormatter.format(toFiniteNumber(value))} 灵石`;
 };
 
 export const formatStockMarketQuantity = (value: number): string => {
@@ -231,11 +224,11 @@ const formatStockMarketTime = (timestamp: number): string => {
 };
 
 const formatStockMarketAveragePrice = (value: number): string => {
-  return value.toFixed(2);
+  return toFiniteNumber(value).toFixed(2);
 };
 
-const formatStockMarketAxisPrice = (value: number): string => {
-  return integerFormatter.format(Math.round(value));
+const toStockMarketChartTime = (timestamp: number): number => {
+  return Math.trunc(timestamp / 1000);
 };
 
 const calculateStockMarketFeeComponent = (
@@ -247,36 +240,22 @@ const calculateStockMarketFeeComponent = (
   return Math.ceil((grossAmount * rate) / feeRateDenominator);
 };
 
-const deriveFirstStockMarketOpenPrice = (closePrice: number, changeBps: number): number => {
-  const normalizedClosePrice = Math.max(1, toFiniteInteger(closePrice));
-  if (changeBps === 0) return normalizedClosePrice;
-  return Math.max(
-    1,
-    Math.round((normalizedClosePrice * BPS_DENOMINATOR) / (BPS_DENOMINATOR + changeBps)),
-  );
+const STOCK_MARKET_FLOAT_EPSILON = 1e-9;
+
+const ceilStockMarketCurrencyAmount = (value: number): number => {
+  return Math.max(0, Math.ceil(value - STOCK_MARKET_FLOAT_EPSILON));
 };
 
-const resolveStockMarketChartY = (
-  price: number,
-  minPrice: number,
-  maxPrice: number,
-): number => {
-  const innerHeight = STOCK_MARKET_CHART_HEIGHT
-    - STOCK_MARKET_CHART_PADDING_TOP
-    - STOCK_MARKET_CHART_PADDING_BOTTOM;
-  if (maxPrice <= minPrice) return STOCK_MARKET_CHART_PADDING_TOP + innerHeight / 2;
-  return STOCK_MARKET_CHART_PADDING_TOP
-    + ((maxPrice - price) / (maxPrice - minPrice)) * innerHeight;
+const floorStockMarketCurrencyAmount = (value: number): number => {
+  return Math.max(0, Math.floor(value + STOCK_MARKET_FLOAT_EPSILON));
 };
 
 const buildStockMarketMovingAverageViews = (
   drafts: readonly StockMarketCandlestickDraft[],
-  minPrice: number,
-  maxPrice: number,
 ): StockMarketMovingAverageView[] => {
   return STOCK_MARKET_MA_PERIODS.map((config) => {
     let rollingSum = 0;
-    const pathParts: string[] = [];
+    const data: StockMarketMovingAveragePointView[] = [];
 
     drafts.forEach((draft, index) => {
       rollingSum += draft.closePrice;
@@ -288,8 +267,10 @@ const buildStockMarketMovingAverageViews = (
       }
 
       const average = rollingSum / config.period;
-      const command = pathParts.length === 0 ? 'M' : 'L';
-      pathParts.push(`${command}${draft.x.toFixed(2)} ${resolveStockMarketChartY(average, minPrice, maxPrice).toFixed(2)}`);
+      data.push({
+        time: draft.time,
+        value: Number(average.toFixed(2)),
+      });
     });
 
     const latestDrafts = drafts.slice(-config.period);
@@ -301,26 +282,9 @@ const buildStockMarketMovingAverageViews = (
       key: config.key,
       labelText: config.labelText,
       valueText: formatStockMarketAveragePrice(latestAverage),
-      path: pathParts.join(' '),
+      data,
     };
   });
-};
-
-const buildStockMarketPriceAxis = (
-  minPrice: number,
-  maxPrice: number,
-): StockMarketPriceAxisView[] => {
-  const axis: StockMarketPriceAxisView[] = [];
-  for (let index = 0; index < STOCK_MARKET_PRICE_AXIS_COUNT; index += 1) {
-    const ratio = index / (STOCK_MARKET_PRICE_AXIS_COUNT - 1);
-    const price = maxPrice - (maxPrice - minPrice) * ratio;
-    axis.push({
-      key: `axis:${index}`,
-      y: resolveStockMarketChartY(price, minPrice, maxPrice),
-      priceText: formatStockMarketAxisPrice(price),
-    });
-  }
-  return axis;
 };
 
 const buildStockView = (
@@ -336,7 +300,7 @@ const buildStockView = (
     selected: stock.stockId === selectedStockId,
     hasHolding,
     changeTone: resolveStockMarketTone(stock.lastChangeBps),
-    priceText: formatStockMarketCurrency(stock.priceSpiritStones),
+    priceText: formatStockMarketPrice(stock.priceSpiritStones),
     changeText: formatStockMarketBps(stock.lastChangeBps),
     holdingSummaryText: hasHolding ? `持有 ${holdingQtyText} · 市值 ${holdingValueText}` : '未持有',
     unrealizedPnlText: formatStockMarketSignedCurrency(stock.unrealizedPnlSpiritStones),
@@ -391,15 +355,22 @@ export const buildStockMarketTradePreview = (
   tradeRules: StockMarketTradeRulesDto,
 ): StockMarketTradePreview => {
   const normalizedQuantity = Math.max(0, toFiniteInteger(quantity));
-  const grossAmount = stock.priceSpiritStones * normalizedQuantity;
+  const rawGrossAmount = Math.max(0, toFiniteNumber(stock.priceSpiritStones) * normalizedQuantity);
+  const grossAmount = ceilStockMarketCurrencyAmount(rawGrossAmount);
+  const sellGrossAmount = floorStockMarketCurrencyAmount(rawGrossAmount);
   const feeRateDenominator = toFiniteInteger(tradeRules.feeRateDenominator);
   const commissionAmount = calculateStockMarketFeeComponent(
     grossAmount,
     toFiniteInteger(tradeRules.commissionRate),
     feeRateDenominator,
   );
+  const sellCommissionAmount = calculateStockMarketFeeComponent(
+    sellGrossAmount,
+    toFiniteInteger(tradeRules.commissionRate),
+    feeRateDenominator,
+  );
   const stampDutyAmount = calculateStockMarketFeeComponent(
-    grossAmount,
+    sellGrossAmount,
     toFiniteInteger(tradeRules.stampDutyRate),
     feeRateDenominator,
   );
@@ -408,19 +379,27 @@ export const buildStockMarketTradePreview = (
     toFiniteInteger(tradeRules.transferFeeRate),
     feeRateDenominator,
   );
+  const sellTransferFeeAmount = calculateStockMarketFeeComponent(
+    sellGrossAmount,
+    toFiniteInteger(tradeRules.transferFeeRate),
+    feeRateDenominator,
+  );
   const buyFeeAmount = commissionAmount + transferFeeAmount;
-  const sellFeeAmount = commissionAmount + stampDutyAmount + transferFeeAmount;
+  const sellFeeAmount = sellCommissionAmount + stampDutyAmount + sellTransferFeeAmount;
   const buyCost = grossAmount + buyFeeAmount;
-  const sellReceive = Math.max(0, grossAmount - sellFeeAmount);
+  const sellReceive = Math.max(0, sellGrossAmount - sellFeeAmount);
   const maxBuyQty = Math.max(0, toFiniteInteger(stock.maxBuyQty));
   const maxSellQty = Math.max(0, toFiniteInteger(stock.maxSellQty));
 
   return {
     quantity: normalizedQuantity,
     grossAmount,
+    sellGrossAmount,
     commissionAmount,
+    sellCommissionAmount,
     stampDutyAmount,
     transferFeeAmount,
+    sellTransferFeeAmount,
     buyFeeAmount,
     sellFeeAmount,
     buyCost,
@@ -429,9 +408,12 @@ export const buildStockMarketTradePreview = (
     maxSellQty,
     maxTradeQty: Math.max(1, maxBuyQty, maxSellQty),
     grossAmountText: formatStockMarketCurrency(grossAmount),
+    sellGrossAmountText: formatStockMarketCurrency(sellGrossAmount),
     commissionAmountText: formatStockMarketCurrency(commissionAmount),
+    sellCommissionAmountText: formatStockMarketCurrency(sellCommissionAmount),
     stampDutyAmountText: formatStockMarketCurrency(stampDutyAmount),
     transferFeeAmountText: formatStockMarketCurrency(transferFeeAmount),
+    sellTransferFeeAmountText: formatStockMarketCurrency(sellTransferFeeAmount),
     buyFeeAmountText: formatStockMarketCurrency(buyFeeAmount),
     sellFeeAmountText: formatStockMarketCurrency(sellFeeAmount),
     buyCostText: formatStockMarketCurrency(buyCost),
@@ -444,36 +426,20 @@ export const buildStockMarketTradePreview = (
 export const buildStockMarketHistoryViewModel = (
   points: readonly StockMarketHistoryPointDto[],
 ): StockMarketHistoryViewModel => {
-  const chartViewBox = `0 0 ${STOCK_MARKET_CHART_WIDTH} ${STOCK_MARKET_CHART_HEIGHT}`;
-  const chartPriceAxisX = STOCK_MARKET_CHART_WIDTH - STOCK_MARKET_CHART_PADDING_RIGHT + 8;
-
   if (points.length <= 0) {
     return {
       candlesticks: [],
-      candlestickLookup: new Map<string, StockMarketCandlestickView>(),
       movingAverages: [],
-      priceAxis: [],
-      chartViewBox,
-      chartPriceAxisX,
     };
   }
 
   const drafts: StockMarketCandlestickDraft[] = [];
-  let minPrice = Number.POSITIVE_INFINITY;
-  let maxPrice = Number.NEGATIVE_INFINITY;
-  let previousClosePrice: number | null = null;
-  const chartInnerWidth = STOCK_MARKET_CHART_WIDTH
-    - STOCK_MARKET_CHART_PADDING_LEFT
-    - STOCK_MARKET_CHART_PADDING_RIGHT;
-  const candleSlotWidth = chartInnerWidth / points.length;
-  const bodyWidth = Math.max(3, Math.min(9, candleSlotWidth * 0.56));
 
   for (const point of points) {
-    const closePrice = toFiniteInteger(point.priceSpiritStones);
-    const openPrice = previousClosePrice ?? deriveFirstStockMarketOpenPrice(closePrice, point.changeBps);
-    const highPrice = Math.max(openPrice, closePrice);
-    const lowPrice = Math.min(openPrice, closePrice);
-    const x = STOCK_MARKET_CHART_PADDING_LEFT + candleSlotWidth * (drafts.length + 0.5);
+    const openPrice = toFiniteNumber(point.openPriceSpiritStones);
+    const highPrice = toFiniteNumber(point.highPriceSpiritStones);
+    const lowPrice = toFiniteNumber(point.lowPriceSpiritStones);
+    const closePrice = toFiniteNumber(point.closePriceSpiritStones);
 
     drafts.push({
       point,
@@ -481,80 +447,44 @@ export const buildStockMarketHistoryViewModel = (
       highPrice,
       lowPrice,
       closePrice,
-      x,
-      bodyWidth,
+      time: toStockMarketChartTime(point.createdAt),
     });
-
-    if (lowPrice < minPrice) minPrice = lowPrice;
-    if (highPrice > maxPrice) maxPrice = highPrice;
-    previousClosePrice = closePrice;
   }
 
-  const priceRange = maxPrice - minPrice;
-  const pricePadding = priceRange > 0 ? Math.max(1, priceRange * 0.08) : 1;
-  const chartMinPrice = Math.max(1, minPrice - pricePadding);
-  const chartMaxPrice = maxPrice + pricePadding;
-  const priceAxis = buildStockMarketPriceAxis(chartMinPrice, chartMaxPrice);
-  const movingAverages = buildStockMarketMovingAverageViews(drafts, chartMinPrice, chartMaxPrice);
-  const hitY = STOCK_MARKET_CHART_PADDING_TOP;
-  const hitHeight = STOCK_MARKET_CHART_HEIGHT
-    - STOCK_MARKET_CHART_PADDING_TOP
-    - STOCK_MARKET_CHART_PADDING_BOTTOM;
+  const movingAverages = buildStockMarketMovingAverageViews(drafts);
   const candlesticks: StockMarketCandlestickView[] = drafts.map((draft) => {
     const { point } = draft;
-    const openY = resolveStockMarketChartY(draft.openPrice, chartMinPrice, chartMaxPrice);
-    const closeY = resolveStockMarketChartY(draft.closePrice, chartMinPrice, chartMaxPrice);
-    const highY = resolveStockMarketChartY(draft.highPrice, chartMinPrice, chartMaxPrice);
-    const lowY = resolveStockMarketChartY(draft.lowPrice, chartMinPrice, chartMaxPrice);
-    const rawBodyHeight = Math.abs(closeY - openY);
-    const bodyHeight = Math.max(STOCK_MARKET_CHART_BODY_MIN_HEIGHT, rawBodyHeight);
-    const bodyY = Math.min(openY, closeY) - (bodyHeight - rawBodyHeight) / 2;
-    const openPriceText = formatStockMarketCurrency(draft.openPrice);
-    const highPriceText = formatStockMarketCurrency(draft.highPrice);
-    const lowPriceText = formatStockMarketCurrency(draft.lowPrice);
-    const closePriceText = formatStockMarketCurrency(draft.closePrice);
+    const isFlatBody = draft.openPrice === draft.closePrice;
+    const candleTone = isFlatBody
+      ? 'flat'
+      : resolveStockMarketTone(draft.closePrice - draft.openPrice);
+    const openPriceText = formatStockMarketPrice(draft.openPrice);
+    const highPriceText = formatStockMarketPrice(draft.highPrice);
+    const lowPriceText = formatStockMarketPrice(draft.lowPrice);
+    const closePriceText = formatStockMarketPrice(draft.closePrice);
     const changeText = formatStockMarketBps(point.changeBps);
-    const timeText = formatStockMarketTime(point.createdAt);
-    const tooltipAnchorY = Math.min(highY, bodyY);
+    const reasonText = point.reason ? `影响：${point.reason}` : '影响：无直接影响';
 
     return {
       key: `${point.stockId}:${point.createdAt}`,
+      time: draft.time,
+      open: draft.openPrice,
+      high: draft.highPrice,
+      low: draft.lowPrice,
+      close: draft.closePrice,
       openPriceText,
       highPriceText,
       lowPriceText,
       closePriceText,
       changeText,
-      tone: resolveStockMarketTone(point.changeBps),
-      timeText,
-      reason: point.reason,
-      tooltipText: `${timeText} · 开 ${openPriceText} · 高 ${highPriceText} · 低 ${lowPriceText} · 收 ${closePriceText} · ${changeText}${point.reason ? ` · ${point.reason}` : ''}`,
-      x: draft.x,
-      bodyX: draft.x - draft.bodyWidth / 2,
-      bodyY,
-      bodyWidth: draft.bodyWidth,
-      bodyHeight,
-      wickTopY: highY,
-      wickBottomY: lowY,
-      hitX: draft.x - candleSlotWidth / 2,
-      hitY,
-      hitWidth: candleSlotWidth,
-      hitHeight,
-      tooltipLeftPercent: (draft.x / STOCK_MARKET_CHART_WIDTH) * 100,
-      tooltipTopPercent: (tooltipAnchorY / STOCK_MARKET_CHART_HEIGHT) * 100,
-      tooltipPlacement: tooltipAnchorY < STOCK_MARKET_TOOLTIP_BELOW_THRESHOLD_Y ? 'below' : 'above',
+      tone: candleTone,
+      timeText: formatStockMarketTime(point.createdAt),
+      reasonText,
     };
   });
-  const candlestickLookup = new Map<string, StockMarketCandlestickView>();
-  for (const candlestick of candlesticks) {
-    candlestickLookup.set(candlestick.key, candlestick);
-  }
   return {
     candlesticks,
-    candlestickLookup,
     movingAverages,
-    priceAxis,
-    chartViewBox,
-    chartPriceAxisX,
   };
 };
 
@@ -569,7 +499,7 @@ export const buildStockMarketTradeRecordViews = (
       sideTone: record.side === 'buy' ? 'up' : 'down',
       stockText: `${record.stockName} · ${record.stockCode}`,
       quantityText: formatStockMarketQuantity(record.quantity),
-      unitPriceText: formatStockMarketCurrency(record.unitPriceSpiritStones),
+      unitPriceText: formatStockMarketPrice(record.unitPriceSpiritStones),
       grossAmountText: formatStockMarketCurrency(record.grossAmountSpiritStones),
       feeText: formatStockMarketCurrency(record.feeSpiritStones),
       netAmountText: formatStockMarketCurrency(record.netAmountSpiritStones),

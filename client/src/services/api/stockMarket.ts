@@ -91,6 +91,10 @@ export interface StockMarketOverviewDto {
 export interface StockMarketHistoryPointDto {
   stockId: string;
   priceSpiritStones: number;
+  openPriceSpiritStones: number;
+  highPriceSpiritStones: number;
+  lowPriceSpiritStones: number;
+  closePriceSpiritStones: number;
   changeBps: number;
   direction: string;
   reason: string | null;

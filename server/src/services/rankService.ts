@@ -1,6 +1,7 @@
 import { query } from '../config/database.js';
 import { createCacheLayer } from './shared/cacheLayer.js';
 import { getMonthCardActiveMapByCharacterIds } from './shared/monthCardBenefits.js';
+import { STOCK_MARKET_PRICE_SCALE } from './stockMarket/stockMarketRules.js';
 
 const clampLimit = (limit?: number, fallback: number = 50): number => {
   const n = Number.isFinite(Number(limit)) ? Math.floor(Number(limit)) : fallback;
@@ -27,6 +28,8 @@ const normalizeStockMarketRankMetric = (
 
 const RANK_CACHE_REDIS_TTL_SEC = 30;
 const RANK_CACHE_MEMORY_TTL_MS = 5_000;
+const STOCK_MARKET_PRICE_SCALE_SQL = STOCK_MARKET_PRICE_SCALE.toString();
+const STOCK_MARKET_PRICE_SCALE_OFFSET_SQL = (STOCK_MARKET_PRICE_SCALE - 1n).toString();
 
 export type RealmRankRow = {
   rank: number;
@@ -425,7 +428,7 @@ const loadStockMarketRanks = async (
         SELECT
           csh.character_id,
           SUM(csh.quantity)::bigint AS total_holding_qty,
-          SUM(csh.quantity::bigint * smq.current_price_spirit_stones)::bigint AS total_market_value_spirit_stones,
+          SUM((csh.quantity::bigint * smq.current_price_spirit_stones + ${STOCK_MARKET_PRICE_SCALE_OFFSET_SQL}) / ${STOCK_MARKET_PRICE_SCALE_SQL})::bigint AS total_market_value_spirit_stones,
           SUM(csh.total_cost_spirit_stones)::bigint AS total_cost_spirit_stones
         FROM character_stock_holding csh
         JOIN stock_market_quote smq ON smq.stock_id = csh.stock_id

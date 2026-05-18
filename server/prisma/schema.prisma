@@ -1202,6 +1202,11 @@ model stock_market_trade_record {
   @@index([stock_id, created_at(sort: Desc)], map: "idx_stock_market_trade_record_stock_time")
 }
 
+model stock_market_data_migration {
+  migration_key String   @id @db.VarChar(96)
+  applied_at    DateTime @default(now()) @db.Timestamptz(6)
+}
+
 model market_partner_listing {
   id                       BigInt   @id @default(autoincrement())
   seller_user_id           Int

@@ -10,7 +10,7 @@
  * - 输出：股市概览 DTO、历史价格、交易记录和买卖结果。
  *
  * 数据流 / 状态流：
- * 静态股票 -> 初始 quote -> AI 新闻具体涨跌 -> quote/history；
+ * 静态股票 -> 初始 quote 分单位价格 -> AI 新闻具体涨跌 -> quote/history；
  * 角色请求 -> 交易校验 -> 货币 Delta -> holding/trade record -> route 推送角色刷新。
  *
  * 复用设计说明：
@@ -38,14 +38,19 @@ import {
 } from './stockMarketAi.js';
 import {
   STOCK_MARKET_HISTORY_LIMIT,
+  STOCK_MARKET_PRICE_SCALE,
   STOCK_MARKET_TRADE_RECORD_PAGE_SIZE,
   applyStockMarketPriceChange,
+  buildStockMarketHistoryOhlc,
   buildStockMarketTradeRulesDto,
+  calculateStockMarketMarketValue,
   calculateStockMarketMaxBuyQuantity,
   calculateStockMarketMaxSellQuantity,
   calculateReleasedStockHoldingCost,
   calculateStockMarketGrossAmount,
   calculateStockMarketTradeFee,
+  stockMarketPriceToStorageUnits,
+  stockMarketPriceUnitsToSpiritStones,
 } from './stockMarketRules.js';
 import {
   floorStockMarketTickHour,
@@ -160,6 +165,10 @@ export type StockMarketOverviewDto = {
 export type StockMarketHistoryPointDto = {
   stockId: string;
   priceSpiritStones: number;
+  openPriceSpiritStones: number;
+  highPriceSpiritStones: number;
+  lowPriceSpiritStones: number;
+  closePriceSpiritStones: number;
   changeBps: number;
   direction: string;
   reason: string | null;
@@ -215,6 +224,10 @@ const toDtoNumber = (value: bigint): number => {
   return normalized;
 };
 
+const toDtoStockMarketPrice = (priceUnits: bigint): number => {
+  return stockMarketPriceUnitsToSpiritStones(priceUnits);
+};
+
 const normalizeTradeQuantity = (quantity: number): number | null => {
   if (!Number.isInteger(quantity) || quantity <= 0) return null;
   if (!Number.isSafeInteger(quantity)) return null;
@@ -227,6 +240,9 @@ const buildStockMarketDirection = (changeBps: number): string => {
   return 'flat';
 };
 
+const STOCK_MARKET_PRICE_SCALE_SQL = STOCK_MARKET_PRICE_SCALE.toString();
+const STOCK_MARKET_PRICE_SCALE_OFFSET_SQL = (STOCK_MARKET_PRICE_SCALE - 1n).toString();
+
 class StockMarketService {
   async ensureInitialQuotes(): Promise<void> {
     const definitions = getEnabledStockDefinitions();
@@ -235,7 +251,7 @@ class StockMarketService {
     const values: Array<string | number> = [];
     const placeholders = definitions.map((definition, index) => {
       const baseIndex = index * 2;
-      values.push(definition.id, definition.initial_price_spirit_stones);
+      values.push(definition.id, stockMarketPriceToStorageUnits(definition.initial_price_spirit_stones).toString());
       return `($${baseIndex + 1}, $${baseIndex + 2})`;
     });
 
@@ -266,7 +282,10 @@ class StockMarketService {
   private async loadCurrentTotalHoldingValue(characterId: number): Promise<bigint> {
     const result = await query<{ total_value: string | number | bigint | null }>(
       `
-        SELECT COALESCE(SUM(csh.quantity::bigint * smq.current_price_spirit_stones), 0)::bigint AS total_value
+        SELECT COALESCE(
+          SUM((csh.quantity::bigint * smq.current_price_spirit_stones + ${STOCK_MARKET_PRICE_SCALE_OFFSET_SQL}) / ${STOCK_MARKET_PRICE_SCALE_SQL}),
+          0
+        )::bigint AS total_value
         FROM character_stock_holding csh
         JOIN stock_market_quote smq ON smq.stock_id = csh.stock_id
         WHERE csh.character_id = $1
@@ -334,10 +353,12 @@ class StockMarketService {
     for (const definition of definitions) {
       const quote = quoteByStockId.get(definition.id);
       const holding = holdingByStockId.get(definition.id);
-      const price = toBigIntValue(quote?.current_price_spirit_stones ?? definition.initial_price_spirit_stones);
+      const price = toBigIntValue(
+        quote?.current_price_spirit_stones ?? stockMarketPriceToStorageUnits(definition.initial_price_spirit_stones),
+      );
       const quantity = toIntValue(holding?.quantity ?? 0);
       const holdingCost = toBigIntValue(holding?.total_cost_spirit_stones ?? 0);
-      const marketValue = price * BigInt(quantity);
+      const marketValue = calculateStockMarketMarketValue(price, quantity);
       totalHoldingQty += quantity;
       totalCost += holdingCost;
       totalMarketValue += marketValue;
@@ -421,7 +442,11 @@ class StockMarketService {
         LEFT JOIN stock_market_price_history h ON h.tick_id = ot.id AND h.stock_id = $1
         ORDER BY ot.tick_hour ASC
       `,
-      [definition.id, STOCK_MARKET_HISTORY_LIMIT, definition.initial_price_spirit_stones],
+      [
+        definition.id,
+        STOCK_MARKET_HISTORY_LIMIT,
+        stockMarketPriceToStorageUnits(definition.initial_price_spirit_stones).toString(),
+      ],
     );
 
     return {
@@ -496,14 +521,14 @@ class StockMarketService {
     const totalHoldingValue = await this.loadCurrentTotalHoldingValue(params.characterId);
     const maxBuyQuantity = calculateStockMarketMaxBuyQuantity({
       unitPriceSpiritStones: price,
-      currentSingleStockValueSpiritStones: price * BigInt(currentQuantity),
+      currentSingleStockValueSpiritStones: calculateStockMarketMarketValue(price, currentQuantity),
       currentTotalValueSpiritStones: totalHoldingValue,
     });
     if (quantity > maxBuyQuantity) {
       return { success: false, message: '购买数量超过当前可买上限' };
     }
 
-    const grossAmount = calculateStockMarketGrossAmount(price, quantity);
+    const grossAmount = calculateStockMarketGrossAmount(price, quantity, 'buy');
     const fee = calculateStockMarketTradeFee(grossAmount, 'buy');
     const consumeResult = await consumeCharacterCurrenciesExact(params.characterId, {
       spiritStones: grossAmount + fee,
@@ -562,7 +587,7 @@ class StockMarketService {
     if (quantity > maxSellQuantity) return { success: false, message: '持仓数量不足' };
 
     const price = toBigIntValue(quote.current_price_spirit_stones);
-    const grossAmount = calculateStockMarketGrossAmount(price, quantity);
+    const grossAmount = calculateStockMarketGrossAmount(price, quantity, 'sell');
     const fee = calculateStockMarketTradeFee(grossAmount, 'sell');
     const netAmount = grossAmount > fee ? grossAmount - fee : 0n;
     const holdingCost = toBigIntValue(holding.total_cost_spirit_stones);
@@ -647,7 +672,7 @@ class StockMarketService {
       definitions,
       quotes: quoteResult.rows.map((row) => ({
         stockId: row.stock_id,
-        currentPriceSpiritStones: toBigIntValue(row.current_price_spirit_stones),
+        currentPriceUnits: toBigIntValue(row.current_price_spirit_stones),
       })),
       tickHour,
     });
@@ -686,7 +711,7 @@ class StockMarketService {
       shortName: params.definition.short_name ?? params.definition.name,
       sector: params.definition.sector,
       description: params.definition.description ?? '',
-      priceSpiritStones: toDtoNumber(params.price),
+      priceSpiritStones: toDtoStockMarketPrice(params.price),
       lastChangeBps: params.lastChangeBps,
       updatedAt: toTimestamp(params.updatedAt),
       holdingQty: params.quantity,
@@ -763,12 +788,18 @@ class StockMarketService {
 
     for (const row of rows) {
       const changed = row.price_spirit_stones !== null;
+      const openPrice = lastPrice;
       const price = changed ? toBigIntValue(row.price_spirit_stones) : lastPrice;
       const changeBps = changed ? toIntValue(row.change_bps) : 0;
+      const ohlc = buildStockMarketHistoryOhlc(openPrice, price);
 
       points.push({
         stockId,
-        priceSpiritStones: toDtoNumber(price),
+        priceSpiritStones: toDtoStockMarketPrice(price),
+        openPriceSpiritStones: toDtoStockMarketPrice(ohlc.openPriceUnits),
+        highPriceSpiritStones: toDtoStockMarketPrice(ohlc.highPriceUnits),
+        lowPriceSpiritStones: toDtoStockMarketPrice(ohlc.lowPriceUnits),
+        closePriceSpiritStones: toDtoStockMarketPrice(ohlc.closePriceUnits),
         changeBps,
         direction: changed ? row.direction ?? buildStockMarketDirection(changeBps) : 'flat',
         reason: changed ? row.reason : null,
@@ -792,7 +823,7 @@ class StockMarketService {
       stockCode: definitionMap.get(row.stock_id)?.code ?? row.stock_id,
       side: row.side === 'sell' ? 'sell' : 'buy',
       quantity: toIntValue(row.quantity),
-      unitPriceSpiritStones: toDtoNumber(toBigIntValue(row.unit_price_spirit_stones)),
+      unitPriceSpiritStones: toDtoStockMarketPrice(toBigIntValue(row.unit_price_spirit_stones)),
       grossAmountSpiritStones: toDtoNumber(toBigIntValue(row.gross_amount_spirit_stones)),
       feeSpiritStones: toDtoNumber(toBigIntValue(row.fee_spirit_stones)),
       netAmountSpiritStones: toDtoNumber(toBigIntValue(row.net_amount_spirit_stones)),
