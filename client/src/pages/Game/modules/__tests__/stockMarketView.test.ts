@@ -94,7 +94,10 @@ describe('stockMarketView', () => {
 
     expect(model.selectedStock?.stock.stockId).toBe('stock-qingyun-danfang');
     expect(model.stocks[0].selected).toBe(true);
+    expect(model.stocks[0].hasHolding).toBe(true);
+    expect(model.stocks[0].holdingSummaryText).toBe('持有 2 股 · 市值 202 灵石');
     expect(model.stocks[1].changeTone).toBe('down');
+    expect(model.stocks[1].holdingSummaryText).toBe('未持有');
     expect(model.portfolio.totalUnrealizedPnlTone).toBe('up');
     expect(model.portfolio.totalHoldingQtyText).toBe('2 股');
   });

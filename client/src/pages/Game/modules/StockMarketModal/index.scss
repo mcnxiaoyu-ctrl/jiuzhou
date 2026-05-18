@@ -360,7 +360,7 @@
 
 .stock-market-stock-row {
   width: 100%;
-  min-height: 42px;
+  min-height: 58px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -412,6 +412,14 @@
     line-height: 1.2;
     color: var(--text-tertiary);
   }
+
+  .stock-market-stock-holding {
+    color: var(--text-tertiary);
+
+    &.is-holding {
+      color: var(--primary-color);
+    }
+  }
 }
 
 .stock-market-stock-price {
@@ -428,6 +436,12 @@
     font-style: normal;
     font-size: 12px;
     line-height: 1.2;
+  }
+
+  span {
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: nowrap;
   }
 }
 
@@ -1135,7 +1149,7 @@
   }
 
   .stock-market-stock-row {
-    min-height: 46px;
+    min-height: 62px;
     align-items: center;
     flex-direction: row;
     padding: 7px 8px;

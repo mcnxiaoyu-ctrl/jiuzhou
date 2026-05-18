@@ -557,10 +557,20 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
                             <span className="stock-market-stock-main">
                               <strong>{item.stock.name}</strong>
                               <span>{item.stock.code} · {item.stock.sector}</span>
+                              <span
+                                className={`stock-market-stock-holding${item.hasHolding ? ' is-holding' : ''}`}
+                              >
+                                {item.holdingSummaryText}
+                              </span>
                             </span>
                             <span className="stock-market-stock-price">
                               <strong>{item.priceText}</strong>
                               <em className={getStockMarketToneClassName(item.changeTone)}>{item.changeText}</em>
+                              {item.hasHolding ? (
+                                <span className={getStockMarketToneClassName(item.unrealizedPnlTone)}>
+                                  {item.unrealizedPnlText}
+                                </span>
+                              ) : null}
                             </span>
                           </button>
                         ))}

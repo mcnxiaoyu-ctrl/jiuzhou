@@ -35,9 +35,11 @@ export type StockMarketTone = 'up' | 'down' | 'flat';
 export interface StockMarketStockView {
   stock: StockMarketStockDto;
   selected: boolean;
+  hasHolding: boolean;
   changeTone: StockMarketTone;
   priceText: string;
   changeText: string;
+  holdingSummaryText: string;
   holdingQtyText: string;
   holdingValueText: string;
   holdingCostText: string;
@@ -310,14 +312,20 @@ const buildStockView = (
   stock: StockMarketStockDto,
   selectedStockId: string,
 ): StockMarketStockView => {
+  const hasHolding = stock.holdingQty > 0;
+  const holdingQtyText = formatStockMarketQuantity(stock.holdingQty);
+  const holdingValueText = formatStockMarketCurrency(stock.holdingMarketValueSpiritStones);
+
   return {
     stock,
     selected: stock.stockId === selectedStockId,
+    hasHolding,
     changeTone: resolveStockMarketTone(stock.lastChangeBps),
     priceText: formatStockMarketCurrency(stock.priceSpiritStones),
     changeText: formatStockMarketBps(stock.lastChangeBps),
-    holdingQtyText: formatStockMarketQuantity(stock.holdingQty),
-    holdingValueText: formatStockMarketCurrency(stock.holdingMarketValueSpiritStones),
+    holdingSummaryText: hasHolding ? `持有 ${holdingQtyText} · 市值 ${holdingValueText}` : '未持有',
+    holdingQtyText,
+    holdingValueText,
     holdingCostText: formatStockMarketCurrency(stock.holdingCostSpiritStones),
     unrealizedPnlText: formatStockMarketSignedCurrency(stock.unrealizedPnlSpiritStones),
     unrealizedPnlTone: resolveStockMarketTone(stock.unrealizedPnlSpiritStones),
