@@ -2,11 +2,11 @@
  * 股市 HTTP 路由。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：提供股市概览、历史、交易记录、买入和卖出接口。
+ * 1. 做什么：提供股市概览、历史、交易记录、买入、卖出和清仓接口。
  * 2. 不做什么：不在路由层重复手续费、持仓上限或 AI 行情规则。
  *
  * 输入 / 输出：
- * - 输入：登录角色上下文、股票 ID、交易数量、分页参数。
+ * - 输入：登录角色上下文、股票 ID、交易数量、清仓范围、分页参数。
  * - 输出：标准 `{ success, data?, message }` 响应。
  *
  * 数据流 / 状态流：
@@ -17,7 +17,7 @@
  * - 买入/卖出共用同一个 body 解析函数，减少 stockId/quantity 校验分叉。
  *
  * 关键边界条件与坑点：
- * 1. 买卖成功后需要推送角色刷新，否则灵石余额会滞后。
+ * 1. 买卖和清仓成功后需要推送角色刷新，否则灵石余额会滞后。
  * 2. 查询接口保持低 QPS 限制，避免玩家频繁刷新股市概览造成数据库压力。
  */
 import { Router } from 'express';
@@ -41,6 +41,10 @@ type StockMarketTradeBody = {
   quantity?: string | number | null;
 };
 
+type StockMarketClearPositionBody = {
+  stockId?: string | null;
+};
+
 const createStockMarketQpsLimit = (routeKey: string, limit: number) => createQpsLimitMiddleware({
   keyPrefix: `qps:stock-market:${routeKey}`,
   limit,
@@ -54,6 +58,7 @@ const stockMarketHistoryQpsLimit = createStockMarketQpsLimit('history', STOCK_MA
 const stockMarketTradesQpsLimit = createStockMarketQpsLimit('trades', STOCK_MARKET_QUERY_QPS_LIMIT);
 const stockMarketBuyQpsLimit = createStockMarketQpsLimit('buy', STOCK_MARKET_MUTATION_QPS_LIMIT);
 const stockMarketSellQpsLimit = createStockMarketQpsLimit('sell', STOCK_MARKET_MUTATION_QPS_LIMIT);
+const stockMarketClearQpsLimit = createStockMarketQpsLimit('clear', STOCK_MARKET_MUTATION_QPS_LIMIT);
 
 const parseTradeBody = (body: StockMarketTradeBody): { stockId: string; quantity: number } | null => {
   const stockId = typeof body.stockId === 'string' ? body.stockId.trim() : '';
@@ -63,6 +68,15 @@ const parseTradeBody = (body: StockMarketTradeBody): { stockId: string; quantity
     stockId,
     quantity,
   };
+};
+
+const parseClearPositionBody = (body: StockMarketClearPositionBody): { stockId: string | null } | null => {
+  if (body.stockId === undefined || body.stockId === null) {
+    return { stockId: null };
+  }
+  if (typeof body.stockId !== 'string') return null;
+  const stockId = body.stockId.trim();
+  return { stockId: stockId || null };
 };
 
 router.get('/overview', requireCharacter, stockMarketOverviewQpsLimit, asyncHandler(async (req, res) => {
@@ -120,6 +134,24 @@ router.post('/sell', requireCharacter, stockMarketSellQpsLimit, asyncHandler(asy
     characterId,
     stockId: body.stockId,
     quantity: body.quantity,
+  });
+  if (result.success) {
+    await safePushCharacterUpdate(req.userId!);
+  }
+  sendResult(res, result);
+}));
+
+router.post('/clear', requireCharacter, stockMarketClearQpsLimit, asyncHandler(async (req, res) => {
+  const characterId = req.characterId!;
+  const body = parseClearPositionBody(req.body as StockMarketClearPositionBody);
+  if (!body) {
+    sendResult(res, { success: false, message: '清仓参数无效' });
+    return;
+  }
+
+  const result = await stockMarketService.clearPosition({
+    characterId,
+    stockId: body.stockId,
   });
   if (result.success) {
     await safePushCharacterUpdate(req.userId!);

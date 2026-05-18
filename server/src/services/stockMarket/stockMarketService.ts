@@ -116,6 +116,18 @@ type StockMarketRecentImpactRow = {
   stock_id: string;
 };
 
+type StockMarketSellExecutionPlan = {
+  stockId: string;
+  quantity: number;
+  holdingQuantity: number;
+  price: bigint;
+  grossAmount: bigint;
+  fee: bigint;
+  netAmount: bigint;
+  realizedPnl: bigint;
+  releasedCost: bigint;
+};
+
 export type StockMarketStockDto = {
   stockId: string;
   code: string;
@@ -556,55 +568,181 @@ class StockMarketService {
     if (quantity > maxSellQuantity) return { success: false, message: '持仓数量不足' };
 
     const price = toBigIntValue(quote.current_price_spirit_stones);
-    const grossAmount = calculateStockMarketGrossAmount(price, quantity, 'sell');
+    const executionResult = await this.executeSellPlans(params.characterId, [
+      this.buildSellExecutionPlan({
+        stockId: definition.id,
+        holding,
+        price,
+        quantity,
+      }),
+    ]);
+    if (!executionResult.success) return executionResult;
+
+    return { success: true, message: '卖出成功' };
+  }
+
+  @Transactional
+  async clearPosition(params: {
+    characterId: number;
+    stockId: string | null;
+  }): Promise<{ success: boolean; message: string }> {
+    await this.ensureInitialQuotes();
+
+    let definitions: readonly StockMarketDefinition[];
+    if (params.stockId === null) {
+      definitions = getEnabledStockDefinitions();
+    } else {
+      const definition = getEnabledStockDefinitionById(params.stockId);
+      definitions = definition ? [definition] : [];
+    }
+    if (params.stockId !== null && definitions.length <= 0) {
+      return { success: false, message: '股票不存在' };
+    }
+    if (definitions.length <= 0) {
+      return { success: false, message: '当前没有可清仓股票' };
+    }
+
+    const stockIds = definitions.map((definition) => definition.id);
+    const definitionByStockId = new Map(definitions.map((definition) => [definition.id, definition] as const));
+    const quoteByStockId = await this.loadQuoteRowsForUpdate(stockIds);
+    const holdings = await this.loadHoldingsForUpdate(params.characterId, stockIds);
+    const plans: StockMarketSellExecutionPlan[] = [];
+
+    for (const holding of holdings) {
+      const definition = definitionByStockId.get(holding.stock_id);
+      if (!definition) continue;
+      const quote = quoteByStockId.get(definition.id);
+      if (!quote) return { success: false, message: '股票报价不存在' };
+
+      const holdingQuantity = toIntValue(holding.quantity);
+      const quantity = calculateStockMarketMaxSellQuantity(holdingQuantity);
+      if (quantity <= 0) continue;
+      plans.push(this.buildSellExecutionPlan({
+        stockId: definition.id,
+        holding,
+        price: toBigIntValue(quote.current_price_spirit_stones),
+        quantity,
+      }));
+    }
+
+    if (plans.length <= 0) {
+      return {
+        success: false,
+        message: params.stockId === null ? '当前没有可清仓股票' : '未持有该股票',
+      };
+    }
+
+    const executionResult = await this.executeSellPlans(params.characterId, plans);
+    if (!executionResult.success) return executionResult;
+
+    return {
+      success: true,
+      message: params.stockId === null
+        ? `清仓完成，卖出 ${executionResult.soldStockCount} 支股票 ${executionResult.soldQuantity} 股，到账 ${executionResult.netAmount.toString()} 灵石`
+        : `清仓完成，卖出 ${executionResult.soldQuantity} 股，到账 ${executionResult.netAmount.toString()} 灵石`,
+    };
+  }
+
+  private buildSellExecutionPlan(params: {
+    stockId: string;
+    holding: StockMarketHoldingRow;
+    price: bigint;
+    quantity: number;
+  }): StockMarketSellExecutionPlan {
+    const holdingQuantity = toIntValue(params.holding.quantity);
+    const grossAmount = calculateStockMarketGrossAmount(params.price, params.quantity, 'sell');
     const fee = calculateStockMarketTradeFee(grossAmount, 'sell');
     const netAmount = grossAmount > fee ? grossAmount - fee : 0n;
-    const holdingCost = toBigIntValue(holding.total_cost_spirit_stones);
-    const releasedCost = calculateReleasedStockHoldingCost(holdingCost, holdingQuantity, quantity);
-    const realizedPnl = netAmount - releasedCost;
-
-    if (netAmount > 0n) {
-      const addResult = await addCharacterCurrenciesExact(params.characterId, {
-        spiritStones: netAmount,
-      });
-      if (!addResult.success) return { success: false, message: addResult.message };
-    }
-
-    if (holdingQuantity === quantity) {
-      await query(
-        `
-          DELETE FROM character_stock_holding
-          WHERE character_id = $1 AND stock_id = $2
-        `,
-        [params.characterId, definition.id],
-      );
-    } else {
-      await query(
-        `
-          UPDATE character_stock_holding
-          SET
-            quantity = quantity - $3,
-            total_cost_spirit_stones = total_cost_spirit_stones - $4,
-            updated_at = NOW()
-          WHERE character_id = $1 AND stock_id = $2
-        `,
-        [params.characterId, definition.id, quantity, releasedCost.toString()],
-      );
-    }
-
-    await this.insertTradeRecord({
-      characterId: params.characterId,
-      stockId: definition.id,
-      side: 'sell',
-      quantity,
-      price,
+    const holdingCost = toBigIntValue(params.holding.total_cost_spirit_stones);
+    const releasedCost = calculateReleasedStockHoldingCost(holdingCost, holdingQuantity, params.quantity);
+    return {
+      stockId: params.stockId,
+      quantity: params.quantity,
+      holdingQuantity,
+      price: params.price,
       grossAmount,
       fee,
       netAmount,
-      realizedPnl,
-    });
+      realizedPnl: netAmount - releasedCost,
+      releasedCost,
+    };
+  }
 
-    return { success: true, message: '卖出成功' };
+  private async executeSellPlans(
+    characterId: number,
+    plans: readonly StockMarketSellExecutionPlan[],
+  ): Promise<{
+    success: boolean;
+    message: string;
+    soldStockCount: number;
+    soldQuantity: number;
+    netAmount: bigint;
+  }> {
+    let soldQuantity = 0;
+    let netAmount = 0n;
+    for (const plan of plans) {
+      soldQuantity += plan.quantity;
+      netAmount += plan.netAmount;
+    }
+
+    if (netAmount > 0n) {
+      const addResult = await addCharacterCurrenciesExact(characterId, {
+        spiritStones: netAmount,
+      });
+      if (!addResult.success) {
+        return {
+          success: false,
+          message: addResult.message,
+          soldStockCount: 0,
+          soldQuantity: 0,
+          netAmount: 0n,
+        };
+      }
+    }
+
+    for (const plan of plans) {
+      if (plan.quantity >= plan.holdingQuantity) {
+        await query(
+          `
+            DELETE FROM character_stock_holding
+            WHERE character_id = $1 AND stock_id = $2
+          `,
+          [characterId, plan.stockId],
+        );
+      } else {
+        await query(
+          `
+            UPDATE character_stock_holding
+            SET
+              quantity = quantity - $3,
+              total_cost_spirit_stones = total_cost_spirit_stones - $4,
+              updated_at = NOW()
+            WHERE character_id = $1 AND stock_id = $2
+          `,
+          [characterId, plan.stockId, plan.quantity, plan.releasedCost.toString()],
+        );
+      }
+
+      await this.insertTradeRecord({
+        characterId,
+        stockId: plan.stockId,
+        side: 'sell',
+        quantity: plan.quantity,
+        price: plan.price,
+        grossAmount: plan.grossAmount,
+        fee: plan.fee,
+        netAmount: plan.netAmount,
+        realizedPnl: plan.realizedPnl,
+      });
+    }
+
+    return {
+      success: true,
+      message: '卖出成功',
+      soldStockCount: plans.length,
+      soldQuantity,
+      netAmount,
+    };
   }
 
   async runScheduledTick(now: Date = new Date()): Promise<{
@@ -812,6 +950,26 @@ class StockMarketService {
       [characterId, stockId],
     );
     return result.rows[0] ?? null;
+  }
+
+  private async loadHoldingsForUpdate(
+    characterId: number,
+    stockIds: readonly string[],
+  ): Promise<StockMarketHoldingRow[]> {
+    if (stockIds.length <= 0) return [];
+    const result = await query<StockMarketHoldingRow>(
+      `
+        SELECT stock_id, quantity, total_cost_spirit_stones
+        FROM character_stock_holding
+        WHERE character_id = $1
+          AND stock_id = ANY($2::text[])
+          AND quantity > 0
+        ORDER BY stock_id ASC
+        FOR UPDATE
+      `,
+      [characterId, stockIds],
+    );
+    return result.rows;
   }
 
   private async loadRecentImpactStockIds(): Promise<string[]> {

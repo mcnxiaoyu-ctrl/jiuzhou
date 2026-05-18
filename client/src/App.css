@@ -120,21 +120,6 @@ body.theme-dark {
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
 }
 
-/* 深色主题下统一修复 Ant Design 交互态文字发黑问题 */
-body.theme-dark .ant-btn-color-default,
-body.theme-dark .ant-btn-color-default.ant-btn-variant-outlined,
-body.theme-dark .ant-btn-color-default.ant-btn-variant-filled,
-body.theme-dark .ant-btn-color-default.ant-btn-variant-text,
-body.theme-dark .ant-btn-color-default.ant-btn-variant-link {
-  color: var(--text-color);
-}
-
-body.theme-dark .ant-btn-color-default:not(:disabled):not(.ant-btn-disabled):hover,
-body.theme-dark .ant-btn-color-default:not(:disabled):not(.ant-btn-disabled):focus-visible,
-body.theme-dark .ant-btn-color-default:not(:disabled):not(.ant-btn-disabled):active {
-  color: var(--text-color) !important;
-}
-
 /* 深色主题下统一修复 Spin 提示文字颜色 */
 body.theme-dark .ant-spin,
 body.theme-dark .ant-spin .ant-spin-text {

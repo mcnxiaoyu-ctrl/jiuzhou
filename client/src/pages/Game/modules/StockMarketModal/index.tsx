@@ -2,7 +2,7 @@
  * 股市弹窗。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：提供游戏内股市概览、AI 新闻、选中股票走势、持仓摘要、买卖和交易记录。
+ * 1. 做什么：提供游戏内股市概览、AI 新闻、选中股票走势、持仓摘要、买卖、清仓和交易记录。
  * 2. 不做什么：不复用坊市物品/伙伴交易 UI，不在前端决定实际成交价与资金扣增。
  *
  * 输入 / 输出：
@@ -10,12 +10,12 @@
  * - 输出：用户完成买卖后刷新股市概览，并通过后端推送同步角色灵石。
  *
  * 数据流 / 状态流：
- * 打开弹窗 -> 拉取 overview -> 选中股票时单独拉取 history -> 买卖成功后后台刷新 overview/trades。
+ * 打开弹窗 -> 拉取 overview -> 选中股票时单独拉取 history -> 买卖或清仓成功后后台刷新 overview/trades。
  *
  * 复用设计说明：
  * - 请求 DTO 统一来自 `services/api/stockMarket`，展示派生统一来自 `stockMarketView`，弹窗只负责交互状态。
  * - 历史走势按选中股票延迟请求，避免概览首屏携带所有股票历史点。
- * - 买入/卖出共用同一个数量输入和交易费用预览，避免两套表单重复维护佣金、印花税和过户费展示。
+ * - 买入/卖出共用同一个数量输入和交易费用预览，清仓走后端单一接口，避免前端循环卖出时重复维护交易规则。
  *
  * 关键边界条件与坑点：
  * 1. 自动错误 toast 由 axios 拦截器负责，买卖 catch 不重复弹失败提示。
@@ -25,6 +25,7 @@ import {
   App,
   Button,
   Drawer,
+  Dropdown,
   Empty,
   InputNumber,
   Modal,
@@ -33,17 +34,28 @@ import {
   Tabs,
   Tag,
   Tooltip,
+  type MenuProps,
 } from 'antd';
 import {
+  ClearOutlined,
   FallOutlined,
   LeftOutlined,
   ReloadOutlined,
   RightOutlined,
   ShoppingCartOutlined,
 } from '@ant-design/icons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   buyStockMarketStock,
+  clearStockMarketPosition,
   getStockMarketHistory,
   getStockMarketOverview,
   getStockMarketTrades,
@@ -51,6 +63,7 @@ import {
   type StockMarketHistoryPointDto,
   type StockMarketOverviewDto,
   type StockMarketTradeRecordDto,
+  type StockMarketTradeSide,
 } from '../../../../services/api';
 import { SILENT_API_REQUEST_CONFIG } from '../../../../services/api/requestConfig';
 import {
@@ -73,12 +86,32 @@ interface StockMarketModalProps {
 }
 
 type StockMarketRefreshMode = 'initial' | 'background';
-type StockMarketActionKey = '' | 'buy' | 'sell';
+type StockMarketActionKey = '' | 'buy' | 'buy-all' | 'sell' | 'clear-stock' | 'clear-all';
+
+type StockMarketDropdownButtonElementProps = {
+  className?: string;
+  disabled?: boolean;
+};
 
 const STOCK_MARKET_DEFAULT_TRADE_PAGE_SIZE = 20;
 
+const renderStockMarketTradeDropdownButtons = (
+  buttons: ReactNode[],
+  mainButtonClassName: string,
+  mainButtonDisabled: boolean,
+): ReactNode[] => {
+  const [leftButton, rightButton] = buttons;
+  const leftButtonToRender = isValidElement<StockMarketDropdownButtonElementProps>(leftButton)
+    ? cloneElement(leftButton, {
+      className: `${leftButton.props.className ?? ''} ${mainButtonClassName}`.trim(),
+      disabled: mainButtonDisabled,
+    })
+    : leftButton;
+  return [leftButtonToRender, rightButton];
+};
+
 const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spiritStones }) => {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const isMobile = useIsMobile();
   const [overview, setOverview] = useState<StockMarketOverviewDto | null>(null);
   const [selectedStockId, setSelectedStockId] = useState('');
@@ -225,6 +258,11 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
     setQuantity(value === null ? 1 : Math.max(1, Math.trunc(value)));
   }, []);
 
+  const handleUseTradeLimitQuantity = useCallback((nextQuantity: number) => {
+    if (nextQuantity <= 0) return;
+    setQuantity(nextQuantity);
+  }, []);
+
   useEffect(() => {
     if (!tradePreview) return;
     setQuantity((current) => {
@@ -240,13 +278,23 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
     }
   }, [isMobile]);
 
-  const handleTrade = useCallback(async (side: 'buy' | 'sell') => {
-    if (!selectedStock || !tradePreview || tradePreview.quantity <= 0) return;
-    setActionKey(side);
+  const handleTrade = useCallback(async (
+    side: StockMarketTradeSide,
+    overrideQuantity?: number,
+    nextActionKey: StockMarketActionKey = side,
+  ) => {
+    if (!selectedStock || !tradePreview) return;
+
+    const tradeQuantity = Math.max(0, Math.trunc(overrideQuantity ?? tradePreview.quantity));
+    if (tradeQuantity <= 0) return;
+    if (side === 'buy' && tradeQuantity > tradePreview.maxAffordableBuyQty) return;
+    if (side === 'sell' && tradeQuantity > tradePreview.maxSellQty) return;
+
+    setActionKey(nextActionKey);
     try {
       const response = side === 'buy'
-        ? await buyStockMarketStock({ stockId: selectedStock.stockId, quantity: tradePreview.quantity })
-        : await sellStockMarketStock({ stockId: selectedStock.stockId, quantity: tradePreview.quantity });
+        ? await buyStockMarketStock({ stockId: selectedStock.stockId, quantity: tradeQuantity })
+        : await sellStockMarketStock({ stockId: selectedStock.stockId, quantity: tradeQuantity });
       message.success(response.message || (side === 'buy' ? '买入成功' : '卖出成功'));
       await refreshOverview('background');
       if (activeTab === 'records') {
@@ -257,6 +305,42 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
     }
   }, [activeTab, message, refreshOverview, refreshTrades, selectedStock, tradePage, tradePreview]);
 
+  const handleClearPosition = useCallback((scope: 'stock' | 'all') => {
+    if (scope === 'stock' && (!selectedStock || !tradePreview || tradePreview.maxSellQty <= 0)) return;
+    if (scope === 'all' && (!overview || overview.portfolio.totalHoldingQty <= 0)) return;
+
+    const actionKey: StockMarketActionKey = scope === 'stock' ? 'clear-stock' : 'clear-all';
+    const title = scope === 'stock' && selectedStock
+      ? `确认清仓 ${selectedStock.name}？`
+      : '确认全部清仓？';
+    const content = scope === 'stock' && selectedStock
+      ? `将按当前价卖出该股票全部 ${selectedStock.maxSellQty} 股。`
+      : `将按当前价卖出全部持仓 ${overview?.portfolio.totalHoldingQty ?? 0} 股。`;
+
+    modal.confirm({
+      title,
+      content,
+      okText: '清仓',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setActionKey(actionKey);
+        try {
+          const response = await clearStockMarketPosition(
+            scope === 'stock' && selectedStock ? { stockId: selectedStock.stockId } : {},
+          );
+          message.success(response.message || '清仓成功');
+          await refreshOverview('background');
+          if (activeTab === 'records') {
+            await refreshTrades(tradePage, 'background');
+          }
+        } finally {
+          setActionKey('');
+        }
+      },
+    });
+  }, [activeTab, message, modal, overview, refreshOverview, refreshTrades, selectedStock, tradePage, tradePreview]);
+
   const maxTradeQty = tradePreview?.maxTradeQty ?? 1;
   const canBuy = Boolean(
     selectedStock
@@ -264,11 +348,68 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
     && tradePreview.quantity > 0
     && tradePreview.quantity <= tradePreview.maxAffordableBuyQty,
   );
+  const maxAffordableBuyQty = tradePreview?.maxAffordableBuyQty ?? 0;
+  const canBuyAll = Boolean(selectedStock && maxAffordableBuyQty > 0);
   const canSell = Boolean(
     selectedStock && tradePreview && tradePreview.quantity > 0 && tradePreview.quantity <= tradePreview.maxSellQty,
   );
+  const canClearSelected = Boolean(selectedStock && tradePreview && tradePreview.maxSellQty > 0);
+  const canClearAll = Boolean(overview && overview.portfolio.totalHoldingQty > 0);
+  const buyActionMenuItems = useMemo<NonNullable<MenuProps['items']>>(() => [
+    {
+      key: 'buy-all',
+      label: '全部买入',
+      icon: <ShoppingCartOutlined />,
+      disabled: !canBuyAll || actionKey !== '',
+    },
+  ], [actionKey, canBuyAll]);
+  const handleBuyAll = useCallback(() => {
+    if (!selectedStock || !tradePreview || maxAffordableBuyQty <= 0) return;
 
-  const stockDetailContent = useMemo(() => {
+    modal.confirm({
+      title: `确认全部买入 ${selectedStock.name}？`,
+      content: `将按当前价买入该股票可买上限 ${tradePreview.maxAffordableBuyQtyText}。`,
+      okText: '全部买入',
+      cancelText: '取消',
+      onOk: async () => {
+        await handleTrade('buy', maxAffordableBuyQty, 'buy-all');
+      },
+    });
+  }, [handleTrade, maxAffordableBuyQty, modal, selectedStock, tradePreview]);
+  const handleBuyActionMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(({ key }) => {
+    if (key === 'buy-all') {
+      handleBuyAll();
+    }
+  }, [handleBuyAll]);
+  const sellActionMenuItems = useMemo<NonNullable<MenuProps['items']>>(() => [
+    {
+      key: 'clear-stock',
+      label: '清仓',
+      icon: <ClearOutlined />,
+      disabled: !canClearSelected || actionKey === 'clear-stock',
+    },
+  ], [actionKey, canClearSelected]);
+  const handleSellActionMenuClick = useCallback<NonNullable<MenuProps['onClick']>>(({ key }) => {
+    if (key === 'clear-stock') {
+      handleClearPosition('stock');
+    }
+  }, [handleClearPosition]);
+  const renderBuyDropdownButtons = useCallback((buttons: ReactNode[]): ReactNode[] => {
+    return renderStockMarketTradeDropdownButtons(
+      buttons,
+      'stock-market-buy-main-button',
+      !canBuy || actionKey === 'buy-all',
+    );
+  }, [actionKey, canBuy]);
+  const renderSellDropdownButtons = useCallback((buttons: ReactNode[]): ReactNode[] => {
+    return renderStockMarketTradeDropdownButtons(
+      buttons,
+      'stock-market-sell-main-button',
+      !canSell || actionKey === 'clear-stock',
+    );
+  }, [actionKey, canSell]);
+
+  const stockDetailContent = (() => {
     if (!overview || !selectedStockView || !selectedStock || !tradePreview) {
       return <Empty description="请选择股票" />;
     }
@@ -288,14 +429,57 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
         <div className="stock-market-trade-box">
           <div className="stock-market-trade-input">
             <span>数量</span>
-            <InputNumber<number>
+            <div className="stock-market-trade-quantity-control">
+              <InputNumber<number>
+                size="small"
+                min={1}
+                max={maxTradeQty}
+                precision={0}
+                value={quantity}
+                onChange={handleQuantityChange}
+              />
+            </div>
+          </div>
+          <div className="stock-market-trade-actions">
+            <Dropdown.Button
+              className="stock-market-trade-dropdown stock-market-buy-dropdown"
+              type="primary"
               size="small"
-              min={1}
-              max={maxTradeQty}
-              precision={0}
-              value={quantity}
-              onChange={handleQuantityChange}
-            />
+              trigger={['click']}
+              placement="bottomRight"
+              disabled={!canBuy && !canBuyAll}
+              loading={actionKey === 'buy' || actionKey === 'buy-all'}
+              buttonsRender={renderBuyDropdownButtons}
+              menu={{
+                items: buyActionMenuItems,
+                onClick: handleBuyActionMenuClick,
+              }}
+              onClick={() => void handleTrade('buy')}
+            >
+              <span className="stock-market-trade-dropdown-label">
+                <ShoppingCartOutlined />
+                <span>买入</span>
+              </span>
+            </Dropdown.Button>
+            <Dropdown.Button
+              className="stock-market-trade-dropdown stock-market-sell-dropdown"
+              size="small"
+              trigger={['click']}
+              placement="bottomRight"
+              disabled={!canSell && !canClearSelected}
+              loading={actionKey === 'sell'}
+              buttonsRender={renderSellDropdownButtons}
+              menu={{
+                items: sellActionMenuItems,
+                onClick: handleSellActionMenuClick,
+              }}
+              onClick={() => void handleTrade('sell')}
+            >
+              <span className="stock-market-trade-dropdown-label">
+                <FallOutlined />
+                <span>卖出</span>
+              </span>
+            </Dropdown.Button>
           </div>
           <div className="stock-market-trade-preview">
             <span className="stock-market-trade-preview-item">
@@ -344,29 +528,30 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
             </span>
           </div>
           <div className="stock-market-trade-limits">
-            <span>可买 {tradePreview.maxAffordableBuyQtyText}</span>
-            <span>可卖 {tradePreview.maxSellQtyText}</span>
-          </div>
-          <div className="stock-market-trade-actions">
-            <Button
-              type="primary"
-              size="small"
-              icon={<ShoppingCartOutlined />}
-              disabled={!canBuy}
-              loading={actionKey === 'buy'}
-              onClick={() => void handleTrade('buy')}
-            >
-              买入
-            </Button>
-            <Button
-              size="small"
-              icon={<FallOutlined />}
-              disabled={!canSell}
-              loading={actionKey === 'sell'}
-              onClick={() => void handleTrade('sell')}
-            >
-              卖出
-            </Button>
+            <span>
+              可买
+              <button
+                type="button"
+                className="stock-market-trade-limit-action"
+                disabled={tradePreview.maxAffordableBuyQty <= 0}
+                aria-label={`填入可买数量 ${tradePreview.maxAffordableBuyQtyText}`}
+                onClick={() => handleUseTradeLimitQuantity(tradePreview.maxAffordableBuyQty)}
+              >
+                {tradePreview.maxAffordableBuyQtyText}
+              </button>
+            </span>
+            <span>
+              可卖
+              <button
+                type="button"
+                className="stock-market-trade-limit-action"
+                disabled={tradePreview.maxSellQty <= 0}
+                aria-label={`填入可卖数量 ${tradePreview.maxSellQtyText}`}
+                onClick={() => handleUseTradeLimitQuantity(tradePreview.maxSellQty)}
+              >
+                {tradePreview.maxSellQtyText}
+              </button>
+            </span>
           </div>
         </div>
 
@@ -379,21 +564,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
         />
       </>
     );
-  }, [
-    actionKey,
-    canBuy,
-    canSell,
-    handleQuantityChange,
-    handleTrade,
-    historyLoading,
-    historyModel,
-    maxTradeQty,
-    overview,
-    quantity,
-    selectedStock,
-    selectedStockView,
-    tradePreview,
-  ]);
+  })();
 
   return (
     <Modal
@@ -441,251 +612,261 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
         </div>
 
         <div className="stock-market-body">
-        {loading && !overviewModel ? (
-          <div className="stock-market-loading">
-            <Spin />
-          </div>
-        ) : null}
+          {loading && !overviewModel ? (
+            <div className="stock-market-loading">
+              <Spin />
+            </div>
+          ) : null}
 
-        {!loading && !overviewModel ? (
-          <Empty className="stock-market-empty" description="暂无股市数据" />
-        ) : null}
+          {!loading && !overviewModel ? (
+            <Empty className="stock-market-empty" description="暂无股市数据" />
+          ) : null}
 
-        {overview && overviewModel ? (
-          <Tabs
-            activeKey={activeTab}
-            onChange={setActiveTab}
-            items={[
-              {
-                key: 'market',
-                label: '行情',
-                children: (
-                  <div className="stock-market-grid">
-                    <section className="stock-market-panel stock-market-news">
-                      <div className="stock-market-section-head">
-                        <span>股市新闻</span>
-                        <div className="stock-market-news-tools">
-                          {newsRecords.length > 0 ? (
-                            <>
-                              <span className="stock-market-news-counter">
-                                {newsIndex + 1}/{newsRecords.length}
-                              </span>
-                              <Tooltip title="查看更新的新闻">
-                                <Button
-                                  className="stock-market-news-nav"
-                                  size="small"
-                                  icon={<LeftOutlined />}
-                                  aria-label="查看更新的股市新闻"
-                                  disabled={newsIndex <= 0}
-                                  onClick={handleShowNewerNews}
-                                />
-                              </Tooltip>
-                              <Tooltip title="查看更早的新闻">
-                                <Button
-                                  className="stock-market-news-nav"
-                                  size="small"
-                                  icon={<RightOutlined />}
-                                  aria-label="查看更早的股市新闻"
-                                  disabled={newsIndex >= newsRecords.length - 1}
-                                  onClick={handleShowOlderNews}
-                                />
-                              </Tooltip>
-                            </>
-                          ) : null}
-                          <Tag color="processing">下次 {overviewModel.nextRefreshText}</Tag>
-                        </div>
-                      </div>
-                      {activeNews ? (
-                        <div className="stock-market-news-content">
-                          <div className="stock-market-news-title">{activeNews.headline}</div>
-                          <div className="stock-market-news-summary">{activeNews.summary}</div>
-                          {activeNews.impacts.length > 0 ? (
-                            <div className="stock-market-impact-list">
-                              {activeNews.impacts.map((impact) => {
-                                const tone = resolveStockMarketTone(impact.changeBps);
-                                return (
-                                  <Tag
-                                    key={impact.stockId}
-                                    className={`stock-market-impact ${getStockMarketToneClassName(tone)}`}
-                                  >
-                                    {impact.stockName} {formatStockMarketBps(impact.changeBps)}
-                                  </Tag>
-                                );
-                              })}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <div className="stock-market-muted">暂未生成新闻，等待下一次后台刷新</div>
-                      )}
-                    </section>
-
-                    <section className="stock-market-panel stock-market-portfolio">
-                      <div className="stock-market-section-head">
-                        <span>持仓汇总</span>
-                      </div>
-                      <div className="stock-market-stat-grid">
-                        <div>
-                          <span>总股数</span>
-                          <strong>{overviewModel.portfolio.totalHoldingQtyText}</strong>
-                        </div>
-                        <div>
-                          <span>市值</span>
-                          <strong>{overviewModel.portfolio.totalMarketValueText}</strong>
-                        </div>
-                        <div>
-                          <span>成本</span>
-                          <strong>{overviewModel.portfolio.totalCostText}</strong>
-                        </div>
-                        <div>
-                          <span className="stock-market-stat-label stock-market-stat-label--split">
-                            <span>浮盈亏</span>
-                            <em className={getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
-                              {overviewModel.portfolio.totalUnrealizedPnlPercentText}
-                            </em>
-                          </span>
-                          <strong className={getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
-                            {overviewModel.portfolio.totalUnrealizedPnlText}
-                          </strong>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section className="stock-market-panel stock-market-list-panel">
-                      <div className="stock-market-section-head">
-                        <span>股票列表</span>
-                        <Tag>共 {overviewModel.stocks.length} 支</Tag>
-                      </div>
-                      <div className="stock-market-list">
-                        {overviewModel.stocks.map((item) => (
-                          <button
-                            key={item.stock.stockId}
-                            type="button"
-                            className={`stock-market-stock-row${item.selected ? ' is-selected' : ''}${item.hasHolding ? ' has-holding' : ''}`}
-                            onClick={() => handleSelectStock(item.stock.stockId)}
-                          >
-                            <span className="stock-market-stock-main">
-                              <strong>{item.stock.name}</strong>
-                              <span>{item.stock.code} · {item.stock.sector}</span>
-                            </span>
-                            <span className="stock-market-stock-price">
-                              <strong>{item.priceText}</strong>
-                              <em className={getStockMarketToneClassName(item.changeTone)}>{item.changeText}</em>
-                            </span>
-                            <span
-                              className={`stock-market-stock-holding${item.hasHolding ? ' is-holding' : ''}`}
-                            >
-                              {item.hasHolding ? (
-                                <>
-                                  <span>持有 {item.holdingQtyText}</span>
-                                  <span>市值 {item.holdingMarketValueText}</span>
-                                </>
-                              ) : (
-                                <span>{item.holdingSummaryText}</span>
-                              )}
-                            </span>
-                            {item.hasHolding ? (
-                              <span
-                                className={`stock-market-stock-pnl ${getStockMarketToneClassName(item.unrealizedPnlTone)}`}
-                              >
-                                <span>{item.unrealizedPnlText}</span>
-                                <em>{item.unrealizedPnlPercentText}</em>
-                              </span>
+          {overview && overviewModel ? (
+            <Tabs
+              activeKey={activeTab}
+              onChange={setActiveTab}
+              items={[
+                {
+                  key: 'market',
+                  label: '行情',
+                  children: (
+                    <div className="stock-market-grid">
+                      <section className="stock-market-panel stock-market-news">
+                        <div className="stock-market-section-head">
+                          <span>股市新闻</span>
+                          <div className="stock-market-news-tools">
+                            {newsRecords.length > 0 ? (
+                              <>
+                                <span className="stock-market-news-counter">
+                                  {newsIndex + 1}/{newsRecords.length}
+                                </span>
+                                <Tooltip title="查看更新的新闻">
+                                  <Button
+                                    className="stock-market-news-nav"
+                                    size="small"
+                                    icon={<LeftOutlined />}
+                                    aria-label="查看更新的股市新闻"
+                                    disabled={newsIndex <= 0}
+                                    onClick={handleShowNewerNews}
+                                  />
+                                </Tooltip>
+                                <Tooltip title="查看更早的新闻">
+                                  <Button
+                                    className="stock-market-news-nav"
+                                    size="small"
+                                    icon={<RightOutlined />}
+                                    aria-label="查看更早的股市新闻"
+                                    disabled={newsIndex >= newsRecords.length - 1}
+                                    onClick={handleShowOlderNews}
+                                  />
+                                </Tooltip>
+                              </>
                             ) : null}
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-
-                    <section className="stock-market-panel stock-market-detail stock-market-detail--inline">
-                      {isMobile ? null : stockDetailContent}
-                    </section>
-                  </div>
-                ),
-              },
-              {
-                key: 'records',
-                label: '交易记录',
-                children: (
-                  <section className="stock-market-panel stock-market-record-panel">
-                    <div className="stock-market-section-head">
-                      <span>交易记录</span>
-                      <Button
-                        size="small"
-                        icon={<ReloadOutlined />}
-                        onClick={() => void refreshTrades(tradePage)}
-                        loading={tradesLoading}
-                      >
-                        刷新
-                      </Button>
-                    </div>
-                    {tradesLoading ? (
-                      <div className="stock-market-history-loading">
-                        <Spin size="small" />
-                      </div>
-                    ) : null}
-                    {!tradesLoading && tradeRecordViews.length <= 0 ? (
-                      <Empty description="暂无交易记录" />
-                    ) : null}
-                    {!tradesLoading && tradeRecordViews.length > 0 ? (
-                      <div className="stock-market-record-list">
-                        {tradeRecordViews.map((record) => (
-                          <div key={record.id} className="stock-market-record-row">
-                            <div className="stock-market-record-main">
-                              <Tag className={getStockMarketToneClassName(record.sideTone)}>
-                                {record.sideText}
-                              </Tag>
-                              <strong>{record.stockText}</strong>
-                              <span>{record.quantityText} · 单价 {record.unitPriceText}</span>
-                            </div>
-                            <div className="stock-market-record-meta">
-                              <span>成交 {record.grossAmountText}</span>
-                              <span>交易费用 {record.feeText}</span>
-                              <span>净额 {record.netAmountText}</span>
-                              <span className={getStockMarketToneClassName(record.realizedPnlTone)}>盈亏 {record.realizedPnlText}</span>
-                              <span>{record.timeText}</span>
-                            </div>
+                            <Tag color="processing">下次 {overviewModel.nextRefreshText}</Tag>
                           </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {tradeTotal > tradePageSize ? (
-                      <Pagination
-                        className="stock-market-pagination"
-                        size="small"
-                        current={tradePage}
-                        pageSize={tradePageSize}
-                        total={tradeTotal}
-                        showSizeChanger={false}
-                        onChange={(page) => setTradePage(page)}
-                      />
-                    ) : null}
-                  </section>
-                ),
-              },
-            ]}
-          />
-        ) : null}
-      </div>
+                        </div>
+                        {activeNews ? (
+                          <div className="stock-market-news-content">
+                            <div className="stock-market-news-title">{activeNews.headline}</div>
+                            <div className="stock-market-news-summary">{activeNews.summary}</div>
+                            {activeNews.impacts.length > 0 ? (
+                              <div className="stock-market-impact-list">
+                                {activeNews.impacts.map((impact) => {
+                                  const tone = resolveStockMarketTone(impact.changeBps);
+                                  return (
+                                    <Tag
+                                      key={impact.stockId}
+                                      className={`stock-market-impact ${getStockMarketToneClassName(tone)}`}
+                                    >
+                                      {impact.stockName} {formatStockMarketBps(impact.changeBps)}
+                                    </Tag>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="stock-market-muted">暂未生成新闻，等待下一次后台刷新</div>
+                        )}
+                      </section>
 
-      {isMobile ? (
-        <Drawer
-          placement="bottom"
-          open={mobileDetailOpen && Boolean(selectedStockView)}
-          onClose={() => {
-            setMobileDetailOpen(false);
-            setSelectedStockId('');
-          }}
-          height="72dvh"
-          title={selectedStock ? selectedStock.name : '股票详情'}
-          className="stock-market-detail-drawer"
-          styles={{ body: { padding: '10px 12px 12px' } }}
-        >
-          <div className="stock-market-panel stock-market-detail stock-market-detail--drawer">
-            {stockDetailContent}
-          </div>
-        </Drawer>
-      ) : null}
+                      <section className="stock-market-panel stock-market-portfolio">
+                        <div className="stock-market-section-head">
+                          <span>持仓汇总</span>
+                          <Button
+                            danger
+                            size="small"
+                            icon={<ClearOutlined />}
+                            disabled={!canClearAll}
+                            loading={actionKey === 'clear-all'}
+                            onClick={() => handleClearPosition('all')}
+                          >
+                            全部清仓
+                          </Button>
+                        </div>
+                        <div className="stock-market-stat-grid">
+                          <div>
+                            <span>总股数</span>
+                            <strong>{overviewModel.portfolio.totalHoldingQtyText}</strong>
+                          </div>
+                          <div>
+                            <span>市值</span>
+                            <strong>{overviewModel.portfolio.totalMarketValueText}</strong>
+                          </div>
+                          <div>
+                            <span>成本</span>
+                            <strong>{overviewModel.portfolio.totalCostText}</strong>
+                          </div>
+                          <div>
+                            <span className="stock-market-stat-label stock-market-stat-label--split">
+                              <span>浮盈亏</span>
+                              <em className={getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
+                                {overviewModel.portfolio.totalUnrealizedPnlPercentText}
+                              </em>
+                            </span>
+                            <strong className={getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
+                              {overviewModel.portfolio.totalUnrealizedPnlText}
+                            </strong>
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className="stock-market-panel stock-market-list-panel">
+                        <div className="stock-market-section-head">
+                          <span>股票列表</span>
+                          <Tag>共 {overviewModel.stocks.length} 支</Tag>
+                        </div>
+                        <div className="stock-market-list">
+                          {overviewModel.stocks.map((item) => (
+                            <button
+                              key={item.stock.stockId}
+                              type="button"
+                              className={`stock-market-stock-row${item.selected ? ' is-selected' : ''}${item.hasHolding ? ' has-holding' : ''}`}
+                              onClick={() => handleSelectStock(item.stock.stockId)}
+                            >
+                              <span className="stock-market-stock-main">
+                                <strong>{item.stock.name}</strong>
+                                <span>{item.stock.code} · {item.stock.sector}</span>
+                              </span>
+                              <span className="stock-market-stock-price">
+                                <strong>{item.priceText}</strong>
+                                <em className={getStockMarketToneClassName(item.changeTone)}>{item.changeText}</em>
+                              </span>
+                              <span
+                                className={`stock-market-stock-holding${item.hasHolding ? ' is-holding' : ''}`}
+                              >
+                                {item.hasHolding ? (
+                                  <>
+                                    <span>持有 {item.holdingQtyText}</span>
+                                    <span>市值 {item.holdingMarketValueText}</span>
+                                  </>
+                                ) : (
+                                  <span>{item.holdingSummaryText}</span>
+                                )}
+                              </span>
+                              {item.hasHolding ? (
+                                <span
+                                  className={`stock-market-stock-pnl ${getStockMarketToneClassName(item.unrealizedPnlTone)}`}
+                                >
+                                  <span>{item.unrealizedPnlText}</span>
+                                  <em>{item.unrealizedPnlPercentText}</em>
+                                </span>
+                              ) : null}
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+
+                      <section className="stock-market-panel stock-market-detail stock-market-detail--inline">
+                        {isMobile ? null : stockDetailContent}
+                      </section>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'records',
+                  label: '交易记录',
+                  children: (
+                    <section className="stock-market-panel stock-market-record-panel">
+                      <div className="stock-market-section-head">
+                        <span>交易记录</span>
+                        <Button
+                          size="small"
+                          icon={<ReloadOutlined />}
+                          onClick={() => void refreshTrades(tradePage)}
+                          loading={tradesLoading}
+                        >
+                          刷新
+                        </Button>
+                      </div>
+                      {tradesLoading ? (
+                        <div className="stock-market-history-loading">
+                          <Spin size="small" />
+                        </div>
+                      ) : null}
+                      {!tradesLoading && tradeRecordViews.length <= 0 ? (
+                        <Empty description="暂无交易记录" />
+                      ) : null}
+                      {!tradesLoading && tradeRecordViews.length > 0 ? (
+                        <div className="stock-market-record-list">
+                          {tradeRecordViews.map((record) => (
+                            <div key={record.id} className="stock-market-record-row">
+                              <div className="stock-market-record-main">
+                                <Tag className={getStockMarketToneClassName(record.sideTone)}>
+                                  {record.sideText}
+                                </Tag>
+                                <strong>{record.stockText}</strong>
+                                <span>{record.quantityText} · 单价 {record.unitPriceText}</span>
+                              </div>
+                              <div className="stock-market-record-meta">
+                                <span>成交 {record.grossAmountText}</span>
+                                <span>交易费用 {record.feeText}</span>
+                                <span>净额 {record.netAmountText}</span>
+                                <span className={getStockMarketToneClassName(record.realizedPnlTone)}>盈亏 {record.realizedPnlText}</span>
+                                <span>{record.timeText}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {tradeTotal > tradePageSize ? (
+                        <Pagination
+                          className="stock-market-pagination"
+                          size="small"
+                          current={tradePage}
+                          pageSize={tradePageSize}
+                          total={tradeTotal}
+                          showSizeChanger={false}
+                          onChange={(page) => setTradePage(page)}
+                        />
+                      ) : null}
+                    </section>
+                  ),
+                },
+              ]}
+            />
+          ) : null}
+        </div>
+
+        {isMobile ? (
+          <Drawer
+            placement="bottom"
+            open={mobileDetailOpen && Boolean(selectedStockView)}
+            onClose={() => {
+              setMobileDetailOpen(false);
+              setSelectedStockId('');
+            }}
+            height="72dvh"
+            title={selectedStock ? selectedStock.name : '股票详情'}
+            className="stock-market-detail-drawer"
+            styles={{ body: { padding: '10px 12px 12px' } }}
+          >
+            <div className="stock-market-panel stock-market-detail stock-market-detail--drawer">
+              {stockDetailContent}
+            </div>
+          </Drawer>
+        ) : null}
       </div>
     </Modal>
   );

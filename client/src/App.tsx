@@ -45,6 +45,25 @@ const authRecoveryMessageStyle = {
   lineHeight: 1.6,
 } as const;
 const modalThemeCompat: Record<string, number> = { contentPadding: 8 };
+const buttonThemeCompat = {
+  defaultColor: 'var(--text-color)',
+  defaultBg: 'var(--panel-bg-soft)',
+  defaultBorderColor: 'var(--border-color)',
+  defaultHoverColor: 'var(--text-color)',
+  defaultHoverBg: 'var(--hover-bg)',
+  defaultHoverBorderColor: 'var(--border-color)',
+  defaultActiveColor: 'var(--text-color)',
+  defaultActiveBg: 'var(--active-bg)',
+  defaultActiveBorderColor: 'var(--border-color)',
+  defaultShadow: 'none',
+  primaryShadow: 'none',
+  dangerShadow: 'none',
+  textTextColor: 'var(--text-color)',
+  textTextHoverColor: 'var(--text-color)',
+  textTextActiveColor: 'var(--text-color)',
+  textHoverBg: 'var(--hover-bg)',
+  linkHoverBg: 'var(--hover-bg)',
+} as const;
 
 const ApiErrorToastBridge: React.FC = () => {
   const { message } = AntdApp.useApp();
@@ -91,6 +110,7 @@ function App({ initialThemeMode }: AppProps) {
       colorPrimary: 'var(--primary-color)',
     },
     components: {
+      Button: buttonThemeCompat,
       Modal: {
         contentBg: 'var(--panel-bg)',
         ...modalThemeCompat,

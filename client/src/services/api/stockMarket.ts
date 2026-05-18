@@ -2,11 +2,11 @@
  * 股市接口封装。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：集中定义股市概览、走势、交易记录与买卖请求的 DTO 和 API 函数。
+ * 1. 做什么：集中定义股市概览、走势、交易记录、买卖与清仓请求的 DTO 和 API 函数。
  * 2. 不做什么：不在前端决定最终交易费用、持仓上限或服务端交易规则。
  *
  * 输入 / 输出：
- * - 输入：股票 ID、交易数量、分页参数与可选请求配置。
+ * - 输入：股票 ID、交易数量、清仓范围、分页参数与可选请求配置。
  * - 输出：标准接口响应 Promise，供股市弹窗和纯函数派生层消费。
  *
  * 数据流 / 状态流：
@@ -14,6 +14,7 @@
  *
  * 复用设计说明：
  * - DTO 与请求函数放在同一文件，避免弹窗、测试和后续入口各自重复声明接口形状。
+ * - 清仓走单独请求函数，避免调用方循环卖出多只股票造成多次刷新和半途失败。
  * - 分页和查询参数统一走 `withRequestParams`，避免多个调用点手写 params 合并。
  *
  * 关键边界条件与坑点：
@@ -160,4 +161,11 @@ export const sellStockMarketStock = (
   requestConfig?: AxiosRequestConfig,
 ): Promise<StockMarketTradeResponse> => {
   return api.post('/stock-market/sell', body, requestConfig);
+};
+
+export const clearStockMarketPosition = (
+  body: { stockId?: string },
+  requestConfig?: AxiosRequestConfig,
+): Promise<StockMarketTradeResponse> => {
+  return api.post('/stock-market/clear', body, requestConfig);
 };

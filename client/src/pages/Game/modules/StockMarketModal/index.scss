@@ -544,8 +544,9 @@
 }
 
 .stock-market-trade-box {
+  width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) max-content;
   grid-template-areas:
     "input actions"
     "preview preview"
@@ -558,16 +559,35 @@
   background: var(--panel-bg-soft);
 }
 
+.stock-market-trade-head {
+  grid-area: head;
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+}
+
 .stock-market-trade-input {
   grid-area: input;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 
   span {
     font-size: 12px;
     color: var(--text-secondary);
   }
+}
+
+.stock-market-trade-quantity-control {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 
   .ant-input-number {
     width: 96px;
@@ -615,23 +635,78 @@
   grid-area: limits;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: 5px 12px;
   font-size: 12px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+
+  >span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+}
+
+.stock-market-trade-limit-action {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary-color);
+  font: inherit;
+  font-weight: var(--font-weight-title);
+  line-height: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+
+  &:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+
+  &:disabled {
+    color: var(--text-tertiary);
+    cursor: not-allowed;
+    text-decoration: none;
+  }
 }
 
 .stock-market-trade-actions {
   grid-area: actions;
+  justify-self: end;
+  width: max-content;
+  margin-left: auto;
   min-width: 0;
   display: flex;
   justify-content: flex-end;
+  flex-wrap: nowrap;
   gap: 6px;
 
   .ant-btn {
     min-width: 66px;
     padding-inline: 9px;
   }
+}
+
+.stock-market-trade-dropdown {
+  min-width: 0;
+
+  .ant-btn:first-child {
+    min-width: 66px;
+  }
+
+  .ant-btn:last-child {
+    min-width: 30px;
+    padding-inline: 7px;
+  }
+}
+
+.stock-market-trade-dropdown-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
 }
 
 .stock-market-history {
@@ -1050,7 +1125,7 @@
   }
 
   .stock-market-trade-box {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) max-content;
     grid-template-areas:
       "input actions"
       "preview preview"
@@ -1061,9 +1136,19 @@
 
   .stock-market-trade-input {
     gap: 6px;
+    width: 100%;
+
+    >span {
+      flex: 0 0 auto;
+    }
+  }
+
+  .stock-market-trade-quantity-control {
+    flex: 1 1 auto;
+    width: 100%;
 
     .ant-input-number {
-      width: 88px;
+      width: 100%;
     }
   }
 
@@ -1086,11 +1171,22 @@
 
   .stock-market-trade-actions {
     justify-content: flex-end;
+    flex-wrap: nowrap;
 
     .ant-btn {
       flex: 0 0 auto;
       min-width: 58px;
       padding-inline: 6px;
+    }
+  }
+
+  .stock-market-trade-dropdown {
+    .ant-btn:first-child {
+      min-width: 58px;
+    }
+
+    .ant-btn:last-child {
+      min-width: 30px;
     }
   }
 
@@ -1137,5 +1233,63 @@
 
   .stock-market-stock-price {
     align-items: flex-end;
+  }
+
+  .stock-market-trade-box {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "input"
+      "actions"
+      "preview"
+      "limits";
+  }
+
+  .stock-market-trade-head {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .stock-market-trade-input {
+    width: 100%;
+
+    >span {
+      flex: 0 0 auto;
+    }
+  }
+
+  .stock-market-trade-quantity-control {
+    flex: 1 1 auto;
+    width: 100%;
+
+    .ant-input-number {
+      width: 100%;
+    }
+  }
+
+  .stock-market-trade-actions {
+    width: 100%;
+    justify-self: stretch;
+    justify-content: stretch;
+
+    .ant-btn {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+  }
+
+  .stock-market-trade-dropdown {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+
+    .ant-btn:first-child {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .ant-btn:last-child {
+      flex: 0 0 34px;
+      min-width: 34px;
+    }
   }
 }
