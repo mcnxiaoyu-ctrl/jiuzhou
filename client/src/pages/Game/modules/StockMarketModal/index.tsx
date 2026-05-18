@@ -279,33 +279,6 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose }) =>
             </div>
             <div className="stock-market-selected-desc">{selectedStock.description}</div>
           </div>
-          <div className="stock-market-selected-price">
-            <strong>{selectedStockView.priceText}</strong>
-            <span className={getStockMarketToneClassName(selectedStockView.changeTone)}>
-              {selectedStockView.changeText}
-            </span>
-          </div>
-        </div>
-
-        <div className="stock-market-holding-grid">
-          <div>
-            <span>持仓</span>
-            <strong>{selectedStockView.holdingQtyText}</strong>
-          </div>
-          <div>
-            <span>市值</span>
-            <strong>{selectedStockView.holdingValueText}</strong>
-          </div>
-          <div>
-            <span>成本</span>
-            <strong>{selectedStockView.holdingCostText}</strong>
-          </div>
-          <div>
-            <span>浮盈亏</span>
-            <strong className={getStockMarketToneClassName(selectedStockView.unrealizedPnlTone)}>
-              {selectedStockView.unrealizedPnlText}
-            </strong>
-          </div>
         </div>
 
         <div className="stock-market-trade-box">

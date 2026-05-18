@@ -40,9 +40,6 @@ export interface StockMarketStockView {
   priceText: string;
   changeText: string;
   holdingSummaryText: string;
-  holdingQtyText: string;
-  holdingValueText: string;
-  holdingCostText: string;
   unrealizedPnlText: string;
   unrealizedPnlTone: StockMarketTone;
   maxBuyQtyText: string;
@@ -324,9 +321,6 @@ const buildStockView = (
     priceText: formatStockMarketCurrency(stock.priceSpiritStones),
     changeText: formatStockMarketBps(stock.lastChangeBps),
     holdingSummaryText: hasHolding ? `持有 ${holdingQtyText} · 市值 ${holdingValueText}` : '未持有',
-    holdingQtyText,
-    holdingValueText,
-    holdingCostText: formatStockMarketCurrency(stock.holdingCostSpiritStones),
     unrealizedPnlText: formatStockMarketSignedCurrency(stock.unrealizedPnlSpiritStones),
     unrealizedPnlTone: resolveStockMarketTone(stock.unrealizedPnlSpiritStones),
     maxBuyQtyText: formatStockMarketQuantity(stock.maxBuyQty),

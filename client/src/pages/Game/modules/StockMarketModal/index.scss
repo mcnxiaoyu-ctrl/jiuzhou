@@ -315,8 +315,7 @@
   border-radius: 999px;
 }
 
-.stock-market-stat-grid,
-.stock-market-holding-grid {
+.stock-market-stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
@@ -460,23 +459,6 @@
   line-height: 1.3;
   font-weight: var(--font-weight-title);
   color: var(--text-color);
-}
-
-.stock-market-selected-price {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-  flex: 0 0 auto;
-
-  strong {
-    font-size: 17px;
-    color: var(--text-color);
-  }
-
-  span {
-    font-size: 13px;
-  }
 }
 
 .stock-market-trade-box {
@@ -1016,8 +998,7 @@
     margin-bottom: 6px;
   }
 
-  .stock-market-stat-grid,
-  .stock-market-holding-grid {
+  .stock-market-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 5px;
 
@@ -1066,10 +1047,6 @@
   .stock-market-record-row {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .stock-market-selected-price {
-    align-items: flex-start;
   }
 
   .stock-market-trade-box {
@@ -1143,7 +1120,6 @@
 @media (max-width: 520px) {
 
   .stock-market-stat-grid,
-  .stock-market-holding-grid,
   .stock-market-trade-preview {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
