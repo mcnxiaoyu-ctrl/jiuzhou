@@ -72,11 +72,25 @@ type QualityMainAttackRange = {
   max: number;
 };
 
+type QualityLevelAttrGrowthRollParams = {
+  quality: PartnerRecruitQuality;
+  seed: number;
+  scope: string;
+  ratioRange: readonly [number, number];
+};
+
 const QUALITY_MAIN_ATTACK_RANGE: Record<PartnerRecruitQuality, QualityMainAttackRange> = {
   黄: { min: 10, max: 20 },
   玄: { min: 15, max: 30 },
   地: { min: 20, max: 40 },
   天: { min: 25, max: 50 },
+};
+
+export const PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_RANGE_BY_QUALITY: Record<PartnerRecruitQuality, readonly [number, number]> = {
+  黄: [7, 13],
+  玄: [10, 20],
+  地: [13, 27],
+  天: [17, 33],
 };
 
 const QUALITY_BASE_QIXUE_RANGE: Record<PartnerRecruitQuality, readonly [number, number]> = {
@@ -113,8 +127,6 @@ const QUALITY_BASE_SPEED_RANGE: Record<PartnerRecruitQuality, readonly [number, 
   地: [9, 16],
   天: [11, 20],
 };
-
-export const PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_SCALE = 2 / 3;
 
 const PARTNER_RECRUIT_ATTR_PROFILE_CONFIGS: readonly PartnerRecruitAttrProfileConfig[] = [
   {
@@ -261,12 +273,7 @@ const rollByRatio = (params: {
     : rollInteger(params.seed, params.scope, [min, max]);
 };
 
-const rollQualityMainAttack = (params: {
-  quality: PartnerRecruitQuality;
-  seed: number;
-  scope: string;
-  ratioRange: readonly [number, number];
-}): number => {
+const rollQualityMainAttack = (params: QualityLevelAttrGrowthRollParams): number => {
   const range = QUALITY_MAIN_ATTACK_RANGE[params.quality];
   return rollByRatio({
     seed: params.seed,
@@ -276,13 +283,13 @@ const rollQualityMainAttack = (params: {
   });
 };
 
-export const scalePartnerRecruitLevelDefenseGrowth = (
-  value: number,
-): number => {
-  if (!Number.isFinite(value)) {
-    throw new Error('伙伴招募双防成长值非法');
-  }
-  return Math.max(0, Math.round(value * PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_SCALE));
+const rollQualityLevelDefenseGrowth = (params: QualityLevelAttrGrowthRollParams): number => {
+  return rollByRatio({
+    seed: params.seed,
+    scope: params.scope,
+    sourceRange: PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_RANGE_BY_QUALITY[params.quality],
+    ratioRange: params.ratioRange,
+  });
 };
 
 const rollProfileConfig = (seed: number): PartnerRecruitAttrProfileConfig => {
@@ -439,20 +446,18 @@ const buildProfileLevelAttrGains = (params: {
     scope: 'level-secondary-attack',
     ratioRange: profile.secondaryAttackRatio,
   });
-  attrs.wufang = rollQualityMainAttack({
+  attrs.wufang = rollQualityLevelDefenseGrowth({
     quality,
     seed,
     scope: 'level-wufang',
     ratioRange: profile.defenseRatio,
   });
-  attrs.wufang = scalePartnerRecruitLevelDefenseGrowth(attrs.wufang);
-  attrs.fafang = rollQualityMainAttack({
+  attrs.fafang = rollQualityLevelDefenseGrowth({
     quality,
     seed,
     scope: 'level-fafang',
     ratioRange: profile.defenseRatio,
   });
-  attrs.fafang = scalePartnerRecruitLevelDefenseGrowth(attrs.fafang);
   attrs.sudu = rollByRatio({
     seed,
     scope: 'level-speed',

@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   type PartnerRecruitDraft,
+  type PartnerRecruitQuality,
   buildPartnerRecruitPromptNoiseHash,
   buildPartnerRecruitPromptInput,
   buildPartnerRecruitResponseFormat,
@@ -39,8 +40,7 @@ import {
 } from '../shared/partnerRecruitCreativeDirection.js';
 import {
   buildPartnerRecruitLockedAttrProfile,
-  PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_SCALE,
-  scalePartnerRecruitLevelDefenseGrowth,
+  PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_RANGE_BY_QUALITY,
   type PartnerRecruitAttrProfileId,
 } from '../shared/partnerRecruitAttrProfile.js';
 import { buildPartnerBattleAttrs } from '../shared/partnerRules.js';
@@ -507,7 +507,7 @@ test('buildPartnerRecruitLockedAttrProfile: 护卫定位应比爆发输出拥有
   assert.equal(burstAttacker.levelAttrGains.wugong > guardTank.levelAttrGains.wugong, true);
 });
 
-test('buildPartnerRecruitLockedAttrProfile: 双防成长应统一降低三分之一', () => {
+test('buildPartnerRecruitLockedAttrProfile: 双防成长应使用独立程序区间', () => {
   const profileIds: readonly PartnerRecruitAttrProfileId[] = [
     'burst_attacker',
     'sustained_attacker',
@@ -515,23 +515,35 @@ test('buildPartnerRecruitLockedAttrProfile: 双防成长应统一降低三分之
     'support_healer',
     'speed_controller',
   ];
-  const maxScaledDefenseGrowth = scalePartnerRecruitLevelDefenseGrowth(50);
+  const expectedDefenseGrowthRanges = {
+    黄: [7, 13],
+    玄: [10, 20],
+    地: [13, 27],
+    天: [17, 33],
+  } as const;
+  const qualities: readonly PartnerRecruitQuality[] = ['黄', '玄', '地', '天'];
 
-  assert.equal(PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_SCALE, 2 / 3);
-  assert.equal(scalePartnerRecruitLevelDefenseGrowth(45), 30);
-  assert.equal(scalePartnerRecruitLevelDefenseGrowth(44), 29);
+  assert.deepEqual(PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_RANGE_BY_QUALITY, expectedDefenseGrowthRanges);
 
-  for (let seed = 20260500; seed < 20260550; seed += 1) {
-    for (const profileId of profileIds) {
-      const profile = buildPartnerRecruitLockedAttrProfile({
-        quality: '天',
-        seed,
-        profileId,
-        combatStyle: 'physical',
-      });
+  for (const quality of qualities) {
+    const defenseGrowthRange: readonly [number, number] = PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_RANGE_BY_QUALITY[quality];
+    const minGrowth: number = defenseGrowthRange[0];
+    const maxGrowth: number = defenseGrowthRange[1];
 
-      assert.equal(profile.levelAttrGains.wufang <= maxScaledDefenseGrowth, true);
-      assert.equal(profile.levelAttrGains.fafang <= maxScaledDefenseGrowth, true);
+    for (let seed = 20260500; seed < 20260550; seed += 1) {
+      for (const profileId of profileIds) {
+        const profile = buildPartnerRecruitLockedAttrProfile({
+          quality,
+          seed,
+          profileId,
+          combatStyle: 'physical',
+        });
+
+        assert.equal(profile.levelAttrGains.wufang >= minGrowth, true);
+        assert.equal(profile.levelAttrGains.wufang <= maxGrowth, true);
+        assert.equal(profile.levelAttrGains.fafang >= minGrowth, true);
+        assert.equal(profile.levelAttrGains.fafang <= maxGrowth, true);
+      }
     }
   }
 });
