@@ -18,7 +18,7 @@
  *
  * 关键边界条件与坑点：
  * 1. 股市 tick 是业务行情，不属于清理任务，不能接入 cleanupWorker。
- * 2. AI 失败只能更新 `stock_market_tick` 状态，不能触碰 quote/history。
+ * 2. AI 失败只能更新 `stock_market_tick` 状态，不能触碰 quote/history/event。
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -51,11 +51,19 @@ test('股市 tick 应以 tick_hour 幂等，AI 失败不得更新报价', () => 
   const serviceSource = readSource('../stockMarket/stockMarketService.ts');
   const failureBranch = serviceSource.match(/if \(!newsResult\.success\) \{[\s\S]*?return \{ status: 'failed'/u)?.[0] ?? '';
   const failureMethod = serviceSource.match(/private async recordTickFailure[\s\S]*?\n  \}/u)?.[0] ?? '';
+  const applyGeneratedTickIndex = serviceSource.indexOf('private async applyGeneratedTick');
+  const applyGeneratedTickMethod = applyGeneratedTickIndex >= 0 ? serviceSource.slice(applyGeneratedTickIndex) : '';
 
   assert.match(serviceSource, /ON CONFLICT \(tick_hour\) DO NOTHING/u);
   assert.match(serviceSource, /recordTickFailure\(tickId, newsResult\.reason\)/u);
   assert.doesNotMatch(failureBranch, /stock_market_quote/u);
   assert.doesNotMatch(failureBranch, /stock_market_price_history/u);
+  assert.doesNotMatch(failureBranch, /stock_market_news_event/u);
   assert.match(failureMethod, /UPDATE stock_market_tick/u);
   assert.doesNotMatch(failureMethod, /stock_market_quote/u);
+  assert.doesNotMatch(failureMethod, /stock_market_price_history/u);
+  assert.doesNotMatch(failureMethod, /stock_market_news_event/u);
+  assert.match(applyGeneratedTickMethod, /status = 'generated'/u);
+  assert.match(applyGeneratedTickMethod, /persistNewsEventForTick/u);
+  assert.match(applyGeneratedTickMethod, /event_id/u);
 });

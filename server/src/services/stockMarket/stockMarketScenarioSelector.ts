@@ -45,6 +45,7 @@ const STOCK_MARKET_SCENARIO_BASE_WEIGHT = 100;
 const STOCK_MARKET_SCENARIO_MIN_WEIGHT = 12;
 const STOCK_MARKET_SCENARIO_COLD_STOCK_BONUS = 28;
 const STOCK_MARKET_SCENARIO_HOT_STOCK_PENALTY = 9;
+const STOCK_MARKET_SCENARIO_EVENT_FOCUS_BONUS = 42;
 const STOCK_MARKET_SCENARIO_RECENT_STOCK_WINDOW = 32;
 const STOCK_MARKET_SCENARIO_RANDOM_JITTER = 24;
 
@@ -135,11 +136,16 @@ export const buildStockMarketScenarioSelectionWeights = (params: {
   seed: number;
   enabledStockIdSet: ReadonlySet<string>;
   recentStockIds: readonly string[];
+  eventFocusStockIds?: readonly string[];
 }): StockMarketScenarioSelectionWeight[] => {
   const heatByStockId = buildRecentStockHeatMap(params.recentStockIds, params.enabledStockIdSet);
+  const eventFocusStockIdSet = new Set(
+    (params.eventFocusStockIds ?? []).filter((stockId) => params.enabledStockIdSet.has(stockId)),
+  );
   return STOCK_MARKET_SCENARIO_GUIDES.map((guide) => {
     let hotFocusScore = 0;
     let coldFocusCount = 0;
+    let eventFocusCount = 0;
     for (const stockId of guide.focusStockIds) {
       if (!params.enabledStockIdSet.has(stockId)) continue;
       const heat = heatByStockId.get(stockId) ?? 0;
@@ -147,6 +153,9 @@ export const buildStockMarketScenarioSelectionWeights = (params: {
         hotFocusScore += heat;
       } else {
         coldFocusCount += 1;
+      }
+      if (eventFocusStockIdSet.has(stockId)) {
+        eventFocusCount += 1;
       }
     }
 
@@ -156,6 +165,7 @@ export const buildStockMarketScenarioSelectionWeights = (params: {
       STOCK_MARKET_SCENARIO_MIN_WEIGHT,
       STOCK_MARKET_SCENARIO_BASE_WEIGHT
       + coldFocusCount * STOCK_MARKET_SCENARIO_COLD_STOCK_BONUS
+      + eventFocusCount * STOCK_MARKET_SCENARIO_EVENT_FOCUS_BONUS
       - hotFocusScore * STOCK_MARKET_SCENARIO_HOT_STOCK_PENALTY
       + jitter,
     );
@@ -173,6 +183,7 @@ export const selectStockMarketScenarioGuide = (params: {
   seed: number;
   enabledStockIdSet: ReadonlySet<string>;
   recentStockIds: readonly string[];
+  eventFocusStockIds?: readonly string[];
 }): StockMarketScenarioSelectionResult => {
   const weights = buildStockMarketScenarioSelectionWeights(params);
   const totalWeight = weights.reduce((total, row) => total + row.weight, 0);

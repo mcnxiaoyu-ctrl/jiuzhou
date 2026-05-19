@@ -24,6 +24,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { validateStockMarketAiNewsPayload } from '../stockMarket/stockMarketAi.js';
 import {
+  buildStockMarketNewsEventSelectionWeights,
+  selectStockMarketNewsEventContext,
+  type StockMarketNewsEventPromptContext,
+} from '../stockMarket/stockMarketNewsEventContext.js';
+import {
   buildStockMarketScenarioSelectionWeights,
   selectStockMarketScenarioGuide,
 } from '../stockMarket/stockMarketScenarioSelector.js';
@@ -42,10 +47,34 @@ const enabledScenarioStockIds = new Set([
   'stock-beizhou-treasure',
 ]);
 
+const buildValidEventPayload = () => ({
+  action: 'new',
+  theme: '丹药供应',
+  headline: '丹坊供需事件',
+  summary: '青云丹坊供需波动延续，相关商号同步调整预期。',
+  stage: '起势',
+  affectedStockIds: ['stock-a', 'stock-b'],
+});
+
+const buildPromptEvent = (
+  eventId: string,
+  affectedStockIds: readonly string[],
+  status: StockMarketNewsEventPromptContext['status'] = 'active',
+): StockMarketNewsEventPromptContext => ({
+  eventId,
+  status,
+  theme: `事件${eventId}`,
+  headline: `事件${eventId}标题`,
+  summary: `事件${eventId}摘要`,
+  stage: '发酵',
+  affectedStockIds,
+});
+
 test('validateStockMarketAiNewsPayload: 合法 AI 新闻应输出可执行影响', () => {
   const result = validateStockMarketAiNewsPayload({
     headline: '丹坊新炉成丹',
     summary: '青云丹坊宣布新炉丹药成色稳定，坊间采购情绪升温。',
+    event: buildValidEventPayload(),
     impacts: [
       {
         stockId: 'stock-a',
@@ -72,6 +101,7 @@ test('validateStockMarketAiNewsPayload: 不应限制可影响股票数量', () =
   const result = validateStockMarketAiNewsPayload({
     headline: '坊间大市齐动',
     summary: '多家商号同时受拍卖、矿脉与宗门订单影响，行情同步波动。',
+    event: buildValidEventPayload(),
     impacts: [
       {
         stockId: 'stock-a',
@@ -110,6 +140,7 @@ test('validateStockMarketAiNewsPayload: 0% 影响不应进入可见行情', () =
   const result = validateStockMarketAiNewsPayload({
     headline: '矿脉消息传开',
     summary: '北境矿脉消息只影响矿材与炼器，没有明确关联的股票不应输出。',
+    event: buildValidEventPayload(),
     impacts: [
       {
         stockId: 'stock-c',
@@ -126,6 +157,7 @@ test('validateStockMarketAiNewsPayload: 未知股票或重复股票应整条失�
   const unknownResult = validateStockMarketAiNewsPayload({
     headline: '宝楼传出新消息',
     summary: '坊间消息称有珍宝入库，但股票 ID 并不在白名单内。',
+    event: buildValidEventPayload(),
     impacts: [
       {
         stockId: 'stock-missing',
@@ -138,6 +170,7 @@ test('validateStockMarketAiNewsPayload: 未知股票或重复股票应整条失�
   const duplicatedResult = validateStockMarketAiNewsPayload({
     headline: '灵舟订单波动',
     summary: '同一股票被重复输出两条影响，必须拒绝整条新闻。',
+    event: buildValidEventPayload(),
     impacts: [
       {
         stockId: 'stock-a',
@@ -160,6 +193,7 @@ test('validateStockMarketAiNewsPayload: 涨跌超过两位小数或超过上下�
   const precisionResult = validateStockMarketAiNewsPayload({
     headline: '拍卖热度升温',
     summary: '星河拍卖场成交活跃，但模型给出的涨跌精度超过两位小数。',
+    event: buildValidEventPayload(),
     impacts: [
       {
         stockId: 'stock-a',
@@ -172,6 +206,7 @@ test('validateStockMarketAiNewsPayload: 涨跌超过两位小数或超过上下�
   const limitResult = validateStockMarketAiNewsPayload({
     headline: '矿业订单激增',
     summary: '玄铁矿业订单激增，但模型给出的涨跌超过服务端硬上限。',
+    event: buildValidEventPayload(),
     impacts: [
       {
         stockId: 'stock-b',
@@ -183,6 +218,63 @@ test('validateStockMarketAiNewsPayload: 涨跌超过两位小数或超过上下�
 
   assert.equal(precisionResult.success, false);
   assert.equal(limitResult.success, false);
+});
+
+test('validateStockMarketAiNewsPayload: 事件动作和事件股票必须合法', () => {
+  const badActionResult = validateStockMarketAiNewsPayload({
+    headline: '丹坊事件变动',
+    summary: '丹坊供需事件继续发酵，但模型返回了未知事件动作。',
+    event: {
+      ...buildValidEventPayload(),
+      action: 'pause',
+    },
+    impacts: [
+      {
+        stockId: 'stock-a',
+        changePercent: 1.25,
+        reason: '供需事件推高预期',
+      },
+    ],
+  }, enabledStockIds);
+
+  const badStockResult = validateStockMarketAiNewsPayload({
+    headline: '矿业事件变动',
+    summary: '矿业事件继续发酵，但事件股票不在启用股票白名单内。',
+    event: {
+      ...buildValidEventPayload(),
+      affectedStockIds: ['stock-missing'],
+    },
+    impacts: [
+      {
+        stockId: 'stock-a',
+        changePercent: 1.25,
+        reason: '供需事件推高预期',
+      },
+    ],
+  }, enabledStockIds);
+
+  assert.equal(badActionResult.success, false);
+  assert.equal(badStockResult.success, false);
+});
+
+test('validateStockMarketAiNewsPayload: 选中旧事件时不能输出新事件动作', () => {
+  const result = validateStockMarketAiNewsPayload({
+    headline: '丹坊事件延续',
+    summary: '青云丹坊供需事件继续发酵，相关商号同步调整预期。',
+    event: {
+      ...buildValidEventPayload(),
+      action: 'new',
+    },
+    impacts: [
+      {
+        stockId: 'stock-a',
+        changePercent: 1.25,
+        reason: '供需事件推高预期',
+      },
+    ],
+  }, enabledStockIds, { selectedEventId: '101' });
+
+  assert.equal(result.success, false);
 });
 
 test('selectStockMarketScenarioGuide: 近期高频股票应降低对应场景权重但不固定轮换', () => {
@@ -207,6 +299,37 @@ test('selectStockMarketScenarioGuide: 近期高频股票应降低对应场景权
   assert.ok(sectWeight.weight > alchemyWeight.weight);
 });
 
+test('selectStockMarketScenarioGuide: 活跃事件应提高相关题材权重但不固定轮换', () => {
+  const baseWeights = buildStockMarketScenarioSelectionWeights({
+    seed: 1001,
+    enabledStockIdSet: enabledScenarioStockIds,
+    recentStockIds: [],
+  });
+  const eventWeights = buildStockMarketScenarioSelectionWeights({
+    seed: 1001,
+    enabledStockIdSet: enabledScenarioStockIds,
+    recentStockIds: [],
+    eventFocusStockIds: ['stock-xuantie-mining', 'stock-tiangong-armory'],
+  });
+
+  const baseMiningWeight = baseWeights.find((row) => row.scenarioId === 'mining-armory');
+  const eventMiningWeight = eventWeights.find((row) => row.scenarioId === 'mining-armory');
+  assert.ok(baseMiningWeight);
+  assert.ok(eventMiningWeight);
+  assert.ok(eventMiningWeight.weight > baseMiningWeight.weight);
+
+  const selectedScenarioIds = new Set<string>();
+  for (let seed = 1; seed <= 24; seed += 1) {
+    selectedScenarioIds.add(selectStockMarketScenarioGuide({
+      seed,
+      enabledStockIdSet: enabledScenarioStockIds,
+      recentStockIds: [],
+      eventFocusStockIds: ['stock-xuantie-mining', 'stock-tiangong-armory'],
+    }).guide.id);
+  }
+  assert.ok(selectedScenarioIds.size > 1);
+});
+
 test('selectStockMarketScenarioGuide: 相同近期状态下不同 seed 仍允许选择不同场景', () => {
   const recentStockIds = [
     'stock-qingyun-danfang',
@@ -224,4 +347,38 @@ test('selectStockMarketScenarioGuide: 相同近期状态下不同 seed 仍允许
   }
 
   assert.ok(selectedScenarioIds.size > 1);
+});
+
+test('selectStockMarketNewsEventContext: 高频股票会降低事件权重但不禁止延续', () => {
+  const weights = buildStockMarketNewsEventSelectionWeights({
+    seed: 1001,
+    enabledStockIdSet: enabledStockIds,
+    recentStockIds: ['stock-a', 'stock-a', 'stock-a', 'stock-b'],
+    events: [
+      buildPromptEvent('1', ['stock-a', 'stock-b']),
+      buildPromptEvent('2', ['stock-c', 'stock-d']),
+    ],
+  });
+
+  const hotEvent = weights.find((row) => row.eventId === '1');
+  const coldEvent = weights.find((row) => row.eventId === '2');
+  assert.ok(hotEvent);
+  assert.ok(coldEvent);
+  assert.ok(hotEvent.weight > 0);
+  assert.ok(coldEvent.weight > hotEvent.weight);
+});
+
+test('selectStockMarketNewsEventContext: resolved 事件不进入候选池且保留新事件选择', () => {
+  const selection = selectStockMarketNewsEventContext({
+    seed: 7,
+    enabledStockIdSet: enabledStockIds,
+    recentStockIds: [],
+    events: [
+      buildPromptEvent('1', ['stock-a'], 'resolved'),
+    ],
+  });
+
+  assert.equal(selection.selectedEvent, null);
+  assert.equal(selection.directive, 'new');
+  assert.deepEqual(selection.weights.map((row) => row.eventId), ['new']);
 });

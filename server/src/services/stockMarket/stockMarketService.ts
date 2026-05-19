@@ -30,12 +30,19 @@ import {
 import {
   getEnabledStockDefinitionById,
   getEnabledStockDefinitions,
+  getEnabledStockIdSet,
   type StockMarketDefinition,
 } from './stockMarketDefinitions.js';
 import {
   generateStockMarketAiNewsDraft,
+  type StockMarketValidatedEvent,
   type StockMarketValidatedImpact,
 } from './stockMarketAi.js';
+import {
+  STOCK_MARKET_NEWS_EVENT_CONTEXT_LIMIT,
+  type StockMarketNewsEventPromptContext,
+  type StockMarketNewsEventStatus,
+} from './stockMarketNewsEventContext.js';
 import {
   STOCK_MARKET_HISTORY_LIMIT,
   STOCK_MARKET_TRADE_RECORD_PAGE_SIZE,
@@ -114,6 +121,20 @@ type StockMarketTickRow = {
 
 type StockMarketRecentImpactRow = {
   stock_id: string;
+};
+
+type StockMarketNewsEventRow = {
+  id: string | number | bigint;
+  status: string;
+  theme: string;
+  headline: string;
+  summary: string;
+  stage: string;
+  affected_stock_ids: string[] | string;
+};
+
+type StockMarketNewsEventInsertRow = {
+  id: string | number | bigint;
 };
 
 type StockMarketSellExecutionPlan = {
@@ -252,6 +273,22 @@ const buildStockMarketDirection = (changeBps: number): string => {
   if (changeBps > 0) return 'up';
   if (changeBps < 0) return 'down';
   return 'flat';
+};
+
+const normalizeStockMarketNewsEventStatus = (status: string): StockMarketNewsEventStatus | null => {
+  if (status === 'active' || status === 'cooling' || status === 'resolved') return status;
+  return null;
+};
+
+const parseStockMarketEventStockIds = (value: string[] | string): string[] => {
+  if (Array.isArray(value)) return value;
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  return trimmed
+    .replace(/^\{|\}$/gu, '')
+    .split(',')
+    .map((stockId) => stockId.trim())
+    .filter((stockId) => stockId.length > 0);
 };
 
 class StockMarketService {
@@ -775,13 +812,16 @@ class StockMarketService {
       `,
       [definitions.map((definition) => definition.id)],
     );
+    const recentImpactStockIds = await this.loadRecentImpactStockIds();
+    const activeEvents = await this.loadActiveNewsEvents();
     const newsResult = await generateStockMarketAiNewsDraft({
       definitions,
       quotes: quoteResult.rows.map((row) => ({
         stockId: row.stock_id,
         currentPriceUnits: toBigIntValue(row.current_price_spirit_stones),
       })),
-      recentImpactStockIds: await this.loadRecentImpactStockIds(),
+      recentImpactStockIds,
+      activeEvents,
       tickHour,
     });
 
@@ -797,6 +837,7 @@ class StockMarketService {
       summary: newsResult.draft.summary,
       modelName: newsResult.draft.modelName,
       promptSnapshot: newsResult.draft.promptSnapshot,
+      event: newsResult.draft.event,
       impacts: newsResult.draft.impacts,
     });
     return { status: 'generated', message: '股市新闻与行情已生成' };
@@ -992,6 +1033,40 @@ class StockMarketService {
     return result.rows.map((row) => row.stock_id);
   }
 
+  private async loadActiveNewsEvents(): Promise<StockMarketNewsEventPromptContext[]> {
+    const result = await query<StockMarketNewsEventRow>(
+      `
+        SELECT id, status, theme, headline, summary, stage, affected_stock_ids
+        FROM stock_market_news_event
+        WHERE status IN ('active', 'cooling')
+        ORDER BY updated_at DESC, id DESC
+        LIMIT $1
+      `,
+      [STOCK_MARKET_NEWS_EVENT_CONTEXT_LIMIT],
+    );
+    const enabledStockIdSet = getEnabledStockIdSet();
+    const events: StockMarketNewsEventPromptContext[] = [];
+
+    for (const row of result.rows) {
+      const status = normalizeStockMarketNewsEventStatus(row.status);
+      if (!status || status === 'resolved') continue;
+      const affectedStockIds = parseStockMarketEventStockIds(row.affected_stock_ids)
+        .filter((stockId) => enabledStockIdSet.has(stockId));
+      if (affectedStockIds.length <= 0) continue;
+      events.push({
+        eventId: toBigIntValue(row.id).toString(),
+        status,
+        theme: row.theme,
+        headline: row.headline,
+        summary: row.summary,
+        stage: row.stage,
+        affectedStockIds,
+      });
+    }
+
+    return events;
+  }
+
   private async insertTradeRecord(params: {
     characterId: number;
     stockId: string;
@@ -1039,6 +1114,74 @@ class StockMarketService {
     );
   }
 
+  private async persistNewsEventForTick(params: {
+    tickId: bigint;
+    event: StockMarketValidatedEvent;
+  }): Promise<bigint> {
+    if (params.event.action === 'new') {
+      const insertResult = await query<StockMarketNewsEventInsertRow>(
+        `
+          INSERT INTO stock_market_news_event (
+            status, theme, headline, summary, stage, affected_stock_ids,
+            started_tick_id, last_tick_id, updated_at
+          )
+          VALUES ('active', $1, $2, $3, $4, $5::text[], $6, $6, NOW())
+          RETURNING id
+        `,
+        [
+          params.event.theme,
+          params.event.headline,
+          params.event.summary,
+          params.event.stage,
+          params.event.affectedStockIds,
+          params.tickId.toString(),
+        ],
+      );
+      const insertedEventId = insertResult.rows[0]?.id;
+      if (insertedEventId === undefined) {
+        throw new Error('股市事件创建失败');
+      }
+      return toBigIntValue(insertedEventId);
+    }
+
+    if (!params.event.selectedEventId) {
+      throw new Error('股市事件缺少选中事件 ID');
+    }
+
+    const nextStatus = params.event.action === 'resolve' ? 'resolved' : 'active';
+    const updateResult = await query<StockMarketNewsEventInsertRow>(
+      `
+        UPDATE stock_market_news_event
+        SET status = $2,
+            theme = $3,
+            headline = $4,
+            summary = $5,
+            stage = $6,
+            affected_stock_ids = $7::text[],
+            last_tick_id = $8,
+            updated_at = NOW()
+        WHERE id = $1
+          AND status IN ('active', 'cooling')
+        RETURNING id
+      `,
+      [
+        params.event.selectedEventId,
+        nextStatus,
+        params.event.theme,
+        params.event.headline,
+        params.event.summary,
+        params.event.stage,
+        params.event.affectedStockIds,
+        params.tickId.toString(),
+      ],
+    );
+    const updatedEventId = updateResult.rows[0]?.id;
+    if (updatedEventId === undefined) {
+      throw new Error('股市事件上下文已失效');
+    }
+    return toBigIntValue(updatedEventId);
+  }
+
   private async applyGeneratedTick(params: {
     tickId: bigint;
     tickHour: Date;
@@ -1046,6 +1189,7 @@ class StockMarketService {
     summary: string;
     modelName: string;
     promptSnapshot: string;
+    event: StockMarketValidatedEvent;
     impacts: readonly StockMarketValidatedImpact[];
   }): Promise<void> {
     await withTransaction(async () => {
@@ -1085,6 +1229,19 @@ class StockMarketService {
           params.modelName,
           params.promptSnapshot,
         ],
+      );
+
+      const eventId = await this.persistNewsEventForTick({
+        tickId: params.tickId,
+        event: params.event,
+      });
+      await query(
+        `
+          UPDATE stock_market_tick
+          SET event_id = $2
+          WHERE id = $1
+        `,
+        [params.tickId.toString(), eventId.toString()],
       );
 
       for (const impact of params.impacts) {

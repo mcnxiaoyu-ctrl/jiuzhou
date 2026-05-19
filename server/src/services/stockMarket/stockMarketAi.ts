@@ -39,6 +39,11 @@ import {
   selectStockMarketScenarioGuide,
   type StockMarketScenarioSelectionWeight,
 } from './stockMarketScenarioSelector.js';
+import {
+  selectStockMarketNewsEventContext,
+  type StockMarketNewsEventPromptContext,
+  type StockMarketNewsEventSelectionWeight,
+} from './stockMarketNewsEventContext.js';
 
 export type StockMarketAiQuoteInput = {
   stockId: string;
@@ -51,9 +56,22 @@ export type StockMarketValidatedImpact = {
   reason: string;
 };
 
+export type StockMarketAiEventAction = 'new' | 'continue' | 'escalate' | 'resolve';
+
+export type StockMarketValidatedEvent = {
+  selectedEventId: string | null;
+  action: StockMarketAiEventAction;
+  theme: string;
+  headline: string;
+  summary: string;
+  stage: string;
+  affectedStockIds: string[];
+};
+
 export type StockMarketAiNewsDraft = {
   headline: string;
   summary: string;
+  event: StockMarketValidatedEvent;
   impacts: StockMarketValidatedImpact[];
   modelName: string;
   promptSnapshot: string;
@@ -71,13 +89,19 @@ export type StockMarketAiNewsDraftResult =
 
 const STOCK_MARKET_AI_TEMPERATURE = 0.8;
 const STOCK_MARKET_AI_MAX_ATTEMPTS = 3;
+const STOCK_MARKET_AI_EVENT_ACTIONS: readonly StockMarketAiEventAction[] = [
+  'new',
+  'continue',
+  'escalate',
+  'resolve',
+];
 
 const buildStockMarketNewsResponseSchema = (
   enabledStockIds: readonly string[],
 ): TechniqueTextModelJsonSchemaObject => ({
   type: 'object',
   additionalProperties: false,
-  required: ['headline', 'summary', 'impacts'],
+  required: ['headline', 'summary', 'event', 'impacts'],
   properties: {
     headline: {
       type: 'string',
@@ -88,6 +112,46 @@ const buildStockMarketNewsResponseSchema = (
       type: 'string',
       minLength: 12,
       maxLength: 160,
+    },
+    event: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['action', 'theme', 'headline', 'summary', 'stage', 'affectedStockIds'],
+      properties: {
+        action: {
+          type: 'string',
+          enum: [...STOCK_MARKET_AI_EVENT_ACTIONS],
+        },
+        theme: {
+          type: 'string',
+          minLength: 2,
+          maxLength: 32,
+        },
+        headline: {
+          type: 'string',
+          minLength: 4,
+          maxLength: 40,
+        },
+        summary: {
+          type: 'string',
+          minLength: 12,
+          maxLength: 120,
+        },
+        stage: {
+          type: 'string',
+          minLength: 2,
+          maxLength: 24,
+        },
+        affectedStockIds: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 8,
+          items: {
+            type: 'string',
+            enum: [...enabledStockIds],
+          },
+        },
+      },
     },
     impacts: {
       type: 'array',
@@ -142,6 +206,73 @@ const readChangeBps = (source: TechniqueModelJsonObject): number | null => {
   return normalizeStockMarketAiChangeBps(value);
 };
 
+const readJsonObject = (
+  source: TechniqueModelJsonObject,
+  key: string,
+): TechniqueModelJsonObject | null => {
+  const value = source[key];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  return value;
+};
+
+const readEventAction = (
+  source: TechniqueModelJsonObject,
+): StockMarketAiEventAction | null => {
+  const value = readTrimmedText(source, 'action', 16);
+  if (!value) return null;
+  return STOCK_MARKET_AI_EVENT_ACTIONS.includes(value as StockMarketAiEventAction)
+    ? value as StockMarketAiEventAction
+    : null;
+};
+
+const readAffectedStockIds = (
+  source: TechniqueModelJsonObject,
+  enabledStockIdSet: ReadonlySet<string>,
+): string[] | null => {
+  const value = source.affectedStockIds;
+  if (!Array.isArray(value) || value.length <= 0 || value.length > 8) return null;
+
+  const seenStockIds = new Set<string>();
+  const stockIds: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'string') return null;
+    const stockId = entry.trim();
+    if (!stockId || !enabledStockIdSet.has(stockId) || seenStockIds.has(stockId)) return null;
+    seenStockIds.add(stockId);
+    stockIds.push(stockId);
+  }
+  return stockIds;
+};
+
+const readEventEntry = (
+  payload: TechniqueModelJsonObject,
+  enabledStockIdSet: ReadonlySet<string>,
+  selectedEventId: string | null,
+): StockMarketValidatedEvent | null => {
+  const rawEvent = readJsonObject(payload, 'event');
+  if (!rawEvent) return null;
+
+  const action = readEventAction(rawEvent);
+  const theme = readTrimmedText(rawEvent, 'theme', 32);
+  const headline = readTrimmedText(rawEvent, 'headline', 40);
+  const summary = readTrimmedText(rawEvent, 'summary', 120);
+  const stage = readTrimmedText(rawEvent, 'stage', 24);
+  const affectedStockIds = readAffectedStockIds(rawEvent, enabledStockIdSet);
+  if (!action || !theme || !headline || !summary || !stage || !affectedStockIds) return null;
+  if (selectedEventId === null && action !== 'new') return null;
+  if (selectedEventId !== null && action === 'new') return null;
+
+  return {
+    selectedEventId,
+    action,
+    theme,
+    headline,
+    summary,
+    stage,
+    affectedStockIds,
+  };
+};
+
 const readImpactEntry = (
   source: TechniqueModelJsonObject,
   enabledStockIdSet: ReadonlySet<string>,
@@ -163,12 +294,19 @@ const readImpactEntry = (
 export const validateStockMarketAiNewsPayload = (
   payload: TechniqueModelJsonObject,
   enabledStockIdSet: ReadonlySet<string>,
+  options?: {
+    selectedEventId?: string | null;
+  },
 ): StockMarketAiNewsDraftResult => {
   const headline = readTrimmedText(payload, 'headline', 40);
   const summary = readTrimmedText(payload, 'summary', 160);
+  const event = readEventEntry(payload, enabledStockIdSet, options?.selectedEventId ?? null);
   const rawImpacts = payload.impacts;
   if (!headline || !summary) {
     return { success: false, reason: 'AI 新闻标题或摘要无效' };
+  }
+  if (!event) {
+    return { success: false, reason: 'AI 新闻事件上下文无效' };
   }
   if (!Array.isArray(rawImpacts) || rawImpacts.length <= 0) {
     return { success: false, reason: 'AI 新闻影响列表无效' };
@@ -193,6 +331,7 @@ export const validateStockMarketAiNewsPayload = (
     draft: {
       headline,
       summary,
+      event,
       impacts,
       modelName: '',
       promptSnapshot: '',
@@ -222,6 +361,7 @@ const buildStockMarketUserMessage = (params: {
   previousFailureReason: string | null;
   scenarioSeed: number;
   recentImpactStockIds: readonly string[];
+  activeEvents: readonly StockMarketNewsEventPromptContext[];
 }): string => {
   const quoteByStockId = new Map(
     params.quotes.map((quote) => [
@@ -230,10 +370,19 @@ const buildStockMarketUserMessage = (params: {
     ] as const),
   );
   const stockIdSet = new Set(params.definitions.map((definition) => definition.id));
+  const eventSelection = selectStockMarketNewsEventContext({
+    seed: params.scenarioSeed,
+    enabledStockIdSet: stockIdSet,
+    recentStockIds: params.recentImpactStockIds,
+    events: params.activeEvents,
+  });
+  const selectedEvent = eventSelection.selectedEvent;
+  const eventWeights: StockMarketNewsEventSelectionWeight[] = eventSelection.weights;
   const scenarioSelection = selectStockMarketScenarioGuide({
     seed: params.scenarioSeed,
     enabledStockIdSet: stockIdSet,
     recentStockIds: params.recentImpactStockIds,
+    eventFocusStockIds: selectedEvent?.affectedStockIds ?? [],
   });
   const scenarioGuide = scenarioSelection.guide;
   const focusStockIds = scenarioGuide.focusStockIds.filter((stockId) => stockIdSet.has(stockId));
@@ -253,6 +402,12 @@ const buildStockMarketUserMessage = (params: {
       recentImpactStockIds: params.recentImpactStockIds.slice(0, 16),
       weights: scenarioWeights,
     },
+    eventContext: {
+      activeEvents: params.activeEvents.slice(0, 6),
+      selectedEvent,
+      eventDirective: eventSelection.directive,
+      weights: eventWeights,
+    },
     stocks: params.definitions.map((definition) => ({
       stockId: definition.id,
       code: definition.code,
@@ -270,6 +425,10 @@ const buildStockMarketUserMessage = (params: {
       '常规单股波动优先控制在 -3.00 到 3.00；超过 4.00 或低于 -4.00 只用于重大突发事件',
       '优先输出 2 到 4 个相互关联的受影响股票，形成一涨一跌或多空配对',
       '本轮新闻题材必须优先围绕 marketScenario，impacts 优先从 marketScenario.focusStockIds 中选择',
+      'eventContext.selectedEvent 非空时，本轮必须续写该事件，event.action 只能是 continue、escalate 或 resolve',
+      'eventContext.selectedEvent 为空时，本轮必须开启新事件，event.action 必须是 new',
+      'event.theme、event.headline、event.summary、event.stage 用于内部事件池，不会直接展示给玩家，但必须概括本轮新闻脉络',
+      'event.affectedStockIds 只能填写本事件明确关联股票，必须来自 stocks，不能重复',
       'recentImpactStockIds 表示近期已频繁波动的股票，用于降低重复题材；它不是禁用名单，确有强关联时可以少量复用',
       '优先让近期较少出现的 focusStockIds 获得明确影响，避免同一批股票连续多轮占据 impacts',
       '不要连续使用丹方突破、筑基丹热销、青云丹坊大利好作为默认新闻题材',
@@ -287,24 +446,33 @@ export const generateStockMarketAiNewsDraft = async (params: {
   quotes: readonly StockMarketAiQuoteInput[];
   tickHour: Date;
   recentImpactStockIds: readonly string[];
+  activeEvents: readonly StockMarketNewsEventPromptContext[];
 }): Promise<StockMarketAiNewsDraftResult> => {
   let previousFailureReason: string | null = null;
+  const enabledStockIdSet = new Set(params.definitions.map((definition) => definition.id));
   for (let attempt = 1; attempt <= STOCK_MARKET_AI_MAX_ATTEMPTS; attempt += 1) {
     const seed = generateTechniqueTextModelSeed();
+    const eventSelection = selectStockMarketNewsEventContext({
+      seed,
+      enabledStockIdSet,
+      recentStockIds: params.recentImpactStockIds,
+      events: params.activeEvents,
+    });
     let callResult: Awaited<ReturnType<typeof callConfiguredTextModel>> | null = null;
     try {
+      const userMessage = buildStockMarketUserMessage({
+        ...params,
+        attempt,
+        previousFailureReason,
+        recentImpactStockIds: params.recentImpactStockIds,
+        scenarioSeed: seed,
+        promptNoiseHash: buildTextModelPromptNoiseHash(`stock-market-news:${attempt}`, seed),
+      });
       callResult = await callConfiguredTextModel({
         modelScope: 'stockMarket',
         responseFormat: buildStockMarketResponseFormat(params.definitions),
         systemMessage: buildStockMarketSystemMessage(),
-        userMessage: buildStockMarketUserMessage({
-          ...params,
-          attempt,
-          previousFailureReason,
-          recentImpactStockIds: params.recentImpactStockIds,
-          scenarioSeed: seed,
-          promptNoiseHash: buildTextModelPromptNoiseHash(`stock-market-news:${attempt}`, seed),
-        }),
+        userMessage,
         seed,
         temperature: STOCK_MARKET_AI_TEMPERATURE,
         timeoutMs: AI_GENERATION_TIMEOUT_MS,
@@ -319,7 +487,7 @@ export const generateStockMarketAiNewsDraft = async (params: {
     }
 
     const parsed = parseTechniqueTextModelJsonObject(callResult.content, {
-      preferredTopLevelKeys: ['headline', 'summary', 'impacts'],
+      preferredTopLevelKeys: ['headline', 'summary', 'event', 'impacts'],
     });
     if (!parsed.success) {
       previousFailureReason = `AI 新闻 JSON 解析失败: ${parsed.reason}`;
@@ -328,7 +496,10 @@ export const generateStockMarketAiNewsDraft = async (params: {
 
     const validated = validateStockMarketAiNewsPayload(
       parsed.data,
-      new Set(params.definitions.map((definition) => definition.id)),
+      enabledStockIdSet,
+      {
+        selectedEventId: eventSelection.selectedEvent?.eventId ?? null,
+      },
     );
     if (!validated.success) {
       previousFailureReason = validated.reason;
