@@ -30,10 +30,12 @@ import { resolveItemUseResourceDelta, rollItemUseAmount } from './shared/itemUse
 import {
   applyCharacterResourceDeltaByCharacterId,
   getCharacterComputedByCharacterId,
+  setCharacterResourcesByCharacterId,
   type CharacterComputedRow,
 } from './characterComputedService.js';
 import { getItemDefinitionById } from './staticConfigLoader.js';
 import { getRandomGemItemDefinitionIds } from './itemUse/staticUseIndex.js';
+import { applyItemUseResourceDeltaToActiveBattle } from './itemUse/activeBattleResourceSync.js';
 import { getVisibleTechniqueDefinitionById } from './technique/definitionReadModel.js';
 import { unbindEquipmentBindingByInstanceId } from './inventory/equipmentUnbind.js';
 import type { PartnerLearnTechniqueResultDto } from './partnerService.js';
@@ -1258,10 +1260,29 @@ class ItemService {
       };
     }
     if (deltaQixue !== 0 || deltaLingqi !== 0) {
-      appliedResourceDelta = await applyCharacterResourceDeltaByCharacterId(characterId, {
+      const activeBattleResourceSync = await applyItemUseResourceDeltaToActiveBattle(characterId, {
         qixue: deltaQixue,
         lingqi: deltaLingqi,
       });
+      if (activeBattleResourceSync.synced) {
+        const persistedResource = await setCharacterResourcesByCharacterId(characterId, {
+          qixue: activeBattleResourceSync.qixue,
+          lingqi: activeBattleResourceSync.lingqi,
+        });
+        appliedResourceDelta = persistedResource
+          ? {
+              qixue: persistedResource.qixue,
+              lingqi: persistedResource.lingqi,
+              max_qixue: computedBefore.max_qixue,
+              max_lingqi: computedBefore.max_lingqi,
+            }
+          : null;
+      } else {
+        appliedResourceDelta = await applyCharacterResourceDeltaByCharacterId(characterId, {
+          qixue: deltaQixue,
+          lingqi: deltaLingqi,
+        });
+      }
     }
     if (deltaStamina !== 0) {
       const staminaResult = await recoverStaminaByCharacterId(characterId, deltaStamina);
