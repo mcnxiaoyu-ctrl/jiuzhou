@@ -54,6 +54,9 @@ import {
 import {
   QUALITY_RANK_MAP,
 } from './itemQuality.js';
+import type {
+  PartnerRecruitLockedAttrProfile,
+} from './partnerRecruitAttrProfile.js';
 
 export type PartnerRecruitQuality = '黄' | '玄' | '地' | '天';
 export type PartnerRecruitElement = 'jin' | 'mu' | 'shui' | 'huo' | 'tu' | 'none';
@@ -113,6 +116,7 @@ export type PartnerRecruitPromptInputOptions = {
   promptNoiseHash?: string;
   primaryAttackGrowthTarget?: number;
   fusionReferencePartners?: PartnerRecruitFusionReferencePartner[];
+  lockedAttrProfile?: PartnerRecruitLockedAttrProfile;
 };
 
 export type PartnerRecruitQualityRateEntry = {
@@ -953,6 +957,21 @@ export const buildPartnerRecruitPromptInput = (
       attributeElement: entry.attributeElement,
     }))
     : undefined;
+  const attrProfile = options.lockedAttrProfile
+    ? {
+      id: options.lockedAttrProfile.id,
+      label: options.lockedAttrProfile.label,
+      description: options.lockedAttrProfile.description,
+      roleKeywords: [...options.lockedAttrProfile.roleKeywords],
+      combatStyle: options.lockedAttrProfile.combatStyle,
+    }
+    : undefined;
+  const lockedPartnerAttrs = options.lockedAttrProfile
+    ? {
+      baseAttrs: options.lockedAttrProfile.baseAttrs,
+      levelAttrGains: options.lockedAttrProfile.levelAttrGains,
+    }
+    : undefined;
 
   return {
     worldview: '中国仙侠世界《九州修仙录》',
@@ -979,6 +998,8 @@ export const buildPartnerRecruitPromptInput = (
     currentMaxQixueLevelAttrGainLimit: maxQixueGrowth,
     promptNoiseHash,
     primaryAttackGrowthTarget,
+    attrProfile,
+    lockedPartnerAttrs,
     constraints: [
       '必须返回严格 JSON 对象，禁止额外解释文本',
       '顶层字段必须且只能使用 requiredTopLevelKeys，禁止使用 forbiddenAliasKeys 中的别名字段',
@@ -1001,8 +1022,16 @@ export const buildPartnerRecruitPromptInput = (
       'partner.baseAttrs 与 partner.levelAttrGains 必须完整包含 requiredAttrKeys 中的全部字段，禁止缺项',
       '每个天生功法 passiveValue 必须 > 0，且不得超过 passiveValueGuideByKey[passiveKey].maxTotal；百分比继续使用小数表示，例如 0.18 表示 18%',
       'partner.baseAttrs 中 integerAttrKeys 的属性必须使用非负整数；partner.levelAttrGains 的全部属性都使用非负数字，允许按参考模板写小数成长',
-      `只限制 partner.levelAttrGains.max_qixue 这个“气血上限属性的每级成长值”，当前 quality=${quality} 时不得超过 currentMaxQixueLevelAttrGainLimit=${maxQixueGrowth}；各品质数值只表示最大可取值：黄级最多200、玄级最多300、地级最多400、天级最多500，允许生成低于上限的正常成长值`,
-      '这里的“气血上限”只是属性名 max_qixue，不是伙伴最终气血值、基础气血值或面板气血上限；禁止把上述 200/300/400/500 当成 partner.baseAttrs.max_qixue 的上限，也禁止因此压低 baseAttrs.max_qixue',
+      ...(options.lockedAttrProfile
+        ? [
+          `attrProfile 是本次服务端已锁定的数值定位：${options.lockedAttrProfile.label}；partner.role、partner.description 与天生功法语义必须贴合该定位，不得写成相反职责`,
+          `partner.combatStyle 必须严格等于 attrProfile.combatStyle=${options.lockedAttrProfile.combatStyle}`,
+          'partner.baseAttrs 必须逐字段原样等于 lockedPartnerAttrs.baseAttrs；partner.levelAttrGains 必须逐字段原样等于 lockedPartnerAttrs.levelAttrGains，禁止自行调大、调小、四舍五入或换算',
+          `lockedPartnerAttrs.levelAttrGains.max_qixue 已由服务端按 attrProfile=${options.lockedAttrProfile.id} 和 quality=${quality} 随机锁定，当前值为 ${options.lockedAttrProfile.levelAttrGains.max_qixue}，不得改写`,
+        ]
+        : []),
+      `只限制 partner.levelAttrGains.max_qixue 这个“气血上限属性的每级成长值”，当前 quality=${quality} 时不得超过 currentMaxQixueLevelAttrGainLimit=${maxQixueGrowth}；各品质数值只表示最大可取值：黄级最多${PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY.黄}、玄级最多${PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY.玄}、地级最多${PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY.地}、天级最多${PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY.天}`,
+      '这里的“气血上限”只是属性名 max_qixue，不是伙伴最终气血值、基础气血值或面板气血上限；禁止把 currentMaxQixueLevelAttrGainLimit 当成基础气血上限，也禁止因此压低 baseAttrs.max_qixue',
       'percentAttrKeys 中的属性必须使用非负数字，小数表示百分比，例如 0.18 表示 18%',
       '品质高低顺序固定为 黄 < 玄 < 地 < 天；referencePartnerExample 中青木小偶的 quality=黄，表示它是最低品质参考模板，最终强度与风格仍必须以当前 quality 字段为准',
       ...buildPartnerRecruitQualityStrengthConstraints(

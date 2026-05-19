@@ -25,7 +25,6 @@ import {
 import {
   buildPartnerRecruitPromptNoiseHash,
   PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY,
-  rollPartnerRecruitPrimaryAttackGrowthTarget,
 } from '../shared/partnerRecruitRules.js';
 import {
   resolvePartnerRecruitBaseModelBySeed,
@@ -42,22 +41,39 @@ test('buildPartnerRecruitTextModelRequest: 应显式传入 seed 并在 prompt �
     promptNoiseHash?: string;
     primaryAttackGrowthTarget?: number;
     baseModel?: string;
+    attrProfile?: {
+      id?: string;
+      combatStyle?: string;
+    };
+    lockedPartnerAttrs?: {
+      baseAttrs?: Record<string, number>;
+      levelAttrGains?: Record<string, number>;
+    };
     constraints?: string[];
   };
 
   assert.equal(request.seed, seed);
   assert.equal(parsedUserMessage.quality, '黄');
   assert.equal(parsedUserMessage.promptNoiseHash, buildPartnerRecruitPromptNoiseHash(seed));
-  assert.equal(parsedUserMessage.primaryAttackGrowthTarget, rollPartnerRecruitPrimaryAttackGrowthTarget('黄', seed));
+  assert.equal(
+    parsedUserMessage.primaryAttackGrowthTarget,
+    request.lockedAttrProfile.combatStyle === 'physical'
+      ? request.lockedAttrProfile.levelAttrGains.wugong
+      : request.lockedAttrProfile.levelAttrGains.fagong,
+  );
   assert.equal(request.baseModel, resolvePartnerRecruitBaseModelBySeed(seed));
   assert.equal(parsedUserMessage.baseModel, resolvePartnerRecruitBaseModelBySeed(seed));
+  assert.equal(parsedUserMessage.attrProfile?.id, request.attrProfile.id);
+  assert.equal(parsedUserMessage.attrProfile?.combatStyle, request.attrProfile.combatStyle);
+  assert.deepEqual(parsedUserMessage.lockedPartnerAttrs?.baseAttrs, request.lockedAttrProfile.baseAttrs);
+  assert.deepEqual(parsedUserMessage.lockedPartnerAttrs?.levelAttrGains, request.lockedAttrProfile.levelAttrGains);
   assert.equal(
     parsedUserMessage.constraints?.some((rule) => rule.includes('仅作为伙伴主体形态、种族特征、气质与文风倾向参考')) ?? false,
     false,
   );
   assert.equal(
     parsedUserMessage.constraints?.includes(
-      `本次程序已为当前 quality=黄 稳定随机出主攻成长目标值 primaryAttackGrowthTarget=${rollPartnerRecruitPrimaryAttackGrowthTarget('黄', seed)}；该值只用于双攻中的主攻项，不代表双攻都取这个值`,
+      `本次程序已为当前 quality=黄 稳定随机出主攻成长目标值 primaryAttackGrowthTarget=${parsedUserMessage.primaryAttackGrowthTarget}；该值只用于双攻中的主攻项，不代表双攻都取这个值`,
     ),
     true,
   );
@@ -91,21 +107,24 @@ test('buildPartnerRecruitTextModelRequest: 应明确约束气血上限属性的�
   const parsedUserMessage = JSON.parse(request.userMessage) as {
     maxQixueLevelAttrGainLimitByQuality?: Record<string, number>;
     currentMaxQixueLevelAttrGainLimit?: number;
+    lockedPartnerAttrs?: {
+      levelAttrGains?: Record<string, number>;
+    };
     constraints?: string[];
   };
 
   assert.deepEqual(parsedUserMessage.maxQixueLevelAttrGainLimitByQuality, PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY);
-  assert.equal(parsedUserMessage.currentMaxQixueLevelAttrGainLimit, 500);
+  assert.equal(parsedUserMessage.currentMaxQixueLevelAttrGainLimit, PARTNER_RECRUIT_MAX_QIXUE_GROWTH_BY_QUALITY.天);
   assert.equal(
-    parsedUserMessage.constraints?.includes(
-      '只限制 partner.levelAttrGains.max_qixue 这个“气血上限属性的每级成长值”，当前 quality=天 时不得超过 currentMaxQixueLevelAttrGainLimit=500；各品质数值只表示最大可取值：黄级最多200、玄级最多300、地级最多400、天级最多500，允许生成低于上限的正常成长值',
-    ),
+    parsedUserMessage.lockedPartnerAttrs?.levelAttrGains?.max_qixue,
+    request.lockedAttrProfile.levelAttrGains.max_qixue,
+  );
+  assert.equal(
+    parsedUserMessage.constraints?.some((rule) => rule.includes('lockedPartnerAttrs.levelAttrGains.max_qixue')),
     true,
   );
   assert.equal(
-    parsedUserMessage.constraints?.includes(
-      '这里的“气血上限”只是属性名 max_qixue，不是伙伴最终气血值、基础气血值或面板气血上限；禁止把上述 200/300/400/500 当成 partner.baseAttrs.max_qixue 的上限，也禁止因此压低 baseAttrs.max_qixue',
-    ),
+    parsedUserMessage.constraints?.some((rule) => rule.includes('禁止把 currentMaxQixueLevelAttrGainLimit 当成基础气血上限')),
     true,
   );
 });

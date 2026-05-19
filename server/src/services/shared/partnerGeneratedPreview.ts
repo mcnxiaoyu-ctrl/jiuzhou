@@ -60,6 +60,11 @@ import {
   type PartnerRecruitRequestedBaseModelValidationResult,
 } from './partnerRecruitBaseModel.js';
 import {
+  applyPartnerRecruitLockedAttrProfileToDraft,
+  rollPartnerRecruitLockedAttrProfile,
+  type PartnerRecruitLockedAttrProfile,
+} from './partnerRecruitAttrProfile.js';
+import {
   generatePartnerRecruitAvatar,
   type PartnerRecruitAvatarInput,
 } from './partnerRecruitAvatarGenerator.js';
@@ -500,6 +505,8 @@ export const buildGeneratedPartnerTextModelRequest = (params: {
   promptNoiseHash: string;
   requestedBaseModel: string | null;
   baseModel: string;
+  lockedAttrProfile: PartnerRecruitLockedAttrProfile;
+  attrProfile: Pick<PartnerRecruitLockedAttrProfile, 'id' | 'label' | 'description' | 'roleKeywords' | 'combatStyle'>;
 } => {
   const seed = params.seed ?? generateTechniqueTextModelSeed();
   const promptNoiseHash = buildPartnerRecruitPromptNoiseHash(seed);
@@ -507,8 +514,21 @@ export const buildGeneratedPartnerTextModelRequest = (params: {
     seed,
     requestedBaseModel: params.requestedBaseModel,
   });
-  const primaryAttackGrowthTarget = rollPartnerRecruitPrimaryAttackGrowthTarget(params.quality, seed);
+  const lockedAttrProfile = rollPartnerRecruitLockedAttrProfile({
+    quality: params.quality,
+    seed,
+  });
+  const primaryAttackGrowthTarget = lockedAttrProfile.combatStyle === 'physical'
+    ? lockedAttrProfile.levelAttrGains.wugong
+    : lockedAttrProfile.levelAttrGains.fagong;
   const timeoutMs = PARTNER_RECRUIT_GENERATION_TIMEOUT_MS;
+  const attrProfile = {
+    id: lockedAttrProfile.id,
+    label: lockedAttrProfile.label,
+    description: lockedAttrProfile.description,
+    roleKeywords: lockedAttrProfile.roleKeywords,
+    combatStyle: lockedAttrProfile.combatStyle,
+  };
 
   return {
     responseFormat: buildPartnerRecruitResponseFormat(params.quality),
@@ -519,12 +539,15 @@ export const buildGeneratedPartnerTextModelRequest = (params: {
       promptNoiseHash,
       primaryAttackGrowthTarget,
       fusionReferencePartners: params.fusionReferencePartners,
+      lockedAttrProfile,
     })),
     seed,
     timeoutMs,
     promptNoiseHash,
     requestedBaseModel: baseModelSelection.requestedBaseModel,
     baseModel: baseModelSelection.baseModel,
+    lockedAttrProfile,
+    attrProfile,
   };
 };
 
@@ -725,10 +748,18 @@ export const tryCallGeneratedPartnerTextModel = async (params: {
         modelName: external.modelName,
       };
     }
+    const lockedDraft = applyPartnerRecruitLockedAttrProfileToDraft(draft, request.lockedAttrProfile);
+    if (!lockedDraft) {
+      return {
+        success: false,
+        reason: '伙伴生成模型返回的战斗风格与服务端属性定位不一致',
+        modelName: external.modelName,
+      };
+    }
 
     return {
       success: true,
-      draft,
+      draft: lockedDraft,
       modelName: external.modelName,
     };
   } catch (error) {

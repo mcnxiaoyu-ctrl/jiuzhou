@@ -37,6 +37,12 @@ import {
 import {
   PARTNER_RECRUIT_FORM_RULES,
 } from '../shared/partnerRecruitCreativeDirection.js';
+import {
+  buildPartnerRecruitLockedAttrProfile,
+  PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_SCALE,
+  scalePartnerRecruitLevelDefenseGrowth,
+  type PartnerRecruitAttrProfileId,
+} from '../shared/partnerRecruitAttrProfile.js';
 import { buildPartnerBattleAttrs } from '../shared/partnerRules.js';
 
 const DEFAULT_BASE_MODEL = '狐';
@@ -478,6 +484,56 @@ test('rollPartnerRecruitPrimaryAttackGrowthTarget: 天级 45+ 应为少见长尾
   }
 
   assert.equal(count45Plus / 2000 < 0.07, true);
+});
+
+test('buildPartnerRecruitLockedAttrProfile: 护卫定位应比爆发输出拥有更高气血和防御成长', () => {
+  const seed = 20260519;
+  const burstAttacker = buildPartnerRecruitLockedAttrProfile({
+    quality: '天',
+    seed,
+    profileId: 'burst_attacker',
+    combatStyle: 'physical',
+  });
+  const guardTank = buildPartnerRecruitLockedAttrProfile({
+    quality: '天',
+    seed,
+    profileId: 'guard_tank',
+    combatStyle: 'physical',
+  });
+
+  assert.equal(guardTank.levelAttrGains.max_qixue > burstAttacker.levelAttrGains.max_qixue, true);
+  assert.equal(guardTank.levelAttrGains.wufang > burstAttacker.levelAttrGains.wufang, true);
+  assert.equal(guardTank.levelAttrGains.fafang > burstAttacker.levelAttrGains.fafang, true);
+  assert.equal(burstAttacker.levelAttrGains.wugong > guardTank.levelAttrGains.wugong, true);
+});
+
+test('buildPartnerRecruitLockedAttrProfile: 双防成长应统一降低三分之一', () => {
+  const profileIds: readonly PartnerRecruitAttrProfileId[] = [
+    'burst_attacker',
+    'sustained_attacker',
+    'guard_tank',
+    'support_healer',
+    'speed_controller',
+  ];
+  const maxScaledDefenseGrowth = scalePartnerRecruitLevelDefenseGrowth(50);
+
+  assert.equal(PARTNER_RECRUIT_LEVEL_DEFENSE_GROWTH_SCALE, 2 / 3);
+  assert.equal(scalePartnerRecruitLevelDefenseGrowth(45), 30);
+  assert.equal(scalePartnerRecruitLevelDefenseGrowth(44), 29);
+
+  for (let seed = 20260500; seed < 20260550; seed += 1) {
+    for (const profileId of profileIds) {
+      const profile = buildPartnerRecruitLockedAttrProfile({
+        quality: '天',
+        seed,
+        profileId,
+        combatStyle: 'physical',
+      });
+
+      assert.equal(profile.levelAttrGains.wufang <= maxScaledDefenseGrowth, true);
+      assert.equal(profile.levelAttrGains.fafang <= maxScaledDefenseGrowth, true);
+    }
+  }
 });
 
 test('buildPartnerRecruitPromptInput: 应注入程序随机出的主攻成长目标值，并让 AI 决定落到物攻或法攻', () => {
