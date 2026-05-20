@@ -1412,3 +1412,17 @@
     max-width: calc(100vw - 24px);
   }
 }
+
+.sect-table-notice-cell {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+
+  &:hover {
+    color: var(--primary-color) !important;
+  }
+}
+
