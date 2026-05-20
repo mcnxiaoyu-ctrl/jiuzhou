@@ -140,7 +140,7 @@ const renderTechniqueInlineDetails = (t: Technique): React.ReactNode => {
         <span className="tech-row-detail-label">已解锁技能：</span>
         <span className="tech-row-detail-value">
           {skills.length > 0 ? (
-            skills.map((s, idx) => (
+            skills.map((s) => (
               <span key={s.id} className="tech-row-detail-skill-wrapper">
                 <Tooltip
                   title={renderSkillTooltip(s)}
@@ -158,7 +158,6 @@ const renderTechniqueInlineDetails = (t: Technique): React.ReactNode => {
                     <span className="tech-row-detail-skill-name">{s.name}</span>
                   </span>
                 </Tooltip>
-                {idx < skills.length - 1 && <span className="tech-row-detail-skill-sep">、</span>}
               </span>
             ))
           ) : (
@@ -865,7 +864,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
 
   const renderSlotCard = (k: SlotKey) => {
     const t = equippedTech[k];
-    const content = (
+    const content = t ? (
       <div
         key={k}
         className={`tech-slot ${k === activeSlot ? 'is-active' : ''}`}
@@ -877,32 +876,53 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
         }}
       >
         <div className="tech-slot-label">{slotLabels[k]}</div>
+        <Button
+          size="small"
+          className="tech-slot-remove-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            removeFromSlot(k);
+          }}
+          title="卸下功法"
+        >
+          卸下
+        </Button>
         <div className="tech-slot-card">
           <div className="tech-slot-meta">
-            <div className="tech-slot-name">
-              {t ? `${t.name}（${layerText(t.layer)}/${layerText(t.layers.length)}）` : '未装备'}
+            <div className="tech-slot-name">{t.name}</div>
+            <div className="tech-slot-layer">
+              进度：{layerText(t.layer)}/{layerText(t.layers.length)}
             </div>
             <div className="tech-slot-tags">
-              {t ? <Tag className={getItemQualityTagClassName(t.quality)}>{getItemQualityLabel(t.quality)}</Tag> : <Tag>未装配</Tag>}
-              {(t?.tags ?? []).slice(0, 2).map((x) => (
-                <Tag key={x} color="default">
+              <span className={`tech-slot-quality-tag ${getItemQualityTagClassName(t.quality)}`}>
+                {getItemQualityLabel(t.quality)}
+              </span>
+              {(t.tags ?? []).slice(0, 2).map((x) => (
+                <span key={x} className="tech-row-type-tag-item">
                   {x}
-                </Tag>
+                </span>
               ))}
             </div>
           </div>
-          <Button
-            size="small"
-            className={`tech-slot-remove ${t ? '' : 'is-placeholder'}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              removeFromSlot(k);
-            }}
-          >
-            卸下
-          </Button>
         </div>
-        <div className="tech-slot-hint">{t ? '点击下方功法可替换' : '点击下方功法运功装备到此栏位'}</div>
+        <div className="tech-slot-hint">点击下方功法可替换</div>
+      </div>
+    ) : (
+      <div
+        key={k}
+        className={`tech-slot is-empty ${k === activeSlot ? 'is-active' : ''}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => setActiveSlot(k)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') setActiveSlot(k);
+        }}
+      >
+        <div className="tech-slot-label">{slotLabels[k]}</div>
+        <div className="tech-slot-empty-body">
+          <span className="tech-slot-empty-title">未装配功法</span>
+          <span className="tech-slot-empty-desc">点击下方功法运功装配</span>
+        </div>
       </div>
     );
 
@@ -920,7 +940,15 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
       {learned.map((t) => {
         const equippedSlot = equippedSlotByTechId.get(t.id) ?? null;
         const content = (
-          <div className="tech-row">
+          <div
+            className={`tech-row ${equippedSlot ? 'is-equipped' : 'is-idle'}`}
+            onClick={() => {
+              if (!equippedSlot) {
+                equipToActiveSlot(t.id);
+              }
+            }}
+            style={{ cursor: equippedSlot ? 'default' : 'pointer' }}
+          >
             <div className="tech-row-main">
               {/* 头部：功法名、品质与进度 */}
               <div className="tech-row-header">
@@ -930,13 +958,32 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
                     {getItemQualityLabel(t.quality)}
                   </Tag>
                   <span className="tech-row-progress-text">
-                    进度：{layerText(t.layer)}/{layerText(t.layers.length)} 层
+                    进度：{layerText(t.layer)}/{layerText(t.layers.length)}
                   </span>
                 </div>
-                {equippedSlot && (
-                  <span className="tech-row-equipped-status">
-                    {slotLabels[equippedSlot]}
+                {equippedSlot ? (
+                  <span
+                    className="tech-row-equipped-status"
+                    title="点击卸下功法"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFromSlot(equippedSlot);
+                    }}
+                  >
+                    {slotLabels[equippedSlot]} ×
                   </span>
+                ) : (
+                  <Button
+                    size="small"
+                    type="link"
+                    className="tech-row-action-link"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      equipToActiveSlot(t.id);
+                    }}
+                  >
+                    运功
+                  </Button>
                 )}
               </div>
 
@@ -953,18 +1000,6 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
                     </span>
                   ))}
                 </div>
-              )}
-            </div>
-
-            <div className="tech-row-actions">
-              {equippedSlot ? (
-                <Button size="small" danger onClick={() => removeFromSlot(equippedSlot)}>
-                  取消运功
-                </Button>
-              ) : (
-                <Button size="small" type="primary" onClick={() => equipToActiveSlot(t.id)}>
-                  运功
-                </Button>
               )}
             </div>
           </div>
@@ -1042,7 +1077,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
                         {getItemQualityLabel(t.quality)}
                       </Tag>
                       <span className="tech-row-progress-text">
-                        进度：{layerText(t.layer)}/{layerText(t.layers.length)} 层
+                        进度：{layerText(t.layer)}/{layerText(t.layers.length)}
                       </span>
                     </div>
                     {equippedSlot && (
