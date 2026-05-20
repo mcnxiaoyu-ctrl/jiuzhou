@@ -873,7 +873,6 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
                               </div>
                               {activeNews.impacts.length > 0 ? (
                                 <div className="stock-market-news-sidebar">
-                                  <div className="stock-market-news-sidebar-title">受影响个股</div>
                                   <div className="stock-market-news-sidebar-list">
                                     {activeNews.impacts.map((impact) => {
                                       const tone = resolveStockMarketTone(impact.changeBps);
