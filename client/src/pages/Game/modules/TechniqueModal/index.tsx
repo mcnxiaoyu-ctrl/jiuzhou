@@ -1,4 +1,4 @@
-import { App, Button, Input, Modal, Segmented, Table, Tag, Tooltip } from 'antd';
+import { App, Button, Input, Modal, Segmented, Tag, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveIconUrl, DEFAULT_ICON as coin01 } from '../../shared/resolveIcon';
 import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../shared/imageAssets';
@@ -47,6 +47,8 @@ import {
 import { renderSkillInlineDetails, renderSkillTooltip } from './skillDetailShared';
 import {
   getMergedUnlockedTechniqueBonuses,
+  mergeTechniqueBonuses,
+  formatTechniqueBonusAmount,
   type TechniqueBonus,
 } from './bonusShared';
 import {
@@ -1036,68 +1038,113 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
 
   const renderBonusPanel = () => {
     const rows = learned.map((t) => {
-      let role: string = '未装配';
-      if (equipped.main === t.id) role = '主功法';
-      if (equipped.sub1 === t.id || equipped.sub2 === t.id || equipped.sub3 === t.id) role = '副功法';
+      let role: 'main' | 'sub' | 'none' = 'none';
+      let roleLabel = '未生效';
+      let coef = 0;
+      if (equipped.main === t.id) {
+        role = 'main';
+        roleLabel = '主功法';
+        coef = 1.0;
+      } else if (equipped.sub1 === t.id || equipped.sub2 === t.id || equipped.sub3 === t.id) {
+        role = 'sub';
+        roleLabel = '副功法';
+        coef = 0.3;
+      }
       return {
         id: t.id,
         name: t.name,
         quality: t.quality,
         role,
+        roleLabel,
+        coef,
         bonuses: getMergedUnlockedTechniqueBonuses(t.layers, t.layer),
       };
     });
 
+    const totalActiveBonuses = (() => {
+      const activeBonuses: TechniqueBonus[] = [];
+      rows.forEach((row) => {
+        if (row.coef > 0) {
+          row.bonuses.forEach((b) => {
+            activeBonuses.push({
+              ...b,
+              amount: b.amount * row.coef,
+            });
+          });
+        }
+      });
+      return mergeTechniqueBonuses(activeBonuses);
+    })();
+
     return (
       <div className="tech-pane">
         <div className="tech-pane-scroll">
-          <div className="tech-subtitle">功法加成（主功法 100%，副功法 30%）</div>
-          <Table
-            size="small"
-            rowKey={(row) => row.id}
-            pagination={false}
-            className="tech-table"
-            columns={[
-              {
-                title: '功法',
-                dataIndex: 'name',
-                key: 'name',
-                render: (_: string, row: (typeof rows)[number]) => (
-                  <div className="tech-table-name">
-                    <span className="tech-table-name-text">{row.name}</span>
-                    <Tag className={getItemQualityTagClassName(row.quality)}>{getItemQualityLabel(row.quality)}</Tag>
+          <div className="tech-bonus-panel-flat">
+            
+            {/* 顶置：加成总览行（Title + Grid 结构） */}
+            <div className="tech-bonus-total-row">
+              <div className="tech-bonus-total-header-line">
+                <span className="tech-bonus-total-label">混元总加成</span>
+                <span className="tech-bonus-total-sub-label">（当前运功生效之属性聚合）</span>
+              </div>
+              <div className="tech-bonus-total-grid">
+                {totalActiveBonuses.length ? (
+                  totalActiveBonuses.map((b) => (
+                    <div key={b.key} className="tech-bonus-total-item">
+                      <span className="tech-bonus-total-k">{b.label}</span>
+                      <span className="tech-bonus-total-v">{b.value}</span>
+                    </div>
+                  ))
+                ) : (
+                  <span className="tech-bonus-total-empty">暂无生效加成，请在「功法栏」装备功法</span>
+                )}
+              </div>
+            </div>
+
+            {/* 列表：各功法加成行 */}
+            <div className="tech-bonus-list-flat">
+              {rows.map((row) => (
+                <div key={row.id} className="tech-bonus-row-flat">
+                  {/* 左侧：功法名称与运功状态 */}
+                  <div className="tech-bonus-row-left">
+                    <span className="tech-bonus-row-name">{row.name}</span>
+                    <Tag className={getItemQualityTagClassName(row.quality)} style={{ margin: 0 }}>
+                      {getItemQualityLabel(row.quality)}
+                    </Tag>
+                    <span className={`tech-bonus-row-role is-role-${row.role}`}>
+                      {row.roleLabel}
+                    </span>
                   </div>
-                ),
-              },
-              {
-                title: '装配',
-                dataIndex: 'role',
-                key: 'role',
-                width: 90,
-                render: (value: string) => <span className="tech-table-role">{value}</span>,
-              },
-              {
-                title: '属性',
-                dataIndex: 'bonuses',
-                key: 'bonuses',
-                render: (list: TechniqueBonus[]) => (
-                  <div className="tech-bonus-lines">
-                    {list.length ? (
-                      list.map((b) => (
-                        <div key={`${b.label}-${b.value}`} className="tech-bonus-line">
-                          <span className="tech-bonus-k">{b.label}</span>
-                          <span className="tech-bonus-v">{b.value}</span>
-                        </div>
-                      ))
+
+                  {/* 右侧：此功法提供的加成详细信息 */}
+                  <div className="tech-bonus-row-right">
+                    {row.bonuses.length ? (
+                      row.bonuses.map((b) => {
+                        const activeVal = row.coef > 0 ? formatTechniqueBonusAmount(b.key, b.amount * row.coef) : null;
+                        return (
+                          <div key={b.key} className="tech-bonus-detail-item">
+                            <span className="tech-bonus-detail-k">{b.label}</span>
+                            <span className="tech-bonus-detail-v">
+                              {b.value}
+                              {activeVal && (
+                                <span className="tech-bonus-detail-active-sub">
+                                  (生效 {activeVal})
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })
                     ) : (
-                      <div className="tech-empty">无</div>
+                      <span className="tech-bonus-detail-empty">暂无加成</span>
                     )}
                   </div>
-                ),
-              },
-            ]}
-            dataSource={rows}
-          />
+                </div>
+              ))}
+              {rows.length === 0 && <div className="tech-empty">暂无功法数据</div>}
+            </div>
+
+          </div>
         </div>
       </div>
     );
