@@ -25,13 +25,14 @@
 
 import { query, withTransactionAuto } from '../../config/database.js';
 import { BATTLE_TICK_MS, BATTLE_START_COOLDOWN_MS } from '../battle/index.js';
-import { getGameServer } from '../../game/gameServer.js';
 import { getMapDefById, getRoomInMap, isMapEnabled } from '../mapService.js';
 import { getCharacterUserId } from '../sect/db.js';
 import type {
   IdleBattleRewardSettlementPlan,
   IdleSessionRow,
 } from './types.js';
+import type { IdleRealtimeEvent } from './idleRealtimeEventQueue.js';
+import { publishIdleRealtimeEvent } from './idleRealtimeEventQueue.js';
 import {
   buildIdleBattleRewardSettlementPlan,
   buildIdleRewardParticipant,
@@ -96,6 +97,27 @@ const FLUSH_INTERVAL_MS = 30_000;
 
 /** 会话状态查库间隔：仅用于开战前预检查，避免每轮都重复查询 idle_sessions */
 const SESSION_STATUS_CHECK_INTERVAL_MS = 15_000;
+
+const describeRealtimePublishFailure = (
+  reason: Error | string | number | boolean | null | undefined,
+): string => {
+  if (reason instanceof Error) {
+    return reason.message;
+  }
+  return String(reason);
+};
+
+const publishIdleRealtimeEventSafely = (event: IdleRealtimeEvent): void => {
+  void publishIdleRealtimeEvent(event).then(
+    undefined,
+    (reason: Error | string | number | boolean | null | undefined) => {
+      console.error(
+        `[IdleBattleExecutor] 挂机实时事件发布失败（type=${event.type}）:`,
+        describeRealtimePublishFailure(reason),
+      );
+    },
+  );
+};
 
 // ============================================
 // 内部状态
@@ -213,11 +235,10 @@ async function flushBuffer(
     throw err;
   }
 
-  try {
-    await getGameServer().pushCharacterUpdate(userId);
-  } catch (err) {
-    console.error(`[IdleBattleExecutor] flush 后角色快照推送失败:`, err);
-  }
+  publishIdleRealtimeEventSafely({
+    type: 'character_update',
+    userId,
+  });
 
   return true;
 }
@@ -314,14 +335,12 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
     await idleSessionService.completeIdleSession(session.id, stop.status);
     await idleSessionService.releaseIdleLock(session.characterId);
 
-    try {
-      getGameServer().emitToUser(userId, 'idle:finished', {
+      publishIdleRealtimeEventSafely({
+        type: 'finished',
+        userId,
         sessionId: session.id,
         reason: stop.reason,
       });
-    } catch {
-      // 忽略推送错误
-    }
   }
 
   function scheduleNext(delayMs: number): void {
@@ -411,19 +430,17 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
       batchIndex++;
 
       // 5. 实时推送本场摘要
-      try {
-        getGameServer().emitToUser(userId, 'idle:update', {
-          sessionId: session.id,
-          batchIndex: batchIndex - 1,
-          result: batchResult.result,
-          expGained: batchResult.rewardPlan.expGained,
-          silverGained: batchResult.rewardPlan.silverGained,
-          itemsGained: batchResult.rewardPlan.previewItems,
-          roundCount: batchResult.roundCount,
-        });
-      } catch {
-        // 忽略推送错误
-      }
+      publishIdleRealtimeEventSafely({
+        type: 'update',
+        userId,
+        sessionId: session.id,
+        batchIndex: batchIndex - 1,
+        result: batchResult.result,
+        expGained: batchResult.rewardPlan.expGained,
+        silverGained: batchResult.rewardPlan.silverGained,
+        itemsGained: batchResult.rewardPlan.previewItems,
+        roundCount: batchResult.roundCount,
+      });
 
       const shouldStopAfterBattle = checkTerminationConditionsWithoutDb(session, runtime);
       if (shouldFlush(buffer) || shouldStopAfterBattle.terminate) {

@@ -11,7 +11,7 @@
  * - 输出：`all | api | worker` 之一，以及启动决策函数。
  *
  * 数据流 / 状态流：
- * process.env -> resolveJiuzhouRuntimeRole -> startupPipeline -> 按角色启动 HTTP、请求型 Worker、挂机执行 Worker、恢复任务或后台调度。
+ * process.env -> resolveJiuzhouRuntimeRole -> startupPipeline -> 按角色启动 HTTP、请求型 Worker、挂机执行 Worker、实时事件转发或后台调度。
  *
  * 复用设计说明：
  * - 运行角色是部署级高频变化点，集中在 config 模块后，后续新增 worker 类型不需要散改 startupPipeline。
@@ -22,6 +22,7 @@
  * 3. AI 招募、洞府研修、云游、洗髓和归契当前仍是请求创建后在本进程入队，不能放到独立 worker 角色，否则 API 无法投递新任务。
  * 4. 挂机执行循环已改为 RabbitMQ 命令投递，worker 角色必须承接 WorkerPool 与历史会话恢复，API 角色不能再启动挂机计算线程。
  * 5. 定时调度、增量刷写与在线战斗延迟结算不依赖 HTTP 请求内存队列，适合放到 worker 角色独立运行。
+ * 6. 挂机实时 Socket 事件只能由持有玩家连接的 API 角色转发，worker 角色只发布 RabbitMQ 事件。
  */
 
 export type JiuzhouRuntimeRole = 'all' | 'api' | 'worker';
@@ -50,6 +51,10 @@ export const shouldStartWorkerPool = (role: JiuzhouRuntimeRole): boolean => {
 
 export const shouldStartIdleExecutionWorker = (role: JiuzhouRuntimeRole): boolean => {
   return role === 'all' || role === 'worker';
+};
+
+export const shouldStartIdleRealtimeEventWorker = (role: JiuzhouRuntimeRole): boolean => {
+  return role === 'all' || role === 'api';
 };
 
 export const shouldStartScheduledBackgroundServices = (role: JiuzhouRuntimeRole): boolean => {

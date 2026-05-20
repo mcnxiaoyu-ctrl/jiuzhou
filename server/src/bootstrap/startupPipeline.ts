@@ -19,6 +19,10 @@ import {
   stopIdleExecutionWorker,
 } from "../workers/idleExecutionWorker.js";
 import {
+  startIdleRealtimeEventWorker,
+  stopIdleRealtimeEventWorker,
+} from "../workers/idleRealtimeEventWorker.js";
+import {
   initArenaWeeklySettlementService,
   stopArenaWeeklySettlementService,
 } from "../services/arenaWeeklySettlementService.js";
@@ -110,6 +114,7 @@ import {
   resolveJiuzhouRuntimeRole,
   shouldRecoverHttpBattleState,
   shouldStartIdleExecutionWorker,
+  shouldStartIdleRealtimeEventWorker,
   shouldStartScheduledBackgroundServices,
   shouldStartHttpServer,
   shouldStartOnlineSettlementRunner,
@@ -146,7 +151,7 @@ const runStartupStep = async <T>(
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：按运行角色串联数据库/Redis 检查、静态配置预热、后台服务启动、状态恢复、HTTP 监听和优雅关闭。
- * 2. 做什么：集中管理 worker 角色专属后台能力，包括 cleanup worker、在线战斗延迟结算和坊市自动下架 RabbitMQ 消费者。
+ * 2. 做什么：集中管理 worker 角色专属后台能力，以及 API 角色专属的挂机实时事件 Socket 转发消费者。
  * 3. 不做什么：不实现具体业务逻辑，不直接消费 RabbitMQ 消息，也不在这里拼装 SQL 或请求参数。
  *
  * 输入 / 输出：
@@ -154,14 +159,14 @@ const runStartupStep = async <T>(
  * - 输出：启动时完成必要初始化；关闭时按顺序停止后台任务、刷写缓冲区并关闭外部连接。
  *
  * 数据流 / 状态流：
- * runtimeRole -> guard helper -> 启动对应服务 -> registerGracefulShutdown -> stop worker/service -> close RabbitMQ/Redis/PostgreSQL。
+ * runtimeRole -> guard helper -> 启动对应服务 -> registerGracefulShutdown -> stop worker/service/consumer -> close RabbitMQ/Redis/PostgreSQL。
  *
  * 复用设计说明：
  * - 启动/关闭顺序是进程级共享规则，集中在这里避免 API 角色、worker 角色和未来后台服务各自散写生命周期。
  * - 具体能力通过启动/停止函数接入，startupPipeline 只负责编排，减少和业务 service 的直接耦合。
  *
  * 关键边界条件与坑点：
- * 1. 只有 worker/all 角色能启动独立后台消费者，API 角色不能消费 RabbitMQ 自动下架任务。
+ * 1. 只有 worker/all 角色能启动独立后台消费者，API 角色只消费需要本地 Socket 连接的实时事件。
  * 2. 关闭时必须先停消费者再关 RabbitMQ 连接，并且 RabbitMQ 要在 Redis/数据库连接池之前关闭。
  */
 export const startServerWithPipeline = async (
@@ -215,6 +220,10 @@ export const startServerWithPipeline = async (
   if (shouldStartIdleExecutionWorker(runtimeRole)) {
     await runStartupStep("挂机执行 RabbitMQ Worker 启动", startIdleExecutionWorker);
     console.log("✓ 挂机执行 RabbitMQ Worker 已就绪\n");
+  }
+  if (shouldStartIdleRealtimeEventWorker(runtimeRole)) {
+    await runStartupStep("挂机实时事件 RabbitMQ Worker 启动", startIdleRealtimeEventWorker);
+    console.log("✓ 挂机实时事件 RabbitMQ Worker 已就绪\n");
   }
   if (shouldStartRequestBoundJobWorkers(runtimeRole)) {
     await runStartupStep("洞府研修 worker 协调器初始化", initializeTechniqueGenerationJobRunner);
@@ -347,6 +356,9 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
 
       await stopIdleExecutionWorker();
       console.log("✓ 挂机执行 RabbitMQ Worker 已停止");
+
+      await stopIdleRealtimeEventWorker();
+      console.log("✓ 挂机实时事件 RabbitMQ Worker 已停止");
 
       stopAllExecutionLoops();
       console.log("✓ 挂机执行循环已停止");
