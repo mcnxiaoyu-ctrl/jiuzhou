@@ -529,27 +529,39 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
           <div className="stock-market-profit-list">
             {profitDetailModel.dailyRows.map((row) => (
               <div key={row.dayKey} className="stock-market-profit-row">
-                <div className="stock-market-profit-main">
-                  <strong>{row.dayKey}</strong>
-                  <span className={getStockMarketToneClassName(row.totalPnlTone)}>
-                    总收益 {row.totalPnlText}
+                <div className="stock-market-profit-row-header">
+                  <span className="profit-date">{row.dayKey}</span>
+                  <span className={`profit-badge ${getStockMarketToneClassName(row.totalPnlTone)}`}>
+                    累计盈亏 {row.totalPnlText}
                   </span>
                 </div>
-                <div className="stock-market-profit-meta">
-                  <span>
-                    每日收益
-                    <strong className={getStockMarketToneClassName(row.dailyPnlTone)}>{row.dailyPnlText}</strong>
-                  </span>
-                  <span>
-                    已实现
-                    <strong className={getStockMarketToneClassName(row.realizedPnlTone)}>{row.realizedPnlText}</strong>
-                  </span>
-                  <span>
-                    浮盈亏
-                    <strong className={getStockMarketToneClassName(row.unrealizedPnlTone)}>{row.unrealizedPnlText}</strong>
-                  </span>
-                  <span>市值 {row.totalMarketValueText}</span>
-                  <span>成本 {row.totalCostText}</span>
+                <div className="stock-market-profit-row-grid">
+                  <div className="profit-grid-item">
+                    <span className="profit-grid-label">当日收益</span>
+                    <strong className={`profit-grid-val ${getStockMarketToneClassName(row.dailyPnlTone)}`}>
+                      {row.dailyPnlText}
+                    </strong>
+                  </div>
+                  <div className="profit-grid-item">
+                    <span className="profit-grid-label">已实现</span>
+                    <strong className={`profit-grid-val ${getStockMarketToneClassName(row.realizedPnlTone)}`}>
+                      {row.realizedPnlText}
+                    </strong>
+                  </div>
+                  <div className="profit-grid-item">
+                    <span className="profit-grid-label">持仓浮盈亏</span>
+                    <strong className={`profit-grid-val ${getStockMarketToneClassName(row.unrealizedPnlTone)}`}>
+                      {row.unrealizedPnlText}
+                    </strong>
+                  </div>
+                  <div className="profit-grid-item">
+                    <span className="profit-grid-label">持仓市值</span>
+                    <strong className="profit-grid-val">{row.totalMarketValueText}</strong>
+                  </div>
+                  <div className="profit-grid-item">
+                    <span className="profit-grid-label">持仓成本</span>
+                    <strong className="profit-grid-val">{row.totalCostText}</strong>
+                  </div>
                 </div>
               </div>
             ))}
@@ -1037,19 +1049,38 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
                         <div className="stock-market-record-list">
                           {tradeRecordViews.map((record) => (
                             <div key={record.id} className="stock-market-record-row">
-                              <div className="stock-market-record-main">
-                                <Tag className={getStockMarketToneClassName(record.sideTone)}>
-                                  {record.sideText}
-                                </Tag>
-                                <strong>{record.stockText}</strong>
-                                <span>{record.quantityText} · 单价 {record.unitPriceText}</span>
+                              <div className="stock-market-record-row-info">
+                                <div className="record-stock-line">
+                                  <span className={`record-side-badge ${getStockMarketToneClassName(record.sideTone)}`}>
+                                    {record.sideText}
+                                  </span>
+                                  <strong className="record-stock-name">{record.stockText}</strong>
+                                </div>
+                                <span className="record-time">{record.timeText}</span>
                               </div>
-                              <div className="stock-market-record-meta">
-                                <span>成交 {record.grossAmountText}</span>
-                                <span>交易费用 {record.feeText}</span>
-                                <span>净额 {record.netAmountText}</span>
-                                <span className={getStockMarketToneClassName(record.realizedPnlTone)}>盈亏 {record.realizedPnlText}</span>
-                                <span>{record.timeText}</span>
+                              <div className="stock-market-record-row-grid">
+                                <div className="record-grid-item">
+                                  <span className="record-grid-label">成交数量</span>
+                                  <strong className="record-grid-val">{record.quantityText}</strong>
+                                </div>
+                                <div className="record-grid-item">
+                                  <span className="record-grid-label">成交单价</span>
+                                  <strong className="record-grid-val">{record.unitPriceText}</strong>
+                                </div>
+                                <div className="record-grid-item">
+                                  <span className="record-grid-label">交易费用</span>
+                                  <strong className="record-grid-val">{record.feeText}</strong>
+                                </div>
+                                <div className="record-grid-item">
+                                  <span className="record-grid-label">结算收支</span>
+                                  <strong className="record-grid-val">{record.netAmountText}</strong>
+                                </div>
+                                <div className="record-grid-item">
+                                  <span className="record-grid-label">实现盈亏</span>
+                                  <strong className={`record-grid-val ${getStockMarketToneClassName(record.realizedPnlTone)}`}>
+                                    {record.realizedPnlText}
+                                  </strong>
+                                </div>
                               </div>
                             </div>
                           ))}
