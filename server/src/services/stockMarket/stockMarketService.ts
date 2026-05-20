@@ -2,12 +2,12 @@
  * 股市交易与行情服务。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：初始化静态股票报价、生成周期行情、查询概览/历史/交易记录，并处理系统即时买卖。
+ * 1. 做什么：初始化静态股票报价、生成周期行情、查询概览/历史/交易记录/收益详情，并处理系统即时买卖。
  * 2. 不做什么：不实现玩家挂单撮合、不把股票伪装成坊市物品、不在路由层重复业务规则。
  *
  * 输入 / 输出：
  * - 输入：角色 ID、股票 ID、交易数量、调度 tick 时间。
- * - 输出：股市概览 DTO、历史价格、交易记录和买卖结果。
+ * - 输出：股市概览 DTO、历史价格、交易记录、收益详情和买卖结果。
  *
  * 数据流 / 状态流：
  * 静态股票 -> 初始 quote 分单位价格 -> AI 新闻具体涨跌 -> quote/history；
@@ -45,6 +45,7 @@ import {
 } from './stockMarketNewsEventContext.js';
 import {
   STOCK_MARKET_HISTORY_LIMIT,
+  STOCK_MARKET_PRICE_SCALE,
   STOCK_MARKET_TRADE_RECORD_PAGE_SIZE,
   applyStockMarketPriceChange,
   buildStockMarketHistoryOhlc,
@@ -108,6 +109,18 @@ type StockMarketTradeRow = {
   net_amount_spirit_stones: string | number | bigint;
   realized_pnl_spirit_stones: string | number | bigint | null;
   created_at: Date | string;
+};
+
+type StockMarketProfitDetailRow = {
+  day_key: string;
+  total_holding_qty: string | number | bigint;
+  total_market_value_spirit_stones: string | number | bigint;
+  total_cost_spirit_stones: string | number | bigint;
+  realized_pnl_spirit_stones: string | number | bigint;
+  cumulative_realized_pnl_spirit_stones: string | number | bigint;
+  unrealized_pnl_spirit_stones: string | number | bigint;
+  total_pnl_spirit_stones: string | number | bigint;
+  daily_pnl_spirit_stones: string | number | bigint;
 };
 
 type StockMarketTickInsertRow = {
@@ -225,6 +238,30 @@ export type StockMarketTradeRecordDto = {
   createdAt: number;
 };
 
+export type StockMarketProfitSummaryDto = {
+  totalHoldingQty: number;
+  totalMarketValueSpiritStones: number;
+  totalCostSpiritStones: number;
+  realizedPnlSpiritStones: number;
+  unrealizedPnlSpiritStones: number;
+  totalPnlSpiritStones: number;
+};
+
+export type StockMarketProfitDailyDto = {
+  dayKey: string;
+  dailyPnlSpiritStones: number;
+  totalPnlSpiritStones: number;
+  realizedPnlSpiritStones: number;
+  unrealizedPnlSpiritStones: number;
+  totalMarketValueSpiritStones: number;
+  totalCostSpiritStones: number;
+};
+
+export type StockMarketProfitDetailDto = {
+  summary: StockMarketProfitSummaryDto;
+  daily: StockMarketProfitDailyDto[];
+};
+
 type StockMarketStockBuildInput = {
   definition: StockMarketDefinition;
   price: bigint;
@@ -262,6 +299,10 @@ const toDtoNumber = (value: bigint): number => {
 const toDtoStockMarketPrice = (priceUnits: bigint): number => {
   return stockMarketPriceUnitsToSpiritStones(priceUnits);
 };
+
+const STOCK_MARKET_PROFIT_DETAIL_DAY_LIMIT = 30;
+const STOCK_MARKET_PRICE_SCALE_SQL = STOCK_MARKET_PRICE_SCALE.toString();
+const STOCK_MARKET_PRICE_SCALE_OFFSET_SQL = (STOCK_MARKET_PRICE_SCALE - 1n).toString();
 
 const normalizeTradeQuantity = (quantity: number): number | null => {
   if (!Number.isInteger(quantity) || quantity <= 0) return null;
@@ -526,6 +567,180 @@ class StockMarketService {
       page: safePage,
       pageSize: STOCK_MARKET_TRADE_RECORD_PAGE_SIZE,
     };
+  }
+
+  async getProfitDetail(characterId: number): Promise<StockMarketProfitDetailDto> {
+    await this.ensureInitialQuotes();
+
+    const definitions = getEnabledStockDefinitions();
+    const stockIds = definitions.map((definition) => definition.id);
+    const initialPriceUnits = definitions.map((definition) => (
+      stockMarketPriceToStorageUnits(definition.initial_price_spirit_stones).toString()
+    ));
+    if (stockIds.length <= 0) {
+      return this.buildEmptyProfitDetailDto();
+    }
+
+    const result = await query<StockMarketProfitDetailRow>(
+      `
+        WITH runtime_params AS (
+          SELECT timezone('Asia/Shanghai', NOW())::date AS today_key
+        ),
+        calc_days AS (
+          SELECT generated_day::date AS day_key
+          FROM runtime_params
+          CROSS JOIN generate_series(
+            runtime_params.today_key - ($2::int * INTERVAL '1 day'),
+            runtime_params.today_key,
+            INTERVAL '1 day'
+          ) AS generated_day
+        ),
+        output_days AS (
+          SELECT generated_day::date AS day_key
+          FROM runtime_params
+          CROSS JOIN generate_series(
+            runtime_params.today_key - (($2::int - 1) * INTERVAL '1 day'),
+            runtime_params.today_key,
+            INTERVAL '1 day'
+          ) AS generated_day
+        ),
+        stock_defs AS (
+          SELECT stock_id, initial_price_units
+          FROM unnest($3::text[], $4::bigint[]) AS stock_def(stock_id, initial_price_units)
+        ),
+        trade_deltas AS (
+          SELECT
+            stock_id,
+            created_at,
+            CASE
+              WHEN side = 'buy' THEN quantity::bigint
+              ELSE -quantity::bigint
+            END AS quantity_delta,
+            CASE
+              WHEN side = 'buy' THEN gross_amount_spirit_stones
+              ELSE -(net_amount_spirit_stones - COALESCE(realized_pnl_spirit_stones, 0))
+            END AS cost_delta
+          FROM stock_market_trade_record
+          CROSS JOIN runtime_params
+          WHERE character_id = $1
+            AND stock_id = ANY($3::text[])
+            AND created_at < ((runtime_params.today_key + 1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+        ),
+        position_by_day AS (
+          SELECT
+            d.day_key,
+            s.stock_id,
+            COALESCE(SUM(td.quantity_delta) FILTER (
+              WHERE td.created_at < ((d.day_key + 1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+            ), 0)::bigint AS quantity,
+            COALESCE(SUM(td.cost_delta) FILTER (
+              WHERE td.created_at < ((d.day_key + 1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+            ), 0)::bigint AS total_cost_spirit_stones
+          FROM calc_days d
+          CROSS JOIN stock_defs s
+          LEFT JOIN trade_deltas td ON td.stock_id = s.stock_id
+          GROUP BY d.day_key, s.stock_id
+        ),
+        price_by_day AS (
+          SELECT
+            p.day_key,
+            p.stock_id,
+            p.quantity,
+            p.total_cost_spirit_stones,
+            CASE
+              WHEN p.day_key = runtime_params.today_key THEN COALESCE(q.current_price_spirit_stones, s.initial_price_units)
+              ELSE COALESCE(history_price.price_spirit_stones, s.initial_price_units)
+            END AS price_spirit_stones
+          FROM position_by_day p
+          JOIN stock_defs s ON s.stock_id = p.stock_id
+          CROSS JOIN runtime_params
+          LEFT JOIN stock_market_quote q ON q.stock_id = p.stock_id
+          LEFT JOIN LATERAL (
+            SELECT h.price_spirit_stones
+            FROM stock_market_price_history h
+            WHERE h.stock_id = p.stock_id
+              AND h.created_at < ((p.day_key + 1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+            ORDER BY h.created_at DESC, h.id DESC
+            LIMIT 1
+          ) history_price ON p.day_key <> runtime_params.today_key
+        ),
+        daily_portfolio AS (
+          SELECT
+            day_key,
+            SUM(quantity)::bigint AS total_holding_qty,
+            SUM(
+              (quantity * price_spirit_stones + ${STOCK_MARKET_PRICE_SCALE_OFFSET_SQL})
+              / ${STOCK_MARKET_PRICE_SCALE_SQL}
+            )::bigint AS total_market_value_spirit_stones,
+            SUM(total_cost_spirit_stones)::bigint AS total_cost_spirit_stones
+          FROM price_by_day
+          GROUP BY day_key
+        ),
+        realized_by_day AS (
+          SELECT
+            d.day_key,
+            COALESCE(SUM(COALESCE(r.realized_pnl_spirit_stones, 0)) FILTER (
+              WHERE r.side = 'sell'
+                AND r.created_at >= (d.day_key::timestamp AT TIME ZONE 'Asia/Shanghai')
+                AND r.created_at < ((d.day_key + 1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+            ), 0)::bigint AS realized_pnl_spirit_stones,
+            COALESCE(SUM(COALESCE(r.realized_pnl_spirit_stones, 0)) FILTER (
+              WHERE r.side = 'sell'
+                AND r.created_at < ((d.day_key + 1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+            ), 0)::bigint AS cumulative_realized_pnl_spirit_stones
+          FROM calc_days d
+          LEFT JOIN stock_market_trade_record r ON r.character_id = $1
+            AND r.stock_id = ANY($3::text[])
+            AND r.created_at < ((d.day_key + 1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+          GROUP BY d.day_key
+        ),
+        daily_totals AS (
+          SELECT
+            p.day_key,
+            p.total_holding_qty,
+            p.total_market_value_spirit_stones,
+            p.total_cost_spirit_stones,
+            r.realized_pnl_spirit_stones,
+            r.cumulative_realized_pnl_spirit_stones,
+            (p.total_market_value_spirit_stones - p.total_cost_spirit_stones)::bigint AS unrealized_pnl_spirit_stones,
+            (
+              r.cumulative_realized_pnl_spirit_stones
+              + p.total_market_value_spirit_stones
+              - p.total_cost_spirit_stones
+            )::bigint AS total_pnl_spirit_stones
+          FROM daily_portfolio p
+          JOIN realized_by_day r ON r.day_key = p.day_key
+        ),
+        ordered_totals AS (
+          SELECT
+            *,
+            (
+              total_pnl_spirit_stones
+              - COALESCE(
+                LAG(total_pnl_spirit_stones) OVER (ORDER BY day_key ASC),
+                total_pnl_spirit_stones
+              )
+            )::bigint AS daily_pnl_spirit_stones
+          FROM daily_totals
+        )
+        SELECT
+          to_char(ordered_totals.day_key, 'YYYY-MM-DD') AS day_key,
+          ordered_totals.total_holding_qty,
+          ordered_totals.total_market_value_spirit_stones,
+          ordered_totals.total_cost_spirit_stones,
+          ordered_totals.realized_pnl_spirit_stones,
+          ordered_totals.cumulative_realized_pnl_spirit_stones,
+          ordered_totals.unrealized_pnl_spirit_stones,
+          ordered_totals.total_pnl_spirit_stones,
+          ordered_totals.daily_pnl_spirit_stones
+        FROM ordered_totals
+        JOIN output_days ON output_days.day_key = ordered_totals.day_key
+        ORDER BY ordered_totals.day_key DESC
+      `,
+      [characterId, STOCK_MARKET_PROFIT_DETAIL_DAY_LIMIT, stockIds, initialPriceUnits],
+    );
+
+    return this.buildProfitDetailDto(result.rows);
   }
 
   @Transactional
@@ -974,6 +1189,49 @@ class StockMarketService {
         ? null
         : toDtoNumber(toBigIntValue(row.realized_pnl_spirit_stones)),
       createdAt: toTimestamp(row.created_at),
+    };
+  }
+
+  private buildEmptyProfitDetailDto(): StockMarketProfitDetailDto {
+    return {
+      summary: {
+        totalHoldingQty: 0,
+        totalMarketValueSpiritStones: 0,
+        totalCostSpiritStones: 0,
+        realizedPnlSpiritStones: 0,
+        unrealizedPnlSpiritStones: 0,
+        totalPnlSpiritStones: 0,
+      },
+      daily: [],
+    };
+  }
+
+  private buildProfitDailyDto(row: StockMarketProfitDetailRow): StockMarketProfitDailyDto {
+    return {
+      dayKey: row.day_key,
+      dailyPnlSpiritStones: toDtoNumber(toBigIntValue(row.daily_pnl_spirit_stones)),
+      totalPnlSpiritStones: toDtoNumber(toBigIntValue(row.total_pnl_spirit_stones)),
+      realizedPnlSpiritStones: toDtoNumber(toBigIntValue(row.realized_pnl_spirit_stones)),
+      unrealizedPnlSpiritStones: toDtoNumber(toBigIntValue(row.unrealized_pnl_spirit_stones)),
+      totalMarketValueSpiritStones: toDtoNumber(toBigIntValue(row.total_market_value_spirit_stones)),
+      totalCostSpiritStones: toDtoNumber(toBigIntValue(row.total_cost_spirit_stones)),
+    };
+  }
+
+  private buildProfitDetailDto(rows: readonly StockMarketProfitDetailRow[]): StockMarketProfitDetailDto {
+    const todayRow = rows[0] ?? null;
+    if (!todayRow) return this.buildEmptyProfitDetailDto();
+
+    return {
+      summary: {
+        totalHoldingQty: toDtoNumber(toBigIntValue(todayRow.total_holding_qty)),
+        totalMarketValueSpiritStones: toDtoNumber(toBigIntValue(todayRow.total_market_value_spirit_stones)),
+        totalCostSpiritStones: toDtoNumber(toBigIntValue(todayRow.total_cost_spirit_stones)),
+        realizedPnlSpiritStones: toDtoNumber(toBigIntValue(todayRow.cumulative_realized_pnl_spirit_stones)),
+        unrealizedPnlSpiritStones: toDtoNumber(toBigIntValue(todayRow.unrealized_pnl_spirit_stones)),
+        totalPnlSpiritStones: toDtoNumber(toBigIntValue(todayRow.total_pnl_spirit_stones)),
+      },
+      daily: rows.map((row) => this.buildProfitDailyDto(row)),
     };
   }
 

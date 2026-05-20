@@ -2,7 +2,7 @@
  * 股市 HTTP 路由。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：提供股市概览、历史、交易记录、买入、卖出和清仓接口。
+ * 1. 做什么：提供股市概览、历史、交易记录、收益详情、买入、卖出和清仓接口。
  * 2. 不做什么：不在路由层重复手续费、持仓上限或 AI 行情规则。
  *
  * 输入 / 输出：
@@ -56,6 +56,7 @@ const createStockMarketQpsLimit = (routeKey: string, limit: number) => createQps
 const stockMarketOverviewQpsLimit = createStockMarketQpsLimit('overview', STOCK_MARKET_QUERY_QPS_LIMIT);
 const stockMarketHistoryQpsLimit = createStockMarketQpsLimit('history', STOCK_MARKET_QUERY_QPS_LIMIT);
 const stockMarketTradesQpsLimit = createStockMarketQpsLimit('trades', STOCK_MARKET_QUERY_QPS_LIMIT);
+const stockMarketProfitDetailQpsLimit = createStockMarketQpsLimit('profit-detail', STOCK_MARKET_QUERY_QPS_LIMIT);
 const stockMarketBuyQpsLimit = createStockMarketQpsLimit('buy', STOCK_MARKET_MUTATION_QPS_LIMIT);
 const stockMarketSellQpsLimit = createStockMarketQpsLimit('sell', STOCK_MARKET_MUTATION_QPS_LIMIT);
 const stockMarketClearQpsLimit = createStockMarketQpsLimit('clear', STOCK_MARKET_MUTATION_QPS_LIMIT);
@@ -100,6 +101,12 @@ router.get('/trades', requireCharacter, stockMarketTradesQpsLimit, asyncHandler(
   const characterId = req.characterId!;
   const page = parseFiniteNumber(getSingleQueryValue(req.query.page));
   const data = await stockMarketService.getTradeRecords(characterId, page ?? 1);
+  sendSuccess(res, data);
+}));
+
+router.get('/profit-detail', requireCharacter, stockMarketProfitDetailQpsLimit, asyncHandler(async (req, res) => {
+  const characterId = req.characterId!;
+  const data = await stockMarketService.getProfitDetail(characterId);
   sendSuccess(res, data);
 }));
 

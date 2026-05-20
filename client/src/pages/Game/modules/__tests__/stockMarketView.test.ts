@@ -25,11 +25,13 @@ import { describe, expect, it } from 'vitest';
 import type {
   StockMarketHistoryPointDto,
   StockMarketOverviewDto,
+  StockMarketProfitDetailDto,
   StockMarketTradeRecordDto,
 } from '../../../../services/api';
 import {
   buildStockMarketHistoryViewModel,
   buildStockMarketOverviewViewModel,
+  buildStockMarketProfitDetailViewModel,
   buildStockMarketTradePreview,
   buildStockMarketTradeRecordViews,
 } from '../StockMarketModal/stockMarketView';
@@ -85,6 +87,37 @@ const buildOverview = (): StockMarketOverviewDto => ({
     minPriceSpiritStones: 1,
   },
   nextRefreshAt: 1_785_003_600_000,
+});
+
+const buildProfitDetail = (): StockMarketProfitDetailDto => ({
+  summary: {
+    totalHoldingQty: 8,
+    totalMarketValueSpiritStones: 1_280,
+    totalCostSpiritStones: 1_000,
+    realizedPnlSpiritStones: 120,
+    unrealizedPnlSpiritStones: 280,
+    totalPnlSpiritStones: 400,
+  },
+  daily: [
+    {
+      dayKey: '2026-05-20',
+      dailyPnlSpiritStones: 90,
+      totalPnlSpiritStones: 400,
+      realizedPnlSpiritStones: 50,
+      unrealizedPnlSpiritStones: 280,
+      totalMarketValueSpiritStones: 1_280,
+      totalCostSpiritStones: 1_000,
+    },
+    {
+      dayKey: '2026-05-19',
+      dailyPnlSpiritStones: -30,
+      totalPnlSpiritStones: 310,
+      realizedPnlSpiritStones: 70,
+      unrealizedPnlSpiritStones: 190,
+      totalMarketValueSpiritStones: 1_190,
+      totalCostSpiritStones: 1_000,
+    },
+  ],
 });
 
 describe('stockMarketView', () => {
@@ -214,5 +247,42 @@ describe('stockMarketView', () => {
     expect(rows[0].sideTone).toBe('down');
     expect(rows[0].stockText).toBe('青云丹坊 · QYDF');
     expect(rows[0].realizedPnlText).toBe('+19 灵石');
+  });
+
+  it('收益详情应集中格式化总收益与每日浮动收益', () => {
+    const model = buildStockMarketProfitDetailViewModel(buildProfitDetail());
+
+    expect(model.summary.totalHoldingQtyText).toBe('8 股');
+    expect(model.summary.totalMarketValueText).toBe('1,280 灵石');
+    expect(model.summary.totalCostText).toBe('1,000 灵石');
+    expect(model.summary.realizedPnlText).toBe('+120 灵石');
+    expect(model.summary.unrealizedPnlText).toBe('+280 灵石');
+    expect(model.summary.totalPnlText).toBe('+400 灵石');
+    expect(model.summary.totalPnlTone).toBe('up');
+    expect(model.dailyRows[0].dayKey).toBe('2026-05-20');
+    expect(model.dailyRows[0].dailyPnlText).toBe('+90 灵石');
+    expect(model.dailyRows[0].dailyPnlTone).toBe('up');
+    expect(model.dailyRows[1].dailyPnlText).toBe('-30 灵石');
+    expect(model.dailyRows[1].dailyPnlTone).toBe('down');
+    expect(model.dailyRows[1].unrealizedPnlText).toBe('+190 灵石');
+  });
+
+  it('收益详情空数据应输出稳定的零值汇总和空日列表', () => {
+    const model = buildStockMarketProfitDetailViewModel({
+      summary: {
+        totalHoldingQty: 0,
+        totalMarketValueSpiritStones: 0,
+        totalCostSpiritStones: 0,
+        realizedPnlSpiritStones: 0,
+        unrealizedPnlSpiritStones: 0,
+        totalPnlSpiritStones: 0,
+      },
+      daily: [],
+    });
+
+    expect(model.summary.totalHoldingQtyText).toBe('0 股');
+    expect(model.summary.totalPnlText).toBe('0 灵石');
+    expect(model.summary.totalPnlTone).toBe('flat');
+    expect(model.dailyRows).toHaveLength(0);
   });
 });

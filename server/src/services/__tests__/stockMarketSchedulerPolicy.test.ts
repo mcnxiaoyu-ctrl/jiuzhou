@@ -67,3 +67,19 @@ test('股市 tick 应以 tick_hour 幂等，AI 失败不得更新报价', () => 
   assert.match(applyGeneratedTickMethod, /persistNewsEventForTick/u);
   assert.match(applyGeneratedTickMethod, /event_id/u);
 });
+
+test('股市收益详情应按北京时间自然日聚合已实现与浮动收益', () => {
+  const serviceSource = readSource('../stockMarket/stockMarketService.ts');
+  const routesSource = readSource('../../routes/stockMarketRoutes.ts');
+  const methodMatch = serviceSource.match(/async getProfitDetail[\s\S]*?\n  @Transactional/u)?.[0] ?? '';
+
+  assert.match(routesSource, /router\.get\('\/profit-detail'/u);
+  assert.match(methodMatch, /timezone\('Asia\/Shanghai', NOW\(\)\)/u);
+  assert.match(methodMatch, /generate_series/u);
+  assert.match(methodMatch, /SUM\(COALESCE\(r\.realized_pnl_spirit_stones, 0\)\) FILTER/u);
+  assert.match(methodMatch, /stock_market_price_history/u);
+  assert.match(methodMatch, /stock_market_quote/u);
+  assert.match(methodMatch, /"totalPnlSpiritStones"/u);
+  assert.match(methodMatch, /"dailyPnlSpiritStones"/u);
+  assert.doesNotMatch(methodMatch, /_spirit_stones[\s\S]{0,80}::int/u);
+});

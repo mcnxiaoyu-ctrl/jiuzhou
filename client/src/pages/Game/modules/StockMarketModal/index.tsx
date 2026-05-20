@@ -58,10 +58,12 @@ import {
   clearStockMarketPosition,
   getStockMarketHistory,
   getStockMarketOverview,
+  getStockMarketProfitDetail,
   getStockMarketTrades,
   sellStockMarketStock,
   type StockMarketHistoryPointDto,
   type StockMarketOverviewDto,
+  type StockMarketProfitDetailDto,
   type StockMarketTradeRecordDto,
   type StockMarketTradeSide,
 } from '../../../../services/api';
@@ -69,6 +71,7 @@ import { SILENT_API_REQUEST_CONFIG } from '../../../../services/api/requestConfi
 import {
   buildStockMarketHistoryViewModel,
   buildStockMarketOverviewViewModel,
+  buildStockMarketProfitDetailViewModel,
   buildStockMarketTradePreview,
   buildStockMarketTradeRecordViews,
   formatStockMarketBps,
@@ -87,6 +90,7 @@ interface StockMarketModalProps {
 
 type StockMarketRefreshMode = 'initial' | 'background';
 type StockMarketActionKey = '' | 'buy' | 'buy-all' | 'sell' | 'clear-stock' | 'clear-all';
+type StockMarketActiveTab = 'market' | 'profit' | 'records';
 
 type StockMarketDropdownButtonElementProps = {
   className?: string;
@@ -120,12 +124,14 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyPoints, setHistoryPoints] = useState<StockMarketHistoryPointDto[]>([]);
-  const [activeTab, setActiveTab] = useState('market');
+  const [activeTab, setActiveTab] = useState<StockMarketActiveTab>('market');
   const [tradeRecords, setTradeRecords] = useState<StockMarketTradeRecordDto[]>([]);
   const [tradeTotal, setTradeTotal] = useState(0);
   const [tradePage, setTradePage] = useState(1);
   const [tradePageSize, setTradePageSize] = useState(STOCK_MARKET_DEFAULT_TRADE_PAGE_SIZE);
   const [tradesLoading, setTradesLoading] = useState(false);
+  const [profitDetail, setProfitDetail] = useState<StockMarketProfitDetailDto | null>(null);
+  const [profitLoading, setProfitLoading] = useState(false);
   const [actionKey, setActionKey] = useState<StockMarketActionKey>('');
   const [newsIndex, setNewsIndex] = useState(0);
 
@@ -182,6 +188,26 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
     }
   }, []);
 
+  const refreshProfitDetail = useCallback(async (mode: StockMarketRefreshMode = 'initial') => {
+    if (mode === 'initial') {
+      setProfitLoading(true);
+    }
+    try {
+      const response = await getStockMarketProfitDetail(
+        mode === 'background' ? SILENT_API_REQUEST_CONFIG : undefined,
+      );
+      setProfitDetail(response.data ?? null);
+    } catch {
+      if (mode === 'initial') {
+        setProfitDetail(null);
+      }
+    } finally {
+      if (mode === 'initial') {
+        setProfitLoading(false);
+      }
+    }
+  }, []);
+
   const overviewModel = useMemo(() => {
     return overview ? buildStockMarketOverviewViewModel(overview, selectedStockId) : null;
   }, [overview, selectedStockId]);
@@ -194,6 +220,9 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
   }, [overview, quantity, selectedStock, spiritStones]);
   const historyModel = useMemo(() => buildStockMarketHistoryViewModel(historyPoints), [historyPoints]);
   const tradeRecordViews = useMemo(() => buildStockMarketTradeRecordViews(tradeRecords), [tradeRecords]);
+  const profitDetailModel = useMemo(() => (
+    profitDetail ? buildStockMarketProfitDetailViewModel(profitDetail) : null
+  ), [profitDetail]);
   const newsRecords = overview?.newsRecords ?? [];
   const activeNews = newsRecords[newsIndex] ?? null;
 
@@ -249,6 +278,11 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
   }, [activeTab, open, refreshTrades, tradePage]);
 
   useEffect(() => {
+    if (!open || activeTab !== 'profit' || profitDetail) return;
+    void refreshProfitDetail();
+  }, [activeTab, open, profitDetail, refreshProfitDetail]);
+
+  useEffect(() => {
     if (!isMobile) {
       setMobileDetailOpen(false);
     }
@@ -300,10 +334,22 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
       if (activeTab === 'records') {
         await refreshTrades(tradePage, 'background');
       }
+      if (activeTab === 'profit') {
+        await refreshProfitDetail('background');
+      }
     } finally {
       setActionKey('');
     }
-  }, [activeTab, message, refreshOverview, refreshTrades, selectedStock, tradePage, tradePreview]);
+  }, [
+    activeTab,
+    message,
+    refreshOverview,
+    refreshProfitDetail,
+    refreshTrades,
+    selectedStock,
+    tradePage,
+    tradePreview,
+  ]);
 
   const handleClearPosition = useCallback((scope: 'stock' | 'all') => {
     if (scope === 'stock' && (!selectedStock || !tradePreview || tradePreview.maxSellQty <= 0)) return;
@@ -334,12 +380,26 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
           if (activeTab === 'records') {
             await refreshTrades(tradePage, 'background');
           }
+          if (activeTab === 'profit') {
+            await refreshProfitDetail('background');
+          }
         } finally {
           setActionKey('');
         }
       },
     });
-  }, [activeTab, message, modal, overview, refreshOverview, refreshTrades, selectedStock, tradePage, tradePreview]);
+  }, [
+    activeTab,
+    message,
+    modal,
+    overview,
+    refreshOverview,
+    refreshProfitDetail,
+    refreshTrades,
+    selectedStock,
+    tradePage,
+    tradePreview,
+  ]);
 
   const maxTradeQty = tradePreview?.maxTradeQty ?? 1;
   const canBuy = Boolean(
@@ -408,6 +468,96 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
       !canSell || actionKey === 'clear-stock',
     );
   }, [actionKey, canSell]);
+
+  const handleTabChange = useCallback((key: string) => {
+    if (key === 'market' || key === 'profit' || key === 'records') {
+      setActiveTab(key);
+    }
+  }, []);
+
+  const profitDetailContent = (() => {
+    if (profitLoading && !profitDetailModel) {
+      return (
+        <div className="stock-market-history-loading">
+          <Spin size="small" />
+        </div>
+      );
+    }
+
+    if (!profitDetailModel) {
+      return <Empty description="暂无收益数据" />;
+    }
+
+    return (
+      <>
+        <div className="stock-market-stat-grid stock-market-profit-summary">
+          <div>
+            <span>总收益</span>
+            <strong className={getStockMarketToneClassName(profitDetailModel.summary.totalPnlTone)}>
+              {profitDetailModel.summary.totalPnlText}
+            </strong>
+          </div>
+          <div>
+            <span>已实现盈亏</span>
+            <strong className={getStockMarketToneClassName(profitDetailModel.summary.realizedPnlTone)}>
+              {profitDetailModel.summary.realizedPnlText}
+            </strong>
+          </div>
+          <div>
+            <span>持仓浮盈亏</span>
+            <strong className={getStockMarketToneClassName(profitDetailModel.summary.unrealizedPnlTone)}>
+              {profitDetailModel.summary.unrealizedPnlText}
+            </strong>
+          </div>
+          <div>
+            <span>总股数</span>
+            <strong>{profitDetailModel.summary.totalHoldingQtyText}</strong>
+          </div>
+          <div>
+            <span>当前市值</span>
+            <strong>{profitDetailModel.summary.totalMarketValueText}</strong>
+          </div>
+          <div>
+            <span>当前成本</span>
+            <strong>{profitDetailModel.summary.totalCostText}</strong>
+          </div>
+        </div>
+
+        {profitDetailModel.dailyRows.length <= 0 ? (
+          <Empty description="暂无每日收益" />
+        ) : (
+          <div className="stock-market-profit-list">
+            {profitDetailModel.dailyRows.map((row) => (
+              <div key={row.dayKey} className="stock-market-profit-row">
+                <div className="stock-market-profit-main">
+                  <strong>{row.dayKey}</strong>
+                  <span className={getStockMarketToneClassName(row.totalPnlTone)}>
+                    总收益 {row.totalPnlText}
+                  </span>
+                </div>
+                <div className="stock-market-profit-meta">
+                  <span>
+                    每日收益
+                    <strong className={getStockMarketToneClassName(row.dailyPnlTone)}>{row.dailyPnlText}</strong>
+                  </span>
+                  <span>
+                    已实现
+                    <strong className={getStockMarketToneClassName(row.realizedPnlTone)}>{row.realizedPnlText}</strong>
+                  </span>
+                  <span>
+                    浮盈亏
+                    <strong className={getStockMarketToneClassName(row.unrealizedPnlTone)}>{row.unrealizedPnlText}</strong>
+                  </span>
+                  <span>市值 {row.totalMarketValueText}</span>
+                  <span>成本 {row.totalCostText}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  })();
 
   const stockDetailContent = (() => {
     if (!overview || !selectedStockView || !selectedStock || !tradePreview) {
@@ -586,6 +736,8 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
           setTradeRecords([]);
           setTradeTotal(0);
           setTradePage(1);
+          setProfitDetail(null);
+          setProfitLoading(false);
           setMobileDetailOpen(false);
           setActiveTab('market');
           setActionKey('');
@@ -625,7 +777,7 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
           {overview && overviewModel ? (
             <Tabs
               activeKey={activeTab}
-              onChange={setActiveTab}
+              onChange={handleTabChange}
               items={[
                 {
                   key: 'market',
@@ -782,6 +934,26 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
                         {isMobile ? null : stockDetailContent}
                       </section>
                     </div>
+                  ),
+                },
+                {
+                  key: 'profit',
+                  label: '收益详情',
+                  children: (
+                    <section className="stock-market-panel stock-market-profit-panel">
+                      <div className="stock-market-section-head">
+                        <span>收益详情</span>
+                        <Button
+                          size="small"
+                          icon={<ReloadOutlined />}
+                          onClick={() => void refreshProfitDetail()}
+                          loading={profitLoading}
+                        >
+                          刷新
+                        </Button>
+                      </div>
+                      {profitDetailContent}
+                    </section>
                   ),
                 },
                 {

@@ -2,7 +2,7 @@
  * 股市弹窗视图派生工具。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：把服务端股市 DTO 一次性派生成股票列表、持仓摘要、交易预览、标准 K 线和交易记录展示模型。
+ * 1. 做什么：把服务端股市 DTO 一次性派生成股票列表、持仓摘要、交易预览、标准 K 线、交易记录和收益详情展示模型。
  * 2. 不做什么：不发请求、不修改持仓状态、不重新实现服务端交易校验。
  *
  * 输入 / 输出：
@@ -28,6 +28,8 @@
 import type {
   StockMarketHistoryPointDto,
   StockMarketOverviewDto,
+  StockMarketProfitDetailDto,
+  StockMarketProfitDailyDto,
   StockMarketStockDto,
   StockMarketTradeRulesDto,
   StockMarketTradeRecordDto,
@@ -145,6 +147,37 @@ export interface StockMarketTradeRecordView {
   realizedPnlText: string;
   realizedPnlTone: StockMarketTone;
   timeText: string;
+}
+
+export interface StockMarketProfitSummaryView {
+  totalHoldingQtyText: string;
+  totalMarketValueText: string;
+  totalCostText: string;
+  realizedPnlText: string;
+  realizedPnlTone: StockMarketTone;
+  unrealizedPnlText: string;
+  unrealizedPnlTone: StockMarketTone;
+  totalPnlText: string;
+  totalPnlTone: StockMarketTone;
+}
+
+export interface StockMarketProfitDailyView {
+  dayKey: string;
+  dailyPnlText: string;
+  dailyPnlTone: StockMarketTone;
+  totalPnlText: string;
+  totalPnlTone: StockMarketTone;
+  realizedPnlText: string;
+  realizedPnlTone: StockMarketTone;
+  unrealizedPnlText: string;
+  unrealizedPnlTone: StockMarketTone;
+  totalMarketValueText: string;
+  totalCostText: string;
+}
+
+export interface StockMarketProfitDetailViewModel {
+  summary: StockMarketProfitSummaryView;
+  dailyRows: StockMarketProfitDailyView[];
 }
 
 type StockMarketCandlestickDraft = {
@@ -576,4 +609,41 @@ export const buildStockMarketTradeRecordViews = (
       timeText: formatStockMarketTime(record.createdAt),
     };
   });
+};
+
+const buildStockMarketProfitDailyView = (
+  record: StockMarketProfitDailyDto,
+): StockMarketProfitDailyView => {
+  return {
+    dayKey: record.dayKey,
+    dailyPnlText: formatStockMarketSignedCurrency(record.dailyPnlSpiritStones),
+    dailyPnlTone: resolveStockMarketTone(record.dailyPnlSpiritStones),
+    totalPnlText: formatStockMarketSignedCurrency(record.totalPnlSpiritStones),
+    totalPnlTone: resolveStockMarketTone(record.totalPnlSpiritStones),
+    realizedPnlText: formatStockMarketSignedCurrency(record.realizedPnlSpiritStones),
+    realizedPnlTone: resolveStockMarketTone(record.realizedPnlSpiritStones),
+    unrealizedPnlText: formatStockMarketSignedCurrency(record.unrealizedPnlSpiritStones),
+    unrealizedPnlTone: resolveStockMarketTone(record.unrealizedPnlSpiritStones),
+    totalMarketValueText: formatStockMarketCurrency(record.totalMarketValueSpiritStones),
+    totalCostText: formatStockMarketCurrency(record.totalCostSpiritStones),
+  };
+};
+
+export const buildStockMarketProfitDetailViewModel = (
+  detail: StockMarketProfitDetailDto,
+): StockMarketProfitDetailViewModel => {
+  return {
+    summary: {
+      totalHoldingQtyText: formatStockMarketQuantity(detail.summary.totalHoldingQty),
+      totalMarketValueText: formatStockMarketCurrency(detail.summary.totalMarketValueSpiritStones),
+      totalCostText: formatStockMarketCurrency(detail.summary.totalCostSpiritStones),
+      realizedPnlText: formatStockMarketSignedCurrency(detail.summary.realizedPnlSpiritStones),
+      realizedPnlTone: resolveStockMarketTone(detail.summary.realizedPnlSpiritStones),
+      unrealizedPnlText: formatStockMarketSignedCurrency(detail.summary.unrealizedPnlSpiritStones),
+      unrealizedPnlTone: resolveStockMarketTone(detail.summary.unrealizedPnlSpiritStones),
+      totalPnlText: formatStockMarketSignedCurrency(detail.summary.totalPnlSpiritStones),
+      totalPnlTone: resolveStockMarketTone(detail.summary.totalPnlSpiritStones),
+    },
+    dailyRows: detail.daily.map((record) => buildStockMarketProfitDailyView(record)),
+  };
 };

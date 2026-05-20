@@ -2,7 +2,7 @@
  * 股市接口封装。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：集中定义股市概览、走势、交易记录、买卖与清仓请求的 DTO 和 API 函数。
+ * 1. 做什么：集中定义股市概览、走势、交易记录、收益详情、买卖与清仓请求的 DTO 和 API 函数。
  * 2. 不做什么：不在前端决定最终交易费用、持仓上限或服务端交易规则。
  *
  * 输入 / 输出：
@@ -113,6 +113,30 @@ export interface StockMarketTradeRecordDto {
   createdAt: number;
 }
 
+export interface StockMarketProfitSummaryDto {
+  totalHoldingQty: number;
+  totalMarketValueSpiritStones: number;
+  totalCostSpiritStones: number;
+  realizedPnlSpiritStones: number;
+  unrealizedPnlSpiritStones: number;
+  totalPnlSpiritStones: number;
+}
+
+export interface StockMarketProfitDailyDto {
+  dayKey: string;
+  dailyPnlSpiritStones: number;
+  totalPnlSpiritStones: number;
+  realizedPnlSpiritStones: number;
+  unrealizedPnlSpiritStones: number;
+  totalMarketValueSpiritStones: number;
+  totalCostSpiritStones: number;
+}
+
+export interface StockMarketProfitDetailDto {
+  summary: StockMarketProfitSummaryDto;
+  daily: StockMarketProfitDailyDto[];
+}
+
 interface StockMarketApiResponse<TData> {
   success: boolean;
   message?: string;
@@ -127,6 +151,7 @@ export type StockMarketTradesResponse = StockMarketApiResponse<{
   page: number;
   pageSize: number;
 }>;
+export type StockMarketProfitDetailResponse = StockMarketApiResponse<StockMarketProfitDetailDto>;
 export type StockMarketTradeResponse = StockMarketApiResponse<never>;
 
 export const getStockMarketOverview = (
@@ -147,6 +172,12 @@ export const getStockMarketTrades = (
   requestConfig?: AxiosRequestConfig,
 ): Promise<StockMarketTradesResponse> => {
   return api.get('/stock-market/trades', withRequestParams(requestConfig, { page: params?.page }));
+};
+
+export const getStockMarketProfitDetail = (
+  requestConfig?: AxiosRequestConfig,
+): Promise<StockMarketProfitDetailResponse> => {
+  return api.get('/stock-market/profit-detail', requestConfig);
 };
 
 export const buyStockMarketStock = (
