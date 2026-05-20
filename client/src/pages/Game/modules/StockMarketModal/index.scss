@@ -440,7 +440,7 @@
 
   strong {
     min-width: 0;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
     font-size: 13px;
     color: var(--text-color);
   }
@@ -482,7 +482,7 @@
 
   .stock-market-stat-val {
     min-width: 0;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
     font-size: 13px;
     font-weight: 600;
     color: var(--text-color);
@@ -1150,7 +1150,7 @@
     font-weight: 600;
     color: var(--text-color);
     font-variant-numeric: tabular-nums;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
   }
 }
 
@@ -1268,7 +1268,7 @@
     font-weight: 600;
     color: var(--text-color);
     font-variant-numeric: tabular-nums;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
   }
 }
 
@@ -1552,8 +1552,17 @@
 
   .stock-market-profit-row-grid,
   .stock-market-record-row-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+
+    .profit-grid-item,
+    .record-grid-item {
+      grid-column: span 1;
+
+      &:nth-child(5) {
+        grid-column: span 2;
+      }
+    }
   }
 
   .stock-market-trade-box {
@@ -1661,6 +1670,8 @@
   .stock-market-trade-preview {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+
 
   .stock-market-stock-row {
     min-height: 66px;
