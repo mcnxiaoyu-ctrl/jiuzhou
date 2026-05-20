@@ -678,30 +678,76 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
             </span>
           </div>
           <div className="stock-market-trade-limits">
-            <span>
-              可买
+            <div className="stock-market-trade-limit-group">
+              <span className="limit-label">可买</span>
               <button
                 type="button"
                 className="stock-market-trade-limit-action"
                 disabled={tradePreview.maxAffordableBuyQty <= 0}
-                aria-label={`填入可买数量 ${tradePreview.maxAffordableBuyQtyText}`}
+                onClick={() => handleUseTradeLimitQuantity(Math.max(1, Math.floor(tradePreview.maxAffordableBuyQty * 0.25)))}
+              >
+                25%
+              </button>
+              <button
+                type="button"
+                className="stock-market-trade-limit-action"
+                disabled={tradePreview.maxAffordableBuyQty <= 0}
+                onClick={() => handleUseTradeLimitQuantity(Math.max(1, Math.floor(tradePreview.maxAffordableBuyQty * 0.5)))}
+              >
+                50%
+              </button>
+              <button
+                type="button"
+                className="stock-market-trade-limit-action"
+                disabled={tradePreview.maxAffordableBuyQty <= 0}
+                onClick={() => handleUseTradeLimitQuantity(Math.max(1, Math.floor(tradePreview.maxAffordableBuyQty * 0.75)))}
+              >
+                75%
+              </button>
+              <button
+                type="button"
+                className="stock-market-trade-limit-action max-btn"
+                disabled={tradePreview.maxAffordableBuyQty <= 0}
                 onClick={() => handleUseTradeLimitQuantity(tradePreview.maxAffordableBuyQty)}
               >
-                {tradePreview.maxAffordableBuyQtyText}
+                全部({tradePreview.maxAffordableBuyQtyText})
               </button>
-            </span>
-            <span>
-              可卖
+            </div>
+            <div className="stock-market-trade-limit-group">
+              <span className="limit-label">可卖</span>
               <button
                 type="button"
                 className="stock-market-trade-limit-action"
                 disabled={tradePreview.maxSellQty <= 0}
-                aria-label={`填入可卖数量 ${tradePreview.maxSellQtyText}`}
+                onClick={() => handleUseTradeLimitQuantity(Math.max(1, Math.floor(tradePreview.maxSellQty * 0.25)))}
+              >
+                25%
+              </button>
+              <button
+                type="button"
+                className="stock-market-trade-limit-action"
+                disabled={tradePreview.maxSellQty <= 0}
+                onClick={() => handleUseTradeLimitQuantity(Math.max(1, Math.floor(tradePreview.maxSellQty * 0.5)))}
+              >
+                50%
+              </button>
+              <button
+                type="button"
+                className="stock-market-trade-limit-action"
+                disabled={tradePreview.maxSellQty <= 0}
+                onClick={() => handleUseTradeLimitQuantity(Math.max(1, Math.floor(tradePreview.maxSellQty * 0.75)))}
+              >
+                75%
+              </button>
+              <button
+                type="button"
+                className="stock-market-trade-limit-action max-btn"
+                disabled={tradePreview.maxSellQty <= 0}
                 onClick={() => handleUseTradeLimitQuantity(tradePreview.maxSellQty)}
               >
-                {tradePreview.maxSellQtyText}
+                全部({tradePreview.maxSellQtyText})
               </button>
-            </span>
+            </div>
           </div>
         </div>
 

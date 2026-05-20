@@ -194,10 +194,10 @@ const STOCK_MARKET_MA_PERIODS: ReadonlyArray<{
   labelText: string;
   period: number;
 }> = [
-  { key: 'ma5', labelText: 'MA5', period: 5 },
-  { key: 'ma10', labelText: 'MA10', period: 10 },
-  { key: 'ma30', labelText: 'MA30', period: 30 },
-];
+    { key: 'ma5', labelText: 'MA5', period: 5 },
+    { key: 'ma10', labelText: 'MA10', period: 10 },
+    { key: 'ma30', labelText: 'MA30', period: 30 },
+  ];
 
 const integerFormatter = new Intl.NumberFormat('zh-CN', {
   maximumFractionDigits: 0,

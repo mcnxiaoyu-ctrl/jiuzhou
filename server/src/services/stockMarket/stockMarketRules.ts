@@ -252,3 +252,6 @@ export const buildStockMarketTradeRulesDto = () => ({
   transferFeeRate: STOCK_MARKET_TRANSFER_FEE_RATE,
   minPriceSpiritStones: Number(STOCK_MARKET_MIN_PRICE_SPIRIT_STONES),
 });
+
+
+
