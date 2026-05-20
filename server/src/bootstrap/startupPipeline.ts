@@ -11,10 +11,13 @@ import { recoverBattlesFromRedis } from "../domains/battle/index.js";
 import { itemDataCleanupService } from "../services/itemDataCleanupService.js";
 import { clearAllAvatarsOnce } from "./clearAvatars.js";
 import {
-  recoverActiveIdleSessions,
   flushAllBuffers,
   stopAllExecutionLoops,
 } from "../services/idle/idleBattleExecutorWorker.js";
+import {
+  startIdleExecutionWorker,
+  stopIdleExecutionWorker,
+} from "../workers/idleExecutionWorker.js";
 import {
   initArenaWeeklySettlementService,
   stopArenaWeeklySettlementService,
@@ -106,7 +109,7 @@ import { closeRabbitMqConnection } from "../services/shared/rabbitMqConnection.j
 import {
   resolveJiuzhouRuntimeRole,
   shouldRecoverHttpBattleState,
-  shouldRecoverIdleSessions,
+  shouldStartIdleExecutionWorker,
   shouldStartScheduledBackgroundServices,
   shouldStartHttpServer,
   shouldStartOnlineSettlementRunner,
@@ -209,6 +212,10 @@ export const startServerWithPipeline = async (
     );
     console.log(`✓ Worker 池已就绪（${workerCount} 个 Worker）\n`);
   }
+  if (shouldStartIdleExecutionWorker(runtimeRole)) {
+    await runStartupStep("挂机执行 RabbitMQ Worker 启动", startIdleExecutionWorker);
+    console.log("✓ 挂机执行 RabbitMQ Worker 已就绪\n");
+  }
   if (shouldStartRequestBoundJobWorkers(runtimeRole)) {
     await runStartupStep("洞府研修 worker 协调器初始化", initializeTechniqueGenerationJobRunner);
     console.log("✓ 洞府研修 worker 协调器已就绪\n");
@@ -279,10 +286,6 @@ export const startServerWithPipeline = async (
     });
   }
 
-  if (shouldRecoverIdleSessions(runtimeRole)) {
-    await runStartupStep("挂机会话恢复", recoverActiveIdleSessions);
-  }
-
   if (shouldStartHttpServer(runtimeRole)) {
     await new Promise<void>((resolve, reject) => {
       options.httpServer.listen(options.port, options.host, () => {
@@ -341,6 +344,9 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
 
       stopBattleService();
       console.log("✓ 战斗服务已停止");
+
+      await stopIdleExecutionWorker();
+      console.log("✓ 挂机执行 RabbitMQ Worker 已停止");
 
       stopAllExecutionLoops();
       console.log("✓ 挂机执行循环已停止");

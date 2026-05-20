@@ -2,8 +2,8 @@
  * 服务运行角色启动策略测试
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：锁定 API 角色启动请求型 AI/挂机 Worker，不启动定时后台调度和在线战斗延迟结算。
- * 2. 做什么：锁定 worker 角色不监听 HTTP 端口、不承接请求型内存队列，只运行可独立调度的后台服务。
+ * 1. 做什么：锁定 API 角色启动请求型 AI worker，不启动挂机计算池、定时后台调度和在线战斗延迟结算。
+ * 2. 做什么：锁定 worker 角色不监听 HTTP 端口、不承接请求型内存队列，只运行可独立调度的后台服务和挂机执行 worker。
  * 3. 不做什么：不启动真实服务，不修改 Docker Swarm。
  *
  * 输入 / 输出：
@@ -11,14 +11,14 @@
  * - 输出：行为矩阵断言和轻量静态 guard 断言。
  *
  * 数据流 / 状态流：
- * JIUZHOU_RUNTIME_ROLE -> runtimeRole helpers -> startupPipeline 按角色启动 HTTP、请求型 Worker、恢复任务或后台调度。
+ * JIUZHOU_RUNTIME_ROLE -> runtimeRole helpers -> startupPipeline 按角色启动 HTTP、请求型 Worker、挂机执行 Worker、恢复任务或后台调度。
  *
  * 复用设计说明：
  * - 用单一 runtimeRole 模块集中解释环境变量，避免 startupPipeline 各处直接解析字符串。
  *
  * 关键边界条件与坑点：
  * 1. 默认 all 保持当前单服务行为，降低部署切换风险。
- * 2. worker 角色仍需数据库、Redis、事件循环监控和必要静态配置预热，但不能接受 HTTP 流量，也不能承接 API 进程内存队列。
+ * 2. worker 角色仍需数据库、Redis、事件循环监控和必要静态配置预热，但不能接受 HTTP 流量，也不能承接 API 请求型 AI 内存队列。
  */
 
 import assert from 'node:assert/strict';
@@ -29,6 +29,7 @@ import {
   shouldRecoverHttpBattleState,
   shouldRecoverIdleSessions,
   shouldStartHttpServer,
+  shouldStartIdleExecutionWorker,
   shouldStartOnlineSettlementRunner,
   shouldStartRequestBoundJobWorkers,
   shouldStartScheduledBackgroundServices,
@@ -41,6 +42,7 @@ interface RuntimeRolePolicySnapshot {
   onlineSettlementRunner: boolean;
   requestBoundJobWorkers: boolean;
   workerPool: boolean;
+  idleExecutionWorker: boolean;
   scheduledBackgroundServices: boolean;
   httpBattleStateRecovery: boolean;
   idleSessionsRecovery: boolean;
@@ -57,6 +59,7 @@ const readRuntimeRolePolicy = (role: JiuzhouRuntimeRole): RuntimeRolePolicySnaps
     onlineSettlementRunner: shouldStartOnlineSettlementRunner(role),
     requestBoundJobWorkers: shouldStartRequestBoundJobWorkers(role),
     workerPool: shouldStartWorkerPool(role),
+    idleExecutionWorker: shouldStartIdleExecutionWorker(role),
     scheduledBackgroundServices: shouldStartScheduledBackgroundServices(role),
     httpBattleStateRecovery: shouldRecoverHttpBattleState(role),
     idleSessionsRecovery: shouldRecoverIdleSessions(role),
@@ -111,6 +114,7 @@ test('runtimeRole 应按 all/api/worker 返回启动策略矩阵', () => {
         onlineSettlementRunner: true,
         requestBoundJobWorkers: true,
         workerPool: true,
+        idleExecutionWorker: true,
         scheduledBackgroundServices: true,
         httpBattleStateRecovery: true,
         idleSessionsRecovery: true,
@@ -122,10 +126,11 @@ test('runtimeRole 应按 all/api/worker 返回启动策略矩阵', () => {
         httpServer: true,
         onlineSettlementRunner: false,
         requestBoundJobWorkers: true,
-        workerPool: true,
+        workerPool: false,
+        idleExecutionWorker: false,
         scheduledBackgroundServices: false,
         httpBattleStateRecovery: true,
-        idleSessionsRecovery: true,
+        idleSessionsRecovery: false,
       },
     },
     {
@@ -134,10 +139,11 @@ test('runtimeRole 应按 all/api/worker 返回启动策略矩阵', () => {
         httpServer: false,
         onlineSettlementRunner: true,
         requestBoundJobWorkers: false,
-        workerPool: false,
+        workerPool: true,
+        idleExecutionWorker: true,
         scheduledBackgroundServices: true,
         httpBattleStateRecovery: false,
-        idleSessionsRecovery: false,
+        idleSessionsRecovery: true,
       },
     },
   ];
@@ -168,12 +174,12 @@ test('startupPipeline 应导入运行角色 guard helper', () => {
   assert.notEqual(runtimeRoleImportBlock, '', 'startupPipeline 应从 runtimeRole 导入 helper');
   assertStartupSourceContains(runtimeRoleImportBlock, 'resolveJiuzhouRuntimeRole');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartHttpServer');
+  assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartIdleExecutionWorker');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartOnlineSettlementRunner');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartRequestBoundJobWorkers');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartWorkerPool');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldStartScheduledBackgroundServices');
   assertStartupSourceContains(runtimeRoleImportBlock, 'shouldRecoverHttpBattleState');
-  assertStartupSourceContains(runtimeRoleImportBlock, 'shouldRecoverIdleSessions');
 });
 
 test('startupPipeline 应保留关键启动副作用的角色 guard', () => {
@@ -181,9 +187,11 @@ test('startupPipeline 应保留关键启动副作用的角色 guard', () => {
   assertStartupSourceContains(source, 'const runtimeRole = resolveJiuzhouRuntimeRole();');
   assertStartupSourceContains(source, 'if (shouldStartOnlineSettlementRunner(runtimeRole))');
   assertStartupSourceContains(source, 'if (shouldStartRequestBoundJobWorkers(runtimeRole))');
+  assertStartupSourceContains(source, 'if (shouldStartIdleExecutionWorker(runtimeRole))');
   assertStartupSourceContains(source, 'if (shouldStartHttpServer(runtimeRole))');
 
   assertGuardNearStartupEffect(source, 'if (shouldStartWorkerPool(runtimeRole))', 'initializeWorkerPool');
+  assertGuardNearStartupEffect(source, 'if (shouldStartIdleExecutionWorker(runtimeRole))', 'startIdleExecutionWorker');
   assertGuardNearStartupEffect(source, 'if (shouldStartOnlineSettlementRunner(runtimeRole))', 'initializeOnlineBattleSettlementRunner');
   assertGuardNearStartupEffect(source, 'if (shouldStartRequestBoundJobWorkers(runtimeRole))', 'initializeTechniqueGenerationJobRunner');
   assertGuardNearStartupEffect(source, 'if (shouldStartRequestBoundJobWorkers(runtimeRole))', 'initializePartnerRecruitJobRunner');
@@ -202,6 +210,6 @@ test('startupPipeline 应保留关键启动副作用的角色 guard', () => {
   assertGuardNearStartupEffect(source, 'if (shouldStartScheduledBackgroundServices(runtimeRole))', 'startMarketListingAutoCancelWorker');
   assertGuardNearStartupEffect(source, 'if (shouldRecoverHttpBattleState(runtimeRole) && redisConnected)', 'recoverBattlesFromRedis');
   assertGuardNearStartupEffect(source, 'if (shouldRecoverHttpBattleState(runtimeRole) && redisConnected)', 'recoverBattleSessionsFromProjection');
-  assertGuardNearStartupEffect(source, 'if (shouldRecoverIdleSessions(runtimeRole))', 'recoverActiveIdleSessions');
+  assertStartupSourceContains(source, 'stopIdleExecutionWorker');
   assertGuardNearStartupEffect(source, 'if (shouldStartHttpServer(runtimeRole))', 'options.httpServer.listen');
 });

@@ -30,9 +30,9 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { requireCharacter } from '../middleware/auth.js';
 import { idleSessionService } from '../services/idle/idleSessionService.js';
 import {
-  startExecutionLoop,
-  requestImmediateStop,
-} from '../services/idle/idleBattleExecutorWorker.js';
+  publishIdleExecutionStartCommand,
+  publishIdleExecutionStopCommand,
+} from '../services/idle/idleExecutionQueue.js';
 import { validateAutoSkillPolicy, serializeAutoSkillPolicy } from '../services/idle/autoSkillPolicyCodec.js';
 import { reconcileIdleAutoSkillPolicyForCharacter } from '../services/idle/idleAutoSkillPolicy.js';
 import { query } from '../config/database.js';
@@ -139,10 +139,20 @@ router.post('/start', requireCharacter, asyncHandler(async (req, res) => {
     return;
   }
 
-  // 启动执行循环（异步，不阻塞响应）
+  // 投递跨进程启动命令，由 server_worker 承接执行循环，避免 API 主线程承担挂机计算负载。
   const session = await idleSessionService.getActiveIdleSession(characterId);
   if (session) {
-    startExecutionLoop(session, userId);
+    try {
+      await publishIdleExecutionStartCommand({
+        sessionId: session.id,
+        characterId,
+        userId,
+      });
+    } catch (error) {
+      await idleSessionService.completeIdleSession(session.id, 'interrupted');
+      await idleSessionService.releaseIdleLock(characterId);
+      throw error;
+    }
   }
 
   sendSuccess(res, { sessionId: result.sessionId });
@@ -161,10 +171,12 @@ router.post('/stop', requireCharacter, asyncHandler(async (req, res) => {
     throw new BusinessError(result.error ?? '停止挂机失败');
   }
 
-  // 立即唤醒执行循环做终止检查，避免等待下一次长延迟 tick。
-  for (const sessionId of result.sessionIds ?? []) {
-    requestImmediateStop(sessionId);
-  }
+  // 立即通知 worker 唤醒执行循环做终止检查，避免等待下一次长延迟 tick。
+  await Promise.all(
+    (result.sessionIds ?? []).map((sessionId) =>
+      publishIdleExecutionStopCommand({ sessionId }),
+    ),
+  );
 
   sendOk(res);
 }));
