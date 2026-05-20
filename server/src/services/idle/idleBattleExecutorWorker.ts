@@ -50,6 +50,7 @@ import {
 import {
   appendIdleRewardWindowBatch,
   createIdleRewardWindowState,
+  getIdleRewardWindowFlushPayload,
   resetIdleRewardWindowDelta,
   shouldFlushIdleRewardWindow,
   type IdleRewardWindowState,
@@ -157,22 +158,36 @@ async function flushBuffer(
   try {
     const flushState = await withTransactionAuto(async () => {
       const currentSummaryState = createIdleSessionSummaryState(buffer.summaryState.snapshot);
-
       const participant = buildIdleRewardParticipant(session, userId);
+
+      // 聚合 30 秒窗口内所有批次的奖励计划
+      const payload = getIdleRewardWindowFlushPayload(buffer.rewardWindow);
+
+      // 一次性完成真实兑现入包与邮件补发
+      const settledReward = await settleIdleBattleRewardSettlementPlan(
+        participant,
+        payload.windowRewardPlan,
+      );
+
+      // 累加本次 flush 周期内的所有战斗统计
+      currentSummaryState.delta.totalBattlesDelta += batches.length;
+      let winDelta = 0;
+      let loseDelta = 0;
       for (const batch of batches) {
-        const settledReward = await settleIdleBattleRewardSettlementPlan(
-          participant,
-          {
-            expGained: batch.expGained,
-            silverGained: batch.silverGained,
-            previewItems: batch.previewItems,
-            dropPlans: batch.dropPlans,
-          },
-        );
-        appendBattleResultToIdleSessionSummary(currentSummaryState, {
-          ...settledReward,
-          result: batch.result,
-        });
+        if (batch.result === 'attacker_win') {
+          winDelta += 1;
+        } else if (batch.result === 'defender_win') {
+          loseDelta += 1;
+        }
+      }
+      currentSummaryState.delta.winDelta += winDelta;
+      currentSummaryState.delta.loseDelta += loseDelta;
+      currentSummaryState.delta.expDelta += settledReward.expGained;
+      currentSummaryState.delta.silverDelta += settledReward.silverGained;
+
+      if (settledReward.bagFullFlag) {
+        currentSummaryState.delta.bagFullFlag = true;
+        currentSummaryState.snapshot.bagFullFlag = true;
       }
 
       const summaryPayload = getIdleSessionSummaryFlushPayload(currentSummaryState);

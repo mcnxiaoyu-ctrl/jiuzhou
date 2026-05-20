@@ -1008,7 +1008,7 @@ class BattleDropService {
       expGained: plan.expGained,
       silverGained: totalSilver,
       itemsGained: Array.from(settledItems.values()),
-      bagFullFlag: false,
+      bagFullFlag: pendingMailItems.length > 0,
     };
   }
 
