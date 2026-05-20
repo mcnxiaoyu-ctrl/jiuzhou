@@ -830,105 +830,113 @@ const StockMarketModal: React.FC<StockMarketModalProps> = ({ open, onClose, spir
                   label: '行情',
                   children: (
                     <div className="stock-market-grid">
-                      <section className="stock-market-panel stock-market-news">
-                        <div className="stock-market-section-head">
-                          <span>股市新闻</span>
-                          <div className="stock-market-news-tools">
-                            {newsRecords.length > 0 ? (
-                              <>
-                                <span className="stock-market-news-counter">
-                                  {newsIndex + 1}/{newsRecords.length}
-                                </span>
-                                <Tooltip title="查看更新的新闻">
-                                  <Button
-                                    className="stock-market-news-nav"
-                                    size="small"
-                                    icon={<LeftOutlined />}
-                                    aria-label="查看更新的股市新闻"
-                                    disabled={newsIndex <= 0}
-                                    onClick={handleShowNewerNews}
-                                  />
-                                </Tooltip>
-                                <Tooltip title="查看更早的新闻">
-                                  <Button
-                                    className="stock-market-news-nav"
-                                    size="small"
-                                    icon={<RightOutlined />}
-                                    aria-label="查看更早的股市新闻"
-                                    disabled={newsIndex >= newsRecords.length - 1}
-                                    onClick={handleShowOlderNews}
-                                  />
-                                </Tooltip>
-                              </>
-                            ) : null}
-                            <Tag color="processing">下次 {overviewModel.nextRefreshText}</Tag>
+                      <div className="stock-market-top-row">
+                        <section className="stock-market-panel stock-market-news">
+                          <div className="stock-market-section-head">
+                            <span>股市新闻</span>
+                            <div className="stock-market-news-tools">
+                              {newsRecords.length > 0 ? (
+                                <>
+                                  <span className="stock-market-news-counter">
+                                    {newsIndex + 1}/{newsRecords.length}
+                                  </span>
+                                  <Tooltip title="查看更新的新闻">
+                                    <Button
+                                      className="stock-market-news-nav"
+                                      size="small"
+                                      icon={<LeftOutlined />}
+                                      aria-label="查看更新的股市新闻"
+                                      disabled={newsIndex <= 0}
+                                      onClick={handleShowNewerNews}
+                                    />
+                                  </Tooltip>
+                                  <Tooltip title="查看更早的新闻">
+                                    <Button
+                                      className="stock-market-news-nav"
+                                      size="small"
+                                      icon={<RightOutlined />}
+                                      aria-label="查看更早的股市新闻"
+                                      disabled={newsIndex >= newsRecords.length - 1}
+                                      onClick={handleShowOlderNews}
+                                    />
+                                  </Tooltip>
+                                </>
+                              ) : null}
+                              <Tag color="processing">下次 {overviewModel.nextRefreshText}</Tag>
+                            </div>
                           </div>
-                        </div>
-                        {activeNews ? (
-                          <div className="stock-market-news-content">
-                            <div className="stock-market-news-title">{activeNews.headline}</div>
-                            <div className="stock-market-news-summary">{activeNews.summary}</div>
-                            {activeNews.impacts.length > 0 ? (
-                              <div className="stock-market-impact-list">
-                                {activeNews.impacts.map((impact) => {
-                                  const tone = resolveStockMarketTone(impact.changeBps);
-                                  return (
-                                    <Tag
-                                      key={impact.stockId}
-                                      className={`stock-market-impact ${getStockMarketToneClassName(tone)}`}
-                                    >
-                                      {impact.stockName} {formatStockMarketBps(impact.changeBps)}
-                                    </Tag>
-                                  );
-                                })}
+                          {activeNews ? (
+                            <div className="stock-market-news-body">
+                              <div className="stock-market-news-main">
+                                <div className="stock-market-news-title">{activeNews.headline}</div>
+                                <div className="stock-market-news-summary">{activeNews.summary}</div>
                               </div>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <div className="stock-market-muted">暂未生成新闻，等待下一次后台刷新</div>
-                        )}
-                      </section>
+                              {activeNews.impacts.length > 0 ? (
+                                <div className="stock-market-news-sidebar">
+                                  <div className="stock-market-news-sidebar-title">受影响个股</div>
+                                  <div className="stock-market-news-sidebar-list">
+                                    {activeNews.impacts.map((impact) => {
+                                      const tone = resolveStockMarketTone(impact.changeBps);
+                                      return (
+                                        <div
+                                          key={impact.stockId}
+                                          className={`stock-market-news-impact-item ${getStockMarketToneClassName(tone)}`}
+                                        >
+                                          <span className="stock-name">{impact.stockName}</span>
+                                          <span className="stock-change">{formatStockMarketBps(impact.changeBps)}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="stock-market-muted">暂未生成新闻，等待下一次后台刷新</div>
+                          )}
+                        </section>
 
-                      <section className="stock-market-panel stock-market-portfolio">
-                        <div className="stock-market-section-head">
-                          <span>持仓汇总</span>
-                          <Button
-                            danger
-                            size="small"
-                            icon={<ClearOutlined />}
-                            disabled={!canClearAll}
-                            loading={actionKey === 'clear-all'}
-                            onClick={() => handleClearPosition('all')}
-                          >
-                            全部清仓
-                          </Button>
-                        </div>
-                        <div className="stock-market-stat-grid">
-                          <div>
-                            <span>总股数</span>
-                            <strong>{overviewModel.portfolio.totalHoldingQtyText}</strong>
+                        <section className="stock-market-panel stock-market-portfolio">
+                          <div className="stock-market-section-head">
+                            <span>持仓汇总</span>
+                            <Button
+                              danger
+                              size="small"
+                              icon={<ClearOutlined />}
+                              disabled={!canClearAll}
+                              loading={actionKey === 'clear-all'}
+                              onClick={() => handleClearPosition('all')}
+                            >
+                              全部清仓
+                            </Button>
                           </div>
-                          <div>
-                            <span>市值</span>
-                            <strong>{overviewModel.portfolio.totalMarketValueText}</strong>
+                          <div className="stock-market-stat-grid">
+                            <div className="stock-market-stat-card">
+                              <span className="stock-market-stat-label">总股数</span>
+                              <strong className="stock-market-stat-val">{overviewModel.portfolio.totalHoldingQtyText}</strong>
+                            </div>
+                            <div className="stock-market-stat-card">
+                              <span className="stock-market-stat-label">市值</span>
+                              <strong className="stock-market-stat-val">{overviewModel.portfolio.totalMarketValueText}</strong>
+                            </div>
+                            <div className="stock-market-stat-card">
+                              <span className="stock-market-stat-label">成本</span>
+                              <strong className="stock-market-stat-val">{overviewModel.portfolio.totalCostText}</strong>
+                            </div>
+                            <div className="stock-market-stat-card">
+                              <span className="stock-market-stat-label stock-market-stat-label--split">
+                                <span>浮盈亏</span>
+                                <em className={getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
+                                  {overviewModel.portfolio.totalUnrealizedPnlPercentText}
+                                </em>
+                              </span>
+                              <strong className={`stock-market-stat-val ${getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}`}>
+                                {overviewModel.portfolio.totalUnrealizedPnlText}
+                              </strong>
+                            </div>
                           </div>
-                          <div>
-                            <span>成本</span>
-                            <strong>{overviewModel.portfolio.totalCostText}</strong>
-                          </div>
-                          <div>
-                            <span className="stock-market-stat-label stock-market-stat-label--split">
-                              <span>浮盈亏</span>
-                              <em className={getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
-                                {overviewModel.portfolio.totalUnrealizedPnlPercentText}
-                              </em>
-                            </span>
-                            <strong className={getStockMarketToneClassName(overviewModel.portfolio.totalUnrealizedPnlTone)}>
-                              {overviewModel.portfolio.totalUnrealizedPnlText}
-                            </strong>
-                          </div>
-                        </div>
-                      </section>
+                        </section>
+                      </div>
 
                       <section className="stock-market-panel stock-market-list-panel">
                         <div className="stock-market-section-head">
